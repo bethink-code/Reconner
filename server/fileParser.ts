@@ -122,41 +122,71 @@ export class FileParser {
       .sort((a, b) => a[0] - b[0])
       .map(([_, items]) => items.sort((a, b) => a.x - b.x));
 
-    if (sortedRowsWithCoords.length < 2) {
-      throw new Error('Not enough data rows detected in PDF');
+    if (sortedRowsWithCoords.length < 1) {
+      throw new Error('No data rows detected in PDF');
     }
 
-    const columnBoundaries: number[] = [];
-    const firstDataRow = sortedRowsWithCoords[1];
+    const allXPositions = new Set<number>();
+    for (const row of sortedRowsWithCoords.slice(0, Math.min(10, sortedRowsWithCoords.length))) {
+      for (const item of row) {
+        allXPositions.add(Math.round(item.x));
+      }
+    }
+
+    const sortedXPositions = Array.from(allXPositions).sort((a, b) => a - b);
     
-    for (const item of firstDataRow) {
-      const midpoint = item.x + (item.width / 2);
-      columnBoundaries.push(midpoint);
-    }
-    columnBoundaries.sort((a, b) => a - b);
+    const columnXRanges: Array<{ min: number; max: number; index: number }> = [];
+    let currentGroup: number[] = [];
+    const xGapThreshold = 15;
 
-    function assignToColumn(x: number, width: number): number {
-      const itemMidpoint = x + (width / 2);
-      let closestCol = 0;
-      let minDist = Math.abs(itemMidpoint - columnBoundaries[0]);
-      
-      for (let i = 1; i < columnBoundaries.length; i++) {
-        const dist = Math.abs(itemMidpoint - columnBoundaries[i]);
-        if (dist < minDist) {
-          minDist = dist;
-          closestCol = i;
+    for (let i = 0; i < sortedXPositions.length; i++) {
+      if (currentGroup.length === 0) {
+        currentGroup.push(sortedXPositions[i]);
+      } else {
+        const lastX = currentGroup[currentGroup.length - 1];
+        if (sortedXPositions[i] - lastX <= xGapThreshold) {
+          currentGroup.push(sortedXPositions[i]);
+        } else {
+          columnXRanges.push({
+            min: Math.min(...currentGroup),
+            max: Math.max(...currentGroup),
+            index: columnXRanges.length,
+          });
+          currentGroup = [sortedXPositions[i]];
         }
       }
-      return closestCol;
+    }
+    if (currentGroup.length > 0) {
+      columnXRanges.push({
+        min: Math.min(...currentGroup),
+        max: Math.max(...currentGroup),
+        index: columnXRanges.length,
+      });
     }
 
-    const numColumns = columnBoundaries.length;
+    function getColumnIndex(x: number): number {
+      for (const range of columnXRanges) {
+        if (x >= range.min - 5 && x <= range.max + 5) {
+          return range.index;
+        }
+      }
+      for (let i = 0; i < columnXRanges.length - 1; i++) {
+        if (x > columnXRanges[i].max && x < columnXRanges[i + 1].min) {
+          const distToLeft = x - columnXRanges[i].max;
+          const distToRight = columnXRanges[i + 1].min - x;
+          return distToLeft < distToRight ? i : i + 1;
+        }
+      }
+      return columnXRanges.length - 1;
+    }
+
+    const numColumns = columnXRanges.length;
     const structuredRows: string[][] = [];
 
     for (const rowItems of sortedRowsWithCoords) {
       const row = new Array(numColumns).fill('');
       for (const item of rowItems) {
-        const colIndex = assignToColumn(item.x, item.width);
+        const colIndex = getColumnIndex(Math.round(item.x));
         if (row[colIndex]) {
           row[colIndex] += ' ' + item.text;
         } else {

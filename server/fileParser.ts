@@ -79,7 +79,7 @@ export class FileParser {
       throw new Error('PDF file is empty or unreadable');
     }
 
-    const allTextItems: { text: string; x: number; y: number }[] = [];
+    const allTextItems: { text: string; x: number; y: number; width: number }[] = [];
     
     for (const page of data.pages) {
       if (page.content) {
@@ -89,6 +89,7 @@ export class FileParser {
               text: item.str.trim(),
               x: item.x,
               y: item.y,
+              width: item.width,
             });
           }
         }
@@ -99,39 +100,83 @@ export class FileParser {
       throw new Error('No text found in PDF');
     }
 
-    const rowsByY = new Map<number, { text: string; x: number }[]>();
-    const yTolerance = 2;
+    const rowsByY = new Map<number, { text: string; x: number; width: number }[]>();
+    const yTolerance = 3;
 
     for (const item of allTextItems) {
       let foundRow = false;
       const entries = Array.from(rowsByY.entries());
       for (const [existingY, items] of entries) {
         if (Math.abs(existingY - item.y) < yTolerance) {
-          items.push({ text: item.text, x: item.x });
+          items.push({ text: item.text, x: item.x, width: item.width });
           foundRow = true;
           break;
         }
       }
       if (!foundRow) {
-        rowsByY.set(item.y, [{ text: item.text, x: item.x }]);
+        rowsByY.set(item.y, [{ text: item.text, x: item.x, width: item.width }]);
       }
     }
 
-    const sortedRows = Array.from(rowsByY.entries())
+    const sortedRowsWithCoords = Array.from(rowsByY.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([_, items]) => items.sort((a, b) => a.x - b.x).map(i => i.text));
+      .map(([_, items]) => items.sort((a, b) => a.x - b.x));
 
-    if (sortedRows.length === 0) {
+    if (sortedRowsWithCoords.length < 2) {
+      throw new Error('Not enough data rows detected in PDF');
+    }
+
+    const columnBoundaries: number[] = [];
+    const firstDataRow = sortedRowsWithCoords[1];
+    
+    for (const item of firstDataRow) {
+      const midpoint = item.x + (item.width / 2);
+      columnBoundaries.push(midpoint);
+    }
+    columnBoundaries.sort((a, b) => a - b);
+
+    function assignToColumn(x: number, width: number): number {
+      const itemMidpoint = x + (width / 2);
+      let closestCol = 0;
+      let minDist = Math.abs(itemMidpoint - columnBoundaries[0]);
+      
+      for (let i = 1; i < columnBoundaries.length; i++) {
+        const dist = Math.abs(itemMidpoint - columnBoundaries[i]);
+        if (dist < minDist) {
+          minDist = dist;
+          closestCol = i;
+        }
+      }
+      return closestCol;
+    }
+
+    const numColumns = columnBoundaries.length;
+    const structuredRows: string[][] = [];
+
+    for (const rowItems of sortedRowsWithCoords) {
+      const row = new Array(numColumns).fill('');
+      for (const item of rowItems) {
+        const colIndex = assignToColumn(item.x, item.width);
+        if (row[colIndex]) {
+          row[colIndex] += ' ' + item.text;
+        } else {
+          row[colIndex] = item.text;
+        }
+      }
+      structuredRows.push(row);
+    }
+
+    if (structuredRows.length === 0) {
       throw new Error('No table structure detected in PDF');
     }
 
-    const headers = sortedRows[0];
-    const dataRows = sortedRows.slice(1);
+    const headers = structuredRows[0].map((h, i) => h || `Column ${i + 1}`);
+    const dataRows = structuredRows.slice(1);
 
     const rows = dataRows.map(row => {
       const obj: Record<string, any> = {};
       headers.forEach((header, index) => {
-        obj[header] = row[index] || '';
+        obj[header] = (row[index] || '').trim();
       });
       return obj;
     });

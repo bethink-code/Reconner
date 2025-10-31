@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -17,7 +17,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-// Reconciliation Period Schema
+// Reconciliation Period
 export const reconciliationPeriods = pgTable("reconciliation_periods", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -38,53 +38,69 @@ export const insertReconciliationPeriodSchema = createInsertSchema(reconciliatio
 export type InsertReconciliationPeriod = z.infer<typeof insertReconciliationPeriodSchema>;
 export type ReconciliationPeriod = typeof reconciliationPeriods.$inferSelect;
 
-// Transaction Schema
-export const transactionSchema = z.object({
-  id: z.string(),
-  date: z.string(),
-  amount: z.number(),
-  reference: z.string(),
-  description: z.string().optional(),
-  source: z.enum(["fuel", "bank1", "bank2"]),
-  matchStatus: z.enum(["matched", "unmatched", "partial"]).optional(),
-  matchedWith: z.string().optional(),
-  notes: z.string().optional(),
+// Uploaded Files
+export const uploadedFiles = pgTable("uploaded_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  fileType: text("file_type").notNull(),
+  sourceType: text("source_type").notNull(),
+  sourceName: text("source_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: integer("file_size").notNull(),
+  rowCount: integer("row_count").default(0),
+  columnMapping: jsonb("column_mapping"),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  status: text("status").notNull().default("uploaded"),
 });
 
-export type Transaction = z.infer<typeof transactionSchema>;
-
-// File Upload Schema
-export const fileUploadSchema = z.object({
-  id: z.string(),
-  fileName: z.string(),
-  fileType: z.string(),
-  fileSize: z.number(),
-  source: z.enum(["fuel", "bank1", "bank2"]),
-  uploadedAt: z.string(),
-  status: z.enum(["uploading", "processing", "completed", "error"]),
+export const insertUploadedFileSchema = createInsertSchema(uploadedFiles).omit({
+  id: true,
+  uploadedAt: true,
 });
 
-export type FileUpload = z.infer<typeof fileUploadSchema>;
+export type InsertUploadedFile = z.infer<typeof insertUploadedFileSchema>;
+export type UploadedFile = typeof uploadedFiles.$inferSelect;
 
-// Column Mapping Schema
-export const columnMappingSchema = z.object({
-  detectedColumn: z.string(),
-  mappedTo: z.enum(["date", "amount", "reference", "description", "ignore"]),
+// Transactions
+export const transactions = pgTable("transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileId: varchar("file_id").notNull().references(() => uploadedFiles.id, { onDelete: "cascade" }),
+  periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }),
+  sourceType: text("source_type").notNull(),
+  rawData: jsonb("raw_data").notNull(),
+  transactionDate: text("transaction_date").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  description: text("description"),
+  referenceNumber: text("reference_number"),
+  matchStatus: text("match_status").notNull().default("unmatched"),
+  matchId: varchar("match_id"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export type ColumnMapping = z.infer<typeof columnMappingSchema>;
-
-// Reconciliation Report Schema
-export const reconciliationReportSchema = z.object({
-  periodId: z.string(),
-  totalTransactions: z.number(),
-  matchedCount: z.number(),
-  unmatchedCount: z.number(),
-  partialMatchCount: z.number(),
-  reconciliationRate: z.number(),
-  totalAmount: z.number(),
-  discrepancy: z.number(),
-  generatedAt: z.string(),
+export const insertTransactionSchema = createInsertSchema(transactions).omit({
+  id: true,
+  createdAt: true,
 });
 
-export type ReconciliationReport = z.infer<typeof reconciliationReportSchema>;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+
+// Matches
+export const matches = pgTable("matches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }),
+  fuelTransactionId: varchar("fuel_transaction_id").notNull().references(() => transactions.id, { onDelete: "cascade" }),
+  bankTransactionId: varchar("bank_transaction_id").notNull().references(() => transactions.id, { onDelete: "cascade" }),
+  matchType: text("match_type").notNull(),
+  matchConfidence: decimal("match_confidence", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMatchSchema = createInsertSchema(matches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMatch = z.infer<typeof insertMatchSchema>;
+export type Match = typeof matches.$inferSelect;

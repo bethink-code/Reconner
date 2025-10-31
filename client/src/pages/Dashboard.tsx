@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, FileText, MoreVertical, Trash2, Eye } from "lucide-react";
@@ -11,60 +10,51 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { ReconciliationPeriod } from "@shared/schema";
 
-interface ReconciliationPeriod {
+interface DisplayPeriod {
   id: string;
   name: string;
   dateRange: string;
   status: "draft" | "in_progress" | "complete";
   progress: number;
   lastModified: string;
-  totalTransactions: number;
-  matchedCount: number;
 }
 
 export default function Dashboard() {
-  // todo: remove mock functionality
-  const [periods, setPeriods] = useState<ReconciliationPeriod[]>([
-    {
-      id: "1",
-      name: "January 2024 Reconciliation",
-      dateRange: "Jan 1 - Jan 31, 2024",
-      status: "complete",
-      progress: 100,
-      lastModified: "2024-01-31",
-      totalTransactions: 245,
-      matchedCount: 240,
-    },
-    {
-      id: "2",
-      name: "February 2024 Reconciliation",
-      dateRange: "Feb 1 - Feb 29, 2024",
-      status: "in_progress",
-      progress: 68,
-      lastModified: "2024-02-25",
-      totalTransactions: 198,
-      matchedCount: 135,
-    },
-    {
-      id: "3",
-      name: "March 2024 Reconciliation",
-      dateRange: "Mar 1 - Mar 31, 2024",
-      status: "draft",
-      progress: 0,
-      lastModified: "2024-03-01",
-      totalTransactions: 0,
-      matchedCount: 0,
-    },
-  ]);
+  const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
+    queryKey: ["/api/periods"],
+  });
 
-  const completedCount = periods.filter(p => p.status === "complete").length;
-  const inProgressCount = periods.filter(p => p.status === "in_progress").length;
-  const draftCount = periods.filter(p => p.status === "draft").length;
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/periods/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
+    },
+  });
+
+  const displayPeriods: DisplayPeriod[] = periods.map(period => ({
+    id: period.id,
+    name: period.name,
+    dateRange: `${period.startDate} to ${period.endDate}`,
+    status: period.status as "draft" | "in_progress" | "complete",
+    progress: 0,
+    lastModified: period.updatedAt ? new Date(period.updatedAt).toLocaleDateString() : 
+                   new Date(period.createdAt!).toLocaleDateString(),
+  }));
+
+  const completedCount = displayPeriods.filter(p => p.status === "complete").length;
+  const inProgressCount = displayPeriods.filter(p => p.status === "in_progress").length;
+  const draftCount = displayPeriods.filter(p => p.status === "draft").length;
 
   const handleDelete = (id: string) => {
-    console.log('Delete period:', id);
-    setPeriods(periods.filter(p => p.id !== id));
+    if (confirm("Are you sure you want to delete this period? This will also delete all associated files and transactions.")) {
+      deleteMutation.mutate(id);
+    }
   };
 
   return (
@@ -92,12 +82,12 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <PeriodCard title="Total Periods" value={periods.length} icon="total" />
+          <PeriodCard title="Total Periods" value={displayPeriods.length} icon="total" />
           <PeriodCard 
             title="Completed" 
             value={completedCount} 
             icon="complete"
-            subtitle={`${Math.round((completedCount / periods.length) * 100)}% of total`}
+            subtitle={displayPeriods.length > 0 ? `${Math.round((completedCount / displayPeriods.length) * 100)}% of total` : undefined}
           />
           <PeriodCard title="In Progress" value={inProgressCount} icon="inProgress" />
           <PeriodCard title="Draft" value={draftCount} icon="draft" />
@@ -110,22 +100,35 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold">Reconciliation Periods</h2>
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr className="border-b">
-                      <th className="text-left p-4 text-sm font-semibold">Period Name</th>
-                      <th className="text-left p-4 text-sm font-semibold">Date Range</th>
-                      <th className="text-left p-4 text-sm font-semibold">Status</th>
-                      <th className="text-left p-4 text-sm font-semibold">Progress</th>
-                      <th className="text-left p-4 text-sm font-semibold">Transactions</th>
-                      <th className="text-left p-4 text-sm font-semibold">Last Modified</th>
-                      <th className="text-right p-4 text-sm font-semibold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {periods.map((period) => (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-muted-foreground">Loading periods...</p>
+              </div>
+            ) : displayPeriods.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-4">
+                <p className="text-muted-foreground">No reconciliation periods yet</p>
+                <Link href="/create">
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Period
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr className="border-b">
+                        <th className="text-left p-4 text-sm font-semibold">Period Name</th>
+                        <th className="text-left p-4 text-sm font-semibold">Date Range</th>
+                        <th className="text-left p-4 text-sm font-semibold">Status</th>
+                        <th className="text-left p-4 text-sm font-semibold">Last Modified</th>
+                        <th className="text-right p-4 text-sm font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayPeriods.map((period) => (
                       <tr 
                         key={period.id} 
                         className="border-b hover-elevate"
@@ -142,26 +145,6 @@ export default function Dashboard() {
                         </td>
                         <td className="p-4">
                           <StatusBadge status={period.status} />
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-muted rounded-full h-2 max-w-24">
-                              <div
-                                className="bg-primary rounded-full h-2 transition-all"
-                                style={{ width: `${period.progress}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium">{period.progress}%</span>
-                          </div>
-                        </td>
-                        <td className="p-4 text-sm">
-                          {period.totalTransactions > 0 ? (
-                            <span>
-                              {period.matchedCount} / {period.totalTransactions}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
                         </td>
                         <td className="p-4 text-sm text-muted-foreground">
                           {period.lastModified}
@@ -198,6 +181,7 @@ export default function Dashboard() {
                 </table>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
       </main>

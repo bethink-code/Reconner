@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { PDFExtract, PDFExtractOptions } from 'pdf.js-extract';
 
 export interface ParsedFileData {
   headers: string[];
@@ -70,7 +71,79 @@ export class FileParser {
     };
   }
 
-  parse(buffer: Buffer, fileType: string): ParsedFileData {
+  async parsePDF(buffer: Buffer): Promise<ParsedFileData> {
+    const pdfExtract = new PDFExtract();
+    const data = await pdfExtract.extractBuffer(buffer, {});
+
+    if (!data.pages || data.pages.length === 0) {
+      throw new Error('PDF file is empty or unreadable');
+    }
+
+    const allTextItems: { text: string; x: number; y: number }[] = [];
+    
+    for (const page of data.pages) {
+      if (page.content) {
+        for (const item of page.content) {
+          if (item.str && item.str.trim()) {
+            allTextItems.push({
+              text: item.str.trim(),
+              x: item.x,
+              y: item.y,
+            });
+          }
+        }
+      }
+    }
+
+    if (allTextItems.length === 0) {
+      throw new Error('No text found in PDF');
+    }
+
+    const rowsByY = new Map<number, { text: string; x: number }[]>();
+    const yTolerance = 2;
+
+    for (const item of allTextItems) {
+      let foundRow = false;
+      const entries = Array.from(rowsByY.entries());
+      for (const [existingY, items] of entries) {
+        if (Math.abs(existingY - item.y) < yTolerance) {
+          items.push({ text: item.text, x: item.x });
+          foundRow = true;
+          break;
+        }
+      }
+      if (!foundRow) {
+        rowsByY.set(item.y, [{ text: item.text, x: item.x }]);
+      }
+    }
+
+    const sortedRows = Array.from(rowsByY.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([_, items]) => items.sort((a, b) => a.x - b.x).map(i => i.text));
+
+    if (sortedRows.length === 0) {
+      throw new Error('No table structure detected in PDF');
+    }
+
+    const headers = sortedRows[0];
+    const dataRows = sortedRows.slice(1);
+
+    const rows = dataRows.map(row => {
+      const obj: Record<string, any> = {};
+      headers.forEach((header, index) => {
+        obj[header] = row[index] || '';
+      });
+      return obj;
+    });
+
+    return {
+      headers,
+      rows,
+      rowCount: rows.length,
+    };
+  }
+
+  async parse(buffer: Buffer, fileType: string): Promise<ParsedFileData> {
     if (fileType === 'csv' || fileType === 'text/csv') {
       return this.parseCSV(buffer);
     } else if (
@@ -80,6 +153,11 @@ export class FileParser {
       fileType === 'application/vnd.ms-excel'
     ) {
       return this.parseExcel(buffer);
+    } else if (
+      fileType === 'pdf' ||
+      fileType === 'application/pdf'
+    ) {
+      return await this.parsePDF(buffer);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }

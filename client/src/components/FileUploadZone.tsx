@@ -18,7 +18,7 @@ interface FileUploadZoneProps {
   onFilesSelected?: (files: File[]) => void;
 }
 
-export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls", onFilesSelected }: FileUploadZoneProps) {
+export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls,.pdf", onFilesSelected }: FileUploadZoneProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -106,7 +106,7 @@ export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls", onFi
           </Button>
         </label>
         <p className="text-xs text-muted-foreground mt-2">
-          Supported formats: CSV, Excel (.xlsx, .xls)
+          Supported formats: CSV, Excel (.xlsx, .xls), PDF
         </p>
       </div>
 

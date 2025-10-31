@@ -104,11 +104,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "sourceType and sourceName are required" });
       }
 
-      const fileType = req.file.mimetype.includes('csv') ? 'csv' : 
-                      req.file.mimetype.includes('spreadsheet') || req.file.originalname.endsWith('.xlsx') ? 'xlsx' : 
-                      req.file.originalname.endsWith('.csv') ? 'csv' : 'xlsx';
+      const isCSV = req.file.mimetype.includes('csv') || 
+                    req.file.mimetype === 'text/csv' || 
+                    req.file.originalname.endsWith('.csv');
+      
+      const isExcel = req.file.mimetype.includes('spreadsheet') || 
+                      req.file.mimetype.includes('excel') ||
+                      req.file.originalname.endsWith('.xlsx') || 
+                      req.file.originalname.endsWith('.xls');
 
-      const parsed = fileParser.parse(req.file.buffer, fileType);
+      const isPDF = req.file.mimetype === 'application/pdf' ||
+                    req.file.originalname.endsWith('.pdf');
+
+      if (!isCSV && !isExcel && !isPDF) {
+        return res.status(400).json({ 
+          error: "Invalid file format. Please upload CSV, Excel, or PDF files only." 
+        });
+      }
+
+      const fileType = isCSV ? 'csv' : isExcel ? 'xlsx' : 'pdf';
+
+      const parsed = await fileParser.parse(req.file.buffer, fileType);
       const columnMappings = fileParser.autoDetectColumns(parsed.headers);
 
       const fileUrl = await objectStorageService.uploadFile(
@@ -155,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const objectFile = await objectStorageService.getFile(file.fileUrl);
       const [buffer] = await objectFile.download();
       
-      const parsed = fileParser.parse(buffer, file.fileType);
+      const parsed = await fileParser.parse(buffer, file.fileType);
       const suggestedMappings = fileParser.autoDetectColumns(parsed.headers);
 
       res.json({
@@ -206,7 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const objectFile = await objectStorageService.getFile(file.fileUrl);
       const [buffer] = await objectFile.download();
       
-      const parsed = fileParser.parse(buffer, file.fileType);
+      const parsed = await fileParser.parse(buffer, file.fileType);
       
       const transactions = parsed.rows.map(row => {
         const extracted = fileParser.extractTransactionData(row, file.columnMapping as Record<string, string>);

@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ReconciliationPeriod } from "@shared/schema";
@@ -24,6 +24,7 @@ interface DisplayPeriod {
 }
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
   const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
     queryKey: ["/api/periods"],
   });
@@ -50,6 +51,10 @@ export default function Dashboard() {
   const completedCount = displayPeriods.filter(p => p.status === "complete").length;
   const inProgressCount = displayPeriods.filter(p => p.status === "in_progress").length;
   const draftCount = displayPeriods.filter(p => p.status === "draft").length;
+
+  const handleViewDetails = (id: string) => {
+    setLocation(`/upload?periodId=${id}`);
+  };
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this period? This will also delete all associated files and transactions.")) {
@@ -161,7 +166,7 @@ export default function Dashboard() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleViewDetails(period.id)}>
                                 <Eye className="h-4 w-4 mr-2" />
                                 View Details
                               </DropdownMenuItem>

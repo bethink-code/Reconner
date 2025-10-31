@@ -145,6 +145,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/files/:fileId/preview", async (req, res) => {
+    try {
+      const file = await storage.getFile(req.params.fileId);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      const objectFile = await objectStorageService.getFile(file.fileUrl);
+      const [buffer] = await objectFile.download();
+      
+      const parsed = fileParser.parse(buffer, file.fileType);
+      const suggestedMappings = fileParser.autoDetectColumns(parsed.headers);
+
+      res.json({
+        headers: parsed.headers,
+        rows: parsed.rows.slice(0, 5),
+        totalRows: parsed.rowCount,
+        suggestedMappings,
+        currentMapping: file.columnMapping,
+      });
+    } catch (error) {
+      console.error("Error fetching file preview:", error);
+      res.status(500).json({ error: "Failed to fetch file preview" });
+    }
+  });
+
   app.post("/api/files/:fileId/column-mapping", async (req, res) => {
     try {
       const validatedMapping = columnMappingSchema.parse(req.body.columnMapping);

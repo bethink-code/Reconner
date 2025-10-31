@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,9 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { ReconciliationPeriod } from "@shared/schema";
 
 export default function CreatePeriod() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -17,11 +22,31 @@ export default function CreatePeriod() {
     endDate: "",
   });
 
+  const createPeriodMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const response = await apiRequest("POST", "/api/periods", data);
+      const period = await response.json() as ReconciliationPeriod;
+      return period;
+    },
+    onSuccess: (period) => {
+      toast({
+        title: "Period created",
+        description: `${period.name} has been created successfully.`,
+      });
+      setLocation(`/upload?periodId=${period.id}`);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create period",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Creating period:', formData);
-    // todo: remove mock functionality - replace with actual API call
-    setLocation("/upload");
+    createPeriodMutation.mutate(formData);
   };
 
   const handleChange = (field: string, value: string) => {
@@ -107,12 +132,23 @@ export default function CreatePeriod() {
 
               <div className="flex gap-3 pt-4">
                 <Link href="/" className="flex-1">
-                  <Button type="button" variant="outline" className="w-full" data-testid="button-cancel">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="w-full" 
+                    disabled={createPeriodMutation.isPending}
+                    data-testid="button-cancel"
+                  >
                     Cancel
                   </Button>
                 </Link>
-                <Button type="submit" className="flex-1" data-testid="button-create-and-continue">
-                  Create & Continue
+                <Button 
+                  type="submit" 
+                  className="flex-1" 
+                  disabled={createPeriodMutation.isPending}
+                  data-testid="button-create-and-continue"
+                >
+                  {createPeriodMutation.isPending ? "Creating..." : "Create & Continue"}
                 </Button>
               </div>
             </form>

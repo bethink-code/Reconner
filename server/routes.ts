@@ -127,6 +127,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const parsed = await fileParser.parse(req.file.buffer, fileType);
       const columnMappings = fileParser.autoDetectColumns(parsed.headers);
 
+      const suggestedMappingsObject: Record<string, string> = {};
+      for (const mapping of columnMappings) {
+        suggestedMappingsObject[mapping.detectedColumn] = mapping.suggestedMapping;
+      }
+
       const fileUrl = await objectStorageService.uploadFile(
         req.file.buffer,
         req.file.originalname,
@@ -153,7 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           rows: parsed.rows.slice(0, 5),
           totalRows: parsed.rowCount,
         },
-        suggestedMappings: columnMappings,
+        suggestedMappings: suggestedMappingsObject,
       });
     } catch (error) {
       console.error("Error uploading file:", error);
@@ -172,7 +177,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [buffer] = await objectFile.download();
       
       const parsed = await fileParser.parse(buffer, file.fileType);
-      const suggestedMappings = fileParser.autoDetectColumns(parsed.headers);
+      const suggestedMappingsArray = fileParser.autoDetectColumns(parsed.headers);
+      
+      const suggestedMappings: Record<string, string> = {};
+      for (const mapping of suggestedMappingsArray) {
+        suggestedMappings[mapping.detectedColumn] = mapping.suggestedMapping;
+      }
 
       res.json({
         headers: parsed.headers,

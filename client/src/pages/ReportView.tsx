@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -8,41 +10,58 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Download, FileText } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import type { ReconciliationPeriod, Transaction } from "@shared/schema";
 
 export default function ReportView() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [periodId, setPeriodId] = useState<string>("");
   const [exportFormat, setExportFormat] = useState("pdf");
 
-  // todo: remove mock functionality
-  const reportData = {
-    periodName: "January 2024 Reconciliation",
-    dateRange: "Jan 1 - Jan 31, 2024",
-    generatedAt: new Date().toLocaleString(),
-    summary: {
-      totalTransactions: 150,
-      matched: 120,
-      unmatched: 20,
-      partial: 10,
-      reconciliationRate: 80,
-      totalAmount: 125750.50,
-      discrepancy: 250.00,
-    },
-    matchedTransactions: [
-      { id: "TXN-001", date: "2024-01-15", amount: 1250.50, reference: "REF-2024-001" },
-      { id: "TXN-002", date: "2024-01-16", amount: 890.00, reference: "REF-2024-002" },
-      { id: "TXN-004", date: "2024-01-18", amount: 1450.25, reference: "REF-2024-004" },
-    ],
-    unmatchedTransactions: [
-      { id: "TXN-003", date: "2024-01-17", amount: 2100.75, reference: "REF-2024-003" },
-      { id: "TXN-005", date: "2024-01-19", amount: 750.00, reference: "REF-2024-005" },
-    ],
-  };
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('periodId');
+    if (id) {
+      setPeriodId(id);
+    } else {
+      setLocation('/');
+    }
+  }, [setLocation]);
+
+  const { data: period } = useQuery<ReconciliationPeriod>({
+    queryKey: ['/api/periods', periodId],
+    enabled: !!periodId,
+  });
+
+  const { data: transactions = [] } = useQuery<Transaction[]>({
+    queryKey: ['/api/periods', periodId, 'transactions'],
+    enabled: !!periodId,
+  });
+
+  const matchedTransactions = transactions.filter(t => t.matchStatus === "matched");
+  const unmatchedTransactions = transactions.filter(t => t.matchStatus === "unmatched");
+  const partialTransactions = transactions.filter(t => t.matchStatus === "partial");
+
+  const totalAmount = transactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+  const matchedAmount = matchedTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+  const unmatchedAmount = unmatchedTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+
+  const reconciliationRate = transactions.length > 0 
+    ? Math.round((matchedTransactions.length / transactions.length) * 100) 
+    : 0;
 
   const handleExport = () => {
-    console.log(`Exporting report as ${exportFormat}`);
-    // todo: remove mock functionality - implement actual export
+    const url = `/api/periods/${periodId}/report/${exportFormat}`;
+    window.open(url, '_blank');
+    
+    toast({
+      title: "Downloading report",
+      description: `Your ${exportFormat.toUpperCase()} report is being downloaded.`,
+    });
   };
 
   const formatCurrency = (amount: number) => {
@@ -52,13 +71,28 @@ export default function ReportView() {
     }).format(amount);
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  if (!period) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading report...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/reconcile">
+            <Link href={`/reconcile?periodId=${periodId}`}>
               <Button variant="ghost" size="icon" data-testid="button-back">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -66,7 +100,7 @@ export default function ReportView() {
             <div className="flex-1">
               <h1 className="text-2xl font-semibold">Reconciliation Report</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {reportData.periodName}
+                {period.name}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -91,25 +125,23 @@ export default function ReportView() {
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="space-y-6">
-          {/* Report Header */}
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
-                  <CardTitle className="text-xl">{reportData.periodName}</CardTitle>
+                  <CardTitle className="text-xl">{period.name}</CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Period: {reportData.dateRange}
+                    Period: {formatDate(period.startDate)} - {formatDate(period.endDate)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Generated: {reportData.generatedAt}
+                    Generated: {new Date().toLocaleString()}
                   </p>
                 </div>
-                <StatusBadge status="complete" />
+                <StatusBadge status={period.status} />
               </div>
             </CardHeader>
           </Card>
 
-          {/* Summary Statistics */}
           <Card>
             <CardHeader>
               <CardTitle>Summary</CardTitle>
@@ -118,104 +150,78 @@ export default function ReportView() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Transactions</p>
-                  <p className="text-2xl font-bold">{reportData.summary.totalTransactions}</p>
+                  <p className="text-2xl font-bold">{transactions.length}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Matched</p>
-                  <p className="text-2xl font-bold text-chart-2">{reportData.summary.matched}</p>
+                  <p className="text-2xl font-bold text-chart-2">{matchedTransactions.length}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Unmatched</p>
-                  <p className="text-2xl font-bold text-destructive">{reportData.summary.unmatched}</p>
+                  <p className="text-2xl font-bold text-chart-1">{unmatchedTransactions.length}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Reconciliation Rate</p>
-                  <p className="text-2xl font-bold">{reportData.summary.reconciliationRate}%</p>
+                  <p className="text-sm text-muted-foreground mb-1">Partial</p>
+                  <p className="text-2xl font-bold text-chart-3">{partialTransactions.length}</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="grid grid-cols-2 gap-6 mt-6 pt-6 border-t">
+          <Card>
+            <CardHeader>
+              <CardTitle>Financial Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
-                  <p className="text-xl font-mono font-semibold">
-                    {formatCurrency(reportData.summary.totalAmount)}
-                  </p>
+                  <p className="text-2xl font-bold font-mono">{formatCurrency(totalAmount)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Discrepancy</p>
-                  <p className="text-xl font-mono font-semibold text-destructive">
-                    {formatCurrency(reportData.summary.discrepancy)}
+                  <p className="text-sm text-muted-foreground mb-1">Matched Amount</p>
+                  <p className="text-2xl font-bold font-mono text-chart-2">{formatCurrency(matchedAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Unmatched Amount</p>
+                  <p className="text-2xl font-bold font-mono text-chart-1">{formatCurrency(unmatchedAmount)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Reconciliation Rate</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <div className="text-4xl font-bold">{reconciliationRate}%</div>
+                <div className="flex-1">
+                  <div className="h-4 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-chart-2 transition-all"
+                      style={{ width: `${reconciliationRate}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {matchedTransactions.length} of {transactions.length} transactions matched
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Matched Transactions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Matched Transactions ({reportData.matchedTransactions.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr className="border-b">
-                      <th className="text-left p-3 text-sm font-semibold">Transaction ID</th>
-                      <th className="text-left p-3 text-sm font-semibold">Date</th>
-                      <th className="text-left p-3 text-sm font-semibold">Reference</th>
-                      <th className="text-right p-3 text-sm font-semibold">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.matchedTransactions.map((txn) => (
-                      <tr key={txn.id} className="border-b">
-                        <td className="p-3 text-sm font-mono">{txn.id}</td>
-                        <td className="p-3 text-sm">{txn.date}</td>
-                        <td className="p-3 text-sm font-mono">{txn.reference}</td>
-                        <td className="p-3 text-sm font-mono text-right">
-                          {formatCurrency(txn.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Unmatched Transactions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Unmatched Transactions ({reportData.unmatchedTransactions.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr className="border-b">
-                      <th className="text-left p-3 text-sm font-semibold">Transaction ID</th>
-                      <th className="text-left p-3 text-sm font-semibold">Date</th>
-                      <th className="text-left p-3 text-sm font-semibold">Reference</th>
-                      <th className="text-right p-3 text-sm font-semibold">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.unmatchedTransactions.map((txn) => (
-                      <tr key={txn.id} className="border-b">
-                        <td className="p-3 text-sm font-mono">{txn.id}</td>
-                        <td className="p-3 text-sm">{txn.date}</td>
-                        <td className="p-3 text-sm font-mono">{txn.reference}</td>
-                        <td className="p-3 text-sm font-mono text-right">
-                          {formatCurrency(txn.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          {period.description && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm">{period.description}</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
     </div>

@@ -1,109 +1,86 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, Zap } from "lucide-react";
 import TransactionTable from "@/components/TransactionTable";
 import ReconciliationSummary from "@/components/ReconciliationSummary";
-import ManualMatchPanel from "@/components/ManualMatchPanel";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Transaction } from "@shared/schema";
 
 export default function ReconcileTransactions() {
   const [, setLocation] = useLocation();
-  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const { toast } = useToast();
+  const [periodId, setPeriodId] = useState<string>("");
   const [activeTab, setActiveTab] = useState("all");
 
-  // todo: remove mock functionality
-  const allTransactions = [
-    {
-      id: "TXN-001",
-      date: "2024-01-15",
-      amount: 1250.50,
-      reference: "REF-2024-001",
-      description: "Fuel delivery - Premium unleaded",
-      source: "Fuel System",
-      matchStatus: "matched" as const,
-      confidence: 95,
-    },
-    {
-      id: "TXN-002",
-      date: "2024-01-16",
-      amount: 890.00,
-      reference: "REF-2024-002",
-      description: "Diesel fuel purchase",
-      source: "Bank Account 1",
-      matchStatus: "partial" as const,
-      confidence: 75,
-    },
-    {
-      id: "TXN-003",
-      date: "2024-01-17",
-      amount: 2100.75,
-      reference: "REF-2024-003",
-      description: "Monthly fuel supply",
-      source: "Fuel System",
-      matchStatus: "unmatched" as const,
-    },
-    {
-      id: "TXN-004",
-      date: "2024-01-18",
-      amount: 1450.25,
-      reference: "REF-2024-004",
-      description: "Regular fuel delivery",
-      source: "Bank Account 1",
-      matchStatus: "matched" as const,
-      confidence: 98,
-    },
-    {
-      id: "TXN-005",
-      date: "2024-01-19",
-      amount: 750.00,
-      reference: "REF-2024-005",
-      description: "Adjustment - refund",
-      source: "Fuel System",
-      matchStatus: "unmatched" as const,
-    },
-  ];
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('periodId');
+    if (id) {
+      setPeriodId(id);
+    } else {
+      setLocation('/');
+    }
+  }, [setLocation]);
 
-  const matchedTransactions = allTransactions.filter(t => t.matchStatus === "matched");
-  const unmatchedTransactions = allTransactions.filter(t => t.matchStatus === "unmatched");
-  const partialTransactions = allTransactions.filter(t => t.matchStatus === "partial");
+  const { data: transactions = [], isLoading } = useQuery<Transaction[]>({
+    queryKey: ['/api/periods', periodId, 'transactions'],
+    enabled: !!periodId,
+  });
 
-  const suggestedMatches = [
-    {
-      transaction: {
-        id: "BANK-456",
-        date: "2024-01-17",
-        amount: 2100.75,
-        reference: "REF-003",
-        source: "Bank Account 1",
-      },
-      confidence: 88,
+  const autoMatchMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/periods/${periodId}/auto-match`, {});
+      return await response.json();
     },
-    {
-      transaction: {
-        id: "BANK-457",
-        date: "2024-01-18",
-        amount: 2100.00,
-        reference: "REF-2024-003",
-        source: "Bank Account 2",
-      },
-      confidence: 65,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/periods', periodId, 'transactions'] });
+      toast({
+        title: "Auto-match complete",
+        description: `Created ${result.matchesCreated} matches.`,
+      });
     },
-  ];
+    onError: (error: Error) => {
+      toast({
+        title: "Auto-match failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const matchedTransactions = transactions.filter(t => t.matchStatus === "matched");
+  const unmatchedTransactions = transactions.filter(t => t.matchStatus === "unmatched");
+  const partialTransactions = transactions.filter(t => t.matchStatus === "partial");
 
   const handleGenerateReport = () => {
-    console.log('Generating report');
-    setLocation("/report");
+    setLocation(`/report?periodId=${periodId}`);
+  };
+
+  const handleAutoMatch = () => {
+    autoMatchMutation.mutate();
+  };
+
+  const summary = {
+    totalTransactions: transactions.length,
+    matched: matchedTransactions.length,
+    unmatched: unmatchedTransactions.length,
+    partial: partialTransactions.length,
+    reconciliationRate: transactions.length > 0 
+      ? Math.round((matchedTransactions.length / transactions.length) * 100) 
+      : 0,
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/mapping">
+            <Link href={`/mapping?periodId=${periodId}`}>
               <Button variant="ghost" size="icon" data-testid="button-back">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -114,6 +91,15 @@ export default function ReconcileTransactions() {
                 Review matched transactions and resolve discrepancies
               </p>
             </div>
+            <Button 
+              onClick={handleAutoMatch}
+              disabled={autoMatchMutation.isPending || transactions.length === 0}
+              variant="outline"
+              data-testid="button-auto-match"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              {autoMatchMutation.isPending ? "Matching..." : "Auto-Match"}
+            </Button>
             <Button onClick={handleGenerateReport} data-testid="button-generate-report">
               <Download className="h-4 w-4 mr-2" />
               Generate Report
@@ -123,13 +109,24 @@ export default function ReconcileTransactions() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
+          <ReconciliationSummary
+            totalTransactions={summary.totalTransactions}
+            matched={summary.matched}
+            unmatched={summary.unmatched}
+            partial={summary.partial}
+            reconciliationRate={summary.reconciliationRate}
+          />
+
+          {isLoading ? (
+            <p className="text-muted-foreground">Loading transactions...</p>
+          ) : transactions.length === 0 ? (
+            <p className="text-muted-foreground">No transactions found. Please upload and process files first.</p>
+          ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4" data-testid="tabs-transactions">
+              <TabsList>
                 <TabsTrigger value="all" data-testid="tab-all">
-                  All ({allTransactions.length})
+                  All ({transactions.length})
                 </TabsTrigger>
                 <TabsTrigger value="matched" data-testid="tab-matched">
                   Matched ({matchedTransactions.length})
@@ -138,75 +135,41 @@ export default function ReconcileTransactions() {
                   Unmatched ({unmatchedTransactions.length})
                 </TabsTrigger>
                 <TabsTrigger value="partial" data-testid="tab-partial">
-                  Needs Review ({partialTransactions.length})
+                  Partial ({partialTransactions.length})
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="all" className="mt-6">
                 <TransactionTable
-                  title="All Transactions"
-                  transactions={allTransactions}
-                  showSelection={true}
-                  onTransactionSelect={setSelectedTransaction}
+                  transactions={transactions}
+                  onTransactionSelect={() => {}}
                 />
               </TabsContent>
 
               <TabsContent value="matched" className="mt-6">
                 <TransactionTable
-                  title="Matched Transactions"
                   transactions={matchedTransactions}
-                  onTransactionSelect={setSelectedTransaction}
+                  onTransactionSelect={() => {}}
                 />
               </TabsContent>
 
               <TabsContent value="unmatched" className="mt-6">
                 <TransactionTable
-                  title="Unmatched Transactions"
                   transactions={unmatchedTransactions}
-                  onTransactionSelect={setSelectedTransaction}
+                  onTransactionSelect={() => {}}
                 />
               </TabsContent>
 
               <TabsContent value="partial" className="mt-6">
                 <TransactionTable
-                  title="Transactions Needing Review"
                   transactions={partialTransactions}
-                  onTransactionSelect={setSelectedTransaction}
+                  onTransactionSelect={() => {}}
                 />
               </TabsContent>
             </Tabs>
-          </div>
-
-          {/* Sidebar */}
-          <div>
-            <ReconciliationSummary
-              totalTransactions={allTransactions.length}
-              matched={matchedTransactions.length}
-              unmatched={unmatchedTransactions.length}
-              partial={partialTransactions.length}
-              totalAmount={allTransactions.reduce((sum, t) => sum + t.amount, 0)}
-              discrepancy={250.00}
-            />
-          </div>
+          )}
         </div>
       </main>
-
-      {/* Manual Match Panel */}
-      {selectedTransaction && (
-        <ManualMatchPanel
-          transaction={selectedTransaction}
-          suggestedMatches={suggestedMatches}
-          onMatch={(txnId, matchId, notes) => {
-            console.log('Match confirmed:', { txnId, matchId, notes });
-            setSelectedTransaction(null);
-          }}
-          onReject={() => {
-            console.log('Match rejected');
-            setSelectedTransaction(null);
-          }}
-          onClose={() => setSelectedTransaction(null)}
-        />
-      )}
     </div>
   );
 }

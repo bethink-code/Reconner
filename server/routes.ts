@@ -286,6 +286,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Column mapping not set" });
       }
 
+      // Delete existing transactions from this file before reprocessing
+      // This prevents duplicates when files are processed multiple times
+      await storage.deleteTransactionsByFile(file.id);
+
       const objectFile = await objectStorageService.getFile(file.fileUrl);
       const [buffer] = await objectFile.download();
       

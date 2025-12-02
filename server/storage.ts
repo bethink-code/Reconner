@@ -143,7 +143,19 @@ export class DatabaseStorage implements IStorage {
 
   async createTransactions(transactionList: InsertTransaction[]): Promise<Transaction[]> {
     if (transactionList.length === 0) return [];
-    return await db.insert(transactions).values(transactionList).returning();
+    
+    // Batch inserts to avoid "Maximum call stack size exceeded" error
+    // when inserting many transactions at once
+    const BATCH_SIZE = 100;
+    const results: Transaction[] = [];
+    
+    for (let i = 0; i < transactionList.length; i += BATCH_SIZE) {
+      const batch = transactionList.slice(i, i + BATCH_SIZE);
+      const inserted = await db.insert(transactions).values(batch).returning();
+      results.push(...inserted);
+    }
+    
+    return results;
   }
 
   async updateTransaction(id: string, data: Partial<InsertTransaction>): Promise<Transaction | undefined> {

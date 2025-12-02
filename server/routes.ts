@@ -396,46 +396,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return hours * 60 + minutes;
       };
 
+      // Helper function to parse date and calculate days difference
+      // Bank transactions are source of truth - fuel transactions may appear 1-2 days earlier
+      const parseDateToDays = (dateStr: string): number | null => {
+        if (!dateStr) return null;
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return null;
+        return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
+      };
+
       for (const fuelTx of fuelTransactions) {
         if (fuelTx.matchStatus !== 'unmatched') continue;
 
-        let bestMatch: { bankTx: typeof bankTransactions[0]; confidence: number; timeDiff: number } | null = null;
+        let bestMatch: { bankTx: typeof bankTransactions[0]; confidence: number; timeDiff: number; dateDiff: number } | null = null;
 
         for (const bankTx of bankTransactions) {
           if (bankTx.matchStatus !== 'unmatched') continue;
 
-          // PRIMARY CRITERIA: Amount + Date + Time
+          // PRIMARY CRITERIA: Amount must match exactly
           const amountMatch = Math.abs(parseFloat(fuelTx.amount) - parseFloat(bankTx.amount)) < 0.01;
-          const dateMatch = fuelTx.transactionDate === bankTx.transactionDate;
+          if (!amountMatch) continue;
+
+          // DATE MATCHING: Allow ±2 days tolerance for card processing delays
+          // Bank date is typically 0-2 days AFTER fuel transaction date
+          const fuelDate = parseDateToDays(fuelTx.transactionDate || '');
+          const bankDate = parseDateToDays(bankTx.transactionDate || '');
           
-          // Both amount AND date MUST match for a valid match
-          if (!amountMatch || !dateMatch) continue;
+          if (fuelDate === null || bankDate === null) continue;
+          
+          const dateDiff = bankDate - fuelDate; // Positive = bank is later (expected)
+          
+          // Allow bank to be 0-2 days after fuel (normal processing)
+          // Also allow bank to be 1 day before fuel (timezone/cutoff differences)
+          if (dateDiff < -1 || dateDiff > 2) continue;
+
+          // Calculate base confidence from date difference
+          // Same day = highest, 1 day = medium, 2 days = lower
+          let baseConfidence = 70;
+          if (dateDiff === 0) baseConfidence = 85;      // Same day
+          else if (Math.abs(dateDiff) === 1) baseConfidence = 75;  // 1 day difference
+          else baseConfidence = 65;                      // 2 days difference
 
           // Time matching - calculate difference in minutes
+          // Time is less critical when dates differ (processing delays affect time too)
           const fuelTime = parseTimeToMinutes(fuelTx.transactionTime || '');
           const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
           
           let timeDiff = 999; // Large number if no time available
-          let confidence = 70; // Base confidence for amount + date match
+          let confidence = baseConfidence;
           
-          if (fuelTime !== null && bankTime !== null) {
+          // Only apply strict time matching for same-day transactions
+          if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
             timeDiff = Math.abs(fuelTime - bankTime);
             // Time within 5 minutes = perfect match
             if (timeDiff <= 5) confidence = 100;
             // Time within 15 minutes = good match
-            else if (timeDiff <= 15) confidence = 90;
+            else if (timeDiff <= 15) confidence = 95;
             // Time within 30 minutes = acceptable
-            else if (timeDiff <= 30) confidence = 80;
-            // Time within 60 minutes = low confidence but allowed
-            else if (timeDiff <= 60) confidence = 65;
-            // Time differs more than 60 minutes = reject match (too risky)
-            else continue;
+            else if (timeDiff <= 30) confidence = 85;
+            // Time within 60 minutes = still good for same day
+            else if (timeDiff <= 60) confidence = 75;
+            // Time differs more than 60 minutes on same day = lower confidence
+            else confidence = 65;
+          } else if (dateDiff !== 0) {
+            // Different days - time is less relevant due to processing delays
+            // Just use the base confidence from date difference
+            timeDiff = 0; // Treat as acceptable
           }
 
-          // Prefer matches with smallest time difference
-          if (!bestMatch || timeDiff < bestMatch.timeDiff || 
-              (timeDiff === bestMatch.timeDiff && confidence > bestMatch.confidence)) {
-            bestMatch = { bankTx, confidence, timeDiff };
+          // Prefer matches with: 1) smallest date diff, 2) smallest time diff, 3) highest confidence
+          const absDiff = Math.abs(dateDiff);
+          if (!bestMatch || 
+              absDiff < bestMatch.dateDiff ||
+              (absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff) ||
+              (absDiff === bestMatch.dateDiff && timeDiff === bestMatch.timeDiff && confidence > bestMatch.confidence)) {
+            bestMatch = { bankTx, confidence, timeDiff, dateDiff: absDiff };
           }
         }
 

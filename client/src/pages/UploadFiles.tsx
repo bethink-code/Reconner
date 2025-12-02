@@ -111,14 +111,21 @@ export default function UploadFiles() {
                   : "Upload files from your fuel management system and bank accounts"}
               </p>
             </div>
-            <Button 
-              onClick={handleContinue}
-              disabled={!canContinue || uploadMutation.isPending}
-              data-testid="button-continue"
-            >
-              {uploadMutation.isPending ? "Uploading..." : "Continue to Mapping"}
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
+            <div className="flex items-center gap-3">
+              {!canContinue && !uploadMutation.isPending && (
+                <span className="text-xs text-muted-foreground">
+                  {!fuelFile ? "Upload fuel file to continue" : "Upload at least one bank file to continue"}
+                </span>
+              )}
+              <Button 
+                onClick={handleContinue}
+                disabled={!canContinue || uploadMutation.isPending}
+                data-testid="button-continue"
+              >
+                {uploadMutation.isPending ? "Uploading..." : "Continue to Mapping"}
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>

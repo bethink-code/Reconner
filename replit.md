@@ -118,10 +118,12 @@ Preferred communication style: Simple, everyday language.
 ### User Workflow
 
 **Multi-Step Reconciliation Process**
-1. **Dashboard** - View all periods with status cards and period list
+1. **Dashboard** - View all periods with status cards and period list; "Edit" opens existing period, "View Report" goes to report
 2. **Create Period** - Define reconciliation period with name, description, and date range
-3. **Upload Files** - Upload fuel management and bank account transaction files
-4. **Column Mapping** - Map detected columns to required fields (date, amount, reference, description)
+3. **Upload Files** - Upload fuel management and bank account transaction files (requires fuel + at least one bank file)
+   - Shows existing uploaded files with Replace button to upload new file over existing one
+   - File cards display: filename, size, row count, mapping status
+4. **Column Mapping** - Map detected columns to required fields (date, amount, reference, description, card number)
 5. **Reconcile Transactions** - Review automatic matches, resolve partial matches, manually match unmatched transactions
 6. **Report View** - Generate and export comprehensive reconciliation reports
 

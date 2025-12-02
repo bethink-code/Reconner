@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, FileText, MoreVertical, Trash2, Eye } from "lucide-react";
+import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart } from "lucide-react";
 import PeriodCard from "@/components/PeriodCard";
 import StatusBadge from "@/components/StatusBadge";
 import {
@@ -52,8 +52,12 @@ export default function Dashboard() {
   const inProgressCount = displayPeriods.filter(p => p.status === "in_progress").length;
   const draftCount = displayPeriods.filter(p => p.status === "draft").length;
 
-  const handleViewDetails = (id: string) => {
+  const handleEdit = (id: string) => {
     setLocation(`/upload?periodId=${id}`);
+  };
+
+  const handleViewReport = (id: string) => {
+    setLocation(`/report?periodId=${id}`);
   };
 
   const handleDelete = (id: string) => {
@@ -166,9 +170,13 @@ export default function Dashboard() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleViewDetails(period.id)}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
+                              <DropdownMenuItem onClick={() => handleEdit(period.id)}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleViewReport(period.id)}>
+                                <FileBarChart className="h-4 w-4 mr-2" />
+                                View Report
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 className="text-destructive"

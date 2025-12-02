@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
-import { fileParser } from "./fileParser";
+import { fileParser, DataNormalizer, SOURCE_PRESETS } from "./fileParser";
 import { objectStorageService } from "./objectStorage";
 import { reportGenerator } from "./reportGenerator";
 import { 
@@ -20,7 +20,8 @@ const upload = multer({
   }
 });
 
-const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'ignore']));
+// Expanded column mapping schema to include time and payment type
+const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'ignore']));
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -184,12 +185,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         suggestedMappings[mapping.detectedColumn] = mapping.suggestedMapping;
       }
 
+      // Detect source preset and get column labels
+      const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
+      const columnLabels: Record<string, string> = {};
+      for (const header of parsed.headers) {
+        columnLabels[header] = fileParser.getColumnLabel(header, parsed.headers);
+      }
+
+      // Generate normalized preview if we have a current mapping
+      const normalizedPreview: Array<{
+        transactionDate: string;
+        transactionTime: string;
+        amount: string;
+        referenceNumber: string;
+        description: string;
+        paymentType: string;
+        isCardTransaction: 'yes' | 'no' | 'unknown';
+      }> = [];
+      
+      const mappingToUse = file.columnMapping || suggestedMappings;
+      if (mappingToUse && Object.keys(mappingToUse).length > 0) {
+        for (const row of parsed.rows.slice(0, 5)) {
+          const extracted = fileParser.extractTransactionData(
+            row,
+            mappingToUse as Record<string, string>,
+            parsed.headers,
+            file.sourceType
+          );
+          normalizedPreview.push(extracted);
+        }
+      }
+
       res.json({
         headers: parsed.headers,
         rows: parsed.rows.slice(0, 5),
         totalRows: parsed.rowCount,
         suggestedMappings,
         currentMapping: file.columnMapping,
+        // New fields for improved UI
+        detectedPreset: detectedPreset ? {
+          name: detectedPreset.name,
+          description: detectedPreset.description,
+        } : null,
+        columnLabels,
+        normalizedPreview,
       });
     } catch (error) {
       console.error("Error fetching file preview:", error);
@@ -235,7 +274,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const parsed = await fileParser.parse(buffer, file.fileType);
       
       const transactions = parsed.rows.map(row => {
-        const extracted = fileParser.extractTransactionData(row, file.columnMapping as Record<string, string>);
+        const extracted = fileParser.extractTransactionData(
+          row, 
+          file.columnMapping as Record<string, string>,
+          parsed.headers,
+          file.sourceType
+        );
         
         return {
           fileId: file.id,
@@ -243,9 +287,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sourceType: file.sourceType,
           rawData: row,
           transactionDate: extracted.transactionDate,
+          transactionTime: extracted.transactionTime || null,
           amount: extracted.amount,
           description: extracted.description || '',
           referenceNumber: extracted.referenceNumber || '',
+          paymentType: extracted.paymentType || null,
+          isCardTransaction: extracted.isCardTransaction,
           matchStatus: 'unmatched' as const,
           matchId: null,
         };
@@ -297,10 +344,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
       
-      const fuelTransactions = transactions.filter(t => t.sourceType === 'fuel');
-      const bankTransactions = transactions.filter(t => t.sourceType === 'bank');
+      // Filter fuel transactions to ONLY confirmed card transactions for reconciliation
+      // Cash and unknown transactions are excluded from matching but kept for reporting
+      const fuelTransactions = transactions.filter(t => 
+        t.sourceType === 'fuel' && 
+        t.isCardTransaction === 'yes'
+      );
+      
+      // All bank transactions are card by definition (from merchant portals)
+      const bankTransactions = transactions.filter(t => t.sourceType === 'bank_account');
       
       let matchCount = 0;
+      // Count non-card transactions (cash + unknown) that are skipped from matching
+      let skippedNonCardCount = transactions.filter(t => 
+        t.sourceType === 'fuel' && t.isCardTransaction !== 'yes'
+      ).length;
 
       for (const fuelTx of fuelTransactions) {
         if (fuelTx.matchStatus !== 'unmatched') continue;
@@ -344,7 +402,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         success: true, 
-        matchesCreated: matchCount 
+        matchesCreated: matchCount,
+        cardTransactionsProcessed: fuelTransactions.length,
+        nonCardTransactionsSkipped: skippedNonCardCount,
       });
     } catch (error) {
       console.error("Error auto-matching:", error);

@@ -65,14 +65,25 @@ export default function ReconcileTransactions() {
     autoMatchMutation.mutate();
   };
 
+  const totalAmount = transactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+  
+  // Calculate discrepancy: fuel card total vs bank total
+  const fuelCardTransactions = transactions.filter(t => 
+    t.sourceType === 'fuel' && (t.isCardTransaction === 'yes' || t.isCardTransaction === 'unknown')
+  );
+  const bankTransactions = transactions.filter(t => t.sourceType === 'bank_account');
+  
+  const fuelCardTotal = fuelCardTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+  const bankTotal = bankTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+  const discrepancy = fuelCardTotal - bankTotal;
+
   const summary = {
     totalTransactions: transactions.length,
     matched: matchedTransactions.length,
     unmatched: unmatchedTransactions.length,
     partial: partialTransactions.length,
-    reconciliationRate: transactions.length > 0 
-      ? Math.round((matchedTransactions.length / transactions.length) * 100) 
-      : 0,
+    totalAmount,
+    discrepancy,
   };
 
   return (
@@ -115,7 +126,8 @@ export default function ReconcileTransactions() {
             matched={summary.matched}
             unmatched={summary.unmatched}
             partial={summary.partial}
-            reconciliationRate={summary.reconciliationRate}
+            totalAmount={summary.totalAmount}
+            discrepancy={summary.discrepancy}
           />
 
           {isLoading ? (
@@ -141,6 +153,7 @@ export default function ReconcileTransactions() {
 
               <TabsContent value="all" className="mt-6">
                 <TransactionTable
+                  title="All Transactions"
                   transactions={transactions}
                   onTransactionSelect={() => {}}
                 />
@@ -148,6 +161,7 @@ export default function ReconcileTransactions() {
 
               <TabsContent value="matched" className="mt-6">
                 <TransactionTable
+                  title="Matched Transactions"
                   transactions={matchedTransactions}
                   onTransactionSelect={() => {}}
                 />
@@ -155,6 +169,7 @@ export default function ReconcileTransactions() {
 
               <TabsContent value="unmatched" className="mt-6">
                 <TransactionTable
+                  title="Unmatched Transactions"
                   transactions={unmatchedTransactions}
                   onTransactionSelect={() => {}}
                 />
@@ -162,6 +177,7 @@ export default function ReconcileTransactions() {
 
               <TabsContent value="partial" className="mt-6">
                 <TransactionTable
+                  title="Partial Matches"
                   transactions={partialTransactions}
                   onTransactionSelect={() => {}}
                 />

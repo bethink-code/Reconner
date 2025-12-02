@@ -10,8 +10,231 @@ export interface ParsedFileData {
 
 export interface ColumnMapping {
   detectedColumn: string;
-  suggestedMapping: 'date' | 'amount' | 'reference' | 'description' | 'ignore';
+  suggestedMapping: 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'ignore';
   confidence: number;
+}
+
+// Source-specific preset definitions based on known file structures
+export interface SourcePreset {
+  name: string;
+  description: string;
+  detectPattern: (headers: string[]) => boolean;
+  mappings: Record<string, 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'ignore'>;
+  columnLabels: Record<string, string>; // Human-readable labels for cryptic column names
+}
+
+export const SOURCE_PRESETS: SourcePreset[] = [
+  {
+    name: 'FNB Merchant',
+    description: 'FNB Bank merchant transaction export',
+    detectPattern: (headers) => {
+      const normalized = headers.map(h => h.toLowerCase().trim());
+      return normalized.includes('transaction date') && 
+             normalized.includes('terminal id') &&
+             normalized.includes('pan');
+    },
+    mappings: {
+      'Transaction Date': 'date',
+      'Time': 'time',
+      'Amount': 'amount',
+      'Terminal ID': 'reference',
+      'Transaction Type': 'description',
+      'PAN': 'ignore',
+      'Source': 'ignore',
+    },
+    columnLabels: {
+      'Transaction Date': 'Transaction Date (e.g., "27 Nov")',
+      'Time': 'Transaction Time',
+      'Amount': 'Transaction Amount',
+      'Terminal ID': 'Terminal Reference ID',
+      'Transaction Type': 'Transaction Type (Purchase, etc.)',
+      'PAN': 'Card Number (masked)',
+      'Source': 'Source System',
+    },
+  },
+  {
+    name: 'ABSA Merchant',
+    description: 'ABSA Bank merchant portal export',
+    detectPattern: (headers) => {
+      const normalized = headers.map(h => h.toLowerCase().trim());
+      return normalized.includes('transaction amount') && 
+             normalized.includes('short reference') &&
+             normalized.includes('merchant name');
+    },
+    mappings: {
+      'Date': 'date',
+      'Time': 'time',
+      'Transaction Amount': 'amount',
+      'Short Reference': 'reference',
+      'Merchant Name': 'description',
+      'Receipt No': 'ignore',
+      'Terminal ID': 'ignore',
+      'Card Type': 'ignore',
+      'Payment Method': 'paymentType',
+      'Invoice No': 'ignore',
+    },
+    columnLabels: {
+      'Date': 'Transaction Date (YYYY/MM/DD)',
+      'Time': 'Transaction Time',
+      'Transaction Amount': 'Amount (R currency format)',
+      'Short Reference': 'Short Reference Code',
+      'Merchant Name': 'Merchant/Store Name',
+      'Receipt No': 'Receipt Number',
+      'Terminal ID': 'Terminal ID',
+      'Card Type': 'Card Type (Visa, MC)',
+      'Payment Method': 'Payment Method',
+    },
+  },
+  {
+    name: 'Fuel Master',
+    description: 'Fuel Master shift/sales export',
+    detectPattern: (headers) => {
+      const normalized = headers.map(h => h.toLowerCase().trim());
+      // Fuel Master has cryptic column names like _1, _2, _3, _4, _5
+      const hasCrypticColumns = headers.some(h => /^_\d+$/.test(h.trim()));
+      const hasInvoice = normalized.includes('invoice');
+      const hasShift = normalized.includes('shift');
+      return (hasCrypticColumns && hasInvoice) || (hasShift && hasInvoice);
+    },
+    mappings: {
+      '_1': 'date',  // Date/Time combined
+      '_2': 'ignore', // Shift identifier
+      '_3': 'description', // Fuel type (DSL50, ULP95)
+      '_4': 'ignore', // Unit price
+      '_5': 'amount', // Total amount
+      'Invoice': 'reference',
+      'Description': 'ignore', // Actually contains quantity, not description
+      'Shift': 'paymentType', // Contains "Card" or other payment type
+    },
+    columnLabels: {
+      '_1': 'Date & Time (combined)',
+      '_2': 'Shift Number',
+      '_3': 'Fuel Type (DSL50, ULP95)',
+      '_4': 'Unit Price per Liter',
+      '_5': 'Total Amount',
+      'Invoice': 'Invoice Number',
+      'Description': 'Quantity (liters)',
+      'Shift': 'Payment Type (Card/Cash)',
+    },
+  },
+];
+
+// Data normalization utilities
+export class DataNormalizer {
+  // Normalize ABSA amount: "R 1,337.20" → 1337.20
+  static normalizeABSAAmount(value: string): string {
+    if (!value) return '0';
+    let cleaned = String(value).trim();
+    // Remove "R " prefix and any currency symbols
+    cleaned = cleaned.replace(/^R\s*/i, '');
+    // Remove commas (thousands separator)
+    cleaned = cleaned.replace(/,/g, '');
+    // Handle negative amounts in parentheses or with CR
+    const isNegative = cleaned.startsWith('(') && cleaned.endsWith(')') || 
+                       cleaned.startsWith('-') ||
+                       cleaned.toLowerCase().includes('cr');
+    cleaned = cleaned.replace(/[^0-9.]/g, '');
+    return isNegative ? `-${cleaned}` : cleaned;
+  }
+
+  // Normalize FNB date: "27 Nov" → "2025-11-27" (uses provided year)
+  static normalizeFNBDate(value: string, year: string = '2025'): string {
+    if (!value) return '';
+    const trimmed = String(value).trim();
+    // Pattern: "DD Mon" (e.g., "27 Nov")
+    const match = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3})/);
+    if (match) {
+      const day = match[1].padStart(2, '0');
+      const monthStr = match[2];
+      const months: Record<string, string> = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+        'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+        'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+      };
+      const month = months[monthStr.toLowerCase()];
+      if (month) {
+        return `${year}-${month}-${day}`;
+      }
+    }
+    return trimmed;
+  }
+
+  // Normalize ABSA date: "2025/11/27" → "2025-11-27"
+  static normalizeABSADate(value: string): string {
+    if (!value) return '';
+    return String(value).trim().replace(/\//g, '-');
+  }
+
+  // Normalize Fuel Master datetime: extract date portion from datetime
+  static normalizeFuelMasterDate(value: string): string {
+    if (!value) return '';
+    const trimmed = String(value).trim();
+    // Try parsing as ISO datetime or common formats
+    // Common formats: "2025-11-27 14:30:00" or Excel serial number
+    
+    // If it looks like a date-time string
+    const dateMatch = trimmed.match(/^(\d{4}[-/]\d{2}[-/]\d{2})/);
+    if (dateMatch) {
+      return dateMatch[1].replace(/\//g, '-');
+    }
+    
+    // Excel serial date number
+    const serial = parseFloat(trimmed);
+    if (!isNaN(serial) && serial > 40000 && serial < 50000) {
+      // Excel date serial number conversion
+      const date = new Date((serial - 25569) * 86400 * 1000);
+      return date.toISOString().split('T')[0];
+    }
+    
+    return trimmed;
+  }
+
+  // Extract time from Fuel Master datetime
+  static normalizeFuelMasterTime(value: string): string {
+    if (!value) return '';
+    const trimmed = String(value).trim();
+    const timeMatch = trimmed.match(/(\d{2}:\d{2}(:\d{2})?)/);
+    if (timeMatch) {
+      return timeMatch[1];
+    }
+    return '';
+  }
+
+  // General amount normalization
+  static normalizeAmount(value: string, sourceType?: string): string {
+    if (!value) return '0';
+    
+    // For ABSA, use special handling
+    if (sourceType === 'bank_account' && String(value).includes('R')) {
+      return this.normalizeABSAAmount(value);
+    }
+    
+    let rawAmount = String(value).trim();
+    const isNegative = rawAmount.startsWith('(') && rawAmount.endsWith(')') || 
+                       rawAmount.startsWith('-') ||
+                       rawAmount.endsWith('-') ||
+                       rawAmount.toLowerCase().includes('cr');
+    
+    // Remove currency symbols, commas, spaces
+    rawAmount = rawAmount.replace(/[R$€£,\s]/g, '');
+    rawAmount = rawAmount.replace(/[^0-9.-]/g, '');
+    
+    if (!rawAmount || rawAmount === '-') return '0';
+    
+    return isNegative && !rawAmount.startsWith('-') ? `-${rawAmount}` : rawAmount;
+  }
+
+  // Check if a value looks like a card payment
+  static isCardPayment(value: string): boolean {
+    if (!value) return false;
+    const lower = String(value).toLowerCase().trim();
+    return lower === 'card' || 
+           lower.includes('credit') || 
+           lower.includes('debit') ||
+           lower.includes('visa') ||
+           lower.includes('mastercard') ||
+           lower.includes('card');
+  }
 }
 
 export class FileParser {
@@ -238,98 +461,177 @@ export class FileParser {
     }
   }
 
+  // Detect which source preset matches the headers
+  detectSourcePreset(headers: string[]): SourcePreset | null {
+    for (const preset of SOURCE_PRESETS) {
+      if (preset.detectPattern(headers)) {
+        return preset;
+      }
+    }
+    return null;
+  }
+
   autoDetectColumns(headers: string[]): ColumnMapping[] {
     const mappings: ColumnMapping[] = [];
-
-    for (const header of headers) {
-      const normalized = header.toLowerCase().trim();
-      let suggestedMapping: ColumnMapping['suggestedMapping'] = 'ignore';
-      let confidence = 0;
-
-      if (
-        normalized.includes('date') ||
-        normalized.includes('time') ||
-        normalized.includes('transaction date') ||
-        normalized.includes('posted') ||
-        normalized === 'dt'
-      ) {
-        suggestedMapping = 'date';
-        confidence = normalized === 'date' || normalized === 'transaction date' ? 1.0 : 0.8;
-      } else if (
-        normalized.includes('amount') ||
-        normalized.includes('total') ||
-        normalized.includes('price') ||
-        normalized.includes('value') ||
-        normalized === 'amt'
-      ) {
-        suggestedMapping = 'amount';
-        confidence = normalized === 'amount' || normalized === 'total' ? 1.0 : 0.8;
-      } else if (
-        normalized.includes('reference') ||
-        normalized.includes('ref') ||
-        normalized.includes('transaction id') ||
-        normalized.includes('id') ||
-        normalized.includes('number') ||
-        normalized.includes('receipt')
-      ) {
-        suggestedMapping = 'reference';
-        confidence = normalized === 'reference' || normalized === 'ref' ? 1.0 : 0.7;
-      } else if (
-        normalized.includes('description') ||
-        normalized.includes('desc') ||
-        normalized.includes('memo') ||
-        normalized.includes('details') ||
-        normalized.includes('merchant') ||
-        normalized.includes('vendor')
-      ) {
-        suggestedMapping = 'description';
-        confidence = normalized === 'description' || normalized === 'desc' ? 1.0 : 0.8;
+    
+    // First, try to match a known source preset
+    const detectedPreset = this.detectSourcePreset(headers);
+    
+    if (detectedPreset) {
+      // Use preset mappings with high confidence
+      for (const header of headers) {
+        const presetMapping = detectedPreset.mappings[header];
+        if (presetMapping) {
+          mappings.push({
+            detectedColumn: header,
+            suggestedMapping: presetMapping,
+            confidence: 1.0,
+          });
+        } else {
+          // Header not in preset, try generic detection
+          mappings.push(this.detectColumnGeneric(header));
+        }
       }
+      return mappings;
+    }
 
-      mappings.push({
-        detectedColumn: header,
-        suggestedMapping,
-        confidence,
-      });
+    // Fallback to generic column detection
+    for (const header of headers) {
+      mappings.push(this.detectColumnGeneric(header));
     }
 
     return mappings;
   }
 
+  // Generic column detection based on column name patterns
+  private detectColumnGeneric(header: string): ColumnMapping {
+    const normalized = header.toLowerCase().trim();
+    let suggestedMapping: ColumnMapping['suggestedMapping'] = 'ignore';
+    let confidence = 0;
+
+    if (
+      normalized.includes('date') ||
+      normalized.includes('transaction date') ||
+      normalized.includes('posted') ||
+      normalized === 'dt' ||
+      normalized === '_1'  // Fuel Master date column
+    ) {
+      suggestedMapping = 'date';
+      confidence = normalized === 'date' || normalized === 'transaction date' ? 1.0 : 0.8;
+    } else if (
+      normalized === 'time' ||
+      normalized.includes('time') && !normalized.includes('date')
+    ) {
+      suggestedMapping = 'time';
+      confidence = normalized === 'time' ? 1.0 : 0.7;
+    } else if (
+      normalized.includes('amount') ||
+      normalized.includes('total') ||
+      normalized.includes('transaction amount') ||
+      normalized === 'amt' ||
+      normalized === '_5'  // Fuel Master amount column
+    ) {
+      suggestedMapping = 'amount';
+      confidence = normalized === 'amount' || normalized === 'transaction amount' ? 1.0 : 0.8;
+    } else if (
+      normalized.includes('reference') ||
+      normalized.includes('ref') ||
+      normalized.includes('transaction id') ||
+      normalized === 'invoice' ||
+      normalized.includes('short reference') ||
+      normalized.includes('terminal id') ||
+      normalized.includes('receipt')
+    ) {
+      suggestedMapping = 'reference';
+      confidence = normalized === 'reference' || normalized === 'invoice' ? 1.0 : 0.7;
+    } else if (
+      normalized.includes('description') ||
+      normalized.includes('desc') ||
+      normalized.includes('memo') ||
+      normalized.includes('details') ||
+      normalized.includes('merchant') ||
+      normalized.includes('vendor') ||
+      normalized.includes('transaction type') ||
+      normalized === '_3'  // Fuel Master fuel type column
+    ) {
+      suggestedMapping = 'description';
+      confidence = normalized === 'description' ? 1.0 : 0.8;
+    } else if (
+      normalized === 'shift' ||
+      normalized.includes('payment method') ||
+      normalized.includes('payment type') ||
+      normalized.includes('card type')
+    ) {
+      suggestedMapping = 'paymentType';
+      confidence = 0.9;
+    }
+
+    return {
+      detectedColumn: header,
+      suggestedMapping,
+      confidence,
+    };
+  }
+
+  // Get human-readable label for a column based on detected preset
+  getColumnLabel(header: string, headers: string[]): string {
+    const preset = this.detectSourcePreset(headers);
+    if (preset && preset.columnLabels[header]) {
+      return preset.columnLabels[header];
+    }
+    return header;
+  }
+
   extractTransactionData(
     row: Record<string, any>,
-    columnMapping: Record<string, string>
+    columnMapping: Record<string, string>,
+    headers: string[],
+    sourceType?: string
   ): {
     transactionDate: string;
+    transactionTime: string;
     amount: string;
     referenceNumber: string;
     description: string;
+    paymentType: string;
+    isCardTransaction: 'yes' | 'no' | 'unknown';
   } {
     let transactionDate = '';
+    let transactionTime = '';
     let amount = '';
     let referenceNumber = '';
     let description = '';
+    let paymentType = '';
+    let isCardTransaction: 'yes' | 'no' | 'unknown' = 'unknown';
+
+    // Detect preset for source-specific normalization
+    const preset = this.detectSourcePreset(headers);
 
     for (const [column, mapping] of Object.entries(columnMapping)) {
       const value = row[column] || '';
       
       switch (mapping) {
         case 'date':
-          transactionDate = String(value).trim();
+          const rawDate = String(value).trim();
+          // Apply source-specific date normalization
+          if (preset?.name === 'FNB Merchant') {
+            transactionDate = DataNormalizer.normalizeFNBDate(rawDate);
+          } else if (preset?.name === 'ABSA Merchant') {
+            transactionDate = DataNormalizer.normalizeABSADate(rawDate);
+          } else if (preset?.name === 'Fuel Master') {
+            transactionDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
+            // Also extract time from combined field
+            transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
+          } else {
+            transactionDate = rawDate;
+          }
+          break;
+        case 'time':
+          transactionTime = String(value).trim();
           break;
         case 'amount':
-          let rawAmount = String(value).trim();
-          const isNegative = rawAmount.startsWith('(') && rawAmount.endsWith(')') || 
-                            rawAmount.startsWith('-') ||
-                            rawAmount.endsWith('-') ||
-                            rawAmount.toLowerCase().includes('cr');
-          rawAmount = rawAmount.replace(/[^0-9.]/g, '');
-          
-          if (rawAmount) {
-            amount = isNegative ? `-${rawAmount}` : rawAmount;
-          } else {
-            amount = '0';
-          }
+          // Use normalized amount extraction
+          amount = DataNormalizer.normalizeAmount(String(value), sourceType);
           break;
         case 'reference':
           referenceNumber = String(value).trim();
@@ -337,14 +639,31 @@ export class FileParser {
         case 'description':
           description = String(value).trim();
           break;
+        case 'paymentType':
+          paymentType = String(value).trim();
+          // Determine if this is a card transaction
+          if (DataNormalizer.isCardPayment(paymentType)) {
+            isCardTransaction = 'yes';
+          } else if (paymentType) {
+            isCardTransaction = 'no';
+          }
+          break;
       }
+    }
+
+    // Bank transactions are always card transactions (they come from merchant portal)
+    if (sourceType === 'bank_account') {
+      isCardTransaction = 'yes';
     }
 
     return {
       transactionDate,
+      transactionTime,
       amount,
       referenceNumber,
       description,
+      paymentType,
+      isCardTransaction,
     };
   }
 }

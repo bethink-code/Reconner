@@ -70,9 +70,12 @@ export const transactions = pgTable("transactions", {
   sourceType: text("source_type").notNull(),
   rawData: jsonb("raw_data").notNull(),
   transactionDate: text("transaction_date").notNull(),
+  transactionTime: text("transaction_time"),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   description: text("description"),
   referenceNumber: text("reference_number"),
+  paymentType: text("payment_type"), // 'card', 'cash', 'credit_card', etc.
+  isCardTransaction: text("is_card_transaction").default("unknown"), // 'yes', 'no', 'unknown' - for filtering reconciliation
   matchStatus: text("match_status").notNull().default("unmatched"),
   matchId: varchar("match_id"),
   createdAt: timestamp("created_at").defaultNow(),

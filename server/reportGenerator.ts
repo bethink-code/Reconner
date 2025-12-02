@@ -19,6 +19,13 @@ interface ReportSummary {
   totalFuelAmount: number;
   totalBankAmount: number;
   discrepancy: number;
+  // Card vs Cash breakdown for fuel transactions
+  cardFuelTransactions: number;
+  cashFuelTransactions: number;
+  cardFuelAmount: number;
+  cashFuelAmount: number;
+  // Effective match rate (card only)
+  cardMatchRate: number;
 }
 
 export class ReportGenerator {
@@ -29,11 +36,25 @@ export class ReportGenerator {
 
   calculateSummary(data: ReportData): ReportSummary {
     const fuelTransactions = data.transactions.filter(t => t.sourceType === 'fuel');
-    const bankTransactions = data.transactions.filter(t => t.sourceType === 'bank');
+    const bankTransactions = data.transactions.filter(t => t.sourceType === 'bank_account');
     const matchedTransactions = data.transactions.filter(t => t.matchStatus === 'matched');
+
+    // Card vs Cash breakdown
+    const cardFuelTransactions = fuelTransactions.filter(t => 
+      t.isCardTransaction === 'yes' || t.isCardTransaction === 'unknown'
+    );
+    const cashFuelTransactions = fuelTransactions.filter(t => t.isCardTransaction === 'no');
 
     const totalFuelAmount = fuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
     const totalBankAmount = bankTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+    const cardFuelAmount = cardFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+    const cashFuelAmount = cashFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+
+    // Card-only match rate (more meaningful for reconciliation)
+    const matchedCardFuel = cardFuelTransactions.filter(t => t.matchStatus === 'matched');
+    const cardMatchRate = cardFuelTransactions.length > 0 
+      ? (matchedCardFuel.length / cardFuelTransactions.length) * 100 
+      : 0;
 
     return {
       totalTransactions: data.transactions.length,
@@ -46,7 +67,12 @@ export class ReportGenerator {
         : 0,
       totalFuelAmount,
       totalBankAmount,
-      discrepancy: Math.abs(totalFuelAmount - totalBankAmount),
+      discrepancy: Math.abs(cardFuelAmount - totalBankAmount), // Compare card fuel to bank
+      cardFuelTransactions: cardFuelTransactions.length,
+      cashFuelTransactions: cashFuelTransactions.length,
+      cardFuelAmount,
+      cashFuelAmount,
+      cardMatchRate,
     };
   }
 
@@ -55,7 +81,7 @@ export class ReportGenerator {
     const summary = this.calculateSummary(data);
 
     doc.setFontSize(18);
-    doc.text('Fuel Station Reconciliation Report', 14, 20);
+    doc.text("Pieter's Pomp Stasie Reconner - Report", 14, 20);
 
     doc.setFontSize(12);
     doc.text(`Period: ${data.period.name}`, 14, 30);
@@ -66,14 +92,16 @@ export class ReportGenerator {
 
     const summaryData = [
       ['Total Transactions', summary.totalTransactions.toString()],
-      ['Fuel Transactions', summary.fuelTransactions.toString()],
+      ['Fuel Transactions (Total)', summary.fuelTransactions.toString()],
+      ['  - Card Transactions', summary.cardFuelTransactions.toString()],
+      ['  - Cash Transactions', summary.cashFuelTransactions.toString()],
       ['Bank Transactions', summary.bankTransactions.toString()],
       ['Matched Transactions', summary.matchedTransactions.toString()],
-      ['Unmatched Transactions', summary.unmatchedTransactions.toString()],
-      ['Match Rate', `${summary.matchRate.toFixed(2)}%`],
-      ['Total Fuel Amount', `$${summary.totalFuelAmount.toFixed(2)}`],
-      ['Total Bank Amount', `$${summary.totalBankAmount.toFixed(2)}`],
-      ['Discrepancy', `$${summary.discrepancy.toFixed(2)}`],
+      ['Card Match Rate', `${summary.cardMatchRate.toFixed(2)}%`],
+      ['Card Fuel Amount', `R ${summary.cardFuelAmount.toFixed(2)}`],
+      ['Cash Fuel Amount', `R ${summary.cashFuelAmount.toFixed(2)}`],
+      ['Total Bank Amount', `R ${summary.totalBankAmount.toFixed(2)}`],
+      ['Discrepancy (Card vs Bank)', `R ${summary.discrepancy.toFixed(2)}`],
     ];
 
     autoTable(doc, {
@@ -95,14 +123,15 @@ export class ReportGenerator {
       const unmatchedData = unmatchedTransactions.map(t => [
         t.transactionDate,
         t.sourceType,
-        `$${this.parseAmount(t.amount).toFixed(2)}`,
+        t.paymentType || '-',
+        `R ${this.parseAmount(t.amount).toFixed(2)}`,
         t.referenceNumber || '-',
         t.description || '-',
       ]);
 
       autoTable(doc, {
         startY: finalY + 20,
-        head: [['Date', 'Source', 'Amount', 'Reference', 'Description']],
+        head: [['Date', 'Source', 'Payment Type', 'Amount', 'Reference', 'Description']],
         body: unmatchedData,
         theme: 'grid',
         headStyles: { fillColor: [66, 66, 66] },
@@ -118,34 +147,37 @@ export class ReportGenerator {
     const summary = this.calculateSummary(data);
 
     const summaryData = [
-      ['Fuel Station Reconciliation Report'],
+      ["Pieter's Pomp Stasie Reconner - Report"],
       [`Period: ${data.period.name}`],
       [`${data.period.startDate} to ${data.period.endDate}`],
       [],
       ['Summary'],
       ['Metric', 'Value'],
       ['Total Transactions', summary.totalTransactions],
-      ['Fuel Transactions', summary.fuelTransactions],
+      ['Fuel Transactions (Total)', summary.fuelTransactions],
+      ['  - Card Transactions', summary.cardFuelTransactions],
+      ['  - Cash Transactions', summary.cashFuelTransactions],
       ['Bank Transactions', summary.bankTransactions],
       ['Matched Transactions', summary.matchedTransactions],
-      ['Unmatched Transactions', summary.unmatchedTransactions],
-      ['Match Rate', `${summary.matchRate.toFixed(2)}%`],
-      ['Total Fuel Amount', summary.totalFuelAmount],
+      ['Card Match Rate', `${summary.cardMatchRate.toFixed(2)}%`],
+      ['Card Fuel Amount', summary.cardFuelAmount],
+      ['Cash Fuel Amount', summary.cashFuelAmount],
       ['Total Bank Amount', summary.totalBankAmount],
-      ['Discrepancy', summary.discrepancy],
+      ['Discrepancy (Card vs Bank)', summary.discrepancy],
     ];
 
     const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 
     const allTransactionsData: any[][] = [
-      ['Date', 'Source', 'Amount', 'Reference', 'Description', 'Match Status']
+      ['Date', 'Source', 'Payment Type', 'Amount', 'Reference', 'Description', 'Match Status']
     ];
     
     data.transactions.forEach(t => {
       allTransactionsData.push([
         t.transactionDate,
         t.sourceType,
+        t.paymentType || '',
         this.parseAmount(t.amount),
         t.referenceNumber || '',
         t.description || '',
@@ -159,13 +191,14 @@ export class ReportGenerator {
     const unmatchedTransactions = data.transactions.filter(t => t.matchStatus === 'unmatched');
     if (unmatchedTransactions.length > 0) {
       const unmatchedData: any[][] = [
-        ['Date', 'Source', 'Amount', 'Reference', 'Description']
+        ['Date', 'Source', 'Payment Type', 'Amount', 'Reference', 'Description']
       ];
       
       unmatchedTransactions.forEach(t => {
         unmatchedData.push([
           t.transactionDate,
           t.sourceType,
+          t.paymentType || '',
           this.parseAmount(t.amount),
           t.referenceNumber || '',
           t.description || '',
@@ -182,34 +215,36 @@ export class ReportGenerator {
   generateCSV(data: ReportData): string {
     const summary = this.calculateSummary(data);
     
-    let csv = 'Fuel Station Reconciliation Report\n';
+    let csv = "Pieter's Pomp Stasie Reconner - Report\n";
     csv += `Period: ${data.period.name}\n`;
     csv += `${data.period.startDate} to ${data.period.endDate}\n\n`;
     
     csv += 'Summary\n';
     csv += 'Metric,Value\n';
     csv += `Total Transactions,${summary.totalTransactions}\n`;
-    csv += `Fuel Transactions,${summary.fuelTransactions}\n`;
+    csv += `Fuel Transactions (Total),${summary.fuelTransactions}\n`;
+    csv += `  - Card Transactions,${summary.cardFuelTransactions}\n`;
+    csv += `  - Cash Transactions,${summary.cashFuelTransactions}\n`;
     csv += `Bank Transactions,${summary.bankTransactions}\n`;
     csv += `Matched Transactions,${summary.matchedTransactions}\n`;
-    csv += `Unmatched Transactions,${summary.unmatchedTransactions}\n`;
-    csv += `Match Rate,${summary.matchRate.toFixed(2)}%\n`;
-    csv += `Total Fuel Amount,${summary.totalFuelAmount.toFixed(2)}\n`;
+    csv += `Card Match Rate,${summary.cardMatchRate.toFixed(2)}%\n`;
+    csv += `Card Fuel Amount,${summary.cardFuelAmount.toFixed(2)}\n`;
+    csv += `Cash Fuel Amount,${summary.cashFuelAmount.toFixed(2)}\n`;
     csv += `Total Bank Amount,${summary.totalBankAmount.toFixed(2)}\n`;
-    csv += `Discrepancy,${summary.discrepancy.toFixed(2)}\n\n`;
+    csv += `Discrepancy (Card vs Bank),${summary.discrepancy.toFixed(2)}\n\n`;
 
     csv += 'All Transactions\n';
-    csv += 'Date,Source,Amount,Reference,Description,Match Status\n';
+    csv += 'Date,Source,Payment Type,Amount,Reference,Description,Match Status\n';
     data.transactions.forEach(t => {
-      csv += `${t.transactionDate},${t.sourceType},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ''},${t.description || ''},${t.matchStatus}\n`;
+      csv += `${t.transactionDate},${t.sourceType},${t.paymentType || ''},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ''},${t.description || ''},${t.matchStatus}\n`;
     });
 
     const unmatchedTransactions = data.transactions.filter(t => t.matchStatus === 'unmatched');
     if (unmatchedTransactions.length > 0) {
       csv += '\nUnmatched Transactions\n';
-      csv += 'Date,Source,Amount,Reference,Description\n';
+      csv += 'Date,Source,Payment Type,Amount,Reference,Description\n';
       unmatchedTransactions.forEach(t => {
-        csv += `${t.transactionDate},${t.sourceType},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ''},${t.description || ''}\n`;
+        csv += `${t.transactionDate},${t.sourceType},${t.paymentType || ''},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ''},${t.description || ''}\n`;
       });
     }
 

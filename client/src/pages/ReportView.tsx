@@ -10,11 +10,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, CreditCard, Banknote } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import type { ReconciliationPeriod, Transaction } from "@shared/schema";
+
+type ReportSummary = {
+  totalTransactions: number;
+  fuelTransactions: number;
+  bankTransactions: number;
+  matchedTransactions: number;
+  unmatchedTransactions: number;
+  matchRate: number;
+  totalFuelAmount: number;
+  totalBankAmount: number;
+  discrepancy: number;
+  cardFuelTransactions: number;
+  cashFuelTransactions: number;
+  cardFuelAmount: number;
+  cashFuelAmount: number;
+  cardMatchRate: number;
+};
 
 export default function ReportView() {
   const [, setLocation] = useLocation();
@@ -42,17 +59,10 @@ export default function ReportView() {
     enabled: !!periodId,
   });
 
-  const matchedTransactions = transactions.filter(t => t.matchStatus === "matched");
-  const unmatchedTransactions = transactions.filter(t => t.matchStatus === "unmatched");
-  const partialTransactions = transactions.filter(t => t.matchStatus === "partial");
-
-  const totalAmount = transactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
-  const matchedAmount = matchedTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
-  const unmatchedAmount = unmatchedTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
-
-  const reconciliationRate = transactions.length > 0 
-    ? Math.round((matchedTransactions.length / transactions.length) * 100) 
-    : 0;
+  const { data: summary } = useQuery<ReportSummary>({
+    queryKey: ['/api/periods', periodId, 'summary'],
+    enabled: !!periodId,
+  });
 
   const handleExport = () => {
     const url = `/api/periods/${periodId}/report/${exportFormat}`;
@@ -65,9 +75,9 @@ export default function ReportView() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-ZA', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'ZAR',
     }).format(amount);
   };
 
@@ -137,32 +147,32 @@ export default function ReportView() {
                     Generated: {new Date().toLocaleString()}
                   </p>
                 </div>
-                <StatusBadge status={period.status} />
+                <StatusBadge status={period.status as "draft" | "in_progress" | "complete"} />
               </div>
             </CardHeader>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Summary</CardTitle>
+              <CardTitle>Transaction Summary</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Transactions</p>
-                  <p className="text-2xl font-bold">{transactions.length}</p>
+                  <p className="text-2xl font-bold" data-testid="text-total-transactions">{summary?.totalTransactions ?? transactions.length}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Fuel Transactions</p>
+                  <p className="text-2xl font-bold" data-testid="text-fuel-transactions">{summary?.fuelTransactions ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Bank Transactions</p>
+                  <p className="text-2xl font-bold" data-testid="text-bank-transactions">{summary?.bankTransactions ?? 0}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Matched</p>
-                  <p className="text-2xl font-bold text-chart-2">{matchedTransactions.length}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Unmatched</p>
-                  <p className="text-2xl font-bold text-chart-1">{unmatchedTransactions.length}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Partial</p>
-                  <p className="text-2xl font-bold text-chart-3">{partialTransactions.length}</p>
+                  <p className="text-2xl font-bold text-chart-2" data-testid="text-matched-transactions">{summary?.matchedTransactions ?? 0}</p>
                 </div>
               </div>
             </CardContent>
@@ -170,21 +180,40 @@ export default function ReportView() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Financial Summary</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Card vs Cash Breakdown
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
-                  <p className="text-2xl font-bold font-mono">{formatCurrency(totalAmount)}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="p-4 bg-muted/30 rounded-md">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CreditCard className="h-4 w-4 text-chart-4" />
+                    <p className="text-sm font-medium">Card Transactions</p>
+                  </div>
+                  <p className="text-2xl font-bold" data-testid="text-card-transactions">{summary?.cardFuelTransactions ?? 0}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.cardFuelAmount ?? 0)}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Matched Amount</p>
-                  <p className="text-2xl font-bold font-mono text-chart-2">{formatCurrency(matchedAmount)}</p>
+                <div className="p-4 bg-muted/30 rounded-md">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Banknote className="h-4 w-4 text-chart-5" />
+                    <p className="text-sm font-medium">Cash Transactions</p>
+                  </div>
+                  <p className="text-2xl font-bold" data-testid="text-cash-transactions">{summary?.cashFuelTransactions ?? 0}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.cashFuelAmount ?? 0)}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Unmatched Amount</p>
-                  <p className="text-2xl font-bold font-mono text-chart-1">{formatCurrency(unmatchedAmount)}</p>
+                <div className="p-4 bg-muted/30 rounded-md">
+                  <p className="text-sm font-medium mb-2">Bank Account Total</p>
+                  <p className="text-2xl font-bold" data-testid="text-bank-total">{summary?.bankTransactions ?? 0}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.totalBankAmount ?? 0)}</p>
+                </div>
+                <div className="p-4 bg-muted/30 rounded-md">
+                  <p className="text-sm font-medium mb-2">Discrepancy (Card vs Bank)</p>
+                  <p className={`text-2xl font-bold font-mono ${(summary?.discrepancy ?? 0) > 0 ? 'text-chart-1' : 'text-chart-2'}`} data-testid="text-discrepancy">
+                    {formatCurrency(summary?.discrepancy ?? 0)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Only card transactions are matched</p>
                 </div>
               </div>
             </CardContent>
@@ -192,20 +221,23 @@ export default function ReportView() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Reconciliation Rate</CardTitle>
+              <CardTitle>Card Reconciliation Rate</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
-                <div className="text-4xl font-bold">{reconciliationRate}%</div>
+                <div className="text-4xl font-bold" data-testid="text-match-rate">{Math.round(summary?.cardMatchRate ?? 0)}%</div>
                 <div className="flex-1">
                   <div className="h-4 bg-muted rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-chart-2 transition-all"
-                      style={{ width: `${reconciliationRate}%` }}
+                      style={{ width: `${Math.round(summary?.cardMatchRate ?? 0)}%` }}
                     />
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
-                    {matchedTransactions.length} of {transactions.length} transactions matched
+                    {summary?.matchedTransactions ?? 0} of {summary?.cardFuelTransactions ?? 0} card transactions matched
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cash transactions ({summary?.cashFuelTransactions ?? 0}) are excluded from matching
                   </p>
                 </div>
               </div>

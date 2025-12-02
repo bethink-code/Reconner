@@ -2,19 +2,10 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import StatusBadge from "./StatusBadge";
-import { ChevronDown, ChevronUp } from "lucide-react";
-
-interface Transaction {
-  id: string;
-  date: string;
-  amount: number;
-  reference: string;
-  description?: string;
-  source: string;
-  matchStatus?: "matched" | "unmatched" | "partial";
-  confidence?: number;
-}
+import { ChevronDown, ChevronUp, CreditCard, Banknote } from "lucide-react";
+import type { Transaction } from "@shared/schema";
 
 interface TransactionTableProps {
   title: string;
@@ -46,11 +37,21 @@ export default function TransactionTable({
     setExpandedId(expandedId === id ? null : id);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+  const formatCurrency = (amount: string | number) => {
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return new Intl.NumberFormat('en-ZA', {
       style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+      currency: 'ZAR',
+    }).format(isNaN(numAmount) ? 0 : numAmount);
+  };
+
+  const getPaymentTypeIcon = (paymentType: string | null, isCard: string | null) => {
+    if (isCard === 'yes' || paymentType?.toLowerCase().includes('card')) {
+      return <CreditCard className="h-3 w-3 text-chart-4" />;
+    } else if (isCard === 'no' || paymentType?.toLowerCase().includes('cash')) {
+      return <Banknote className="h-3 w-3 text-chart-5" />;
+    }
+    return null;
   };
 
   return (
@@ -75,9 +76,8 @@ export default function TransactionTable({
                   <th className="text-left p-3 text-sm font-semibold">Description</th>
                   <th className="text-right p-3 text-sm font-semibold">Amount</th>
                   <th className="text-left p-3 text-sm font-semibold">Source</th>
-                  {transactions.some(t => t.matchStatus) && (
-                    <th className="text-left p-3 text-sm font-semibold">Status</th>
-                  )}
+                  <th className="text-left p-3 text-sm font-semibold">Type</th>
+                  <th className="text-left p-3 text-sm font-semibold">Status</th>
                   <th className="w-12 p-3"></th>
                 </tr>
               </thead>
@@ -100,22 +100,30 @@ export default function TransactionTable({
                           />
                         </td>
                       )}
-                      <td className="p-3 text-sm">{transaction.date}</td>
-                      <td className="p-3 text-sm font-mono">{transaction.reference}</td>
+                      <td className="p-3 text-sm">{transaction.transactionDate}</td>
+                      <td className="p-3 text-sm font-mono">{transaction.referenceNumber || '-'}</td>
                       <td className="p-3 text-sm text-muted-foreground truncate max-w-xs">
                         {transaction.description || '-'}
                       </td>
                       <td className="p-3 text-sm font-mono text-right">
                         {formatCurrency(transaction.amount)}
                       </td>
-                      <td className="p-3 text-sm">{transaction.source}</td>
-                      {transactions.some(t => t.matchStatus) && (
-                        <td className="p-3">
-                          {transaction.matchStatus && (
-                            <StatusBadge status={transaction.matchStatus} />
-                          )}
-                        </td>
-                      )}
+                      <td className="p-3 text-sm">
+                        <Badge variant="outline" className="text-xs">
+                          {transaction.sourceType === 'fuel' ? 'Fuel' : 'Bank'}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1">
+                          {getPaymentTypeIcon(transaction.paymentType, transaction.isCardTransaction)}
+                          <span className="text-xs text-muted-foreground">
+                            {transaction.paymentType || (transaction.isCardTransaction === 'yes' ? 'Card' : transaction.isCardTransaction === 'no' ? 'Cash' : '-')}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <StatusBadge status={transaction.matchStatus as "matched" | "unmatched" | "partial"} />
+                      </td>
                       <td className="p-3">
                         <Button
                           variant="ghost"
@@ -136,24 +144,30 @@ export default function TransactionTable({
                     </tr>
                     {expandedId === transaction.id && (
                       <tr className="bg-muted/30">
-                        <td colSpan={showSelection ? 8 : 7} className="p-4">
+                        <td colSpan={showSelection ? 10 : 9} className="p-4">
                           <div className="space-y-2 text-sm">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                               <div>
                                 <span className="font-medium">Transaction ID:</span>{" "}
-                                <span className="font-mono">{transaction.id}</span>
+                                <span className="font-mono text-xs">{transaction.id}</span>
                               </div>
                               <div>
-                                <span className="font-medium">Full Description:</span>{" "}
-                                {transaction.description || 'N/A'}
+                                <span className="font-medium">Source Type:</span>{" "}
+                                {transaction.sourceType === 'fuel' ? 'Fuel System' : 'Bank Account'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Payment Type:</span>{" "}
+                                {transaction.paymentType || 'N/A'}
+                              </div>
+                              <div>
+                                <span className="font-medium">Card Transaction:</span>{" "}
+                                {transaction.isCardTransaction === 'yes' ? 'Yes' : transaction.isCardTransaction === 'no' ? 'No' : 'Unknown'}
                               </div>
                             </div>
-                            {transaction.confidence !== undefined && (
-                              <div>
-                                <span className="font-medium">Match Confidence:</span>{" "}
-                                {transaction.confidence}%
-                              </div>
-                            )}
+                            <div>
+                              <span className="font-medium">Full Description:</span>{" "}
+                              {transaction.description || 'N/A'}
+                            </div>
                           </div>
                         </td>
                       </tr>

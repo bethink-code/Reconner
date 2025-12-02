@@ -558,14 +558,16 @@ export class FileParser {
       suggestedMapping = 'time';
       confidence = normalized === 'time' ? 1.0 : 0.7;
     } else if (
-      normalized.includes('amount') ||
-      normalized.includes('total') ||
-      normalized.includes('transaction amount') ||
+      // Only map specific amount columns - not all columns containing "amount"
+      normalized === 'amount' ||
+      normalized === 'transaction amount' ||
+      normalized === 'gross amount' ||
+      normalized === 'original amount' ||
       normalized === 'amt' ||
       normalized === '_5'  // Fuel Master amount column
     ) {
       suggestedMapping = 'amount';
-      confidence = normalized === 'amount' || normalized === 'transaction amount' ? 1.0 : 0.8;
+      confidence = normalized === 'amount' || normalized === 'transaction amount' ? 1.0 : 0.9;
     } else if (
       normalized.includes('reference') ||
       normalized.includes('ref') ||

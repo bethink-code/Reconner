@@ -74,6 +74,7 @@ export const transactions = pgTable("transactions", {
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   description: text("description"),
   referenceNumber: text("reference_number"),
+  cardNumber: text("card_number"), // Masked card number like ****1234 for matching
   paymentType: text("payment_type"), // 'card', 'cash', 'credit_card', etc.
   isCardTransaction: text("is_card_transaction").default("unknown"), // 'yes', 'no', 'unknown' - for filtering reconciliation
   matchStatus: text("match_status").notNull().default("unmatched"),

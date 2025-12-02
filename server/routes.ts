@@ -291,6 +291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           amount: extracted.amount,
           description: extracted.description || '',
           referenceNumber: extracted.referenceNumber || '',
+          cardNumber: extracted.cardNumber || null,
           paymentType: extracted.paymentType || null,
           isCardTransaction: extracted.isCardTransaction,
           matchStatus: 'unmatched' as const,
@@ -352,7 +353,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // All bank transactions are card by definition (from merchant portals)
-      const bankTransactions = transactions.filter(t => t.sourceType === 'bank_account');
+      // Check for any sourceType starting with 'bank' (bank, bank2, bank_account, etc.)
+      const bankTransactions = transactions.filter(t => 
+        t.sourceType && t.sourceType.startsWith('bank')
+      );
       
       let matchCount = 0;
       // Count non-card transactions (cash + unknown) that are skipped from matching
@@ -363,6 +367,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const fuelTx of fuelTransactions) {
         if (fuelTx.matchStatus !== 'unmatched') continue;
 
+        let bestMatch: { bankTx: typeof bankTransactions[0]; confidence: number } | null = null;
+
         for (const bankTx of bankTransactions) {
           if (bankTx.matchStatus !== 'unmatched') continue;
 
@@ -370,33 +376,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const dateMatch = fuelTx.transactionDate === bankTx.transactionDate;
           const refMatch = fuelTx.referenceNumber && bankTx.referenceNumber && 
                           fuelTx.referenceNumber === bankTx.referenceNumber;
+          
+          // Card number matching - both must have card numbers for this to count
+          const cardNumberMatch = fuelTx.cardNumber && bankTx.cardNumber && 
+                                  fuelTx.cardNumber === bankTx.cardNumber;
 
           let confidence = 0;
-          if (amountMatch) confidence += 50;
-          if (dateMatch) confidence += 30;
-          if (refMatch) confidence += 20;
+          if (amountMatch) confidence += 40;
+          if (dateMatch) confidence += 25;
+          if (refMatch) confidence += 15;
+          if (cardNumberMatch) confidence += 20; // Card number match adds significant confidence
 
-          if (confidence >= 70) {
-            const match = await storage.createMatch({
-              periodId: req.params.periodId,
-              fuelTransactionId: fuelTx.id,
-              bankTransactionId: bankTx.id,
-              matchType: 'auto',
-              matchConfidence: String(confidence),
-            });
-
-            await storage.updateTransaction(fuelTx.id, { 
-              matchStatus: 'matched',
-              matchId: match.id 
-            });
-            await storage.updateTransaction(bankTx.id, { 
-              matchStatus: 'matched',
-              matchId: match.id 
-            });
-
-            matchCount++;
-            break;
+          // If card numbers exist but don't match, reduce confidence (likely wrong match)
+          if (fuelTx.cardNumber && bankTx.cardNumber && !cardNumberMatch) {
+            confidence -= 30; // Penalize mismatched card numbers
           }
+
+          if (confidence >= 65 && (!bestMatch || confidence > bestMatch.confidence)) {
+            bestMatch = { bankTx, confidence };
+          }
+        }
+
+        if (bestMatch) {
+          const match = await storage.createMatch({
+            periodId: req.params.periodId,
+            fuelTransactionId: fuelTx.id,
+            bankTransactionId: bestMatch.bankTx.id,
+            matchType: 'auto',
+            matchConfidence: String(bestMatch.confidence),
+          });
+
+          await storage.updateTransaction(fuelTx.id, { 
+            matchStatus: 'matched',
+            matchId: match.id 
+          });
+          await storage.updateTransaction(bestMatch.bankTx.id, { 
+            matchStatus: 'matched',
+            matchId: match.id 
+          });
+
+          matchCount++;
         }
       }
 
@@ -404,6 +423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true, 
         matchesCreated: matchCount,
         cardTransactionsProcessed: fuelTransactions.length,
+        bankTransactionsAvailable: bankTransactions.length,
         nonCardTransactionsSkipped: skippedNonCardCount,
       });
     } catch (error) {

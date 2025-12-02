@@ -10,7 +10,7 @@ export interface ParsedFileData {
 
 export interface ColumnMapping {
   detectedColumn: string;
-  suggestedMapping: 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'ignore';
+  suggestedMapping: 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'ignore';
   confidence: number;
 }
 
@@ -19,7 +19,7 @@ export interface SourcePreset {
   name: string;
   description: string;
   detectPattern: (headers: string[]) => boolean;
-  mappings: Record<string, 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'ignore'>;
+  mappings: Record<string, 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'ignore'>;
   columnLabels: Record<string, string>; // Human-readable labels for cryptic column names
 }
 
@@ -39,7 +39,7 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Amount': 'amount',
       'Terminal ID': 'reference',
       'Transaction Type': 'description',
-      'PAN': 'ignore',
+      'PAN': 'cardNumber',
       'Source': 'ignore',
     },
     columnLabels: {
@@ -69,6 +69,8 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Merchant Name': 'description',
       'Receipt No': 'ignore',
       'Terminal ID': 'ignore',
+      'Card Number': 'cardNumber',
+      'PAN': 'cardNumber',
       'Card Type': 'ignore',
       'Payment Method': 'paymentType',
       'Invoice No': 'ignore',
@@ -81,6 +83,8 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Merchant Name': 'Merchant/Store Name',
       'Receipt No': 'Receipt Number',
       'Terminal ID': 'Terminal ID',
+      'Card Number': 'Masked Card Number',
+      'PAN': 'Masked Card Number',
       'Card Type': 'Card Type (Visa, MC)',
       'Payment Method': 'Payment Method',
     },
@@ -105,6 +109,9 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Invoice': 'reference',
       'Description': 'ignore', // Actually contains quantity, not description
       'Shift': 'paymentType', // Contains "Card" or other payment type
+      'Card Number': 'cardNumber',
+      'Card No': 'cardNumber',
+      'CardNo': 'cardNumber',
     },
     columnLabels: {
       '_1': 'Date & Time (combined)',
@@ -115,6 +122,9 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Invoice': 'Invoice Number',
       'Description': 'Quantity (liters)',
       'Shift': 'Payment Type (Card/Cash)',
+      'Card Number': 'Masked Card Number',
+      'Card No': 'Masked Card Number',
+      'CardNo': 'Masked Card Number',
     },
   },
 ];
@@ -204,8 +214,8 @@ export class DataNormalizer {
   static normalizeAmount(value: string, sourceType?: string): string {
     if (!value) return '0';
     
-    // For ABSA, use special handling
-    if (sourceType === 'bank_account' && String(value).includes('R')) {
+    // For bank sources (ABSA, etc.), use special handling for R currency
+    if (sourceType && sourceType.startsWith('bank') && String(value).includes('R')) {
       return this.normalizeABSAAmount(value);
     }
     
@@ -234,6 +244,29 @@ export class DataNormalizer {
            lower.includes('visa') ||
            lower.includes('mastercard') ||
            lower.includes('card');
+  }
+
+  // Normalize card number to last 4 digits format for matching
+  // Input can be: "****1234", "1234", "5412751234561234", "xxxx-xxxx-xxxx-1234"
+  // Output: "1234" (last 4 digits only for comparison)
+  static normalizeCardNumber(value: string): string {
+    if (!value) return '';
+    const cleaned = String(value).trim();
+    
+    // Extract only digits
+    const digits = cleaned.replace(/\D/g, '');
+    
+    // Return last 4 digits if available
+    if (digits.length >= 4) {
+      return digits.slice(-4);
+    }
+    
+    // If less than 4 digits but some exist, return what we have
+    if (digits.length > 0) {
+      return digits;
+    }
+    
+    return '';
   }
 }
 
@@ -564,6 +597,16 @@ export class FileParser {
     ) {
       suggestedMapping = 'paymentType';
       confidence = 0.9;
+    } else if (
+      normalized === 'pan' ||
+      normalized === 'card number' ||
+      normalized === 'card no' ||
+      normalized === 'cardno' ||
+      normalized.includes('card num') ||
+      normalized.includes('card #')
+    ) {
+      suggestedMapping = 'cardNumber';
+      confidence = 0.95;
     }
 
     return {
@@ -593,6 +636,7 @@ export class FileParser {
     amount: string;
     referenceNumber: string;
     description: string;
+    cardNumber: string;
     paymentType: string;
     isCardTransaction: 'yes' | 'no' | 'unknown';
   } {
@@ -601,6 +645,7 @@ export class FileParser {
     let amount = '';
     let referenceNumber = '';
     let description = '';
+    let cardNumber = '';
     let paymentType = '';
     let isCardTransaction: 'yes' | 'no' | 'unknown' = 'unknown';
 
@@ -639,6 +684,10 @@ export class FileParser {
         case 'description':
           description = String(value).trim();
           break;
+        case 'cardNumber':
+          // Normalize card number to last 4 digits for comparison
+          cardNumber = DataNormalizer.normalizeCardNumber(String(value));
+          break;
         case 'paymentType':
           paymentType = String(value).trim();
           // Determine if this is a card transaction
@@ -651,8 +700,9 @@ export class FileParser {
       }
     }
 
-    // Bank transactions are always card transactions (they come from merchant portal)
-    if (sourceType === 'bank_account') {
+    // Bank transactions are always card transactions (they come from merchant portals)
+    // Check for any source type starting with 'bank' (bank, bank2, bank_account, etc.)
+    if (sourceType && sourceType.startsWith('bank')) {
       isCardTransaction = 'yes';
     }
 
@@ -662,6 +712,7 @@ export class FileParser {
       amount,
       referenceNumber,
       description,
+      cardNumber,
       paymentType,
       isCardTransaction,
     };

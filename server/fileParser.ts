@@ -589,10 +589,12 @@ export class FileParser {
       normalized.includes('card num') ||
       normalized.includes('card #') ||
       normalized.includes('masked') ||
-      normalized.includes('card pan')
+      normalized.includes('card pan') ||
+      normalized === 'payment identifier' ||
+      normalized.includes('payment id')
     ) {
       suggestedMapping = 'cardNumber';
-      confidence = normalized === 'pan' || normalized === 'card number' ? 1.0 : 0.9;
+      confidence = normalized === 'pan' || normalized === 'card number' || normalized === 'payment identifier' ? 1.0 : 0.9;
     } else if (
       normalized.includes('description') ||
       normalized.includes('desc') ||

@@ -71,6 +71,14 @@ export default function ReconcileTransactions() {
   const unmatchedTransactions = transactions.filter(t => t.matchStatus === "unmatched");
   const partialTransactions = transactions.filter(t => t.matchStatus === "partial");
   
+  // Separate unmatched by source type for side-by-side view
+  const unmatchedBankTransactions = unmatchedTransactions.filter(t => 
+    t.sourceType?.startsWith('bank') && parseFloat(t.amount || '0') > 0
+  );
+  const unmatchedCardTransactions = unmatchedTransactions.filter(t => 
+    t.sourceType === 'fuel' && t.isCardTransaction === 'yes' && parseFloat(t.amount || '0') > 0
+  );
+  
   // Apply source filter for unmatched view
   const filteredUnmatchedTransactions = sourceFilter 
     ? unmatchedTransactions.filter(t => {
@@ -202,21 +210,40 @@ export default function ReconcileTransactions() {
               </TabsContent>
 
               <TabsContent value="unmatched" className="mt-6">
-                {sourceFilter && (
-                  <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md">
-                    <span className="text-sm">
-                      Showing: <span className="font-medium">{sourceFilter === 'bank' ? 'Bank Transactions' : 'Card Sales'}</span>
-                    </span>
-                    <Button variant="ghost" size="sm" onClick={clearSourceFilter} data-testid="button-clear-filter">
-                      Clear Filter
-                    </Button>
+                {sourceFilter ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md">
+                      <span className="text-sm">
+                        Showing: <span className="font-medium">{sourceFilter === 'bank' ? 'Bank Transactions' : 'Card Sales'}</span>
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={clearSourceFilter} data-testid="button-clear-filter">
+                        Show All
+                      </Button>
+                    </div>
+                    <TransactionTable
+                      title={`Unmatched ${sourceFilter === 'bank' ? 'Bank' : 'Card'} Transactions`}
+                      transactions={filteredUnmatchedTransactions}
+                      onTransactionSelect={() => {}}
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                      <TransactionTable
+                        title={`Unmatched Bank Transactions (${unmatchedBankTransactions.length})`}
+                        transactions={unmatchedBankTransactions}
+                        onTransactionSelect={() => {}}
+                      />
+                    </div>
+                    <div>
+                      <TransactionTable
+                        title={`Unmatched Card Sales (${unmatchedCardTransactions.length})`}
+                        transactions={unmatchedCardTransactions}
+                        onTransactionSelect={() => {}}
+                      />
+                    </div>
                   </div>
                 )}
-                <TransactionTable
-                  title={sourceFilter ? `Unmatched ${sourceFilter === 'bank' ? 'Bank' : 'Card'} Transactions` : "Unmatched Transactions"}
-                  transactions={filteredUnmatchedTransactions}
-                  onTransactionSelect={() => {}}
-                />
               </TabsContent>
 
               <TabsContent value="partial" className="mt-6">

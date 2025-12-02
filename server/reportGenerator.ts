@@ -36,7 +36,8 @@ export class ReportGenerator {
 
   calculateSummary(data: ReportData): ReportSummary {
     const fuelTransactions = data.transactions.filter(t => t.sourceType === 'fuel');
-    const bankTransactions = data.transactions.filter(t => t.sourceType === 'bank_account');
+    // Check for any sourceType starting with 'bank' (bank, bank2, bank_account, etc.)
+    const bankTransactions = data.transactions.filter(t => t.sourceType && t.sourceType.startsWith('bank'));
     const matchedTransactions = data.transactions.filter(t => t.matchStatus === 'matched');
 
     // Card vs Cash breakdown

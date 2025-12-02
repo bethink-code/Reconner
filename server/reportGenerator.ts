@@ -20,18 +20,26 @@ interface ReportSummary {
   totalFuelAmount: number;
   totalBankAmount: number;
   discrepancy: number;
-  // Card vs Cash breakdown for fuel transactions
+  // Card vs Cash vs Unknown breakdown for fuel transactions
   cardFuelTransactions: number;
   cashFuelTransactions: number;
+  unknownFuelTransactions: number;
   cardFuelAmount: number;
   cashFuelAmount: number;
-  // Effective match rate (card only)
-  cardMatchRate: number;
+  unknownFuelAmount: number;
+  // Match rates
+  bankMatchRate: number;   // % of bank transactions that found a fuel match (key metric)
+  cardMatchRate: number;   // % of fuel card transactions that found a bank match
   // Match breakdown by date difference (for processing delay analysis)
   matchesSameDay: number;
   matches1Day: number;
   matches2Day: number;
   matches3Day: number;
+  // Unmatched transactions
+  unmatchedBankTransactions: number;
+  unmatchedBankAmount: number;
+  unmatchedCardTransactions: number;
+  unmatchedCardAmount: number;
 }
 
 export class ReportGenerator {
@@ -46,18 +54,25 @@ export class ReportGenerator {
     const bankTransactions = data.transactions.filter(t => t.sourceType && t.sourceType.startsWith('bank'));
     const matchedTransactions = data.transactions.filter(t => t.matchStatus === 'matched');
 
-    // Card vs Cash breakdown
-    const cardFuelTransactions = fuelTransactions.filter(t => 
-      t.isCardTransaction === 'yes' || t.isCardTransaction === 'unknown'
-    );
+    // Card vs Cash breakdown - only 'yes' is a confirmed card transaction
+    const cardFuelTransactions = fuelTransactions.filter(t => t.isCardTransaction === 'yes');
     const cashFuelTransactions = fuelTransactions.filter(t => t.isCardTransaction === 'no');
+    const unknownFuelTransactions = fuelTransactions.filter(t => t.isCardTransaction === 'unknown');
 
     const totalFuelAmount = fuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
     const totalBankAmount = bankTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
     const cardFuelAmount = cardFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
     const cashFuelAmount = cashFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+    const unknownFuelAmount = unknownFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
 
-    // Card-only match rate (more meaningful for reconciliation)
+    // Bank match rate - what % of bank transactions found a matching fuel transaction
+    // This is the key metric since bank is the source of truth
+    const matchedBankTransactions = bankTransactions.filter(t => t.matchStatus === 'matched');
+    const bankMatchRate = bankTransactions.length > 0
+      ? (matchedBankTransactions.length / bankTransactions.length) * 100
+      : 0;
+
+    // Card match rate - what % of fuel card transactions found a bank match
     const matchedCardFuel = cardFuelTransactions.filter(t => t.matchStatus === 'matched');
     const cardMatchRate = cardFuelTransactions.length > 0 
       ? (matchedCardFuel.length / cardFuelTransactions.length) * 100 
@@ -91,6 +106,12 @@ export class ReportGenerator {
       }
     }
 
+    // Unmatched transactions
+    const unmatchedBank = bankTransactions.filter(t => t.matchStatus !== 'matched');
+    const unmatchedCard = cardFuelTransactions.filter(t => t.matchStatus !== 'matched');
+    const unmatchedBankAmount = unmatchedBank.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+    const unmatchedCardAmount = unmatchedCard.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+
     return {
       totalTransactions: data.transactions.length,
       fuelTransactions: fuelTransactions.length,
@@ -106,13 +127,20 @@ export class ReportGenerator {
       discrepancy: Math.abs(cardFuelAmount - totalBankAmount), // Compare card fuel to bank
       cardFuelTransactions: cardFuelTransactions.length,
       cashFuelTransactions: cashFuelTransactions.length,
+      unknownFuelTransactions: unknownFuelTransactions.length,
       cardFuelAmount,
       cashFuelAmount,
+      unknownFuelAmount,
+      bankMatchRate,
       cardMatchRate,
       matchesSameDay,
       matches1Day,
       matches2Day,
       matches3Day,
+      unmatchedBankTransactions: unmatchedBank.length,
+      unmatchedBankAmount,
+      unmatchedCardTransactions: unmatchedCard.length,
+      unmatchedCardAmount,
     };
   }
 
@@ -135,15 +163,20 @@ export class ReportGenerator {
       ['Fuel Transactions (Total)', summary.fuelTransactions.toString()],
       ['  - Card Transactions', summary.cardFuelTransactions.toString()],
       ['  - Cash Transactions', summary.cashFuelTransactions.toString()],
+      ['  - Unknown Type', summary.unknownFuelTransactions.toString()],
       ['Bank Transactions', summary.bankTransactions.toString()],
       ['Matched Pairs', summary.matchedPairs.toString()],
       ['  - Same Day', summary.matchesSameDay.toString()],
       ['  - 1 Day Later', summary.matches1Day.toString()],
       ['  - 2 Days Later', summary.matches2Day.toString()],
       ['  - 3 Days Later', summary.matches3Day.toString()],
-      ['Card Match Rate', `${summary.cardMatchRate.toFixed(2)}%`],
+      ['Bank Match Rate (Source of Truth)', `${summary.bankMatchRate.toFixed(2)}%`],
+      ['Card Match Rate (Fuel Side)', `${summary.cardMatchRate.toFixed(2)}%`],
+      ['Unmatched Bank Transactions', `${summary.unmatchedBankTransactions} (R ${summary.unmatchedBankAmount.toFixed(2)})`],
+      ['Unmatched Card Transactions', `${summary.unmatchedCardTransactions} (R ${summary.unmatchedCardAmount.toFixed(2)})`],
       ['Card Fuel Amount', `R ${summary.cardFuelAmount.toFixed(2)}`],
       ['Cash Fuel Amount', `R ${summary.cashFuelAmount.toFixed(2)}`],
+      ['Unknown Fuel Amount', `R ${summary.unknownFuelAmount.toFixed(2)}`],
       ['Total Bank Amount', `R ${summary.totalBankAmount.toFixed(2)}`],
       ['Discrepancy (Card vs Bank)', `R ${summary.discrepancy.toFixed(2)}`],
     ];

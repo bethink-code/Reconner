@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Download, CreditCard, Banknote } from "lucide-react";
+import { ArrowLeft, Download, CreditCard, Banknote, HelpCircle, AlertTriangle } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -29,13 +29,20 @@ type ReportSummary = {
   discrepancy: number;
   cardFuelTransactions: number;
   cashFuelTransactions: number;
+  unknownFuelTransactions: number;
   cardFuelAmount: number;
   cashFuelAmount: number;
+  unknownFuelAmount: number;
+  bankMatchRate: number;
   cardMatchRate: number;
   matchesSameDay: number;
   matches1Day: number;
   matches2Day: number;
   matches3Day: number;
+  unmatchedBankTransactions: number;
+  unmatchedBankAmount: number;
+  unmatchedCardTransactions: number;
+  unmatchedCardAmount: number;
 };
 
 export default function ReportView() {
@@ -214,12 +221,12 @@ export default function ReportView() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
-                Card vs Cash Breakdown
+                Fuel Transaction Breakdown
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="p-4 bg-muted/30 rounded-md">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                <div className="p-4 bg-chart-4/10 border border-chart-4/30 rounded-md">
                   <div className="flex items-center gap-2 mb-2">
                     <CreditCard className="h-4 w-4 text-chart-4" />
                     <p className="text-sm font-medium">Card Transactions</p>
@@ -227,7 +234,7 @@ export default function ReportView() {
                   <p className="text-2xl font-bold" data-testid="text-card-transactions">{summary?.cardFuelTransactions ?? 0}</p>
                   <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.cardFuelAmount ?? 0)}</p>
                 </div>
-                <div className="p-4 bg-muted/30 rounded-md">
+                <div className="p-4 bg-chart-5/10 border border-chart-5/30 rounded-md">
                   <div className="flex items-center gap-2 mb-2">
                     <Banknote className="h-4 w-4 text-chart-5" />
                     <p className="text-sm font-medium">Cash Transactions</p>
@@ -235,6 +242,16 @@ export default function ReportView() {
                   <p className="text-2xl font-bold" data-testid="text-cash-transactions">{summary?.cashFuelTransactions ?? 0}</p>
                   <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.cashFuelAmount ?? 0)}</p>
                 </div>
+                <div className="p-4 bg-muted/30 rounded-md">
+                  <div className="flex items-center gap-2 mb-2">
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm font-medium">Unknown Type</p>
+                  </div>
+                  <p className="text-2xl font-bold" data-testid="text-unknown-transactions">{summary?.unknownFuelTransactions ?? 0}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.unknownFuelAmount ?? 0)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-muted/30 rounded-md">
                   <p className="text-sm font-medium mb-2">Bank Account Total</p>
                   <p className="text-2xl font-bold" data-testid="text-bank-total">{summary?.bankTransactions ?? 0}</p>
@@ -253,24 +270,69 @@ export default function ReportView() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Card Reconciliation Rate</CardTitle>
+              <CardTitle>Reconciliation Rates</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-4">
-                <div className="text-4xl font-bold" data-testid="text-match-rate">{Math.round(summary?.cardMatchRate ?? 0)}%</div>
-                <div className="flex-1">
-                  <div className="h-4 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-chart-2 transition-all"
-                      style={{ width: `${Math.round(summary?.cardMatchRate ?? 0)}%` }}
-                    />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm font-medium mb-2">Bank Match Rate (Source of Truth)</p>
+                  <div className="flex items-center gap-4">
+                    <div className="text-3xl font-bold text-chart-2" data-testid="text-bank-match-rate">{Math.round(summary?.bankMatchRate ?? 0)}%</div>
+                    <div className="flex-1">
+                      <div className="h-3 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-chart-2 transition-all"
+                          style={{ width: `${Math.round(summary?.bankMatchRate ?? 0)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {summary?.matchedPairs ?? 0} of {summary?.bankTransactions ?? 0} bank transactions matched
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {summary?.matchedTransactions ?? 0} of {summary?.cardFuelTransactions ?? 0} card transactions matched
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Cash transactions ({summary?.cashFuelTransactions ?? 0}) are excluded from matching
-                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-2">Card Match Rate (Fuel Side)</p>
+                  <div className="flex items-center gap-4">
+                    <div className="text-3xl font-bold text-chart-4" data-testid="text-card-match-rate">{Math.round(summary?.cardMatchRate ?? 0)}%</div>
+                    <div className="flex-1">
+                      <div className="h-3 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-chart-4 transition-all"
+                          style={{ width: `${Math.round(summary?.cardMatchRate ?? 0)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {summary?.matchedPairs ?? 0} of {summary?.cardFuelTransactions ?? 0} fuel card transactions matched
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-chart-1" />
+                Unmatched Transactions
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">These need manual review or investigation</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-4 bg-chart-1/10 border border-chart-1/30 rounded-md">
+                  <p className="text-sm font-medium mb-2">Unmatched Bank Transactions</p>
+                  <p className="text-2xl font-bold text-chart-1" data-testid="text-unmatched-bank">{summary?.unmatchedBankTransactions ?? 0}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.unmatchedBankAmount ?? 0)}</p>
+                  <p className="text-xs text-muted-foreground mt-2">Bank received payment but no matching fuel sale found</p>
+                </div>
+                <div className="p-4 bg-chart-1/10 border border-chart-1/30 rounded-md">
+                  <p className="text-sm font-medium mb-2">Unmatched Card Sales</p>
+                  <p className="text-2xl font-bold text-chart-1" data-testid="text-unmatched-card">{summary?.unmatchedCardTransactions ?? 0}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.unmatchedCardAmount ?? 0)}</p>
+                  <p className="text-xs text-muted-foreground mt-2">Card sale recorded but no matching bank deposit found</p>
                 </div>
               </div>
             </CardContent>

@@ -174,7 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         file: uploadedFile,
         preview: {
           headers: parsed.headers,
-          rows: parsed.rows.slice(0, 5),
+          rows: DataNormalizer.normalizePreviewRows(parsed.rows.slice(0, 5)),
           totalRows: parsed.rowCount,
         },
         suggestedMappings: suggestedMappingsObject,
@@ -236,7 +236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         headers: parsed.headers,
-        rows: parsed.rows.slice(0, 5),
+        rows: DataNormalizer.normalizePreviewRows(parsed.rows.slice(0, 5)),
         totalRows: parsed.rowCount,
         suggestedMappings,
         currentMapping: file.columnMapping,

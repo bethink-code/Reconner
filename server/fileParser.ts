@@ -131,6 +131,50 @@ export const SOURCE_PRESETS: SourcePreset[] = [
 
 // Data normalization utilities
 export class DataNormalizer {
+  // Format Excel serial date/time for display in preview
+  // Converts "45901.63006944444" to "2025-09-01 15:07:18"
+  static formatExcelSerialForDisplay(value: any): string {
+    if (value === null || value === undefined || value === '') return '';
+    const trimmed = String(value).trim();
+    
+    // Check if it looks like an Excel serial number (5-digit number with optional decimals)
+    const serial = parseFloat(trimmed);
+    if (!isNaN(serial) && serial > 40000 && serial < 60000) {
+      // Extract date
+      const excelEpoch = new Date(1899, 11, 30); // Dec 30, 1899
+      const wholeDays = Math.floor(serial);
+      const date = new Date(excelEpoch.getTime() + wholeDays * 86400 * 1000);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      
+      // Extract time from fractional part
+      const fractionalDay = serial - wholeDays;
+      if (fractionalDay > 0) {
+        const totalSeconds = Math.round(fractionalDay * 86400);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        return `${year}-${month}-${day} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+      
+      return `${year}-${month}-${day}`;
+    }
+    
+    return trimmed;
+  }
+
+  // Normalize preview rows: convert Excel serial dates to readable format
+  static normalizePreviewRows(rows: Record<string, any>[]): Record<string, any>[] {
+    return rows.map(row => {
+      const normalizedRow: Record<string, any> = {};
+      for (const [key, value] of Object.entries(row)) {
+        normalizedRow[key] = this.formatExcelSerialForDisplay(value);
+      }
+      return normalizedRow;
+    });
+  }
+
   // Normalize ABSA amount: "R 1,337.20" → 1337.20
   static normalizeABSAAmount(value: string): string {
     if (!value) return '0';
@@ -686,13 +730,19 @@ export class FileParser {
       switch (mapping) {
         case 'date':
           const rawDate = String(value).trim();
+          // Skip if empty value and we already have a date
+          if (!rawDate && transactionDate) break;
+          
           // Apply source-specific date normalization
           if (preset?.name === 'FNB Merchant') {
-            transactionDate = DataNormalizer.normalizeFNBDate(rawDate);
+            const normalizedDate = DataNormalizer.normalizeFNBDate(rawDate);
+            if (normalizedDate) transactionDate = normalizedDate;
           } else if (preset?.name === 'ABSA Merchant') {
-            transactionDate = DataNormalizer.normalizeABSADate(rawDate);
+            const normalizedDate = DataNormalizer.normalizeABSADate(rawDate);
+            if (normalizedDate) transactionDate = normalizedDate;
           } else if (preset?.name === 'Fuel Master') {
-            transactionDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
+            const normalizedDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
+            if (normalizedDate) transactionDate = normalizedDate;
             // Also extract time from combined field
             if (!transactionTime) {
               transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
@@ -701,11 +751,12 @@ export class FileParser {
             // Generic handling - check if it's an Excel serial number
             const serial = parseFloat(rawDate);
             if (!isNaN(serial) && serial > 40000 && serial < 60000) {
-              transactionDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
+              const normalizedDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
+              if (normalizedDate) transactionDate = normalizedDate;
               if (!transactionTime) {
                 transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
               }
-            } else {
+            } else if (rawDate) {
               transactionDate = rawDate;
             }
           }

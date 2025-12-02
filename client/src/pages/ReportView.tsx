@@ -318,22 +318,26 @@ export default function ReportView() {
                 <AlertTriangle className="h-5 w-5 text-chart-1" />
                 Unmatched Transactions
               </CardTitle>
-              <p className="text-sm text-muted-foreground">These need manual review or investigation</p>
+              <p className="text-sm text-muted-foreground">Click to view and investigate these transactions</p>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-chart-1/10 border border-chart-1/30 rounded-md">
-                  <p className="text-sm font-medium mb-2">Unmatched Bank Transactions</p>
-                  <p className="text-2xl font-bold text-chart-1" data-testid="text-unmatched-bank">{summary?.unmatchedBankTransactions ?? 0}</p>
-                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.unmatchedBankAmount ?? 0)}</p>
-                  <p className="text-xs text-muted-foreground mt-2">Bank received payment but no matching fuel sale found</p>
-                </div>
-                <div className="p-4 bg-chart-1/10 border border-chart-1/30 rounded-md">
-                  <p className="text-sm font-medium mb-2">Unmatched Card Sales</p>
-                  <p className="text-2xl font-bold text-chart-1" data-testid="text-unmatched-card">{summary?.unmatchedCardTransactions ?? 0}</p>
-                  <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.unmatchedCardAmount ?? 0)}</p>
-                  <p className="text-xs text-muted-foreground mt-2">Card sale recorded but no matching bank deposit found</p>
-                </div>
+                <Link href={`/reconcile?periodId=${periodId}&filter=unmatched&source=bank`}>
+                  <div className="p-4 bg-chart-1/10 border border-chart-1/30 rounded-md cursor-pointer hover-elevate" data-testid="link-unmatched-bank">
+                    <p className="text-sm font-medium mb-2">Unmatched Bank Transactions</p>
+                    <p className="text-2xl font-bold text-chart-1" data-testid="text-unmatched-bank">{summary?.unmatchedBankTransactions ?? 0}</p>
+                    <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.unmatchedBankAmount ?? 0)}</p>
+                    <p className="text-xs text-muted-foreground mt-2">Bank received payment but no matching fuel sale found</p>
+                  </div>
+                </Link>
+                <Link href={`/reconcile?periodId=${periodId}&filter=unmatched&source=card`}>
+                  <div className="p-4 bg-chart-1/10 border border-chart-1/30 rounded-md cursor-pointer hover-elevate" data-testid="link-unmatched-card">
+                    <p className="text-sm font-medium mb-2">Unmatched Card Sales</p>
+                    <p className="text-2xl font-bold text-chart-1" data-testid="text-unmatched-card">{summary?.unmatchedCardTransactions ?? 0}</p>
+                    <p className="text-sm text-muted-foreground font-mono">{formatCurrency(summary?.unmatchedCardAmount ?? 0)}</p>
+                    <p className="text-xs text-muted-foreground mt-2">Card sale recorded but no matching bank deposit found</p>
+                  </div>
+                </Link>
               </div>
             </CardContent>
           </Card>

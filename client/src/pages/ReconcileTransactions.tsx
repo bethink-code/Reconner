@@ -16,14 +16,28 @@ export default function ReconcileTransactions() {
   const { toast } = useToast();
   const [periodId, setPeriodId] = useState<string>("");
   const [activeTab, setActiveTab] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('periodId');
+    const filter = params.get('filter');
+    const source = params.get('source');
+    
     if (id) {
       setPeriodId(id);
     } else {
       setLocation('/');
+    }
+    
+    // Set initial tab based on filter param
+    if (filter === 'unmatched') {
+      setActiveTab('unmatched');
+    }
+    
+    // Set source filter (bank or card)
+    if (source === 'bank' || source === 'card') {
+      setSourceFilter(source);
     }
   }, [setLocation]);
 
@@ -56,6 +70,26 @@ export default function ReconcileTransactions() {
   const matchedTransactions = transactions.filter(t => t.matchStatus === "matched");
   const unmatchedTransactions = transactions.filter(t => t.matchStatus === "unmatched");
   const partialTransactions = transactions.filter(t => t.matchStatus === "partial");
+  
+  // Apply source filter for unmatched view
+  const filteredUnmatchedTransactions = sourceFilter 
+    ? unmatchedTransactions.filter(t => {
+        if (sourceFilter === 'bank') {
+          return t.sourceType?.startsWith('bank');
+        } else if (sourceFilter === 'card') {
+          return t.sourceType === 'fuel' && t.isCardTransaction === 'yes';
+        }
+        return true;
+      })
+    : unmatchedTransactions;
+
+  const clearSourceFilter = () => {
+    setSourceFilter(null);
+    // Update URL without source param
+    const params = new URLSearchParams(window.location.search);
+    params.delete('source');
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+  };
 
   const handleGenerateReport = () => {
     setLocation(`/report?periodId=${periodId}`);
@@ -168,9 +202,19 @@ export default function ReconcileTransactions() {
               </TabsContent>
 
               <TabsContent value="unmatched" className="mt-6">
+                {sourceFilter && (
+                  <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md">
+                    <span className="text-sm">
+                      Showing: <span className="font-medium">{sourceFilter === 'bank' ? 'Bank Transactions' : 'Card Sales'}</span>
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={clearSourceFilter} data-testid="button-clear-filter">
+                      Clear Filter
+                    </Button>
+                  </div>
+                )}
                 <TransactionTable
-                  title="Unmatched Transactions"
-                  transactions={unmatchedTransactions}
+                  title={sourceFilter ? `Unmatched ${sourceFilter === 'bank' ? 'Bank' : 'Card'} Transactions` : "Unmatched Transactions"}
+                  transactions={filteredUnmatchedTransactions}
                   onTransactionSelect={() => {}}
                 />
               </TabsContent>

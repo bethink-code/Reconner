@@ -33,6 +33,7 @@ type NormalizedTransaction = {
   amount: string;
   referenceNumber: string;
   description: string;
+  cardNumber: string;
   paymentType: string;
   isCardTransaction: 'yes' | 'no' | 'unknown';
 };
@@ -218,6 +219,7 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
                     <SelectItem value="amount">Amount</SelectItem>
                     <SelectItem value="reference">Reference</SelectItem>
                     <SelectItem value="description">Description</SelectItem>
+                    <SelectItem value="cardNumber">Card Number</SelectItem>
                     <SelectItem value="paymentType">Payment Type</SelectItem>
                     <SelectItem value="ignore">Ignore</SelectItem>
                   </SelectContent>
@@ -254,6 +256,7 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
                           <th className="p-2 text-left font-medium">Time</th>
                           <th className="p-2 text-right font-medium">Amount</th>
                           <th className="p-2 text-left font-medium">Reference</th>
+                          <th className="p-2 text-left font-medium">Card #</th>
                           <th className="p-2 text-left font-medium">Description</th>
                           <th className="p-2 text-left font-medium">Type</th>
                         </tr>
@@ -269,6 +272,7 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
                               <td className="p-2 font-mono">{tx.transactionTime || '-'}</td>
                               <td className="p-2 text-right font-mono">R {tx.amount || '0.00'}</td>
                               <td className="p-2 font-mono truncate max-w-[100px]" title={tx.referenceNumber}>{tx.referenceNumber || '-'}</td>
+                              <td className="p-2 font-mono text-xs truncate max-w-[80px]" title={tx.cardNumber}>{tx.cardNumber || '-'}</td>
                               <td className="p-2 truncate max-w-[150px]" title={tx.description}>{tx.description || '-'}</td>
                               <td className="p-2">
                                 <div className="flex items-center gap-1">

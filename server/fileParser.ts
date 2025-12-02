@@ -578,13 +578,26 @@ export class FileParser {
       suggestedMapping = 'reference';
       confidence = normalized === 'reference' || normalized === 'invoice' ? 1.0 : 0.7;
     } else if (
+      // Card number detection - check BEFORE description to avoid conflicts
+      normalized === 'pan' ||
+      normalized.includes('pan') ||
+      normalized === 'card number' ||
+      normalized === 'card no' ||
+      normalized === 'cardno' ||
+      normalized.includes('card num') ||
+      normalized.includes('card #') ||
+      normalized.includes('masked') ||
+      normalized.includes('card pan')
+    ) {
+      suggestedMapping = 'cardNumber';
+      confidence = normalized === 'pan' || normalized === 'card number' ? 1.0 : 0.9;
+    } else if (
       normalized.includes('description') ||
       normalized.includes('desc') ||
       normalized.includes('memo') ||
       normalized.includes('details') ||
       normalized.includes('merchant') ||
       normalized.includes('vendor') ||
-      normalized.includes('transaction type') ||
       normalized === '_3'  // Fuel Master fuel type column
     ) {
       suggestedMapping = 'description';
@@ -593,20 +606,11 @@ export class FileParser {
       normalized === 'shift' ||
       normalized.includes('payment method') ||
       normalized.includes('payment type') ||
-      normalized.includes('card type')
+      normalized.includes('card type') ||
+      normalized.includes('transaction type')
     ) {
       suggestedMapping = 'paymentType';
       confidence = 0.9;
-    } else if (
-      normalized === 'pan' ||
-      normalized === 'card number' ||
-      normalized === 'card no' ||
-      normalized === 'cardno' ||
-      normalized.includes('card num') ||
-      normalized.includes('card #')
-    ) {
-      suggestedMapping = 'cardNumber';
-      confidence = 0.95;
     }
 
     return {

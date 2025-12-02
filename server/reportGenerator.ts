@@ -106,9 +106,13 @@ export class ReportGenerator {
       }
     }
 
-    // Unmatched transactions
-    const unmatchedBank = bankTransactions.filter(t => t.matchStatus !== 'matched');
-    const unmatchedCard = cardFuelTransactions.filter(t => t.matchStatus !== 'matched');
+    // Unmatched transactions (exclude zero-value transactions)
+    const unmatchedBank = bankTransactions.filter(t => 
+      t.matchStatus !== 'matched' && this.parseAmount(t.amount) > 0
+    );
+    const unmatchedCard = cardFuelTransactions.filter(t => 
+      t.matchStatus !== 'matched' && this.parseAmount(t.amount) > 0
+    );
     const unmatchedBankAmount = unmatchedBank.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
     const unmatchedCardAmount = unmatchedCard.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
 
@@ -189,7 +193,10 @@ export class ReportGenerator {
       headStyles: { fillColor: [66, 66, 66] },
     });
 
-    const unmatchedTransactions = data.transactions.filter(t => t.matchStatus === 'unmatched');
+    // Filter out zero-value transactions from unmatched list
+    const unmatchedTransactions = data.transactions.filter(t => 
+      t.matchStatus === 'unmatched' && this.parseAmount(t.amount) > 0
+    );
     
     if (unmatchedTransactions.length > 0) {
       const finalY = (doc as any).lastAutoTable.finalY || 140;
@@ -266,7 +273,10 @@ export class ReportGenerator {
     const wsAllTransactions = XLSX.utils.aoa_to_sheet(allTransactionsData);
     XLSX.utils.book_append_sheet(wb, wsAllTransactions, 'All Transactions');
 
-    const unmatchedTransactions = data.transactions.filter(t => t.matchStatus === 'unmatched');
+    // Filter out zero-value transactions from unmatched list
+    const unmatchedTransactions = data.transactions.filter(t => 
+      t.matchStatus === 'unmatched' && this.parseAmount(t.amount) > 0
+    );
     if (unmatchedTransactions.length > 0) {
       const unmatchedData: any[][] = [
         ['Date', 'Source', 'Payment Type', 'Amount', 'Reference', 'Description']

@@ -68,6 +68,7 @@ export const transactions = pgTable("transactions", {
   fileId: varchar("file_id").notNull().references(() => uploadedFiles.id, { onDelete: "cascade" }),
   periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }),
   sourceType: text("source_type").notNull(),
+  sourceName: text("source_name"), // Name of the source (e.g., "FNB Merchant", "Fuel Master")
   rawData: jsonb("raw_data").notNull(),
   transactionDate: text("transaction_date").notNull(),
   transactionTime: text("transaction_time"),

@@ -109,7 +109,7 @@ export default function TransactionTable({
                       </td>
                       <td className="p-3 text-sm">
                         <Badge variant="outline" className="text-xs">
-                          {transaction.sourceType === 'fuel' ? 'Fuel' : 'Bank'}
+                          {transaction.sourceName || (transaction.sourceType === 'fuel' ? 'Fuel System' : 'Bank')}
                         </Badge>
                       </td>
                       <td className="p-3">

@@ -307,6 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fileId: file.id,
           periodId: file.periodId,
           sourceType: file.sourceType,
+          sourceName: file.sourceName,
           rawData: row,
           transactionDate: extracted.transactionDate,
           transactionTime: extracted.transactionTime || null,

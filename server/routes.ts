@@ -21,7 +21,7 @@ const upload = multer({
 });
 
 // Expanded column mapping schema to include time and payment type
-const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'ignore']));
+const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'cardNumber', 'ignore']));
 
 export async function registerRoutes(app: Express): Promise<Server> {
   

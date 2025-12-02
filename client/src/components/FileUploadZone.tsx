@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Upload, File, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Upload, File, X, CheckCircle2, RefreshCw, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 
-interface UploadedFile {
+interface LocalUploadedFile {
   id: string;
   name: string;
   size: number;
@@ -12,20 +13,42 @@ interface UploadedFile {
   status: "uploading" | "complete" | "error";
 }
 
+interface ExistingFile {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  rowCount: number | null;
+  status: string;
+  columnMapping: Record<string, string> | null;
+}
+
 interface FileUploadZoneProps {
   label: string;
   accept?: string;
+  existingFile?: ExistingFile | null;
   onFilesSelected?: (files: File[]) => void;
 }
 
-export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls,.pdf", onFilesSelected }: FileUploadZoneProps) {
-  const [files, setFiles] = useState<UploadedFile[]>([]);
+export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls,.pdf", existingFile, onFilesSelected }: FileUploadZoneProps) {
+  const [files, setFiles] = useState<LocalUploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [showReplaceUpload, setShowReplaceUpload] = useState(false);
+  const prevExistingFileId = useRef<string | null>(null);
+
+  // Reset local state when existingFile changes (after successful upload/refetch)
+  useEffect(() => {
+    if (existingFile && existingFile.id !== prevExistingFileId.current) {
+      // File was uploaded/replaced successfully, reset local upload state
+      setFiles([]);
+      setShowReplaceUpload(false);
+      prevExistingFileId.current = existingFile.id;
+    }
+  }, [existingFile]);
 
   const handleFileSelect = (selectedFiles: FileList | null) => {
     if (!selectedFiles) return;
 
-    const newFiles: UploadedFile[] = Array.from(selectedFiles).map((file, idx) => ({
+    const newFiles: LocalUploadedFile[] = Array.from(selectedFiles).map((file, idx) => ({
       id: `${Date.now()}-${idx}`,
       name: file.name,
       size: file.size,
@@ -33,7 +56,8 @@ export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls,.pdf",
       status: "uploading" as const,
     }));
 
-    setFiles((prev) => [...prev, ...newFiles]);
+    setFiles(newFiles); // Replace files, not append
+    setShowReplaceUpload(false);
 
     // Simulate upload progress
     newFiles.forEach((file, idx) => {
@@ -68,48 +92,100 @@ export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls,.pdf",
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
+  // Show existing file card if we have one and no active upload
+  const showExistingFile = existingFile && files.length === 0 && !showReplaceUpload;
+
   return (
     <div className="space-y-4">
-      <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          isDragging ? "border-primary bg-primary/5" : "border-border"
-        }`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setIsDragging(false);
-          handleFileSelect(e.dataTransfer.files);
-        }}
-        data-testid={`dropzone-${label.toLowerCase().replace(/\s/g, '-')}`}
-      >
-        <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium mb-2">{label}</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Drag and drop your file here, or click to browse
-        </p>
-        <input
-          type="file"
-          accept={accept}
-          multiple
-          onChange={(e) => handleFileSelect(e.target.files)}
-          className="hidden"
-          id={`file-input-${label}`}
-          data-testid={`input-file-${label.toLowerCase().replace(/\s/g, '-')}`}
-        />
-        <label htmlFor={`file-input-${label}`}>
-          <Button type="button" variant="secondary" asChild>
-            <span>Browse Files</span>
-          </Button>
-        </label>
-        <p className="text-xs text-muted-foreground mt-2">
-          Supported formats: CSV, Excel (.xlsx, .xls), PDF
-        </p>
-      </div>
+      {/* Show existing file info */}
+      {showExistingFile && (
+        <Card className="p-4 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20" data-testid={`existing-file-${existingFile.id}`}>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-sm font-medium">{label}</h3>
+                <Badge variant="secondary" className="text-xs">Uploaded</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground truncate" title={existingFile.fileName}>
+                  {existingFile.fileName}
+                </p>
+              </div>
+              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                <span>{formatFileSize(existingFile.fileSize)}</span>
+                {existingFile.rowCount && <span>{existingFile.rowCount.toLocaleString()} rows</span>}
+                {existingFile.columnMapping && (
+                  <Badge variant="outline" className="text-xs py-0">Mapped</Badge>
+                )}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReplaceUpload(true)}
+              data-testid={`button-replace-${existingFile.id}`}
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              Replace
+            </Button>
+          </div>
+        </Card>
+      )}
 
+      {/* Show upload zone if no existing file or replacing */}
+      {(!existingFile || showReplaceUpload) && (
+        <div
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            isDragging ? "border-primary bg-primary/5" : "border-border"
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+            handleFileSelect(e.dataTransfer.files);
+          }}
+          data-testid={`dropzone-${label.toLowerCase().replace(/\s/g, '-')}`}
+        >
+          <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">{label}</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            {showReplaceUpload ? "Upload a new file to replace the existing one" : "Drag and drop your file here, or click to browse"}
+          </p>
+          <input
+            type="file"
+            accept={accept}
+            onChange={(e) => handleFileSelect(e.target.files)}
+            className="hidden"
+            id={`file-input-${label}`}
+            data-testid={`input-file-${label.toLowerCase().replace(/\s/g, '-')}`}
+          />
+          <div className="flex items-center justify-center gap-2">
+            <label htmlFor={`file-input-${label}`}>
+              <Button type="button" variant="secondary" asChild>
+                <span>Browse Files</span>
+              </Button>
+            </label>
+            {showReplaceUpload && (
+              <Button type="button" variant="ghost" onClick={() => setShowReplaceUpload(false)}>
+                Cancel
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Supported formats: CSV, Excel (.xlsx, .xls), PDF
+          </p>
+        </div>
+      )}
+
+      {/* Show uploading files */}
       {files.length > 0 && (
         <div className="space-y-2">
           {files.map((file) => (

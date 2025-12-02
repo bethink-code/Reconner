@@ -27,6 +27,11 @@ interface ReportSummary {
   cashFuelAmount: number;
   // Effective match rate (card only)
   cardMatchRate: number;
+  // Match breakdown by date difference (for processing delay analysis)
+  matchesSameDay: number;
+  matches1Day: number;
+  matches2Day: number;
+  matches3Day: number;
 }
 
 export class ReportGenerator {
@@ -61,6 +66,31 @@ export class ReportGenerator {
     // Matched pairs = number of unique matches (each match links 2 transactions)
     const matchedPairs = data.matches.length;
 
+    // Calculate match breakdown by date difference
+    // Build a map of transaction IDs to transactions for quick lookup
+    const txMap = new Map(data.transactions.map(t => [t.id, t]));
+    
+    let matchesSameDay = 0;
+    let matches1Day = 0;
+    let matches2Day = 0;
+    let matches3Day = 0;
+
+    for (const match of data.matches) {
+      const fuelTx = txMap.get(match.fuelTransactionId);
+      const bankTx = txMap.get(match.bankTransactionId);
+      
+      if (fuelTx && bankTx && fuelTx.transactionDate && bankTx.transactionDate) {
+        const fuelDate = new Date(fuelTx.transactionDate);
+        const bankDate = new Date(bankTx.transactionDate);
+        const diffDays = Math.abs(Math.round((bankDate.getTime() - fuelDate.getTime()) / (1000 * 60 * 60 * 24)));
+        
+        if (diffDays === 0) matchesSameDay++;
+        else if (diffDays === 1) matches1Day++;
+        else if (diffDays === 2) matches2Day++;
+        else matches3Day++;
+      }
+    }
+
     return {
       totalTransactions: data.transactions.length,
       fuelTransactions: fuelTransactions.length,
@@ -79,6 +109,10 @@ export class ReportGenerator {
       cardFuelAmount,
       cashFuelAmount,
       cardMatchRate,
+      matchesSameDay,
+      matches1Day,
+      matches2Day,
+      matches3Day,
     };
   }
 
@@ -103,7 +137,10 @@ export class ReportGenerator {
       ['  - Cash Transactions', summary.cashFuelTransactions.toString()],
       ['Bank Transactions', summary.bankTransactions.toString()],
       ['Matched Pairs', summary.matchedPairs.toString()],
-      ['Matched Transactions', summary.matchedTransactions.toString()],
+      ['  - Same Day', summary.matchesSameDay.toString()],
+      ['  - 1 Day Later', summary.matches1Day.toString()],
+      ['  - 2 Days Later', summary.matches2Day.toString()],
+      ['  - 3 Days Later', summary.matches3Day.toString()],
       ['Card Match Rate', `${summary.cardMatchRate.toFixed(2)}%`],
       ['Card Fuel Amount', `R ${summary.cardFuelAmount.toFixed(2)}`],
       ['Cash Fuel Amount', `R ${summary.cashFuelAmount.toFixed(2)}`],

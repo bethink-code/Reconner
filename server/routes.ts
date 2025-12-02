@@ -426,16 +426,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           const dateDiff = bankDate - fuelDate; // Positive = bank is later (expected)
           
-          // Allow bank to be 0-2 days after fuel (normal processing)
+          // Allow bank to be 0-3 days after fuel (weekend processing delays)
           // Also allow bank to be 1 day before fuel (timezone/cutoff differences)
-          if (dateDiff < -1 || dateDiff > 2) continue;
+          if (dateDiff < -1 || dateDiff > 3) continue;
 
           // Calculate base confidence from date difference
-          // Same day = highest, 1 day = medium, 2 days = lower
+          // Same day = highest, decreasing with more days
           let baseConfidence = 70;
-          if (dateDiff === 0) baseConfidence = 85;      // Same day
+          if (dateDiff === 0) baseConfidence = 85;           // Same day
           else if (Math.abs(dateDiff) === 1) baseConfidence = 75;  // 1 day difference
-          else baseConfidence = 65;                      // 2 days difference
+          else if (Math.abs(dateDiff) === 2) baseConfidence = 68;  // 2 days difference
+          else baseConfidence = 62;                           // 3 days difference (weekend)
 
           // Time matching - calculate difference in minutes
           // Time is less critical when dates differ (processing delays affect time too)

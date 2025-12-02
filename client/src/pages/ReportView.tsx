@@ -32,6 +32,10 @@ type ReportSummary = {
   cardFuelAmount: number;
   cashFuelAmount: number;
   cardMatchRate: number;
+  matchesSameDay: number;
+  matches1Day: number;
+  matches2Day: number;
+  matches3Day: number;
 };
 
 export default function ReportView() {
@@ -174,6 +178,33 @@ export default function ReportView() {
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Matched Pairs</p>
                   <p className="text-2xl font-bold text-chart-2" data-testid="text-matched-pairs">{summary?.matchedPairs ?? 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Match Processing Breakdown</CardTitle>
+              <p className="text-sm text-muted-foreground">How long after fuel purchase did bank show the transaction?</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-chart-2/10 border border-chart-2/30 rounded-md">
+                  <p className="text-sm font-medium text-chart-2">Same Day</p>
+                  <p className="text-2xl font-bold" data-testid="text-matches-same-day">{summary?.matchesSameDay ?? 0}</p>
+                </div>
+                <div className="p-4 bg-chart-4/10 border border-chart-4/30 rounded-md">
+                  <p className="text-sm font-medium text-chart-4">1 Day Later</p>
+                  <p className="text-2xl font-bold" data-testid="text-matches-1day">{summary?.matches1Day ?? 0}</p>
+                </div>
+                <div className="p-4 bg-chart-5/10 border border-chart-5/30 rounded-md">
+                  <p className="text-sm font-medium text-chart-5">2 Days Later</p>
+                  <p className="text-2xl font-bold" data-testid="text-matches-2day">{summary?.matches2Day ?? 0}</p>
+                </div>
+                <div className="p-4 bg-chart-1/10 border border-chart-1/30 rounded-md">
+                  <p className="text-sm font-medium text-chart-1">3 Days Later</p>
+                  <p className="text-2xl font-bold" data-testid="text-matches-3day">{summary?.matches3Day ?? 0}</p>
                 </div>
               </div>
             </CardContent>

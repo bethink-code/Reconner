@@ -14,6 +14,7 @@ interface ReportSummary {
   fuelTransactions: number;
   bankTransactions: number;
   matchedTransactions: number;
+  matchedPairs: number; // Unique matched pairs (more meaningful for reconciliation)
   unmatchedTransactions: number;
   matchRate: number;
   totalFuelAmount: number;
@@ -57,11 +58,15 @@ export class ReportGenerator {
       ? (matchedCardFuel.length / cardFuelTransactions.length) * 100 
       : 0;
 
+    // Matched pairs = number of unique matches (each match links 2 transactions)
+    const matchedPairs = data.matches.length;
+
     return {
       totalTransactions: data.transactions.length,
       fuelTransactions: fuelTransactions.length,
       bankTransactions: bankTransactions.length,
       matchedTransactions: matchedTransactions.length,
+      matchedPairs, // Unique reconciled pairs (more meaningful for reports)
       unmatchedTransactions: data.transactions.length - matchedTransactions.length,
       matchRate: data.transactions.length > 0 
         ? (matchedTransactions.length / data.transactions.length) * 100 
@@ -97,6 +102,7 @@ export class ReportGenerator {
       ['  - Card Transactions', summary.cardFuelTransactions.toString()],
       ['  - Cash Transactions', summary.cashFuelTransactions.toString()],
       ['Bank Transactions', summary.bankTransactions.toString()],
+      ['Matched Pairs', summary.matchedPairs.toString()],
       ['Matched Transactions', summary.matchedTransactions.toString()],
       ['Card Match Rate', `${summary.cardMatchRate.toFixed(2)}%`],
       ['Card Fuel Amount', `R ${summary.cardFuelAmount.toFixed(2)}`],
@@ -159,6 +165,7 @@ export class ReportGenerator {
       ['  - Card Transactions', summary.cardFuelTransactions],
       ['  - Cash Transactions', summary.cashFuelTransactions],
       ['Bank Transactions', summary.bankTransactions],
+      ['Matched Pairs', summary.matchedPairs],
       ['Matched Transactions', summary.matchedTransactions],
       ['Card Match Rate', `${summary.cardMatchRate.toFixed(2)}%`],
       ['Card Fuel Amount', summary.cardFuelAmount],
@@ -227,6 +234,7 @@ export class ReportGenerator {
     csv += `  - Card Transactions,${summary.cardFuelTransactions}\n`;
     csv += `  - Cash Transactions,${summary.cashFuelTransactions}\n`;
     csv += `Bank Transactions,${summary.bankTransactions}\n`;
+    csv += `Matched Pairs,${summary.matchedPairs}\n`;
     csv += `Matched Transactions,${summary.matchedTransactions}\n`;
     csv += `Card Match Rate,${summary.cardMatchRate.toFixed(2)}%\n`;
     csv += `Card Fuel Amount,${summary.cardFuelAmount.toFixed(2)}\n`;

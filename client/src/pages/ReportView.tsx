@@ -21,6 +21,7 @@ type ReportSummary = {
   fuelTransactions: number;
   bankTransactions: number;
   matchedTransactions: number;
+  matchedPairs: number;
   unmatchedTransactions: number;
   matchRate: number;
   totalFuelAmount: number;
@@ -171,8 +172,8 @@ export default function ReportView() {
                   <p className="text-2xl font-bold" data-testid="text-bank-transactions">{summary?.bankTransactions ?? 0}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Matched</p>
-                  <p className="text-2xl font-bold text-chart-2" data-testid="text-matched-transactions">{summary?.matchedTransactions ?? 0}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Matched Pairs</p>
+                  <p className="text-2xl font-bold text-chart-2" data-testid="text-matched-pairs">{summary?.matchedPairs ?? 0}</p>
                 </div>
               </div>
             </CardContent>

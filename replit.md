@@ -76,9 +76,22 @@ Preferred communication style: Simple, everyday language.
 **Core Entities**
 - **ReconciliationPeriod**: Top-level entity with name, date range, description, and status (draft/in_progress/complete)
 - **UploadedFile**: Tracks source files with metadata (periodId, fileName, fileType, sourceType, sourceName, fileUrl, fileSize, status, rowCount, columnMapping)
-- **Transaction**: Individual financial records with date, amount, reference, description, source details, and match status
+- **Transaction**: Individual financial records with date, amount, reference, description, source details, match status, isCardTransaction flag, and cardNumber (last 4 digits)
 - **Match**: Links related transactions with confidence scores and optional notes
 - **User**: Basic authentication entity (currently minimal implementation)
+
+**Card-Based Matching**
+- Only CARD transactions are matched (cash transactions appear in reports but aren't reconciled)
+- Card number matching uses last 4 digits (e.g., ****1234) when available
+- Bank sources detected with startsWith('bank') to handle bank, bank2, bank_account variations
+- Source presets for FNB Merchant, ABSA Merchant, Fuel Master with automatic column detection
+
+**Auto-Match Scoring**
+- Amount match: 50 points (exact match with tolerance)
+- Date match: 30 points (same day, ±1 day with reduced points)
+- Reference match: 20 points (exact or partial)
+- Card number match: +20 points when both sides have matching card numbers
+- Card number mismatch: -30 penalty when both have card numbers but they differ
 
 **Workflow States**
 - Period lifecycle: draft → in_progress → complete

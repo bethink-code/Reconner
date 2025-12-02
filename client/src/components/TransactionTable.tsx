@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -83,9 +83,8 @@ export default function TransactionTable({
               </thead>
               <tbody>
                 {transactions.map((transaction) => (
-                  <>
+                  <Fragment key={transaction.id}>
                     <tr 
-                      key={transaction.id} 
                       className="border-b hover-elevate cursor-pointer"
                       onClick={() => onTransactionSelect?.(transaction)}
                       data-testid={`row-transaction-${transaction.id}`}
@@ -172,7 +171,7 @@ export default function TransactionTable({
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

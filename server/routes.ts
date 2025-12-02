@@ -105,6 +105,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "sourceType and sourceName are required" });
       }
 
+      // Check for existing file with same sourceType/sourceName and delete it
+      const existingFiles = await storage.getFilesByPeriod(req.params.periodId);
+      const existingFile = existingFiles.find(f => 
+        f.sourceType === sourceType && f.sourceName === sourceName
+      );
+      
+      if (existingFile) {
+        // Delete old file's transactions, matches, and the file record
+        console.log(`Replacing existing file: ${existingFile.fileName} (${existingFile.id})`);
+        await storage.deleteFile(existingFile.id);
+        // Try to clean up object storage (but don't fail if it doesn't work)
+        try {
+          await objectStorageService.deleteFile(existingFile.fileUrl);
+        } catch (e) {
+          console.warn("Could not delete old file from storage:", e);
+        }
+      }
+
       const isCSV = req.file.mimetype.includes('csv') || 
                     req.file.mimetype === 'text/csv' || 
                     req.file.originalname.endsWith('.csv');

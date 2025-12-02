@@ -386,36 +386,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         t.sourceType === 'fuel' && t.isCardTransaction !== 'yes'
       ).length;
 
+      // Helper function to parse time strings and calculate minutes from midnight
+      const parseTimeToMinutes = (timeStr: string): number | null => {
+        if (!timeStr) return null;
+        const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (!match) return null;
+        const hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        return hours * 60 + minutes;
+      };
+
       for (const fuelTx of fuelTransactions) {
         if (fuelTx.matchStatus !== 'unmatched') continue;
 
-        let bestMatch: { bankTx: typeof bankTransactions[0]; confidence: number } | null = null;
+        let bestMatch: { bankTx: typeof bankTransactions[0]; confidence: number; timeDiff: number } | null = null;
 
         for (const bankTx of bankTransactions) {
           if (bankTx.matchStatus !== 'unmatched') continue;
 
+          // PRIMARY CRITERIA: Amount + Date + Time
           const amountMatch = Math.abs(parseFloat(fuelTx.amount) - parseFloat(bankTx.amount)) < 0.01;
           const dateMatch = fuelTx.transactionDate === bankTx.transactionDate;
-          const refMatch = fuelTx.referenceNumber && bankTx.referenceNumber && 
-                          fuelTx.referenceNumber === bankTx.referenceNumber;
           
-          // Card number matching - both must have card numbers for this to count
-          const cardNumberMatch = fuelTx.cardNumber && bankTx.cardNumber && 
-                                  fuelTx.cardNumber === bankTx.cardNumber;
+          // Both amount AND date MUST match for a valid match
+          if (!amountMatch || !dateMatch) continue;
 
-          let confidence = 0;
-          if (amountMatch) confidence += 40;
-          if (dateMatch) confidence += 25;
-          if (refMatch) confidence += 15;
-          if (cardNumberMatch) confidence += 20; // Card number match adds significant confidence
-
-          // If card numbers exist but don't match, reduce confidence (likely wrong match)
-          if (fuelTx.cardNumber && bankTx.cardNumber && !cardNumberMatch) {
-            confidence -= 30; // Penalize mismatched card numbers
+          // Time matching - calculate difference in minutes
+          const fuelTime = parseTimeToMinutes(fuelTx.transactionTime || '');
+          const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
+          
+          let timeDiff = 999; // Large number if no time available
+          let confidence = 70; // Base confidence for amount + date match
+          
+          if (fuelTime !== null && bankTime !== null) {
+            timeDiff = Math.abs(fuelTime - bankTime);
+            // Time within 5 minutes = perfect match
+            if (timeDiff <= 5) confidence = 100;
+            // Time within 15 minutes = good match
+            else if (timeDiff <= 15) confidence = 90;
+            // Time within 30 minutes = acceptable
+            else if (timeDiff <= 30) confidence = 80;
+            // Time within 60 minutes = low confidence but allowed
+            else if (timeDiff <= 60) confidence = 65;
+            // Time differs more than 60 minutes = reject match (too risky)
+            else continue;
           }
 
-          if (confidence >= 65 && (!bestMatch || confidence > bestMatch.confidence)) {
-            bestMatch = { bankTx, confidence };
+          // Prefer matches with smallest time difference
+          if (!bestMatch || timeDiff < bestMatch.timeDiff || 
+              (timeDiff === bestMatch.timeDiff && confidence > bestMatch.confidence)) {
+            bestMatch = { bankTx, confidence, timeDiff };
           }
         }
 

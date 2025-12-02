@@ -188,25 +188,45 @@ export class DataNormalizer {
       return dateMatch[1].replace(/\//g, '-');
     }
     
-    // Excel serial date number
+    // Excel serial date number (Excel uses 1900-01-01 as epoch)
     const serial = parseFloat(trimmed);
-    if (!isNaN(serial) && serial > 40000 && serial < 50000) {
-      // Excel date serial number conversion
-      const date = new Date((serial - 25569) * 86400 * 1000);
-      return date.toISOString().split('T')[0];
+    if (!isNaN(serial) && serial > 40000 && serial < 60000) {
+      // Excel date serial: integer part is days since 1899-12-30
+      // Using the correct Excel epoch calculation
+      const excelEpoch = new Date(1899, 11, 30); // Dec 30, 1899
+      const wholeDays = Math.floor(serial);
+      const date = new Date(excelEpoch.getTime() + wholeDays * 86400 * 1000);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
     
     return trimmed;
   }
 
-  // Extract time from Fuel Master datetime
+  // Extract time from Fuel Master datetime (Excel serial or HH:MM:SS format)
   static normalizeFuelMasterTime(value: string): string {
     if (!value) return '';
     const trimmed = String(value).trim();
+    
+    // First check for HH:MM:SS pattern
     const timeMatch = trimmed.match(/(\d{2}:\d{2}(:\d{2})?)/);
     if (timeMatch) {
       return timeMatch[1];
     }
+    
+    // Excel serial: fractional part represents time of day
+    const serial = parseFloat(trimmed);
+    if (!isNaN(serial) && serial > 40000 && serial < 60000) {
+      const fractionalDay = serial - Math.floor(serial);
+      const totalSeconds = Math.round(fractionalDay * 86400);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    
     return '';
   }
 
@@ -674,9 +694,20 @@ export class FileParser {
           } else if (preset?.name === 'Fuel Master') {
             transactionDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
             // Also extract time from combined field
-            transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
+            if (!transactionTime) {
+              transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
+            }
           } else {
-            transactionDate = rawDate;
+            // Generic handling - check if it's an Excel serial number
+            const serial = parseFloat(rawDate);
+            if (!isNaN(serial) && serial > 40000 && serial < 60000) {
+              transactionDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
+              if (!transactionTime) {
+                transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
+              }
+            } else {
+              transactionDate = rawDate;
+            }
           }
           break;
         case 'time':

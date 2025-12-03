@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User } from "lucide-react";
+import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import PeriodCard from "@/components/PeriodCard";
 import StatusBadge from "@/components/StatusBadge";
 import {
@@ -104,15 +105,31 @@ export default function Dashboard() {
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="flex items-center justify-start gap-2 p-2">
                     <div className="flex flex-col space-y-1 leading-none">
-                      {user?.firstName && (
-                        <p className="font-medium">{user.firstName} {user.lastName}</p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {user?.firstName && (
+                          <p className="font-medium">{user.firstName} {user.lastName}</p>
+                        )}
+                        {user?.isAdmin && (
+                          <Badge variant="default" className="text-xs" data-testid="badge-admin">Admin</Badge>
+                        )}
+                      </div>
                       {user?.email && (
                         <p className="text-sm text-muted-foreground">{user.email}</p>
                       )}
                     </div>
                   </div>
                   <DropdownMenuSeparator />
+                  {user?.isAdmin && (
+                    <>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin" className="cursor-pointer" data-testid="link-admin">
+                          <Shield className="mr-2 h-4 w-4" />
+                          <span>User Management</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem asChild>
                     <a href="/api/logout" className="cursor-pointer" data-testid="button-logout">
                       <LogOut className="mr-2 h-4 w-4" />

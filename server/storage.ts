@@ -120,6 +120,8 @@ export interface VerificationSummary {
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  setUserAdmin(id: string, isAdmin: boolean): Promise<User | undefined>;
   
   getPeriods(): Promise<ReconciliationPeriod[]>;
   getPeriod(id: string): Promise<ReconciliationPeriod | undefined>;
@@ -172,6 +174,18 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async setUserAdmin(id: string, isAdmin: boolean): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set({ isAdmin, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return updated || undefined;
   }
 
   async getPeriods(): Promise<ReconciliationPeriod[]> {

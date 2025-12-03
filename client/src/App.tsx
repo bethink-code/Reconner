@@ -12,6 +12,7 @@ import UploadFiles from "@/pages/UploadFiles";
 import ColumnMapping from "@/pages/ColumnMapping";
 import ReconcileTransactions from "@/pages/ReconcileTransactions";
 import ReportView from "@/pages/ReportView";
+import Admin from "@/pages/Admin";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/mapping" component={ColumnMapping} />
       <Route path="/reconcile" component={ReconcileTransactions} />
       <Route path="/report" component={ReportView} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

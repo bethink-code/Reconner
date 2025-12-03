@@ -669,10 +669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Period not found" });
       }
 
-      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      const matches = await storage.getMatchesByPeriod(req.params.periodId);
-
-      const summary = reportGenerator.calculateSummary({ period, transactions, matches });
+      const summary = await storage.getPeriodSummary(req.params.periodId);
       
       res.json(summary);
     } catch (error) {

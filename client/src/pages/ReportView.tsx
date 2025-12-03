@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -14,7 +15,7 @@ import { ArrowLeft, Download, CreditCard, Banknote, HelpCircle, AlertTriangle } 
 import StatusBadge from "@/components/StatusBadge";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import type { ReconciliationPeriod, Transaction } from "@shared/schema";
+import type { ReconciliationPeriod } from "@shared/schema";
 
 type ReportSummary = {
   totalTransactions: number;
@@ -61,20 +62,17 @@ export default function ReportView() {
     }
   }, [setLocation]);
 
-  const { data: period } = useQuery<ReconciliationPeriod>({
+  const { data: period, isLoading: periodLoading } = useQuery<ReconciliationPeriod>({
     queryKey: ['/api/periods', periodId],
     enabled: !!periodId,
   });
 
-  const { data: transactions = [] } = useQuery<Transaction[]>({
-    queryKey: ['/api/periods', periodId, 'transactions'],
-    enabled: !!periodId,
-  });
-
-  const { data: summary } = useQuery<ReportSummary>({
+  const { data: summary, isLoading: summaryLoading } = useQuery<ReportSummary>({
     queryKey: ['/api/periods', periodId, 'summary'],
     enabled: !!periodId,
   });
+  
+  const isLoading = periodLoading || summaryLoading;
 
   const handleExport = () => {
     const url = `/api/periods/${periodId}/report/${exportFormat}`;
@@ -101,10 +99,57 @@ export default function ReportView() {
     });
   };
 
-  if (!period) {
+  if (isLoading || !period) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading report...</p>
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card">
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-9 w-9 rounded-md" />
+              <div className="flex-1">
+                <Skeleton className="h-8 w-64 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+              <Skeleton className="h-9 w-32" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </header>
+        <main className="max-w-5xl mx-auto px-6 py-8">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-48 mb-2" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i}>
+                      <Skeleton className="h-4 w-24 mb-2" />
+                      <Skeleton className="h-8 w-16" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
+                <CardContent><Skeleton className="h-32 w-full" /></CardContent>
+              </Card>
+              <Card>
+                <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
+                <CardContent><Skeleton className="h-32 w-full" /></CardContent>
+              </Card>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -172,7 +217,7 @@ export default function ReportView() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Transactions</p>
-                  <p className="text-2xl font-bold" data-testid="text-total-transactions">{summary?.totalTransactions ?? transactions.length}</p>
+                  <p className="text-2xl font-bold" data-testid="text-total-transactions">{summary?.totalTransactions ?? 0}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Fuel Transactions</p>

@@ -16,7 +16,37 @@ import {
   matches
 } from "@shared/schema";
 import { db } from "./db";
+import { pool } from "./db";
 import { eq, and, or, desc } from "drizzle-orm";
+
+export interface PeriodSummary {
+  totalTransactions: number;
+  fuelTransactions: number;
+  bankTransactions: number;
+  matchedTransactions: number;
+  matchedPairs: number;
+  unmatchedTransactions: number;
+  matchRate: number;
+  totalFuelAmount: number;
+  totalBankAmount: number;
+  discrepancy: number;
+  cardFuelTransactions: number;
+  cashFuelTransactions: number;
+  unknownFuelTransactions: number;
+  cardFuelAmount: number;
+  cashFuelAmount: number;
+  unknownFuelAmount: number;
+  bankMatchRate: number;
+  cardMatchRate: number;
+  matchesSameDay: number;
+  matches1Day: number;
+  matches2Day: number;
+  matches3Day: number;
+  unmatchedBankTransactions: number;
+  unmatchedBankAmount: number;
+  unmatchedCardTransactions: number;
+  unmatchedCardAmount: number;
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -47,6 +77,8 @@ export interface IStorage {
   getMatch(id: string): Promise<Match | undefined>;
   createMatch(match: InsertMatch): Promise<Match>;
   deleteMatch(id: string): Promise<void>;
+  
+  getPeriodSummary(periodId: string): Promise<PeriodSummary>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -188,6 +220,126 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMatch(id: string): Promise<void> {
     await db.delete(matches).where(eq(matches.id, id));
+  }
+
+  async getPeriodSummary(periodId: string): Promise<PeriodSummary> {
+    const result = await pool.query(`
+      WITH tx_stats AS (
+        SELECT 
+          COUNT(*) as total_transactions,
+          COUNT(CASE WHEN source_type = 'fuel' THEN 1 END) as fuel_transactions,
+          COUNT(CASE WHEN source_type LIKE 'bank%' THEN 1 END) as bank_transactions,
+          COUNT(CASE WHEN match_status = 'matched' THEN 1 END) as matched_transactions,
+          
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' THEN amount::numeric ELSE 0 END), 0) as total_fuel_amount,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
+          
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' THEN 1 END) as card_fuel_transactions,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' THEN 1 END) as cash_fuel_transactions,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN 1 END) as unknown_fuel_transactions,
+          
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' THEN amount::numeric ELSE 0 END), 0) as card_fuel_amount,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_fuel_amount,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
+          
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN 1 END) as matched_bank_transactions,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched' THEN 1 END) as matched_card_fuel,
+          
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status != 'matched' AND amount::numeric > 0 THEN 1 END) as unmatched_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
+          
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN 1 END) as unmatched_card_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount
+          
+        FROM transactions
+        WHERE period_id = $1
+      ),
+      match_stats AS (
+        SELECT 
+          COUNT(*) as matched_pairs,
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) = 0 THEN 1 END) as matches_same_day,
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) = 1 THEN 1 END) as matches_1_day,
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) = 2 THEN 1 END) as matches_2_day,
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) >= 3 THEN 1 END) as matches_3_day
+        FROM matches m
+        JOIN transactions t_fuel ON m.fuel_transaction_id = t_fuel.id
+        JOIN transactions t_bank ON m.bank_transaction_id = t_bank.id
+        WHERE m.period_id = $1
+      )
+      SELECT 
+        tx.*,
+        COALESCE(ms.matched_pairs, 0) as matched_pairs,
+        COALESCE(ms.matches_same_day, 0) as matches_same_day,
+        COALESCE(ms.matches_1_day, 0) as matches_1_day,
+        COALESCE(ms.matches_2_day, 0) as matches_2_day,
+        COALESCE(ms.matches_3_day, 0) as matches_3_day
+      FROM tx_stats tx
+      CROSS JOIN match_stats ms
+    `, [periodId]);
+
+    const row = result.rows[0] || {};
+    
+    const totalTransactions = parseInt(row.total_transactions || '0');
+    const fuelTransactions = parseInt(row.fuel_transactions || '0');
+    const bankTransactions = parseInt(row.bank_transactions || '0');
+    const matchedTransactions = parseInt(row.matched_transactions || '0');
+    const cardFuelTransactions = parseInt(row.card_fuel_transactions || '0');
+    const matchedBankTransactions = parseInt(row.matched_bank_transactions || '0');
+    const matchedCardFuel = parseInt(row.matched_card_fuel || '0');
+    
+    const bankMatchRate = bankTransactions > 0 
+      ? (matchedBankTransactions / bankTransactions) * 100 
+      : 0;
+    
+    const cardMatchRate = cardFuelTransactions > 0 
+      ? (matchedCardFuel / cardFuelTransactions) * 100 
+      : 0;
+    
+    const cardFuelAmount = parseFloat(row.card_fuel_amount || '0');
+    const totalBankAmount = parseFloat(row.total_bank_amount || '0');
+
+    return {
+      totalTransactions,
+      fuelTransactions,
+      bankTransactions,
+      matchedTransactions,
+      matchedPairs: parseInt(row.matched_pairs || '0'),
+      unmatchedTransactions: totalTransactions - matchedTransactions,
+      matchRate: totalTransactions > 0 
+        ? (matchedTransactions / totalTransactions) * 100 
+        : 0,
+      totalFuelAmount: parseFloat(row.total_fuel_amount || '0'),
+      totalBankAmount,
+      discrepancy: Math.abs(cardFuelAmount - totalBankAmount),
+      cardFuelTransactions,
+      cashFuelTransactions: parseInt(row.cash_fuel_transactions || '0'),
+      unknownFuelTransactions: parseInt(row.unknown_fuel_transactions || '0'),
+      cardFuelAmount,
+      cashFuelAmount: parseFloat(row.cash_fuel_amount || '0'),
+      unknownFuelAmount: parseFloat(row.unknown_fuel_amount || '0'),
+      bankMatchRate,
+      cardMatchRate,
+      matchesSameDay: parseInt(row.matches_same_day || '0'),
+      matches1Day: parseInt(row.matches_1_day || '0'),
+      matches2Day: parseInt(row.matches_2_day || '0'),
+      matches3Day: parseInt(row.matches_3_day || '0'),
+      unmatchedBankTransactions: parseInt(row.unmatched_bank_transactions || '0'),
+      unmatchedBankAmount: parseFloat(row.unmatched_bank_amount || '0'),
+      unmatchedCardTransactions: parseInt(row.unmatched_card_transactions || '0'),
+      unmatchedCardAmount: parseFloat(row.unmatched_card_amount || '0'),
+    };
   }
 }
 

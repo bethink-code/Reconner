@@ -9,11 +9,15 @@ import {
   type InsertTransaction,
   type Match,
   type InsertMatch,
+  type MatchingRules,
+  type InsertMatchingRules,
+  type MatchingRulesConfig,
   users,
   reconciliationPeriods,
   uploadedFiles,
   transactions,
-  matches
+  matches,
+  matchingRules
 } from "@shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -79,6 +83,9 @@ export interface IStorage {
   deleteMatch(id: string): Promise<void>;
   
   getPeriodSummary(periodId: string): Promise<PeriodSummary>;
+  
+  getMatchingRules(periodId: string): Promise<MatchingRulesConfig>;
+  saveMatchingRules(periodId: string, rules: MatchingRulesConfig): Promise<MatchingRules>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -395,6 +402,62 @@ export class DatabaseStorage implements IStorage {
       unmatchedCardTransactions: parseInt(row.unmatched_card_transactions || '0'),
       unmatchedCardAmount: parseFloat(row.unmatched_card_amount || '0'),
     };
+  }
+
+  async getMatchingRules(periodId: string): Promise<MatchingRulesConfig> {
+    const [rules] = await db.select().from(matchingRules).where(eq(matchingRules.periodId, periodId));
+    
+    if (!rules) {
+      // Return default (moderate) rules
+      return {
+        amountTolerance: 0.10,
+        dateWindowDays: 3,
+        timeWindowMinutes: 60,
+        groupByInvoice: true,
+        requireCardMatch: false,
+        minimumConfidence: 70,
+        autoMatchThreshold: 85
+      };
+    }
+    
+    return {
+      amountTolerance: parseFloat(rules.amountTolerance),
+      dateWindowDays: rules.dateWindowDays,
+      timeWindowMinutes: rules.timeWindowMinutes,
+      groupByInvoice: rules.groupByInvoice === 'true',
+      requireCardMatch: rules.requireCardMatch === 'true',
+      minimumConfidence: rules.minimumConfidence,
+      autoMatchThreshold: rules.autoMatchThreshold
+    };
+  }
+
+  async saveMatchingRules(periodId: string, rules: MatchingRulesConfig): Promise<MatchingRules> {
+    // Check if rules already exist for this period
+    const [existing] = await db.select().from(matchingRules).where(eq(matchingRules.periodId, periodId));
+    
+    const rulesData = {
+      periodId,
+      amountTolerance: String(rules.amountTolerance),
+      dateWindowDays: rules.dateWindowDays,
+      timeWindowMinutes: rules.timeWindowMinutes,
+      groupByInvoice: String(rules.groupByInvoice),
+      requireCardMatch: String(rules.requireCardMatch),
+      minimumConfidence: rules.minimumConfidence,
+      autoMatchThreshold: rules.autoMatchThreshold,
+    };
+    
+    if (existing) {
+      // Update existing rules
+      const [updated] = await db.update(matchingRules)
+        .set({ ...rulesData, updatedAt: new Date() })
+        .where(eq(matchingRules.periodId, periodId))
+        .returning();
+      return updated;
+    } else {
+      // Create new rules
+      const [created] = await db.insert(matchingRules).values(rulesData).returning();
+      return created;
+    }
   }
 }
 

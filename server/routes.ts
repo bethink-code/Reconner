@@ -443,146 +443,331 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // MATCHING RULES ENDPOINTS
+  // ============================================
+  
+  app.get("/api/periods/:periodId/matching-rules", async (req, res) => {
+    try {
+      const rules = await storage.getMatchingRules(req.params.periodId);
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching matching rules:", error);
+      res.status(500).json({ error: "Failed to fetch matching rules" });
+    }
+  });
+
+  app.post("/api/periods/:periodId/matching-rules", async (req, res) => {
+    try {
+      const rules = req.body;
+      const saved = await storage.saveMatchingRules(req.params.periodId, rules);
+      res.json({ success: true, rules: saved });
+    } catch (error) {
+      console.error("Error saving matching rules:", error);
+      res.status(500).json({ error: "Failed to save matching rules" });
+    }
+  });
+
+  // ============================================
+  // INVOICE GROUPING TYPES AND HELPERS
+  // ============================================
+  
+  interface FuelInvoice {
+    invoiceNumber: string;
+    items: any[];
+    totalAmount: number;
+    firstDate: string;
+    firstTime: string | null;
+    cardNumber: string | null;
+  }
+
+  // Group fuel transactions by invoice/reference number
+  function groupFuelByInvoice(fuelTransactions: any[], groupByInvoice: boolean): FuelInvoice[] {
+    if (!groupByInvoice) {
+      // Treat each transaction as its own "invoice"
+      return fuelTransactions.map(tx => ({
+        invoiceNumber: tx.id,
+        items: [tx],
+        totalAmount: parseFloat(tx.amount),
+        firstDate: tx.transactionDate,
+        firstTime: tx.transactionTime,
+        cardNumber: tx.cardNumber
+      }));
+    }
+
+    const invoices: Record<string, FuelInvoice> = {};
+
+    for (const tx of fuelTransactions) {
+      const invoiceNum = tx.referenceNumber || tx.id;
+
+      if (!invoices[invoiceNum]) {
+        invoices[invoiceNum] = {
+          invoiceNumber: invoiceNum,
+          items: [],
+          totalAmount: 0,
+          firstDate: tx.transactionDate,
+          firstTime: tx.transactionTime,
+          cardNumber: tx.cardNumber
+        };
+      }
+
+      invoices[invoiceNum].items.push(tx);
+      invoices[invoiceNum].totalAmount += parseFloat(tx.amount);
+    }
+
+    return Object.values(invoices);
+  }
+
+  // Helper function to parse time strings and calculate minutes from midnight
+  function parseTimeToMinutes(timeStr: string): number | null {
+    if (!timeStr) return null;
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (!match) return null;
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    return hours * 60 + minutes;
+  }
+
+  // Helper function to parse date and calculate days difference
+  function parseDateToDays(dateStr: string): number | null {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
+    return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
+  }
+
+  // ============================================
+  // AUTO-MATCH WITH INVOICE GROUPING
+  // ============================================
+  
   app.post("/api/periods/:periodId/auto-match", async (req, res) => {
     try {
+      console.log('=== Starting Auto-Match with Invoice Grouping ===');
+      
+      // Get user-configured matching rules (or defaults)
+      const rules = await storage.getMatchingRules(req.params.periodId);
+      console.log('Matching rules:', rules);
+
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
       
       // Filter fuel transactions to ONLY confirmed card transactions for reconciliation
       // Cash and unknown transactions are excluded from matching but kept for reporting
       const fuelTransactions = transactions.filter(t => 
         t.sourceType === 'fuel' && 
-        t.isCardTransaction === 'yes'
+        t.isCardTransaction === 'yes' &&
+        t.matchStatus === 'unmatched'
       );
       
       // All bank transactions are card by definition (from merchant portals)
-      // Check for any sourceType starting with 'bank' (bank, bank2, bank_account, etc.)
       const bankTransactions = transactions.filter(t => 
-        t.sourceType && t.sourceType.startsWith('bank')
+        t.sourceType && 
+        t.sourceType.startsWith('bank') &&
+        t.matchStatus === 'unmatched'
       );
       
+      console.log(`Loaded: ${bankTransactions.length} unmatched bank, ${fuelTransactions.length} unmatched fuel transactions`);
+
+      // *** KEY STEP: Group fuel by invoice ***
+      const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
+      console.log(`Grouped into ${fuelInvoices.length} invoices (groupByInvoice: ${rules.groupByInvoice})`);
+
+      // Log multi-line invoice examples
+      const multiLine = fuelInvoices.filter(inv => inv.items.length > 1).slice(0, 5);
+      if (multiLine.length > 0) {
+        console.log('Multi-line invoice examples:');
+        multiLine.forEach(inv => {
+          console.log(`  Invoice ${inv.invoiceNumber}: ${inv.items.length} items = R${inv.totalAmount.toFixed(2)}`);
+        });
+      }
+
       let matchCount = 0;
-      // Count non-card transactions (cash + unknown) that are skipped from matching
       let skippedNonCardCount = transactions.filter(t => 
         t.sourceType === 'fuel' && t.isCardTransaction !== 'yes'
       ).length;
 
-      // Helper function to parse time strings and calculate minutes from midnight
-      const parseTimeToMinutes = (timeStr: string): number | null => {
-        if (!timeStr) return null;
-        const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-        if (!match) return null;
-        const hours = parseInt(match[1], 10);
-        const minutes = parseInt(match[2], 10);
-        return hours * 60 + minutes;
-      };
+      // Track matched invoices to avoid double-matching
+      const matchedInvoices = new Set<string>();
 
-      // Helper function to parse date and calculate days difference
-      // Bank transactions are source of truth - fuel transactions may appear 1-2 days earlier
-      const parseDateToDays = (dateStr: string): number | null => {
-        if (!dateStr) return null;
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return null;
-        return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
-      };
+      // Match bank transactions to invoices
+      for (const bankTx of bankTransactions) {
+        let bestMatch: { 
+          invoice: FuelInvoice; 
+          confidence: number; 
+          timeDiff: number; 
+          dateDiff: number;
+          amountDiff: number;
+          reasons: string[];
+        } | null = null;
 
-      for (const fuelTx of fuelTransactions) {
-        if (fuelTx.matchStatus !== 'unmatched') continue;
+        for (const invoice of fuelInvoices) {
+          // Skip if already matched
+          if (matchedInvoices.has(invoice.invoiceNumber)) continue;
+          if (invoice.items.some(item => item.matchStatus === 'matched')) continue;
 
-        let bestMatch: { bankTx: typeof bankTransactions[0]; confidence: number; timeDiff: number; dateDiff: number } | null = null;
+          const reasons: string[] = [];
 
-        for (const bankTx of bankTransactions) {
-          if (bankTx.matchStatus !== 'unmatched') continue;
+          // Amount matching with configurable tolerance
+          const bankAmount = parseFloat(bankTx.amount);
+          const fuelAmount = invoice.totalAmount;
+          const amountDiff = Math.abs(bankAmount - fuelAmount);
 
-          // PRIMARY CRITERIA: Amount must match exactly
-          const amountMatch = Math.abs(parseFloat(fuelTx.amount) - parseFloat(bankTx.amount)) < 0.01;
-          if (!amountMatch) continue;
+          if (amountDiff > rules.amountTolerance) continue; // Outside tolerance
 
-          // DATE MATCHING: Allow ±2 days tolerance for card processing delays
-          // Bank date is typically 0-2 days AFTER fuel transaction date
-          const fuelDate = parseDateToDays(fuelTx.transactionDate || '');
-          const bankDate = parseDateToDays(bankTx.transactionDate || '');
-          
-          if (fuelDate === null || bankDate === null) continue;
-          
-          const dateDiff = bankDate - fuelDate; // Positive = bank is later (expected)
-          
-          // Allow bank to be 0-3 days after fuel (weekend processing delays)
-          // Also allow bank to be 1 day before fuel (timezone/cutoff differences)
-          if (dateDiff < -1 || dateDiff > 3) continue;
-
-          // Calculate base confidence from date difference
-          // Same day = highest, decreasing with more days
-          let baseConfidence = 70;
-          if (dateDiff === 0) baseConfidence = 85;           // Same day
-          else if (Math.abs(dateDiff) === 1) baseConfidence = 75;  // 1 day difference
-          else if (Math.abs(dateDiff) === 2) baseConfidence = 68;  // 2 days difference
-          else baseConfidence = 62;                           // 3 days difference (weekend)
-
-          // Time matching - calculate difference in minutes
-          // Time is less critical when dates differ (processing delays affect time too)
-          const fuelTime = parseTimeToMinutes(fuelTx.transactionTime || '');
-          const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
-          
-          let timeDiff = 999; // Large number if no time available
-          let confidence = baseConfidence;
-          
-          // Only apply strict time matching for same-day transactions
-          if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-            timeDiff = Math.abs(fuelTime - bankTime);
-            // Time within 5 minutes = perfect match
-            if (timeDiff <= 5) confidence = 100;
-            // Time within 15 minutes = good match
-            else if (timeDiff <= 15) confidence = 95;
-            // Time within 30 minutes = acceptable
-            else if (timeDiff <= 30) confidence = 85;
-            // Time within 60 minutes = still good for same day
-            else if (timeDiff <= 60) confidence = 75;
-            // Time differs more than 60 minutes on same day = lower confidence
-            else confidence = 65;
-          } else if (dateDiff !== 0) {
-            // Different days - time is less relevant due to processing delays
-            // Just use the base confidence from date difference
-            timeDiff = 0; // Treat as acceptable
+          if (amountDiff === 0) {
+            reasons.push('Exact amount match');
+          } else {
+            reasons.push(`Amount within R${amountDiff.toFixed(2)} (tolerance: R${rules.amountTolerance})`);
           }
 
-          // Prefer matches with: 1) smallest date diff, 2) smallest time diff, 3) highest confidence
+          // Date matching with configurable window
+          const fuelDate = parseDateToDays(invoice.firstDate || '');
+          const bankDate = parseDateToDays(bankTx.transactionDate || '');
+
+          if (fuelDate === null || bankDate === null) continue;
+
+          const dateDiff = bankDate - fuelDate; // Positive = bank is later
+
+          // Allow bank to be 0-N days after fuel (based on rules)
+          // Also allow bank to be 1 day before fuel (timezone differences)
+          if (dateDiff < -1 || dateDiff > rules.dateWindowDays) continue;
+
+          // Calculate base confidence from date difference
+          let confidence = 70;
+          if (dateDiff === 0) {
+            confidence = 85;
+            reasons.push('Same day transaction');
+          } else if (Math.abs(dateDiff) === 1) {
+            confidence = 75;
+            reasons.push('1 day difference');
+          } else if (Math.abs(dateDiff) === 2) {
+            confidence = 68;
+            reasons.push('2 days difference');
+          } else {
+            confidence = 62;
+            reasons.push(`${Math.abs(dateDiff)} days difference (weekend processing)`);
+          }
+
+          // Time matching (only for same-day transactions)
+          const fuelTime = parseTimeToMinutes(invoice.firstTime || '');
+          const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
+
+          let timeDiff = 0;
+
+          if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+            timeDiff = Math.abs(fuelTime - bankTime);
+
+            if (timeDiff <= 5) {
+              confidence = 100;
+              reasons.push('Times within 5 minutes');
+            } else if (timeDiff <= 15) {
+              confidence = 95;
+              reasons.push('Times within 15 minutes');
+            } else if (timeDiff <= 30) {
+              confidence = 85;
+              reasons.push('Times within 30 minutes');
+            } else if (timeDiff <= rules.timeWindowMinutes) {
+              confidence = 75;
+              reasons.push(`Times within ${timeDiff} minutes`);
+            } else {
+              confidence = 65;
+              reasons.push(`Time difference: ${timeDiff} minutes`);
+            }
+          }
+
+          // Amount penalty (the further from exact, the lower confidence)
+          if (amountDiff > 0) {
+            const amountPenalty = Math.min(10, (amountDiff / rules.amountTolerance) * 10);
+            confidence -= amountPenalty;
+          }
+
+          // Card number check (optional or required based on rules)
+          if (rules.requireCardMatch) {
+            if (!bankTx.cardNumber || !invoice.cardNumber) continue;
+            if (bankTx.cardNumber !== invoice.cardNumber) continue;
+            reasons.push('Card numbers match (required)');
+          } else {
+            // Optional card bonus/penalty
+            if (bankTx.cardNumber && invoice.cardNumber) {
+              if (bankTx.cardNumber === invoice.cardNumber) {
+                confidence += 10;
+                reasons.push('Card numbers match (bonus)');
+              } else {
+                confidence -= 15;
+                reasons.push('Card numbers differ');
+              }
+            }
+          }
+
+          // Multi-line invoice note
+          if (invoice.items.length > 1) {
+            reasons.push(`Grouped invoice: ${invoice.items.length} items`);
+          }
+
+          // Cap confidence
+          confidence = Math.min(100, Math.max(0, confidence));
+
+          // Check minimum confidence threshold
+          if (confidence < rules.minimumConfidence) continue;
+
+          // Prefer matches with: highest confidence, then smallest date diff, then smallest time diff
           const absDiff = Math.abs(dateDiff);
           if (!bestMatch || 
-              absDiff < bestMatch.dateDiff ||
-              (absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff) ||
-              (absDiff === bestMatch.dateDiff && timeDiff === bestMatch.timeDiff && confidence > bestMatch.confidence)) {
-            bestMatch = { bankTx, confidence, timeDiff, dateDiff: absDiff };
+              confidence > bestMatch.confidence ||
+              (confidence === bestMatch.confidence && absDiff < bestMatch.dateDiff) ||
+              (confidence === bestMatch.confidence && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
+            bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
           }
         }
 
+        // Create match if found
         if (bestMatch) {
+          const matchType = bestMatch.confidence >= rules.autoMatchThreshold ? 'auto' : 'auto_review';
+          
           const match = await storage.createMatch({
             periodId: req.params.periodId,
-            fuelTransactionId: fuelTx.id,
-            bankTransactionId: bestMatch.bankTx.id,
-            matchType: 'auto',
+            fuelTransactionId: bestMatch.invoice.items[0].id, // Link to first item
+            bankTransactionId: bankTx.id,
+            matchType,
             matchConfidence: String(bestMatch.confidence),
           });
 
-          await storage.updateTransaction(fuelTx.id, { 
+          // Update bank transaction
+          await storage.updateTransaction(bankTx.id, {
             matchStatus: 'matched',
-            matchId: match.id 
-          });
-          await storage.updateTransaction(bestMatch.bankTx.id, { 
-            matchStatus: 'matched',
-            matchId: match.id 
+            matchId: match.id
           });
 
+          // Update ALL fuel transactions in the invoice
+          for (const fuelItem of bestMatch.invoice.items) {
+            await storage.updateTransaction(fuelItem.id, {
+              matchStatus: 'matched',
+              matchId: match.id
+            });
+          }
+
+          matchedInvoices.add(bestMatch.invoice.invoiceNumber);
           matchCount++;
+
+          console.log(`Match: Bank R${parseFloat(bankTx.amount).toFixed(2)} → Invoice ${bestMatch.invoice.invoiceNumber} (${bestMatch.invoice.items.length} items = R${bestMatch.invoice.totalAmount.toFixed(2)}) [${bestMatch.confidence}%]`);
         }
       }
+
+      const matchRate = bankTransactions.length > 0 
+        ? ((matchCount / bankTransactions.length) * 100).toFixed(1) 
+        : '0';
+
+      console.log(`\n=== Auto-Match Complete ===`);
+      console.log(`Matches: ${matchCount}/${bankTransactions.length} = ${matchRate}%`);
 
       res.json({ 
         success: true, 
         matchesCreated: matchCount,
         cardTransactionsProcessed: fuelTransactions.length,
+        invoicesCreated: fuelInvoices.length,
         bankTransactionsAvailable: bankTransactions.length,
         nonCardTransactionsSkipped: skippedNonCardCount,
+        matchRate: `${matchRate}%`,
+        rulesUsed: rules
       });
     } catch (error) {
       console.error("Error auto-matching:", error);

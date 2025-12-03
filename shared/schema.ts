@@ -109,3 +109,52 @@ export const insertMatchSchema = createInsertSchema(matches).omit({
 
 export type InsertMatch = z.infer<typeof insertMatchSchema>;
 export type Match = typeof matches.$inferSelect;
+
+// Matching Rules - User-configurable matching settings per period
+export const matchingRules = pgTable("matching_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }).unique(),
+  
+  // Amount tolerance in Rand (e.g., 0.10 = ±R0.10)
+  amountTolerance: decimal("amount_tolerance", { precision: 10, scale: 2 }).notNull().default("0.10"),
+  
+  // Date window in days (0-7)
+  dateWindowDays: integer("date_window_days").notNull().default(3),
+  
+  // Time window in minutes (15-180)
+  timeWindowMinutes: integer("time_window_minutes").notNull().default(60),
+  
+  // Grouping options
+  groupByInvoice: text("group_by_invoice").notNull().default("true"), // 'true' or 'false' as text
+  
+  // Matching requirements
+  requireCardMatch: text("require_card_match").notNull().default("false"),
+  
+  // Confidence thresholds (0-100)
+  minimumConfidence: integer("minimum_confidence").notNull().default(70),
+  autoMatchThreshold: integer("auto_match_threshold").notNull().default(85),
+  
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMatchingRulesSchema = createInsertSchema(matchingRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMatchingRules = z.infer<typeof insertMatchingRulesSchema>;
+export type MatchingRules = typeof matchingRules.$inferSelect;
+
+// Interface for matching rules in application code
+export interface MatchingRulesConfig {
+  amountTolerance: number;
+  dateWindowDays: number;
+  timeWindowMinutes: number;
+  groupByInvoice: boolean;
+  requireCardMatch: boolean;
+  minimumConfidence: number;
+  autoMatchThreshold: number;
+}

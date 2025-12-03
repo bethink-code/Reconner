@@ -1,0 +1,947 @@
+# Emergency Performance Fix Plan
+## Pieter's Pomp Stasie Reconner - Report Page Hanging Issue
+
+**Status:** 🔴 CRITICAL - Reports are unusable  
+**Impact:** Users cannot view reconciliation results  
+**Root Cause:** Loading 25,000+ transactions on every page load  
+**Priority:** P0 - Fix immediately
+
+---
+
+## 🚨 The Problem
+
+### Current Behavior
+```
+User clicks "View Report"
+  ↓
+Frontend: GET /api/periods/:id/transactions (no pagination)
+  ↓
+Backend: SELECT * FROM transactions WHERE period_id = '...' (returns 25,947 rows)
+  ↓
+Network: Transfers ~5-10 MB of JSON
+  ↓
+Frontend: Renders 25,947 rows in table
+  ↓
+Browser: Hangs for 10-30 seconds (or crashes)
+```
+
+### Why It's Happening
+
+1. **No Pagination** - API returns ALL transactions at once
+2. **No Lazy Loading** - Frontend tries to render everything immediately
+3. **Repeated Calls** - Same data fetched multiple times per page
+4. **Heavy Calculations** - Report metrics recalculated on every render
+5. **DOM Overload** - Browser struggles with 25,000+ DOM nodes
+
+---
+
+## 🎯 Three-Phase Fix Strategy
+
+### Phase 1: Emergency Fixes (Deploy Today - 2-4 hours)
+Stop the bleeding - make reports usable immediately
+
+### Phase 2: Short-Term Fixes (This Week - 1-2 days)
+Optimize queries and add proper pagination
+
+### Phase 3: Long-Term Fixes (Next Week - 3-5 days)
+Implement caching, background jobs, and virtual scrolling
+
+---
+
+## 🔥 PHASE 1: Emergency Fixes (Deploy Today)
+
+### Fix 1.1: Add Report Summary Endpoint (30 min)
+
+**Problem:** Report page calculates everything from 25,947 rows  
+**Solution:** Pre-calculate summary metrics
+
+```typescript
+// NEW ENDPOINT: GET /api/periods/:periodId/summary
+router.get('/periods/:periodId/summary', async (req, res) => {
+  const { periodId } = req.params;
+  
+  // Single query with aggregations - FAST!
+  const summary = await db.query(`
+    SELECT 
+      -- Total counts
+      COUNT(*) as total_transactions,
+      COUNT(DISTINCT CASE WHEN source_type = 'bank' THEN id END) as bank_count,
+      COUNT(DISTINCT CASE WHEN source_type = 'fuel' THEN id END) as fuel_count,
+      
+      -- Match status counts
+      COUNT(CASE WHEN match_status = 'matched' THEN 1 END) as matched_count,
+      COUNT(CASE WHEN match_status = 'unmatched' THEN 1 END) as unmatched_count,
+      COUNT(CASE WHEN match_status = 'partial' THEN 1 END) as partial_count,
+      
+      -- Amounts
+      SUM(amount) as total_amount,
+      SUM(CASE WHEN source_type = 'bank' THEN amount ELSE 0 END) as bank_total,
+      SUM(CASE WHEN source_type = 'fuel' THEN amount ELSE 0 END) as fuel_total,
+      
+      -- Card/Cash breakdown (fuel only)
+      COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' THEN 1 END) as fuel_card_count,
+      SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' THEN amount ELSE 0 END) as fuel_card_total,
+      COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' THEN 1 END) as fuel_cash_count,
+      SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' THEN amount ELSE 0 END) as fuel_cash_total,
+      COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN 1 END) as fuel_unknown_count,
+      SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN amount ELSE 0 END) as fuel_unknown_total
+      
+    FROM transactions
+    WHERE period_id = $1
+  `, [periodId]);
+  
+  const row = summary.rows[0];
+  
+  // Calculate derived metrics
+  const bankMatchRate = row.bank_count > 0 
+    ? (row.matched_count / row.bank_count) * 100 
+    : 0;
+  
+  const fuelCardMatchRate = row.fuel_card_count > 0
+    ? (row.matched_count / row.fuel_card_count) * 100
+    : 0;
+  
+  res.json({
+    totalTransactions: parseInt(row.total_transactions),
+    bankTransactions: parseInt(row.bank_count),
+    fuelTransactions: parseInt(row.fuel_count),
+    
+    matched: parseInt(row.matched_count),
+    unmatched: parseInt(row.unmatched_count),
+    partial: parseInt(row.partial_count),
+    
+    totalAmount: parseFloat(row.total_amount || 0),
+    bankTotal: parseFloat(row.bank_total || 0),
+    fuelTotal: parseFloat(row.fuel_total || 0),
+    
+    fuelBreakdown: {
+      card: {
+        count: parseInt(row.fuel_card_count),
+        total: parseFloat(row.fuel_card_total || 0)
+      },
+      cash: {
+        count: parseInt(row.fuel_cash_count),
+        total: parseFloat(row.fuel_cash_total || 0)
+      },
+      unknown: {
+        count: parseInt(row.fuel_unknown_count),
+        total: parseFloat(row.fuel_unknown_total || 0)
+      }
+    },
+    
+    matchRates: {
+      bank: bankMatchRate,
+      fuelCard: fuelCardMatchRate
+    },
+    
+    discrepancy: parseFloat(row.fuel_card_total || 0) - parseFloat(row.bank_total || 0)
+  });
+});
+```
+
+**Frontend Change:**
+```tsx
+// BEFORE (slow):
+const { data: transactions } = useQuery(['transactions', periodId], 
+  () => api.getTransactions(periodId)
+);
+// Then calculate everything in React
+
+// AFTER (fast):
+const { data: summary } = useQuery(['summary', periodId], 
+  () => api.getSummary(periodId)
+);
+// Use pre-calculated values
+```
+
+**Impact:** Report page loads in <500ms instead of 10-30 seconds
+
+---
+
+### Fix 1.2: Add Basic Pagination (45 min)
+
+**Update the transactions endpoint:**
+
+```typescript
+// UPDATED: GET /api/periods/:periodId/transactions
+router.get('/periods/:periodId/transactions', async (req, res) => {
+  const { periodId } = req.params;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 100;
+  const offset = (page - 1) * limit;
+  
+  // Optional filters
+  const matchStatus = req.query.matchStatus as string; // 'matched', 'unmatched', 'partial'
+  const sourceType = req.query.sourceType as string;   // 'bank', 'fuel'
+  const isCardTransaction = req.query.isCardTransaction as string;
+  
+  // Build WHERE clause
+  let whereConditions = ['period_id = $1'];
+  let params: any[] = [periodId];
+  let paramIndex = 2;
+  
+  if (matchStatus) {
+    whereConditions.push(`match_status = $${paramIndex}`);
+    params.push(matchStatus);
+    paramIndex++;
+  }
+  
+  if (sourceType) {
+    whereConditions.push(`source_type = $${paramIndex}`);
+    params.push(sourceType);
+    paramIndex++;
+  }
+  
+  if (isCardTransaction) {
+    whereConditions.push(`is_card_transaction = $${paramIndex}`);
+    params.push(isCardTransaction);
+    paramIndex++;
+  }
+  
+  const whereClause = whereConditions.join(' AND ');
+  
+  // Get total count (for pagination info)
+  const countResult = await db.query(
+    `SELECT COUNT(*) as total FROM transactions WHERE ${whereClause}`,
+    params
+  );
+  const total = parseInt(countResult.rows[0].total);
+  
+  // Get paginated results
+  const result = await db.query(
+    `SELECT 
+      id,
+      transaction_date,
+      transaction_time,
+      amount,
+      description,
+      reference_number,
+      card_number,
+      source_type,
+      source_name,
+      payment_type,
+      is_card_transaction,
+      match_status,
+      match_id
+    FROM transactions 
+    WHERE ${whereClause}
+    ORDER BY transaction_date DESC, transaction_time DESC
+    LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+    [...params, limit, offset]
+  );
+  
+  res.json({
+    data: result.rows,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: offset + limit < total
+    }
+  });
+});
+```
+
+**Frontend Change:**
+```tsx
+function TransactionTable() {
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState({
+    matchStatus: undefined,
+    sourceType: undefined
+  });
+  
+  const { data, isLoading } = useQuery(
+    ['transactions', periodId, page, filters],
+    () => api.getTransactions(periodId, { page, limit: 100, ...filters })
+  );
+  
+  if (isLoading) return <TableSkeleton />;
+  
+  return (
+    <>
+      <Table>
+        <TableBody>
+          {data.data.map(tx => (
+            <TransactionRow key={tx.id} transaction={tx} />
+          ))}
+        </TableBody>
+      </Table>
+      
+      <TablePagination
+        count={data.pagination.total}
+        page={page - 1}
+        rowsPerPage={100}
+        onPageChange={(_, newPage) => setPage(newPage + 1)}
+      />
+    </>
+  );
+}
+```
+
+**Impact:** Only loads 100 rows at a time instead of 25,947
+
+---
+
+### Fix 1.3: Remove Redundant API Calls (15 min)
+
+**Problem:** Same data fetched multiple times
+
+```tsx
+// BEFORE (calling same endpoint 3+ times):
+function ReportPage() {
+  const { data: transactions } = useQuery(...);  // Call 1
+  const { data: matches } = useQuery(...);       // Call 2
+  const { data: period } = useQuery(...);        // Call 3
+  
+  // Then each component also fetches:
+  return (
+    <>
+      <TransactionSummary />  {/* Fetches transactions again */}
+      <MatchBreakdown />      {/* Fetches matches again */}
+      <UnmatchedList />       {/* Fetches transactions again */}
+    </>
+  );
+}
+
+// AFTER (single call to summary endpoint):
+function ReportPage() {
+  const { data: summary } = useQuery(['summary', periodId], getSummary);
+  
+  return (
+    <>
+      <TransactionSummary data={summary} />  {/* Uses prop */}
+      <MatchBreakdown data={summary} />      {/* Uses prop */}
+      <UnmatchedList periodId={periodId} /> {/* Only loads when clicked */}
+    </>
+  );
+}
+```
+
+---
+
+### Fix 1.4: Add Loading States (15 min)
+
+**Stop blocking the UI during loads:**
+
+```tsx
+function ReportPage() {
+  const { data: summary, isLoading } = useQuery(['summary', periodId], getSummary);
+  
+  if (isLoading) {
+    return <ReportSkeleton />;  // Instant feedback
+  }
+  
+  return <Report data={summary} />;
+}
+
+function ReportSkeleton() {
+  return (
+    <Box>
+      <Skeleton variant="rectangular" height={200} sx={{ mb: 2 }} />
+      <Grid container spacing={2}>
+        <Grid item xs={4}>
+          <Skeleton variant="rectangular" height={150} />
+        </Grid>
+        <Grid item xs={4}>
+          <Skeleton variant="rectangular" height={150} />
+        </Grid>
+        <Grid item xs={4}>
+          <Skeleton variant="rectangular" height={150} />
+        </Grid>
+      </Grid>
+    </Box>
+  );
+}
+```
+
+---
+
+## ⚡ PHASE 2: Short-Term Fixes (This Week)
+
+### Fix 2.1: Database Indexes (30 min)
+
+```sql
+-- Speed up transaction queries
+CREATE INDEX IF NOT EXISTS idx_transactions_period_match 
+  ON transactions(period_id, match_status, source_type);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_period_date 
+  ON transactions(period_id, transaction_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_card_type 
+  ON transactions(period_id, is_card_transaction, source_type) 
+  WHERE is_card_transaction = 'yes';
+
+-- Speed up match queries
+CREATE INDEX IF NOT EXISTS idx_matches_period 
+  ON matches(period_id, match_type);
+
+-- Analyze tables for query optimization
+ANALYZE transactions;
+ANALYZE matches;
+```
+
+**Impact:** 50-80% faster queries
+
+---
+
+### Fix 2.2: Smart Caching with React Query (1 hour)
+
+```typescript
+// Configure React Query with aggressive caching
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,        // 5 minutes
+      cacheTime: 10 * 60 * 1000,       // 10 minutes
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      retry: 1
+    }
+  }
+});
+
+// Prefetch summary when user navigates to periods list
+function PeriodsList() {
+  const queryClient = useQueryClient();
+  
+  const handleViewReport = (periodId: string) => {
+    // Start loading summary before navigation
+    queryClient.prefetchQuery(['summary', periodId], () => 
+      api.getSummary(periodId)
+    );
+    
+    navigate(`/reconcile?periodId=${periodId}`);
+  };
+  
+  return (
+    <Button onClick={() => handleViewReport(period.id)}>
+      View Report
+    </Button>
+  );
+}
+```
+
+---
+
+### Fix 2.3: Optimize Match Processing Breakdown (1 hour)
+
+**Problem:** "Match Processing Breakdown" section recalculates from all transactions
+
+**Solution:** Add to summary query:
+
+```sql
+-- Add to summary endpoint
+SELECT 
+  -- Existing fields...
+  
+  -- Match delay buckets
+  COUNT(CASE WHEN m.date_difference_in_days = 0 THEN 1 END) as same_day_matches,
+  COUNT(CASE WHEN m.date_difference_in_days = 1 THEN 1 END) as one_day_matches,
+  COUNT(CASE WHEN m.date_difference_in_days = 2 THEN 1 END) as two_day_matches,
+  COUNT(CASE WHEN m.date_difference_in_days >= 3 THEN 1 END) as three_plus_day_matches
+  
+FROM transactions t
+LEFT JOIN matches m ON t.match_id = m.id
+WHERE t.period_id = $1
+```
+
+---
+
+### Fix 2.4: Lazy Load Transaction Lists (2 hours)
+
+**Don't load transaction tables until user clicks:**
+
+```tsx
+function UnmatchedTransactions() {
+  const [expanded, setExpanded] = useState(false);
+  const { data: summary } = useQuery(['summary', periodId]);
+  
+  return (
+    <Accordion expanded={expanded} onChange={() => setExpanded(!expanded)}>
+      <AccordionSummary>
+        <Typography>
+          Unmatched Bank Transactions: {summary.unmatched}
+        </Typography>
+      </AccordionSummary>
+      
+      <AccordionDetails>
+        {expanded && (
+          <TransactionTable 
+            filters={{ matchStatus: 'unmatched', sourceType: 'bank' }}
+          />
+        )}
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+```
+
+---
+
+## 🚀 PHASE 3: Long-Term Fixes (Next Week)
+
+### Fix 3.1: Materialized Summary Table (3 hours)
+
+**Store pre-calculated metrics in database:**
+
+```sql
+CREATE TABLE period_summaries (
+  period_id UUID PRIMARY KEY REFERENCES reconciliation_periods(id),
+  
+  -- Counts
+  total_transactions INTEGER,
+  bank_count INTEGER,
+  fuel_count INTEGER,
+  matched_count INTEGER,
+  unmatched_count INTEGER,
+  
+  -- Amounts
+  total_amount DECIMAL(15,2),
+  bank_total DECIMAL(15,2),
+  fuel_total DECIMAL(15,2),
+  
+  -- Breakdown
+  fuel_card_count INTEGER,
+  fuel_card_total DECIMAL(15,2),
+  fuel_cash_count INTEGER,
+  fuel_cash_total DECIMAL(15,2),
+  
+  -- Match delays
+  same_day_matches INTEGER,
+  one_day_matches INTEGER,
+  two_day_matches INTEGER,
+  three_plus_day_matches INTEGER,
+  
+  -- Metadata
+  last_calculated TIMESTAMP DEFAULT NOW(),
+  
+  CONSTRAINT check_counts CHECK (
+    total_transactions = bank_count + fuel_count
+  )
+);
+
+-- Update trigger: recalculate when transactions change
+CREATE OR REPLACE FUNCTION update_period_summary()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Recalculate summary for affected period
+  INSERT INTO period_summaries (period_id, ...)
+  SELECT 
+    NEW.period_id,
+    COUNT(*) as total_transactions,
+    -- ... all the aggregations from Fix 1.1
+  FROM transactions
+  WHERE period_id = NEW.period_id
+  ON CONFLICT (period_id) DO UPDATE SET
+    total_transactions = EXCLUDED.total_transactions,
+    -- ... update all fields
+    last_calculated = NOW();
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_summary
+AFTER INSERT OR UPDATE OR DELETE ON transactions
+FOR EACH ROW
+EXECUTE FUNCTION update_period_summary();
+```
+
+**API becomes instant:**
+```typescript
+router.get('/periods/:periodId/summary', async (req, res) => {
+  // Single row lookup - INSTANT!
+  const summary = await db.query(
+    'SELECT * FROM period_summaries WHERE period_id = $1',
+    [req.params.periodId]
+  );
+  
+  res.json(summary.rows[0]);
+});
+```
+
+---
+
+### Fix 3.2: Virtual Scrolling for Large Lists (4 hours)
+
+```tsx
+import { FixedSizeList } from 'react-window';
+
+function VirtualTransactionTable({ transactions }: { transactions: Transaction[] }) {
+  const Row = ({ index, style }: { index: number; style: any }) => {
+    const tx = transactions[index];
+    return (
+      <div style={style}>
+        <TableRow>
+          <TableCell>{tx.transactionDate}</TableCell>
+          <TableCell>{tx.amount}</TableCell>
+          <TableCell>{tx.description}</TableCell>
+        </TableRow>
+      </div>
+    );
+  };
+  
+  return (
+    <FixedSizeList
+      height={600}
+      itemCount={transactions.length}
+      itemSize={48}
+      width="100%"
+    >
+      {Row}
+    </FixedSizeList>
+  );
+}
+```
+
+---
+
+### Fix 3.3: Background Job for Auto-Match (5 hours)
+
+**Move matching to background:**
+
+```typescript
+// API endpoint starts job instead of running sync
+router.post('/periods/:periodId/auto-match', async (req, res) => {
+  const jobId = await queue.add('auto-match', {
+    periodId: req.params.periodId,
+    rules: req.body.rules
+  });
+  
+  res.json({
+    jobId,
+    status: 'queued',
+    message: 'Matching started in background'
+  });
+});
+
+// Frontend polls for status
+function AutoMatchButton() {
+  const [jobId, setJobId] = useState<string | null>(null);
+  const { data: status } = useQuery(
+    ['job-status', jobId],
+    () => api.getJobStatus(jobId),
+    {
+      enabled: !!jobId,
+      refetchInterval: 2000  // Poll every 2 seconds
+    }
+  );
+  
+  const startMatching = async () => {
+    const job = await api.startAutoMatch(periodId);
+    setJobId(job.jobId);
+  };
+  
+  if (status?.status === 'processing') {
+    return (
+      <Box>
+        <CircularProgress />
+        <Typography>
+          Matching in progress: {status.progress}% complete
+        </Typography>
+      </Box>
+    );
+  }
+  
+  return (
+    <Button onClick={startMatching}>
+      Auto-Match
+    </Button>
+  );
+}
+```
+
+---
+
+## 📊 Performance Metrics
+
+### Current (Broken)
+```
+Report Page Load Time: 15-30 seconds (or timeout)
+Time to First Byte:     2-5 seconds
+DOM Nodes:              25,000+
+Network Transfer:       5-10 MB
+User Experience:        ❌ Unusable
+```
+
+### After Phase 1 (Emergency Fixes)
+```
+Report Page Load Time: 0.5-1 second
+Time to First Byte:     <200ms
+DOM Nodes:              <500
+Network Transfer:       <50 KB
+User Experience:        ✅ Usable
+```
+
+### After Phase 2 (Optimizations)
+```
+Report Page Load Time: <500ms
+Time to First Byte:     <100ms
+DOM Nodes:              <500
+Network Transfer:       <20 KB
+User Experience:        ✅ Fast
+```
+
+### After Phase 3 (Advanced)
+```
+Report Page Load Time: <200ms
+Time to First Byte:     <50ms
+DOM Nodes:              <500 (virtual scrolling)
+Network Transfer:       <10 KB
+User Experience:        ✅ Instant
+```
+
+---
+
+## 🎯 Implementation Priority
+
+### Deploy ASAP (Today)
+1. ✅ **Fix 1.1** - Summary endpoint (30 min)
+2. ✅ **Fix 1.2** - Basic pagination (45 min)
+3. ✅ **Fix 1.3** - Remove redundant calls (15 min)
+4. ✅ **Fix 1.4** - Loading states (15 min)
+
+**Total Time:** ~2 hours  
+**Impact:** Report becomes usable
+
+### This Week
+5. ✅ **Fix 2.1** - Database indexes (30 min)
+6. ✅ **Fix 2.2** - React Query caching (1 hour)
+7. ✅ **Fix 2.3** - Optimize breakdowns (1 hour)
+8. ✅ **Fix 2.4** - Lazy load lists (2 hours)
+
+**Total Time:** ~5 hours  
+**Impact:** Report becomes fast
+
+### Next Week
+9. ✅ **Fix 3.1** - Materialized summaries (3 hours)
+10. ✅ **Fix 3.2** - Virtual scrolling (4 hours)
+11. ✅ **Fix 3.3** - Background jobs (5 hours)
+
+**Total Time:** ~12 hours  
+**Impact:** System scales to 100K+ transactions
+
+---
+
+## 🚀 Quick Start - Deploy Emergency Fixes Now
+
+### Step 1: Create Summary Endpoint (5 min)
+
+```bash
+# Create new file: server/routes/summaries.ts
+```
+
+Copy the summary endpoint code from Fix 1.1
+
+### Step 2: Add Pagination to Transactions (10 min)
+
+```bash
+# Edit: server/routes/transactions.ts
+```
+
+Update with pagination code from Fix 1.2
+
+### Step 3: Update Frontend API Client (10 min)
+
+```typescript
+// src/api/reconciliation.ts
+
+export async function getSummary(periodId: string) {
+  const response = await fetch(`/api/periods/${periodId}/summary`);
+  return response.json();
+}
+
+export async function getTransactions(
+  periodId: string, 
+  options: {
+    page?: number;
+    limit?: number;
+    matchStatus?: string;
+    sourceType?: string;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (options.page) params.set('page', String(options.page));
+  if (options.limit) params.set('limit', String(options.limit));
+  if (options.matchStatus) params.set('matchStatus', options.matchStatus);
+  if (options.sourceType) params.set('sourceType', options.sourceType);
+  
+  const response = await fetch(
+    `/api/periods/${periodId}/transactions?${params}`
+  );
+  return response.json();
+}
+```
+
+### Step 4: Update Report Page Component (15 min)
+
+```tsx
+// src/pages/ReportPage.tsx
+
+function ReportPage() {
+  const { periodId } = useParams();
+  const { data: summary, isLoading } = useQuery(
+    ['summary', periodId],
+    () => api.getSummary(periodId)
+  );
+  
+  if (isLoading) {
+    return <ReportSkeleton />;
+  }
+  
+  return (
+    <Box>
+      <Typography variant="h4">Reconciliation Report</Typography>
+      
+      {/* Summary Cards - No API calls! */}
+      <Grid container spacing={2} sx={{ mt: 2 }}>
+        <Grid item xs={4}>
+          <StatCard 
+            title="Matched" 
+            value={summary.matched} 
+            color="success"
+          />
+        </Grid>
+        <Grid item xs={4}>
+          <StatCard 
+            title="Unmatched" 
+            value={summary.unmatched} 
+            color="error"
+          />
+        </Grid>
+        <Grid item xs={4}>
+          <StatCard 
+            title="Total" 
+            value={summary.totalTransactions} 
+          />
+        </Grid>
+      </Grid>
+      
+      {/* Transaction Lists - Lazy loaded */}
+      <Box sx={{ mt: 4 }}>
+        <Accordion>
+          <AccordionSummary>
+            Unmatched Transactions ({summary.unmatched})
+          </AccordionSummary>
+          <AccordionDetails>
+            <PaginatedTransactionTable 
+              periodId={periodId}
+              filters={{ matchStatus: 'unmatched' }}
+            />
+          </AccordionDetails>
+        </Accordion>
+      </Box>
+    </Box>
+  );
+}
+```
+
+### Step 5: Test & Deploy (10 min)
+
+```bash
+# Test locally
+npm run dev
+
+# Navigate to report page
+# Verify it loads in <1 second
+
+# Deploy
+git add .
+git commit -m "feat: emergency performance fixes for report page"
+git push
+```
+
+---
+
+## 📈 Success Metrics
+
+Track these after deployment:
+
+```typescript
+// Add to your analytics
+trackPerformance('report_page_load', {
+  loadTime: performance.now() - startTime,
+  transactionCount: summary.totalTransactions,
+  cached: fromCache
+});
+```
+
+**Target Metrics:**
+- Page load: <1 second (95th percentile)
+- Time to interactive: <2 seconds
+- Error rate: <1%
+- User satisfaction: >90%
+
+---
+
+## ⚠️ Known Issues to Watch
+
+### Issue 1: Cache Invalidation
+**Problem:** Summary might be stale after auto-match  
+**Solution:** Invalidate cache on match creation
+```typescript
+queryClient.invalidateQueries(['summary', periodId]);
+```
+
+### Issue 2: Large Periods
+**Problem:** Periods with >100K transactions still slow  
+**Solution:** Deploy Phase 3 (materialized summaries)
+
+### Issue 3: Concurrent Edits
+**Problem:** Multiple users editing same period  
+**Solution:** Add optimistic locking or real-time sync
+
+---
+
+## 🎬 Deployment Checklist
+
+- [ ] Create summary endpoint
+- [ ] Add pagination to transactions endpoint
+- [ ] Add database indexes
+- [ ] Update frontend to use summary
+- [ ] Add loading skeletons
+- [ ] Remove redundant API calls
+- [ ] Test with 25K+ transaction period
+- [ ] Test on slow 3G connection
+- [ ] Monitor error rates
+- [ ] Measure performance improvement
+- [ ] Update documentation
+
+---
+
+## 🆘 Rollback Plan
+
+If deployment causes issues:
+
+```sql
+-- Rollback: Drop new indexes if they cause problems
+DROP INDEX IF EXISTS idx_transactions_period_match;
+DROP INDEX IF EXISTS idx_transactions_period_date;
+DROP INDEX IF EXISTS idx_transactions_card_type;
+
+-- Revert to old endpoint
+-- (Keep both endpoints during rollout)
+GET /api/periods/:id/transactions-old  -- Old version
+GET /api/periods/:id/transactions      -- New version with pagination
+```
+
+---
+
+**STATUS:** Ready to implement  
+**ESTIMATED TIME TO FIX:** 2-4 hours (Phase 1)  
+**RISK LEVEL:** Low (additive changes, no breaking changes)  
+**PRIORITY:** 🔴 CRITICAL - Deploy ASAP
+
+---
+
+## Next Steps
+
+1. **Deploy Phase 1 today** (2 hours of dev time)
+2. **Monitor performance** (verify <1 second load times)
+3. **Deploy Phase 2 this week** (improve to <500ms)
+4. **Plan Phase 3 for next sprint** (scale to 100K+ transactions)
+
+**Questions?** Contact the team immediately if you need help implementing these fixes.

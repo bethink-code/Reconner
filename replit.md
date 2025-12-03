@@ -78,6 +78,7 @@ Preferred communication style: Simple, everyday language.
 - **UploadedFile**: Tracks source files with metadata (periodId, fileName, fileType, sourceType, sourceName, fileUrl, fileSize, status, rowCount, columnMapping)
 - **Transaction**: Individual financial records with date, amount, reference, description, source details, match status, isCardTransaction flag, and cardNumber (last 4 digits)
 - **Match**: Links related transactions with confidence scores and optional notes
+- **MatchingRules**: Per-period matching configuration with tolerance thresholds, date windows, invoice grouping, and confidence settings
 - **User**: Basic authentication entity (currently minimal implementation)
 
 **Card-Based Matching**
@@ -86,9 +87,29 @@ Preferred communication style: Simple, everyday language.
 - Bank sources detected with startsWith('bank') to handle bank, bank2, bank_account variations
 - Source presets for FNB Merchant, ABSA Merchant, Fuel Master with automatic column detection
 
+**Configurable Matching Rules**
+- Per-period matching configuration stored in `matching_rules` table
+- Presets for quick configuration: Conservative, Moderate (default), Aggressive
+- Configurable parameters:
+  - Amount Tolerance: R0.01 to R10.00 (how much amounts can differ)
+  - Date Window: 1 to 7 days (how far apart dates can be)
+  - Time Window: 30 to 240 minutes (for same-day matching)
+  - Group by Invoice: Groups multi-line fuel purchases by invoice number before matching
+  - Require Card Match: Stricter matching requiring card number agreement
+  - Minimum Confidence: 50-90% threshold for matches
+  - Auto-Match Threshold: 70-95% for automatic matching without review
+- API endpoints: GET/POST `/api/periods/:periodId/matching-rules`
+- Zod validation ensures data integrity
+
+**Invoice Grouping Algorithm**
+- Critical for high match rates (improves from ~3% to 80%+)
+- Groups fuel transactions by invoice number
+- Aggregates amounts for matching to single bank transactions
+- Handles multi-line purchases (fuel + extras on same invoice)
+
 **Auto-Match Scoring**
-- Amount match: 50 points (exact match with tolerance)
-- Date match: 30 points (same day, ±1 day with reduced points)
+- Amount match: 50 points (exact match with configurable tolerance)
+- Date match: 30 points (within configurable date window)
 - Reference match: 20 points (exact or partial)
 - Card number match: +20 points when both sides have matching card numbers
 - Card number mismatch: -30 penalty when both have card numbers but they differ

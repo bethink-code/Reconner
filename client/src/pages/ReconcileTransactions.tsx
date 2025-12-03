@@ -3,13 +3,38 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Download, Zap } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeft, Download, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import TransactionTable from "@/components/TransactionTable";
-import ReconciliationSummary from "@/components/ReconciliationSummary";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Transaction } from "@shared/schema";
+
+interface PeriodSummary {
+  totalTransactions: number;
+  matchedTransactions: number;
+  matchedPairs: number;
+  unmatchedTransactions: number;
+  matchRate: number;
+  totalFuelAmount: number;
+  totalBankAmount: number;
+  discrepancy: number;
+  fuelTransactions: number;
+  bankTransactions: number;
+  cardFuelTransactions: number;
+  unmatchedBankTransactions: number;
+  unmatchedCardTransactions: number;
+}
+
+interface PaginatedResponse {
+  transactions: Transaction[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
 export default function ReconcileTransactions() {
   const [, setLocation] = useLocation();
@@ -17,6 +42,8 @@ export default function ReconcileTransactions() {
   const [periodId, setPeriodId] = useState<string>("");
   const [activeTab, setActiveTab] = useState("all");
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -30,21 +57,57 @@ export default function ReconcileTransactions() {
       setLocation('/');
     }
     
-    // Set initial tab based on filter param
     if (filter === 'unmatched') {
       setActiveTab('unmatched');
     }
     
-    // Set source filter (bank or card)
     if (source === 'bank' || source === 'card') {
       setSourceFilter(source);
     }
   }, [setLocation]);
 
-  const { data: transactions = [], isLoading } = useQuery<Transaction[]>({
-    queryKey: ['/api/periods', periodId, 'transactions'],
+  const { data: summary, isLoading: summaryLoading } = useQuery<PeriodSummary>({
+    queryKey: ['/api/periods', periodId, 'summary'],
     enabled: !!periodId,
   });
+
+  const buildQueryParams = (page: number) => {
+    const params = new URLSearchParams();
+    params.set('page', page.toString());
+    params.set('limit', ITEMS_PER_PAGE.toString());
+    
+    if (activeTab === 'matched') {
+      params.set('matchStatus', 'matched');
+    } else if (activeTab === 'unmatched') {
+      params.set('matchStatus', 'unmatched');
+      if (sourceFilter === 'bank') {
+        params.set('sourceType', 'bank');
+      } else if (sourceFilter === 'card') {
+        params.set('sourceType', 'fuel');
+        params.set('isCardTransaction', 'yes');
+      }
+    } else if (activeTab === 'partial') {
+      params.set('matchStatus', 'partial');
+    }
+    
+    return params.toString();
+  };
+
+  const effectivePage = currentPage;
+
+  const { data: paginatedData, isLoading: transactionsLoading } = useQuery<PaginatedResponse>({
+    queryKey: ['/api/periods', periodId, 'transactions', activeTab, sourceFilter, effectivePage],
+    queryFn: async () => {
+      const response = await fetch(`/api/periods/${periodId}/transactions?${buildQueryParams(effectivePage)}`);
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      return response.json();
+    },
+    enabled: !!periodId,
+  });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, sourceFilter]);
 
   const autoMatchMutation = useMutation({
     mutationFn: async () => {
@@ -52,7 +115,9 @@ export default function ReconcileTransactions() {
       return await response.json();
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/periods', periodId, 'transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/periods', periodId, 'summary'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/periods', periodId, 'transactions'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['/api/periods'] });
       toast({
         title: "Auto-match complete",
         description: `Created ${result.matchesCreated} matches.`,
@@ -67,33 +132,8 @@ export default function ReconcileTransactions() {
     },
   });
 
-  const matchedTransactions = transactions.filter(t => t.matchStatus === "matched");
-  const unmatchedTransactions = transactions.filter(t => t.matchStatus === "unmatched");
-  const partialTransactions = transactions.filter(t => t.matchStatus === "partial");
-  
-  // Separate unmatched by source type for side-by-side view
-  const unmatchedBankTransactions = unmatchedTransactions.filter(t => 
-    t.sourceType?.startsWith('bank') && parseFloat(t.amount || '0') > 0
-  );
-  const unmatchedCardTransactions = unmatchedTransactions.filter(t => 
-    t.sourceType === 'fuel' && t.isCardTransaction === 'yes' && parseFloat(t.amount || '0') > 0
-  );
-  
-  // Apply source filter for unmatched view
-  const filteredUnmatchedTransactions = sourceFilter 
-    ? unmatchedTransactions.filter(t => {
-        if (sourceFilter === 'bank') {
-          return t.sourceType?.startsWith('bank');
-        } else if (sourceFilter === 'card') {
-          return t.sourceType === 'fuel' && t.isCardTransaction === 'yes';
-        }
-        return true;
-      })
-    : unmatchedTransactions;
-
   const clearSourceFilter = () => {
     setSourceFilter(null);
-    // Update URL without source param
     const params = new URLSearchParams(window.location.search);
     params.delete('source');
     window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
@@ -107,26 +147,66 @@ export default function ReconcileTransactions() {
     autoMatchMutation.mutate();
   };
 
-  const totalAmount = transactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
-  
-  // Calculate discrepancy: fuel card total vs bank total
-  const fuelCardTransactions = transactions.filter(t => 
-    t.sourceType === 'fuel' && (t.isCardTransaction === 'yes' || t.isCardTransaction === 'unknown')
-  );
-  const bankTransactions = transactions.filter(t => t.sourceType === 'bank_account');
-  
-  const fuelCardTotal = fuelCardTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
-  const bankTotal = bankTransactions.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
-  const discrepancy = fuelCardTotal - bankTotal;
-
-  const summary = {
-    totalTransactions: transactions.length,
-    matched: matchedTransactions.length,
-    unmatched: unmatchedTransactions.length,
-    partial: partialTransactions.length,
-    totalAmount,
-    discrepancy,
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-ZA', {
+      style: 'currency',
+      currency: 'ZAR',
+    }).format(amount);
   };
+
+  const getTabCount = (tab: string): number => {
+    if (!summary) return 0;
+    switch (tab) {
+      case 'all': return summary.totalTransactions;
+      case 'matched': return summary.matchedTransactions;
+      case 'unmatched': return summary.unmatchedTransactions;
+      case 'partial': return 0;
+      default: return 0;
+    }
+  };
+
+  const transactions = paginatedData?.transactions || [];
+  const totalPages = paginatedData?.totalPages || 1;
+  const total = paginatedData?.total || 0;
+
+  if (summaryLoading || !summary) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card">
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-9 w-9 rounded-md" />
+              <div className="flex-1">
+                <Skeleton className="h-8 w-64 mb-2" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+              <Skeleton className="h-9 w-32" />
+              <Skeleton className="h-9 w-36" />
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i}>
+                  <CardContent className="pt-6">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-8 w-16" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <Skeleton className="h-64 w-full" />
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -146,7 +226,7 @@ export default function ReconcileTransactions() {
             </div>
             <Button 
               onClick={handleAutoMatch}
-              disabled={autoMatchMutation.isPending || transactions.length === 0}
+              disabled={autoMatchMutation.isPending || summary.totalTransactions === 0}
               variant="outline"
               data-testid="button-auto-match"
             >
@@ -163,81 +243,211 @@ export default function ReconcileTransactions() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="space-y-6">
-          <ReconciliationSummary
-            totalTransactions={summary.totalTransactions}
-            matched={summary.matched}
-            unmatched={summary.unmatched}
-            partial={summary.partial}
-            totalAmount={summary.totalAmount}
-            discrepancy={summary.discrepancy}
-          />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Total Transactions</p>
+                <p className="text-2xl font-bold" data-testid="text-total">{summary.totalTransactions}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-chart-2/10 border-chart-2/30">
+              <CardContent className="pt-6">
+                <p className="text-sm font-medium">Matched</p>
+                <p className="text-2xl font-bold text-chart-2" data-testid="text-matched">{summary.matchedPairs}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-chart-1/10 border-chart-1/30">
+              <CardContent className="pt-6">
+                <p className="text-sm font-medium">Unmatched</p>
+                <p className="text-2xl font-bold text-chart-1" data-testid="text-unmatched">{summary.unmatchedTransactions}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Discrepancy</p>
+                <p className={`text-2xl font-bold font-mono ${summary.discrepancy > 0 ? 'text-chart-1' : 'text-chart-2'}`} data-testid="text-discrepancy">
+                  {formatCurrency(summary.discrepancy)}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-          {isLoading ? (
-            <p className="text-muted-foreground">Loading transactions...</p>
-          ) : transactions.length === 0 ? (
-            <p className="text-muted-foreground">No transactions found. Please upload and process files first.</p>
-          ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="all" data-testid="tab-all">
-                  All ({transactions.length})
-                </TabsTrigger>
-                <TabsTrigger value="matched" data-testid="tab-matched">
-                  Matched ({matchedTransactions.length})
-                </TabsTrigger>
-                <TabsTrigger value="unmatched" data-testid="tab-unmatched">
-                  Unmatched ({unmatchedTransactions.length})
-                </TabsTrigger>
-                <TabsTrigger value="partial" data-testid="tab-partial">
-                  Partial ({partialTransactions.length})
-                </TabsTrigger>
-              </TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList>
+              <TabsTrigger value="all" data-testid="tab-all">
+                All ({getTabCount('all')})
+              </TabsTrigger>
+              <TabsTrigger value="matched" data-testid="tab-matched">
+                Matched ({summary.matchedTransactions})
+              </TabsTrigger>
+              <TabsTrigger value="unmatched" data-testid="tab-unmatched">
+                Unmatched ({summary.unmatchedTransactions})
+              </TabsTrigger>
+              <TabsTrigger value="partial" data-testid="tab-partial">
+                Partial (0)
+              </TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="all" className="mt-6">
-                <TransactionTable
-                  title="All Transactions"
-                  transactions={transactions}
-                  onTransactionSelect={() => {}}
-                />
-              </TabsContent>
+            <TabsContent value="all" className="mt-6">
+              {transactionsLoading ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <Skeleton className="h-64 w-full" />
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <TransactionTable
+                    title="All Transactions"
+                    transactions={transactions}
+                    onTransactionSelect={() => {}}
+                  />
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    total={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
+              )}
+            </TabsContent>
 
-              <TabsContent value="matched" className="mt-6">
-                <TransactionTable
-                  title="Matched Transactions"
-                  transactions={matchedTransactions}
-                  onTransactionSelect={() => {}}
-                />
-              </TabsContent>
+            <TabsContent value="matched" className="mt-6">
+              {transactionsLoading ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <Skeleton className="h-64 w-full" />
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <TransactionTable
+                    title="Matched Transactions"
+                    transactions={transactions}
+                    onTransactionSelect={() => {}}
+                  />
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    total={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
+              )}
+            </TabsContent>
 
-              <TabsContent value="unmatched" className="mt-6">
-                {sourceFilter && (
-                  <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md">
-                    <span className="text-sm">
-                      Showing: <span className="font-medium">{sourceFilter === 'bank' ? 'Bank Transactions' : 'Card Sales'}</span>
-                    </span>
-                    <Button variant="ghost" size="sm" onClick={clearSourceFilter} data-testid="button-clear-filter">
-                      Show All
-                    </Button>
-                  </div>
-                )}
-                <TransactionTable
-                  title={sourceFilter ? `Unmatched ${sourceFilter === 'bank' ? 'Bank' : 'Card'} Transactions` : "Unmatched Transactions"}
-                  transactions={sourceFilter ? filteredUnmatchedTransactions : unmatchedTransactions.filter(t => parseFloat(t.amount || '0') > 0)}
-                  onTransactionSelect={() => {}}
-                />
-              </TabsContent>
+            <TabsContent value="unmatched" className="mt-6">
+              {sourceFilter && (
+                <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md">
+                  <span className="text-sm">
+                    Showing: <span className="font-medium">{sourceFilter === 'bank' ? 'Bank Transactions' : 'Card Sales'}</span>
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={clearSourceFilter} data-testid="button-clear-filter">
+                    Show All
+                  </Button>
+                </div>
+              )}
+              {transactionsLoading ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <Skeleton className="h-64 w-full" />
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <TransactionTable
+                    title={sourceFilter ? `Unmatched ${sourceFilter === 'bank' ? 'Bank' : 'Card'} Transactions` : "Unmatched Transactions"}
+                    transactions={transactions}
+                    onTransactionSelect={() => {}}
+                  />
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    total={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
+              )}
+            </TabsContent>
 
-              <TabsContent value="partial" className="mt-6">
-                <TransactionTable
-                  title="Partial Matches"
-                  transactions={partialTransactions}
-                  onTransactionSelect={() => {}}
-                />
-              </TabsContent>
-            </Tabs>
-          )}
+            <TabsContent value="partial" className="mt-6">
+              {transactionsLoading ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <Skeleton className="h-64 w-full" />
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <TransactionTable
+                    title="Partial Matches"
+                    transactions={transactions}
+                    onTransactionSelect={() => {}}
+                  />
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    total={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
+    </div>
+  );
+}
+
+interface PaginationControlsProps {
+  currentPage: number;
+  totalPages: number;
+  total: number;
+  itemsPerPage: number;
+  onPageChange: (page: number) => void;
+}
+
+function PaginationControls({ currentPage, totalPages, total, itemsPerPage, onPageChange }: PaginationControlsProps) {
+  if (totalPages <= 1) return null;
+  
+  const startItem = (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, total);
+
+  return (
+    <div className="flex items-center justify-between mt-4 p-4 bg-muted/30 rounded-md">
+      <p className="text-sm text-muted-foreground">
+        Showing {startItem} to {endItem} of {total} transactions
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          data-testid="button-prev-page"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <span className="text-sm px-2">
+          Page {currentPage} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          data-testid="button-next-page"
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

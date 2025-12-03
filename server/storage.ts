@@ -169,11 +169,12 @@ export class DatabaseStorage implements IStorage {
   ): Promise<{ transactions: Transaction[]; total: number }> {
     const { limit, offset, sourceType, matchStatus, isCardTransaction } = options;
     
-    // Build conditions array
+    // Build conditions array - always starts with periodId
     const conditions: any[] = [eq(transactions.periodId, periodId)];
     
     if (sourceType) {
       if (sourceType === 'bank') {
+        // Match any bank source (bank, bank2, bank_account, etc.)
         conditions.push(sql`${transactions.sourceType} LIKE 'bank%'`);
       } else {
         conditions.push(eq(transactions.sourceType, sourceType));
@@ -188,17 +189,22 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(transactions.isCardTransaction, isCardTransaction));
     }
     
+    // Build the where clause - use and() only if multiple conditions
+    const whereClause = conditions.length === 1 
+      ? conditions[0] 
+      : and(...conditions);
+    
     // Get paginated transactions
     const result = await db.select().from(transactions)
-      .where(and(...conditions))
+      .where(whereClause)
       .orderBy(desc(transactions.transactionDate))
       .limit(limit)
       .offset(offset);
     
-    // Get total count
+    // Get total count with same conditions
     const [countResult] = await db.select({ count: sql<number>`count(*)::int` })
       .from(transactions)
-      .where(and(...conditions));
+      .where(whereClause);
     
     return {
       transactions: result,

@@ -11,12 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, Sparkles, Info, Eye, CreditCard, Banknote } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, Sparkles, Info, Eye, CreditCard, Banknote, Check, X } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -54,12 +63,369 @@ type DuplicateError = {
   columns: string[];
 };
 
+type MappingConflict = {
+  field: string;
+  columns: string[];
+};
+
+type ColumnQuality = {
+  column: string;
+  validCount: number;
+  headerCount: number;
+  emptyCount: number;
+  recommendation: 'RECOMMENDED' | 'ACCEPTABLE' | 'NOT_RECOMMENDED';
+  reason: string;
+  sampleValues: string[];
+};
+
+function detectMappingConflicts(
+  columnMapping: Record<string, string>
+): MappingConflict[] {
+  const fieldToColumns: Record<string, string[]> = {};
+  
+  for (const [column, field] of Object.entries(columnMapping)) {
+    if (field === 'ignore' || field === '') continue;
+    
+    if (!fieldToColumns[field]) {
+      fieldToColumns[field] = [];
+    }
+    fieldToColumns[field].push(column);
+  }
+  
+  return Object.entries(fieldToColumns)
+    .filter(([_, columns]) => columns.length > 1)
+    .map(([field, columns]) => ({ field, columns }));
+}
+
+function analyzeColumnQuality(
+  column: string,
+  sampleRows: Record<string, unknown>[],
+  field: string
+): ColumnQuality {
+  const values = sampleRows.map(row => row[column]);
+  
+  let validCount = 0;
+  let headerCount = 0;
+  let emptyCount = 0;
+  const sampleValues: string[] = [];
+  
+  for (const val of values) {
+    const str = String(val ?? '').trim();
+    
+    if (sampleValues.length < 5) {
+      sampleValues.push(str || '(empty)');
+    }
+    
+    if (!str) {
+      emptyCount++;
+      continue;
+    }
+    
+    const headerKeywords = [
+      'Date', 'Time', 'Date / Time', 'Amount', 
+      'Reference', 'Description', 'Invoice', 'Card Number',
+      'Transaction Date', 'Transaction Time', 'Ref', 'Ref No',
+      'Card No', 'Card', 'Value', 'Total'
+    ];
+    const normalizedStr = str.toLowerCase();
+    if (headerKeywords.some(h => h.toLowerCase() === normalizedStr)) {
+      headerCount++;
+      continue;
+    }
+    
+    let isValid = false;
+    switch (field) {
+      case 'date':
+        isValid = /^\d{4,5}(\.\d+)?$/.test(str) || 
+                  /^\d{4}-\d{2}-\d{2}/.test(str) || 
+                  /^\d{1,2}[\/\-]\d{1,2}/.test(str) ||
+                  /^\d{1,2}\s+\w{3}/.test(str) ||
+                  /^\w{3}\s+\d{1,2}/.test(str);
+        break;
+        
+      case 'time':
+        isValid = /^\d{1,2}:\d{2}(:\d{2})?/.test(str) ||
+                  /^\d{4,5}(?:\.\d+)?$/.test(str);
+        break;
+        
+      case 'amount':
+        isValid = /^[R$€£]?\s?-?[\d,\s]+\.?\d*$/.test(str) ||
+                  /^-?\d+([.,]\d+)?$/.test(str);
+        break;
+        
+      case 'reference':
+      case 'description':
+        isValid = str.length > 0 && !headerKeywords.some(h => h.toLowerCase() === normalizedStr);
+        break;
+        
+      case 'cardNumber':
+        isValid = /^\*{4}\d{4}$/.test(str) || 
+                  /^\d{4,19}$/.test(str) ||
+                  /^\d{4}\s?\*+\s?\d{4}$/.test(str);
+        break;
+        
+      case 'paymentType':
+        isValid = str.length > 0;
+        break;
+        
+      default:
+        isValid = true;
+    }
+    
+    if (isValid) {
+      validCount++;
+    }
+  }
+  
+  const totalNonEmpty = values.length - emptyCount;
+  const validPercent = totalNonEmpty > 0 ? (validCount / totalNonEmpty) * 100 : 0;
+  
+  let recommendation: ColumnQuality['recommendation'];
+  let reason: string;
+  
+  if (validPercent > 80 && headerCount === 0) {
+    recommendation = 'RECOMMENDED';
+    reason = `${validPercent.toFixed(0)}% valid data`;
+  } else if (validPercent > 50) {
+    recommendation = 'ACCEPTABLE';
+    reason = headerCount > 0 
+      ? `${validPercent.toFixed(0)}% valid, ${headerCount} header rows` 
+      : `${validPercent.toFixed(0)}% valid data`;
+  } else {
+    recommendation = 'NOT_RECOMMENDED';
+    reason = headerCount > 0 
+      ? `Only ${validPercent.toFixed(0)}% valid, ${headerCount} headers found` 
+      : `Only ${validPercent.toFixed(0)}% valid data`;
+  }
+  
+  return {
+    column,
+    validCount,
+    headerCount,
+    emptyCount,
+    recommendation,
+    reason,
+    sampleValues
+  };
+}
+
+function getFieldLabel(field: string): string {
+  const labels: Record<string, string> = {
+    date: "Date",
+    time: "Time",
+    amount: "Amount",
+    reference: "Reference",
+    description: "Description",
+    cardNumber: "Card Number",
+    paymentType: "Payment Type",
+  };
+  return labels[field] || field;
+}
+
+interface ConflictResolutionModalProps {
+  open: boolean;
+  conflicts: MappingConflict[];
+  sampleRows: Record<string, unknown>[];
+  onResolve: (resolutions: Record<string, string>) => void;
+  onCancel: () => void;
+}
+
+function ConflictResolutionModal({
+  open,
+  conflicts,
+  sampleRows,
+  onResolve,
+  onCancel
+}: ConflictResolutionModalProps) {
+  const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  
+  useEffect(() => {
+    if (open) {
+      const autoResolutions: Record<string, string> = {};
+      for (const conflict of conflicts) {
+        const analyses = conflict.columns.map(col => 
+          analyzeColumnQuality(col, sampleRows, conflict.field)
+        );
+        const recommended = analyses.find(a => a.recommendation === 'RECOMMENDED')?.column ||
+                            analyses.sort((a, b) => b.validCount - a.validCount)[0]?.column;
+        if (recommended) {
+          autoResolutions[conflict.field] = recommended;
+        }
+      }
+      setResolutions(autoResolutions);
+    }
+  }, [open, conflicts, sampleRows]);
+  
+  const allResolved = conflicts.every(c => resolutions[c.field]);
+  
+  const handleApply = () => {
+    onResolve(resolutions);
+  };
+  
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-conflict-resolution">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-amber-500" />
+            Resolve Mapping Conflicts
+          </DialogTitle>
+          <DialogDescription>
+            Multiple columns are mapped to the same field. We've analyzed your data to recommend the best column for each field.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6 py-4">
+          {conflicts.map((conflict) => {
+            const analyses = conflict.columns.map(col => 
+              analyzeColumnQuality(col, sampleRows, conflict.field)
+            );
+            const recommended = analyses.find(a => a.recommendation === 'RECOMMENDED')?.column ||
+                                analyses.sort((a, b) => b.validCount - a.validCount)[0]?.column;
+            
+            return (
+              <div key={conflict.field} className="space-y-3">
+                <h3 className="font-semibold text-lg">
+                  {getFieldLabel(conflict.field)} Field
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {analyses.map(analysis => {
+                    const isRecommended = analysis.column === recommended;
+                    const isSelected = resolutions[conflict.field] === analysis.column;
+                    
+                    return (
+                      <Card 
+                        key={analysis.column}
+                        className={`cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'ring-2 ring-primary border-primary' 
+                            : isRecommended 
+                              ? 'border-green-500/50' 
+                              : ''
+                        }`}
+                        onClick={() => setResolutions(prev => ({ ...prev, [conflict.field]: analysis.column }))}
+                        data-testid={`card-column-option-${analysis.column}`}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium truncate" title={analysis.column}>
+                                {analysis.column}
+                              </span>
+                              {isRecommended && (
+                                <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                  Recommended
+                                </Badge>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                                <Check className="h-3 w-3 text-primary-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Sample data:</p>
+                              <div className="bg-muted/50 rounded p-2 font-mono text-xs max-h-20 overflow-y-auto">
+                                {analysis.sampleValues.slice(0, 3).map((val, i) => (
+                                  <div key={i} className="truncate" title={val}>{val}</div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div className="bg-muted/30 rounded p-2 text-center">
+                                <div className="font-semibold text-green-600">{analysis.validCount}</div>
+                                <div className="text-muted-foreground">Valid</div>
+                              </div>
+                              <div className="bg-muted/30 rounded p-2 text-center">
+                                <div className="font-semibold text-amber-600">{analysis.headerCount}</div>
+                                <div className="text-muted-foreground">Headers</div>
+                              </div>
+                              <div className="bg-muted/30 rounded p-2 text-center">
+                                <div className="font-semibold text-muted-foreground">{analysis.emptyCount}</div>
+                                <div className="text-muted-foreground">Empty</div>
+                              </div>
+                            </div>
+                            
+                            <Alert 
+                              className={`py-2 ${
+                                analysis.recommendation === 'RECOMMENDED' 
+                                  ? 'border-green-500/50 bg-green-50 dark:bg-green-950' 
+                                  : analysis.recommendation === 'ACCEPTABLE'
+                                    ? 'border-blue-500/50 bg-blue-50 dark:bg-blue-950'
+                                    : 'border-red-500/50 bg-red-50 dark:bg-red-950'
+                              }`}
+                            >
+                              <AlertDescription className={`text-xs ${
+                                analysis.recommendation === 'RECOMMENDED' 
+                                  ? 'text-green-700 dark:text-green-300' 
+                                  : analysis.recommendation === 'ACCEPTABLE'
+                                    ? 'text-blue-700 dark:text-blue-300'
+                                    : 'text-red-700 dark:text-red-300'
+                              }`}>
+                                {analysis.reason}
+                              </AlertDescription>
+                            </Alert>
+                            
+                            <Button 
+                              variant={isSelected ? "default" : "outline"}
+                              size="sm"
+                              className="w-full"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setResolutions(prev => ({ ...prev, [conflict.field]: analysis.column }));
+                              }}
+                              data-testid={`button-select-column-${analysis.column}`}
+                            >
+                              {isSelected ? (
+                                <>
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Selected
+                                </>
+                              ) : (
+                                'Use This Column'
+                              )}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onCancel} data-testid="button-cancel-resolution">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleApply}
+            disabled={!allResolved}
+            data-testid="button-apply-resolution"
+          >
+            Apply and Continue
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function FileMappingCard({ file }: { file: UploadedFile }) {
   const { toast } = useToast();
   const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [duplicateErrors, setDuplicateErrors] = useState<DuplicateError[]>([]);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [conflicts, setConflicts] = useState<MappingConflict[]>([]);
 
   const { data: preview, isLoading } = useQuery<FilePreview>({
     queryKey: ['/api/files', file.id, 'preview'],
@@ -79,7 +445,7 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
     return errorColumns;
   };
 
-  const getFieldLabel = (field: string): string => {
+  const getFieldLabelLocal = (field: string): string => {
     const labels: Record<string, string> = {
       date: "Date",
       time: "Time",
@@ -123,7 +489,7 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
       if (typeof error === 'object' && error !== null && 'isDuplicateError' in error) {
         const dupError = error as { isDuplicateError: boolean; duplicates: DuplicateError[] };
         setDuplicateErrors(dupError.duplicates);
-        const fieldNames = dupError.duplicates.map(d => getFieldLabel(d.field)).join(", ");
+        const fieldNames = dupError.duplicates.map(d => getFieldLabelLocal(d.field)).join(", ");
         toast({
           title: "Duplicate mappings found",
           description: `Each field can only be mapped to ONE column. Please fix: ${fieldNames}`,
@@ -144,7 +510,34 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
   };
 
   const handleConfirm = () => {
-    saveColumnMappingMutation.mutate(columnMappings);
+    const detectedConflicts = detectMappingConflicts(columnMappings);
+    
+    if (detectedConflicts.length > 0) {
+      setConflicts(detectedConflicts);
+      setShowConflictModal(true);
+    } else {
+      saveColumnMappingMutation.mutate(columnMappings);
+    }
+  };
+
+  const handleResolveConflicts = (resolutions: Record<string, string>) => {
+    const updatedMappings = { ...columnMappings };
+    
+    for (const [field, chosenColumn] of Object.entries(resolutions)) {
+      const conflictingColumns = Object.keys(updatedMappings).filter(
+        col => updatedMappings[col] === field
+      );
+      
+      for (const col of conflictingColumns) {
+        if (col !== chosenColumn) {
+          updatedMappings[col] = 'ignore';
+        }
+      }
+    }
+    
+    setColumnMappings(updatedMappings);
+    setShowConflictModal(false);
+    saveColumnMappingMutation.mutate(updatedMappings);
   };
 
   const requiredFields = ["date", "amount", "reference"];
@@ -411,6 +804,16 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
           </div>
         </div>
       </CardContent>
+      
+      {showConflictModal && (
+        <ConflictResolutionModal
+          open={showConflictModal}
+          conflicts={conflicts}
+          sampleRows={preview?.rows || []}
+          onResolve={handleResolveConflicts}
+          onCancel={() => setShowConflictModal(false)}
+        />
+      )}
     </Card>
   );
 }

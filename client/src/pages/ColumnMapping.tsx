@@ -49,11 +49,17 @@ type FilePreview = {
   normalizedPreview: NormalizedTransaction[];
 };
 
+type DuplicateError = {
+  field: string;
+  columns: string[];
+};
+
 function FileMappingCard({ file }: { file: UploadedFile }) {
   const { toast } = useToast();
   const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [duplicateErrors, setDuplicateErrors] = useState<DuplicateError[]>([]);
 
   const { data: preview, isLoading } = useQuery<FilePreview>({
     queryKey: ['/api/files', file.id, 'preview'],
@@ -65,25 +71,65 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
     }
   }, [preview]);
 
+  const getColumnsWithErrors = (): Set<string> => {
+    const errorColumns = new Set<string>();
+    duplicateErrors.forEach(err => {
+      err.columns.forEach(col => errorColumns.add(col));
+    });
+    return errorColumns;
+  };
+
+  const getFieldLabel = (field: string): string => {
+    const labels: Record<string, string> = {
+      date: "Date",
+      time: "Time",
+      amount: "Amount",
+      reference: "Reference",
+      description: "Description",
+      cardNumber: "Card Number",
+      paymentType: "Payment Type",
+    };
+    return labels[field] || field;
+  };
+
   const saveColumnMappingMutation = useMutation({
     mutationFn: async (columnMapping: Record<string, string>) => {
       const response = await apiRequest("POST", `/api/files/${file.id}/column-mapping`, { columnMapping });
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.duplicates) {
+          throw { isDuplicateError: true, duplicates: errorData.duplicates };
+        }
+        throw new Error(errorData.message || errorData.error || "Failed to save mapping");
+      }
       return await response.json();
     },
     onSuccess: async () => {
       setIsConfirmed(true);
+      setDuplicateErrors([]);
       await queryClient.invalidateQueries({ queryKey: ['/api/periods', file.periodId, 'files'] });
       toast({
         title: "Mapping saved",
         description: `Column mapping for ${file.fileName} has been saved.`,
       });
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to save mapping",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: unknown) => {
+      if (typeof error === 'object' && error !== null && 'isDuplicateError' in error) {
+        const dupError = error as { isDuplicateError: boolean; duplicates: DuplicateError[] };
+        setDuplicateErrors(dupError.duplicates);
+        const fieldNames = dupError.duplicates.map(d => getFieldLabel(d.field)).join(", ");
+        toast({
+          title: "Duplicate mappings found",
+          description: `Each field can only be mapped to ONE column. Please fix: ${fieldNames}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Failed to save mapping",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -176,16 +222,24 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
           {preview.headers.map((header, index) => {
             const displayLabel = getColumnDisplayLabel(header);
             const sampleValues = getSampleValues(header, index);
+            const errorColumns = getColumnsWithErrors();
+            const hasError = errorColumns.has(header);
+            const errorForColumn = duplicateErrors.find(e => e.columns.includes(header));
             
             return (
               <div 
                 key={header} 
-                className="grid grid-cols-[1fr_150px_1fr] gap-4 items-center py-1 hover:bg-muted/30 rounded px-1 -mx-1" 
+                className={`grid grid-cols-[1fr_150px_1fr] gap-4 items-center py-2 rounded px-2 -mx-2 transition-colors ${
+                  hasError 
+                    ? "bg-destructive/10 border border-destructive/50" 
+                    : "hover:bg-muted/30"
+                }`}
                 data-testid={`row-mapping-${index}`}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate" title={header}>
+                    {hasError && <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />}
+                    <span className={`text-sm font-medium truncate ${hasError ? "text-destructive" : ""}`} title={header}>
                       {header}
                     </span>
                     {displayLabel && (
@@ -204,13 +258,24 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
                       {displayLabel}
                     </p>
                   )}
+                  {hasError && errorForColumn && (
+                    <p className="text-xs text-destructive mt-1">
+                      "{getFieldLabel(errorForColumn.field)}" is also mapped to: {errorForColumn.columns.filter(c => c !== header).join(", ")}
+                    </p>
+                  )}
                 </div>
                 <Select 
                   value={columnMappings[header] || ""} 
-                  onValueChange={(value) => handleMappingChange(header, value)}
+                  onValueChange={(value) => {
+                    handleMappingChange(header, value);
+                    if (hasError) setDuplicateErrors([]);
+                  }}
                   disabled={isConfirmed}
                 >
-                  <SelectTrigger data-testid={`select-mapping-${index}`} className="h-9">
+                  <SelectTrigger 
+                    data-testid={`select-mapping-${index}`} 
+                    className={`h-9 ${hasError ? "border-destructive ring-destructive/20" : ""}`}
+                  >
                     <SelectValue placeholder="Select field" />
                   </SelectTrigger>
                   <SelectContent>

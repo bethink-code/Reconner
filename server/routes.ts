@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { fileParser, DataNormalizer, SOURCE_PRESETS } from "./fileParser";
 import { objectStorageService } from "./objectStorage";
 import { reportGenerator } from "./reportGenerator";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { 
   insertReconciliationPeriodSchema,
   insertUploadedFileSchema,
@@ -25,8 +26,28 @@ const upload = multer({
 const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'cardNumber', 'ignore']));
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication
+  await setupAuth(app);
+
+  // Auth endpoint to get current user
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!req.user?.claims?.sub) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
   
-  app.get("/api/periods", async (req, res) => {
+  app.get("/api/periods", isAuthenticated, async (req, res) => {
     try {
       const periods = await storage.getPeriods();
       res.json(periods);
@@ -36,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:id", async (req, res) => {
+  app.get("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
       const period = await storage.getPeriod(req.params.id);
       if (!period) {
@@ -49,7 +70,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/periods", async (req, res) => {
+  app.post("/api/periods", isAuthenticated, async (req, res) => {
     try {
       const validated = insertReconciliationPeriodSchema.parse(req.body);
       const period = await storage.createPeriod(validated);
@@ -60,7 +81,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/periods/:id", async (req, res) => {
+  app.patch("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
       const partialSchema = insertReconciliationPeriodSchema.partial();
       const validated = partialSchema.parse(req.body);
@@ -75,7 +96,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/periods/:id", async (req, res) => {
+  app.delete("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
       await storage.deletePeriod(req.params.id);
       res.json({ success: true });
@@ -85,7 +106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/files", async (req, res) => {
+  app.get("/api/periods/:periodId/files", isAuthenticated, async (req, res) => {
     try {
       const files = await storage.getFilesByPeriod(req.params.periodId);
       res.json(files);
@@ -95,7 +116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/periods/:periodId/files/upload", upload.single("file"), async (req, res) => {
+  app.post("/api/periods/:periodId/files/upload", isAuthenticated, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
@@ -186,7 +207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/files/:fileId/preview", async (req, res) => {
+  app.get("/api/files/:fileId/preview", isAuthenticated, async (req, res) => {
     try {
       const file = await storage.getFile(req.params.fileId);
       if (!file) {
@@ -255,7 +276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/files/:fileId/column-mapping", async (req, res) => {
+  app.post("/api/files/:fileId/column-mapping", isAuthenticated, async (req, res) => {
     try {
       const validatedMapping = columnMappingSchema.parse(req.body.columnMapping);
 
@@ -307,7 +328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/files/:fileId/process", async (req, res) => {
+  app.post("/api/files/:fileId/process", isAuthenticated, async (req, res) => {
     try {
       const file = await storage.getFile(req.params.fileId);
       if (!file) {
@@ -402,7 +423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/files/:fileId", async (req, res) => {
+  app.delete("/api/files/:fileId", isAuthenticated, async (req, res) => {
     try {
       const file = await storage.getFile(req.params.fileId);
       if (file) {
@@ -417,7 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/transactions", async (req, res) => {
+  app.get("/api/periods/:periodId/transactions", isAuthenticated, async (req, res) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
@@ -448,7 +469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // VERIFICATION SUMMARY ENDPOINT
   // ============================================
   
-  app.get("/api/periods/:periodId/verification-summary", async (req, res) => {
+  app.get("/api/periods/:periodId/verification-summary", isAuthenticated, async (req, res) => {
     try {
       const summary = await storage.getVerificationSummary(req.params.periodId);
       res.json(summary);
@@ -462,7 +483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // MATCHING RULES ENDPOINTS
   // ============================================
   
-  app.get("/api/periods/:periodId/matching-rules", async (req, res) => {
+  app.get("/api/periods/:periodId/matching-rules", isAuthenticated, async (req, res) => {
     try {
       const rules = await storage.getMatchingRules(req.params.periodId);
       res.json(rules);
@@ -472,7 +493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/periods/:periodId/matching-rules", async (req, res) => {
+  app.post("/api/periods/:periodId/matching-rules", isAuthenticated, async (req, res) => {
     try {
       const validatedRules = matchingRulesConfigSchema.parse(req.body);
       const saved = await storage.saveMatchingRules(req.params.periodId, validatedRules);
@@ -559,7 +580,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AUTO-MATCH WITH INVOICE GROUPING
   // ============================================
   
-  app.post("/api/periods/:periodId/auto-match", async (req, res) => {
+  app.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
       console.log('=== Starting Auto-Match with Invoice Grouping ===');
       
@@ -794,7 +815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/matches/manual", async (req, res) => {
+  app.post("/api/matches/manual", isAuthenticated, async (req, res) => {
     try {
       const matchInput = insertMatchSchema.omit({ matchType: true, matchConfidence: true }).parse(req.body);
 
@@ -820,7 +841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/matches/:matchId", async (req, res) => {
+  app.delete("/api/matches/:matchId", isAuthenticated, async (req, res) => {
     try {
       const match = await storage.getMatch(req.params.matchId);
       if (!match) {
@@ -845,7 +866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/report/:format", async (req, res) => {
+  app.get("/api/periods/:periodId/report/:format", isAuthenticated, async (req, res) => {
     try {
       const { periodId, format } = req.params;
       
@@ -883,7 +904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/summary", async (req, res) => {
+  app.get("/api/periods/:periodId/summary", isAuthenticated, async (req, res) => {
     try {
       const period = await storage.getPeriod(req.params.periodId);
       if (!period) {

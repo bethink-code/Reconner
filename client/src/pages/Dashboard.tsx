@@ -1,17 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart } from "lucide-react";
+import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import PeriodCard from "@/components/PeriodCard";
 import StatusBadge from "@/components/StatusBadge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
 import type { ReconciliationPeriod } from "@shared/schema";
 
 interface DisplayPeriod {
@@ -25,6 +28,7 @@ interface DisplayPeriod {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
     queryKey: ["/api/periods"],
   });
@@ -78,12 +82,46 @@ export default function Dashboard() {
                 Manage and track your reconciliation periods
               </p>
             </div>
-            <Link href="/create">
-              <Button data-testid="button-create-period">
-                <Plus className="h-4 w-4 mr-2" />
-                New Reconciliation
-              </Button>
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link href="/create">
+                <Button data-testid="button-create-period">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Reconciliation
+                </Button>
+              </Link>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-user-menu">
+                    <Avatar className="h-9 w-9">
+                      <AvatarImage src={user?.profileImageUrl || undefined} alt={user?.firstName || "User"} />
+                      <AvatarFallback>
+                        {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || <User className="h-4 w-4" />}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <div className="flex items-center justify-start gap-2 p-2">
+                    <div className="flex flex-col space-y-1 leading-none">
+                      {user?.firstName && (
+                        <p className="font-medium">{user.firstName} {user.lastName}</p>
+                      )}
+                      {user?.email && (
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      )}
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <a href="/api/logout" className="cursor-pointer" data-testid="button-logout">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Log out</span>
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </header>

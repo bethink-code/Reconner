@@ -42,6 +42,13 @@ Preferred communication style: Simple, everyday language.
 - ESM modules throughout the codebase
 - Custom middleware for request logging and JSON body parsing with raw body capture
 
+**Authentication**
+- Replit Auth via OpenID Connect (OIDC) with Google login support
+- Session management using PostgreSQL-backed sessions (connect-pg-simple)
+- Protected API routes using `isAuthenticated` middleware
+- User profile stored in `users` table with email, firstName, lastName, profileImageUrl
+- Sessions stored in `sessions` table with automatic expiration
+
 **Database Layer**
 - Drizzle ORM for type-safe database queries and schema management
 - Neon serverless PostgreSQL with WebSocket connection pooling

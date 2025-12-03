@@ -94,7 +94,13 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
 
   const saveColumnMappingMutation = useMutation({
     mutationFn: async (columnMapping: Record<string, string>) => {
-      const response = await apiRequest("POST", `/api/files/${file.id}/column-mapping`, { columnMapping });
+      const response = await fetch(`/api/files/${file.id}/column-mapping`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columnMapping }),
+        credentials: "include",
+      });
+      
       if (!response.ok) {
         const errorData = await response.json();
         if (errorData.duplicates) {

@@ -52,6 +52,71 @@ export interface PeriodSummary {
   unmatchedCardAmount: number;
 }
 
+export interface VerificationSummary {
+  overview: {
+    fuelSystem: {
+      totalSales: number;
+      cardSales: number;
+      cardTransactions: number;
+      cashSales: number;
+      cashTransactions: number;
+    };
+    bankStatements: {
+      totalAmount: number;
+      totalTransactions: number;
+      sources: { name: string; amount: number; transactions: number }[];
+      dateRange: { earliest: string | null; latest: string | null; days: number };
+    };
+  };
+  verificationStatus: {
+    verified: { transactions: number; amount: number; percentage: number };
+    pendingVerification: { transactions: number; amount: number; reason: string };
+    unverified: { transactions: number; amount: number; percentage: number };
+    cashSales: { transactions: number; amount: number; reason: string };
+  };
+  coverageAnalysis: {
+    volumeCoverage: number;
+    dateRangeCoverage: number;
+    fuelDateRange: { earliest: string | null; latest: string | null; days: number };
+    bankDateRange: { earliest: string | null; latest: string | null; days: number };
+    missingDays: number;
+    dailyAverages: { fuel: number; bank: number };
+    volumeGap: number;
+  };
+  discrepancyReport: {
+    verifiedSales: number;
+    bankDeposits: number;
+    difference: number;
+    bankHasMore: boolean;
+    pendingVerification: { amount: number; transactions: number; percentageOfCardSales: number };
+    unmatchedIssues: { count: number; amount: number };
+  };
+  matchingResults: {
+    performanceRating: number;
+    performanceLabel: string;
+    bankTransactions: { matched: number; unmatched: number; matchRate: number };
+    matchQuality: {
+      highConfidence: number;
+      mediumConfidence: number;
+    };
+    invoiceGrouping: {
+      multiLineInvoices: number;
+      totalItemsGrouped: number;
+    };
+    matchesByDateOffset: {
+      sameDay: number;
+      oneDay: number;
+      twoDays: number;
+      threePlusDays: number;
+    };
+  };
+  recommendedActions: {
+    critical: { action: string; description: string; details: string[] }[];
+    important: { action: string; description: string; details: string[] }[];
+    optional: { action: string; description: string; details: string[] }[];
+  };
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -83,6 +148,7 @@ export interface IStorage {
   deleteMatch(id: string): Promise<void>;
   
   getPeriodSummary(periodId: string): Promise<PeriodSummary>;
+  getVerificationSummary(periodId: string): Promise<VerificationSummary>;
   
   getMatchingRules(periodId: string): Promise<MatchingRulesConfig>;
   saveMatchingRules(periodId: string, rules: MatchingRulesConfig): Promise<MatchingRules>;
@@ -401,6 +467,364 @@ export class DatabaseStorage implements IStorage {
       unmatchedBankAmount: parseFloat(row.unmatched_bank_amount || '0'),
       unmatchedCardTransactions: parseInt(row.unmatched_card_transactions || '0'),
       unmatchedCardAmount: parseFloat(row.unmatched_card_amount || '0'),
+    };
+  }
+
+  async getVerificationSummary(periodId: string): Promise<VerificationSummary> {
+    // Get comprehensive verification-based metrics
+    const result = await pool.query(`
+      WITH fuel_stats AS (
+        SELECT 
+          COUNT(*) as total_fuel,
+          COALESCE(SUM(amount::numeric), 0) as total_fuel_amount,
+          COUNT(CASE WHEN is_card_transaction = 'yes' THEN 1 END) as card_transactions,
+          COALESCE(SUM(CASE WHEN is_card_transaction = 'yes' THEN amount::numeric ELSE 0 END), 0) as card_amount,
+          COUNT(CASE WHEN is_card_transaction = 'no' THEN 1 END) as cash_transactions,
+          COALESCE(SUM(CASE WHEN is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_amount,
+          MIN(transaction_date) as fuel_earliest,
+          MAX(transaction_date) as fuel_latest
+        FROM transactions
+        WHERE period_id = $1 AND source_type = 'fuel'
+      ),
+      bank_stats AS (
+        SELECT 
+          COUNT(*) as total_bank,
+          COALESCE(SUM(amount::numeric), 0) as total_bank_amount,
+          COUNT(CASE WHEN match_status = 'matched' THEN 1 END) as matched_bank,
+          COALESCE(SUM(CASE WHEN match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
+          MIN(transaction_date) as bank_earliest,
+          MAX(transaction_date) as bank_latest
+        FROM transactions
+        WHERE period_id = $1 AND source_type LIKE 'bank%'
+      ),
+      bank_sources AS (
+        SELECT 
+          source_name,
+          COUNT(*) as tx_count,
+          COALESCE(SUM(amount::numeric), 0) as source_amount
+        FROM transactions
+        WHERE period_id = $1 AND source_type LIKE 'bank%'
+        GROUP BY source_name
+      ),
+      card_matched AS (
+        SELECT 
+          COUNT(DISTINCT t.id) as matched_card_transactions,
+          COALESCE(SUM(t.amount::numeric), 0) as matched_card_amount
+        FROM transactions t
+        WHERE t.period_id = $1 
+          AND t.source_type = 'fuel' 
+          AND t.is_card_transaction = 'yes'
+          AND t.match_status = 'matched'
+      ),
+      unmatched_card AS (
+        SELECT 
+          COUNT(*) as unmatched_count,
+          COALESCE(SUM(amount::numeric), 0) as unmatched_amount
+        FROM transactions
+        WHERE period_id = $1 
+          AND source_type = 'fuel' 
+          AND is_card_transaction = 'yes'
+          AND match_status != 'matched'
+          AND amount::numeric > 0
+      ),
+      match_quality AS (
+        SELECT 
+          COUNT(CASE WHEN match_confidence >= 85 THEN 1 END) as high_confidence,
+          COUNT(CASE WHEN match_confidence >= 70 AND match_confidence < 85 THEN 1 END) as medium_confidence,
+          COUNT(*) as total_matches
+        FROM matches
+        WHERE period_id = $1
+      ),
+      match_date_offsets AS (
+        SELECT 
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) = 0 THEN 1 END) as same_day,
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) = 1 THEN 1 END) as one_day,
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) = 2 THEN 1 END) as two_days,
+          COUNT(CASE WHEN ABS(
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
+          ) >= 3 THEN 1 END) as three_plus_days
+        FROM matches m
+        JOIN transactions t_fuel ON m.fuel_transaction_id = t_fuel.id
+        JOIN transactions t_bank ON m.bank_transaction_id = t_bank.id
+        WHERE m.period_id = $1
+      ),
+      invoice_groups AS (
+        SELECT 
+          COUNT(DISTINCT invoice_number) as grouped_invoices,
+          COUNT(*) as total_grouped_items
+        FROM (
+          SELECT reference_number as invoice_number, COUNT(*) as item_count
+          FROM transactions
+          WHERE period_id = $1 
+            AND source_type = 'fuel' 
+            AND reference_number IS NOT NULL 
+            AND reference_number != ''
+          GROUP BY reference_number
+          HAVING COUNT(*) > 1
+        ) grouped
+      )
+      SELECT 
+        fs.*,
+        bs.*,
+        cm.matched_card_transactions,
+        cm.matched_card_amount,
+        uc.unmatched_count as unmatched_card_count,
+        uc.unmatched_amount as unmatched_card_amount,
+        mq.high_confidence,
+        mq.medium_confidence,
+        mq.total_matches,
+        md.same_day,
+        md.one_day,
+        md.two_days,
+        md.three_plus_days,
+        COALESCE(ig.grouped_invoices, 0) as grouped_invoices,
+        COALESCE(ig.total_grouped_items, 0) as total_grouped_items
+      FROM fuel_stats fs
+      CROSS JOIN bank_stats bs
+      CROSS JOIN card_matched cm
+      CROSS JOIN unmatched_card uc
+      CROSS JOIN match_quality mq
+      CROSS JOIN match_date_offsets md
+      CROSS JOIN invoice_groups ig
+    `, [periodId]);
+
+    // Get bank sources breakdown
+    const sourcesResult = await pool.query(`
+      SELECT 
+        source_name,
+        COUNT(*) as tx_count,
+        COALESCE(SUM(amount::numeric), 0) as source_amount
+      FROM transactions
+      WHERE period_id = $1 AND source_type LIKE 'bank%'
+      GROUP BY source_name
+    `, [periodId]);
+
+    const row = result.rows[0] || {};
+    const bankSources = sourcesResult.rows.map(s => ({
+      name: s.source_name || 'Unknown Bank',
+      amount: parseFloat(s.source_amount || '0'),
+      transactions: parseInt(s.tx_count || '0')
+    }));
+
+    // Parse values
+    const totalFuelAmount = parseFloat(row.total_fuel_amount || '0');
+    const cardAmount = parseFloat(row.card_amount || '0');
+    const cashAmount = parseFloat(row.cash_amount || '0');
+    const cardTransactions = parseInt(row.card_transactions || '0');
+    const cashTransactions = parseInt(row.cash_transactions || '0');
+    
+    const totalBankAmount = parseFloat(row.total_bank_amount || '0');
+    const totalBankTransactions = parseInt(row.total_bank || '0');
+    const matchedBankTransactions = parseInt(row.matched_bank || '0');
+    const matchedBankAmount = parseFloat(row.matched_bank_amount || '0');
+    
+    const matchedCardTransactions = parseInt(row.matched_card_transactions || '0');
+    const matchedCardAmount = parseFloat(row.matched_card_amount || '0');
+    const unmatchedCardCount = parseInt(row.unmatched_card_count || '0');
+    const unmatchedCardAmount = parseFloat(row.unmatched_card_amount || '0');
+    
+    // Date calculations
+    const fuelEarliest = row.fuel_earliest;
+    const fuelLatest = row.fuel_latest;
+    const bankEarliest = row.bank_earliest;
+    const bankLatest = row.bank_latest;
+    
+    const calculateDays = (earliest: string | null, latest: string | null): number => {
+      if (!earliest || !latest) return 0;
+      const start = new Date(earliest);
+      const end = new Date(latest);
+      return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    };
+    
+    const fuelDays = calculateDays(fuelEarliest, fuelLatest);
+    const bankDays = calculateDays(bankEarliest, bankLatest);
+    
+    // Coverage metrics
+    const volumeCoverage = cardAmount > 0 ? (totalBankAmount / cardAmount) * 100 : 0;
+    const dateRangeCoverage = fuelDays > 0 ? (bankDays / fuelDays) * 100 : 0;
+    const missingDays = Math.max(0, fuelDays - bankDays);
+    
+    // Daily averages
+    const fuelDailyAvg = fuelDays > 0 ? cardTransactions / fuelDays : 0;
+    const bankDailyAvg = bankDays > 0 ? totalBankTransactions / bankDays : 0;
+    const volumeGap = bankDailyAvg > 0 ? fuelDailyAvg / bankDailyAvg : 0;
+    
+    // Match rate calculation - KEY INSIGHT: calculate based on what CAN be verified
+    const bankMatchRate = totalBankTransactions > 0 
+      ? (matchedBankTransactions / totalBankTransactions) * 100 
+      : 0;
+    
+    // Performance rating (1-5 stars)
+    let performanceRating = 1;
+    let performanceLabel = 'Poor';
+    if (bankMatchRate >= 90) { performanceRating = 5; performanceLabel = 'Excellent'; }
+    else if (bankMatchRate >= 80) { performanceRating = 5; performanceLabel = 'Excellent'; }
+    else if (bankMatchRate >= 70) { performanceRating = 4; performanceLabel = 'Very Good'; }
+    else if (bankMatchRate >= 60) { performanceRating = 3; performanceLabel = 'Good'; }
+    else if (bankMatchRate >= 40) { performanceRating = 2; performanceLabel = 'Needs Improvement'; }
+    
+    // Pending verification = card transactions without corresponding bank data
+    const pendingVerificationAmount = cardAmount - matchedCardAmount - unmatchedCardAmount;
+    const pendingVerificationTransactions = cardTransactions - matchedCardTransactions - unmatchedCardCount;
+    
+    // Unverified = card transactions that have bank data available but didn't match
+    const unverifiedPercentage = totalBankTransactions > 0 
+      ? ((totalBankTransactions - matchedBankTransactions) / totalBankTransactions) * 100 
+      : 0;
+
+    // Build recommended actions
+    const criticalActions: { action: string; description: string; details: string[] }[] = [];
+    const importantActions: { action: string; description: string; details: string[] }[] = [];
+    const optionalActions: { action: string; description: string; details: string[] }[] = [];
+
+    // Critical: Missing bank data
+    if (volumeCoverage < 50) {
+      criticalActions.push({
+        action: 'upload_bank_statements',
+        description: 'Upload Missing Bank Statements',
+        details: [
+          `You're missing ${(100 - volumeCoverage).toFixed(0)}% of bank transaction data`,
+          'Check for additional merchant accounts',
+          'Verify all bank accounts uploaded',
+          missingDays > 0 ? `Get statements for ${missingDays} missing days` : ''
+        ].filter(d => d)
+      });
+    }
+
+    // Important: Unmatched transactions
+    const unmatchedBankCount = totalBankTransactions - matchedBankTransactions;
+    if (unmatchedBankCount > 0) {
+      importantActions.push({
+        action: 'review_unmatched',
+        description: `Review ${unmatchedBankCount} Unmatched Transactions`,
+        details: [
+          `R${(totalBankAmount - matchedBankAmount).toFixed(2)} in transactions that didn't match`,
+          'Check for voided sales',
+          'Verify refunds processed',
+          'Look for amount discrepancies'
+        ]
+      });
+    }
+
+    // Optional: Adjust rules (only if match rate is below expectations)
+    if (bankMatchRate >= 70) {
+      optionalActions.push({
+        action: 'adjust_rules',
+        description: 'Adjust Matching Rules',
+        details: [
+          `Current performance: ${bankMatchRate.toFixed(1)}% (${performanceLabel.toLowerCase()})`,
+          'Only adjust if match rate drops after adding complete bank data'
+        ]
+      });
+    } else if (bankMatchRate > 0) {
+      importantActions.push({
+        action: 'adjust_rules',
+        description: 'Consider Adjusting Matching Rules',
+        details: [
+          `Current match rate: ${bankMatchRate.toFixed(1)}%`,
+          'Try widening date window or amount tolerance',
+          'Enable invoice grouping if not already on'
+        ]
+      });
+    }
+
+    return {
+      overview: {
+        fuelSystem: {
+          totalSales: totalFuelAmount,
+          cardSales: cardAmount,
+          cardTransactions,
+          cashSales: cashAmount,
+          cashTransactions
+        },
+        bankStatements: {
+          totalAmount: totalBankAmount,
+          totalTransactions: totalBankTransactions,
+          sources: bankSources,
+          dateRange: { earliest: bankEarliest, latest: bankLatest, days: bankDays }
+        }
+      },
+      verificationStatus: {
+        verified: { 
+          transactions: matchedBankTransactions, 
+          amount: matchedBankAmount, 
+          percentage: bankMatchRate 
+        },
+        pendingVerification: { 
+          transactions: Math.max(0, pendingVerificationTransactions), 
+          amount: Math.max(0, pendingVerificationAmount), 
+          reason: 'No bank data available for these card transactions' 
+        },
+        unverified: { 
+          transactions: unmatchedBankCount, 
+          amount: totalBankAmount - matchedBankAmount, 
+          percentage: unverifiedPercentage 
+        },
+        cashSales: { 
+          transactions: cashTransactions, 
+          amount: cashAmount, 
+          reason: "Bank statements don't show cash deposits by transaction" 
+        }
+      },
+      coverageAnalysis: {
+        volumeCoverage,
+        dateRangeCoverage,
+        fuelDateRange: { earliest: fuelEarliest, latest: fuelLatest, days: fuelDays },
+        bankDateRange: { earliest: bankEarliest, latest: bankLatest, days: bankDays },
+        missingDays,
+        dailyAverages: { fuel: fuelDailyAvg, bank: bankDailyAvg },
+        volumeGap
+      },
+      discrepancyReport: {
+        verifiedSales: matchedCardAmount,
+        bankDeposits: totalBankAmount,
+        difference: Math.abs(matchedCardAmount - totalBankAmount),
+        bankHasMore: totalBankAmount > matchedCardAmount,
+        pendingVerification: { 
+          amount: Math.max(0, pendingVerificationAmount), 
+          transactions: Math.max(0, pendingVerificationTransactions),
+          percentageOfCardSales: cardAmount > 0 ? (Math.max(0, pendingVerificationAmount) / cardAmount) * 100 : 0
+        },
+        unmatchedIssues: { count: unmatchedBankCount, amount: totalBankAmount - matchedBankAmount }
+      },
+      matchingResults: {
+        performanceRating,
+        performanceLabel,
+        bankTransactions: { 
+          matched: matchedBankTransactions, 
+          unmatched: unmatchedBankCount, 
+          matchRate: bankMatchRate 
+        },
+        matchQuality: {
+          highConfidence: parseInt(row.high_confidence || '0'),
+          mediumConfidence: parseInt(row.medium_confidence || '0')
+        },
+        invoiceGrouping: {
+          multiLineInvoices: parseInt(row.grouped_invoices || '0'),
+          totalItemsGrouped: parseInt(row.total_grouped_items || '0')
+        },
+        matchesByDateOffset: {
+          sameDay: parseInt(row.same_day || '0'),
+          oneDay: parseInt(row.one_day || '0'),
+          twoDays: parseInt(row.two_days || '0'),
+          threePlusDays: parseInt(row.three_plus_days || '0')
+        }
+      },
+      recommendedActions: {
+        critical: criticalActions,
+        important: importantActions,
+        optional: optionalActions
+      }
     };
   }
 

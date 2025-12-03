@@ -445,6 +445,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================
+  // VERIFICATION SUMMARY ENDPOINT
+  // ============================================
+  
+  app.get("/api/periods/:periodId/verification-summary", async (req, res) => {
+    try {
+      const summary = await storage.getVerificationSummary(req.params.periodId);
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching verification summary:", error);
+      res.status(500).json({ error: "Failed to fetch verification summary" });
+    }
+  });
+
+  // ============================================
   // MATCHING RULES ENDPOINTS
   // ============================================
   

@@ -125,6 +125,7 @@ Preferred communication style: Simple, everyday language.
 - `GET /api/periods` - List all reconciliation periods
 - `GET /api/periods/:id` - Get specific period details
 - `POST /api/periods` - Create new reconciliation period
+- `GET /api/periods/:id/verification-summary` - Verification-based reconciliation metrics
 - File upload endpoints with multipart/form-data support
 - Column mapping validation endpoints
 - Transaction matching and manual review endpoints
@@ -146,7 +147,7 @@ Preferred communication style: Simple, everyday language.
    - File cards display: filename, size, row count, mapping status
 4. **Column Mapping** - Map detected columns to required fields (date, amount, reference, description, card number)
 5. **Reconcile Transactions** - Review automatic matches, resolve partial matches, manually match unmatched transactions
-6. **Report View** - Generate and export comprehensive reconciliation reports
+6. **Report View** - Redesigned verification-based reconciliation dashboard with 6 sections
 
 **Page Components**
 - Dashboard: Period overview with metrics and quick actions
@@ -154,7 +155,19 @@ Preferred communication style: Simple, everyday language.
 - UploadFiles: Drag-and-drop file upload zones for multiple sources
 - ColumnMapping: Interactive column mapping with sample data preview
 - ReconcileTransactions: Tabbed transaction views with manual matching panel
-- ReportView: Summary statistics and export functionality
+- ReportView: Verification-based dashboard with 6 sections:
+  1. Overview: Fuel vs bank data side-by-side
+  2. Verification Status: Verified, pending, unverified, cash breakdown
+  3. Coverage Analysis: Volume and date coverage with gap analysis
+  4. Discrepancy Report: Financial differences and pending verification
+  5. Matching Results: Performance rating (1-5 stars) with match quality metrics
+  6. Recommended Actions: Priority-based action items (Critical, Important, Optional)
+
+**Key Insight: Verification-Based Metrics**
+- Shows match rate for VERIFIABLE transactions only (e.g., 79.4%)
+- Not misleading overall rate (e.g., 3.81%)
+- Clearly separates what CAN be verified from what CANNOT be verified
+- Helps users understand they need to upload more bank data
 
 ## External Dependencies
 

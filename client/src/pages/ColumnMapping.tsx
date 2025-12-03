@@ -461,8 +461,8 @@ function ConflictResolutionModal({
   
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
-      <DialogContent className="max-w-2xl" data-testid="dialog-conflict-resolution">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col" data-testid="dialog-conflict-resolution">
+        <DialogHeader className="shrink-0">
           <div className="flex items-center justify-between mb-2">
             <Badge variant="outline" className="text-xs">
               Step {currentStep + 1} of {totalSteps}
@@ -490,23 +490,23 @@ function ConflictResolutionModal({
             })()}
             Choose Your {getFieldLabel(currentConflict.field)} Column
           </DialogTitle>
-          <DialogDescription className="text-base mt-2">
+          <DialogDescription className="text-sm mt-1">
             {getFieldDescription(currentConflict.field)}
           </DialogDescription>
         </DialogHeader>
         
-        {/* Tip box */}
-        <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
-            <strong>Tip:</strong> {getFieldTip(currentConflict.field)}
-          </AlertDescription>
-        </Alert>
-        
-        <div className="space-y-3 py-2">
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+          {/* Tip box */}
+          <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+              <strong>Tip:</strong> {getFieldTip(currentConflict.field)}
+            </AlertDescription>
+          </Alert>
+          
           <p className="text-sm text-muted-foreground">
-            Your file has {analyses.length} columns that could contain {getFieldLabel(currentConflict.field).toLowerCase()} data. 
-            Choose the one that looks correct:
+            Your file has {analyses.length} columns that could be used. Choose the best one:
           </p>
           
           {analyses.map(analysis => {
@@ -525,33 +525,33 @@ function ConflictResolutionModal({
                 onClick={() => handleSelectColumn(analysis.column)}
                 data-testid={`card-column-option-${analysis.column}`}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
+                <CardContent className="p-3">
+                  <div className="flex items-start justify-between gap-3">
                     {/* Left side - column info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-medium truncate" title={analysis.column}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm truncate" title={analysis.column}>
                           Column: "{analysis.column}"
                         </span>
                         {isRecommended && (
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 shrink-0">
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 shrink-0 text-xs">
                             Best Choice
                           </Badge>
                         )}
                       </div>
                       
-                      {/* Sample data preview */}
-                      <div className="bg-muted/50 rounded p-2 font-mono text-xs mb-2">
-                        <div className="text-muted-foreground mb-1">Sample values from your file:</div>
-                        {analysis.sampleValues.slice(0, 3).map((val, i) => (
-                          <div key={i} className="truncate py-0.5" title={val}>
+                      {/* Sample data preview - more compact */}
+                      <div className="bg-muted/50 rounded p-2 font-mono text-xs mb-1">
+                        <div className="text-muted-foreground text-xs mb-0.5">Sample values from your file:</div>
+                        {analysis.sampleValues.slice(0, 2).map((val, i) => (
+                          <div key={i} className="truncate" title={val}>
                             {val}
                           </div>
                         ))}
                       </div>
                       
                       {/* Friendly recommendation */}
-                      <p className={`text-sm ${
+                      <p className={`text-xs ${
                         analysis.recommendation === 'RECOMMENDED' 
                           ? 'text-green-700 dark:text-green-400' 
                           : analysis.recommendation === 'ACCEPTABLE'
@@ -581,7 +581,7 @@ function ConflictResolutionModal({
           })}
         </div>
         
-        <DialogFooter className="gap-2 mt-4">
+        <DialogFooter className="gap-2 pt-4 shrink-0 border-t">
           <Button 
             variant="outline" 
             onClick={isFirstStep ? onCancel : handleBack}

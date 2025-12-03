@@ -17,7 +17,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
-import { eq, and, or, desc } from "drizzle-orm";
+import { eq, and, or, desc, sql } from "drizzle-orm";
 
 export interface PeriodSummary {
   totalTransactions: number;
@@ -155,6 +155,55 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(transactions)
       .where(eq(transactions.periodId, periodId))
       .orderBy(desc(transactions.transactionDate));
+  }
+
+  async getTransactionsByPeriodPaginated(
+    periodId: string,
+    options: {
+      limit: number;
+      offset: number;
+      sourceType?: string;
+      matchStatus?: string;
+      isCardTransaction?: string;
+    }
+  ): Promise<{ transactions: Transaction[]; total: number }> {
+    const { limit, offset, sourceType, matchStatus, isCardTransaction } = options;
+    
+    // Build conditions array
+    const conditions: any[] = [eq(transactions.periodId, periodId)];
+    
+    if (sourceType) {
+      if (sourceType === 'bank') {
+        conditions.push(sql`${transactions.sourceType} LIKE 'bank%'`);
+      } else {
+        conditions.push(eq(transactions.sourceType, sourceType));
+      }
+    }
+    
+    if (matchStatus) {
+      conditions.push(eq(transactions.matchStatus, matchStatus));
+    }
+    
+    if (isCardTransaction) {
+      conditions.push(eq(transactions.isCardTransaction, isCardTransaction));
+    }
+    
+    // Get paginated transactions
+    const result = await db.select().from(transactions)
+      .where(and(...conditions))
+      .orderBy(desc(transactions.transactionDate))
+      .limit(limit)
+      .offset(offset);
+    
+    // Get total count
+    const [countResult] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(and(...conditions));
+    
+    return {
+      transactions: result,
+      total: countResult?.count || 0
+    };
   }
 
   async getTransactionsByFile(fileId: string): Promise<Transaction[]> {

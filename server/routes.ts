@@ -418,8 +418,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/periods/:periodId/transactions", async (req, res) => {
     try {
-      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      res.json(transactions);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const offset = (page - 1) * limit;
+      const sourceType = req.query.sourceType as string | undefined;
+      const matchStatus = req.query.matchStatus as string | undefined;
+      const isCardTransaction = req.query.isCardTransaction as string | undefined;
+      
+      const result = await storage.getTransactionsByPeriodPaginated(
+        req.params.periodId,
+        { limit, offset, sourceType, matchStatus, isCardTransaction }
+      );
+      
+      res.json({
+        transactions: result.transactions,
+        total: result.total,
+        page,
+        limit,
+        totalPages: Math.ceil(result.total / limit)
+      });
     } catch (error) {
       console.error("Error fetching transactions:", error);
       res.status(500).json({ error: "Failed to fetch transactions" });

@@ -209,17 +209,106 @@ function analyzeColumnQuality(
   };
 }
 
+// Field metadata with friendly names and explanations
+const FIELD_METADATA: Record<string, { 
+  title: string; 
+  description: string; 
+  matchTip: string;
+  icon: string;
+}> = {
+  date: {
+    title: "Transaction Date",
+    description: "When the transaction happened. This is essential for matching payments between your fuel system and bank statements.",
+    matchTip: "Look for columns with dates like '2025-01-15' or '15/01/2025'",
+    icon: "📅"
+  },
+  time: {
+    title: "Transaction Time",
+    description: "The exact time of day the transaction occurred. Helps match transactions that happen on the same day.",
+    matchTip: "Look for columns with times like '14:30' or '2:30 PM'",
+    icon: "🕐"
+  },
+  amount: {
+    title: "Transaction Amount",
+    description: "The Rand value of the transaction. This is critical for matching - amounts must match exactly.",
+    matchTip: "Look for columns with money values like 'R 150.00' or '150.00'",
+    icon: "💰"
+  },
+  reference: {
+    title: "Reference Number",
+    description: "A unique ID for the transaction. This helps identify and match specific payments.",
+    matchTip: "Look for short codes or IDs, not long processor strings",
+    icon: "🔖"
+  },
+  description: {
+    title: "Description",
+    description: "Additional details about the transaction. Useful for manually identifying transactions.",
+    matchTip: "Look for columns with text describing what was purchased",
+    icon: "📝"
+  },
+  cardNumber: {
+    title: "Card Number",
+    description: "The last 4 digits of the payment card. Helps match card transactions between systems.",
+    matchTip: "Look for columns showing '****1234' or just the last 4 digits",
+    icon: "💳"
+  },
+  paymentType: {
+    title: "Payment Type",
+    description: "Whether this was a card or cash payment. Only card payments are matched.",
+    matchTip: "Look for columns with 'Card', 'Cash', 'Credit', etc.",
+    icon: "🏷️"
+  }
+};
+
 function getFieldLabel(field: string): string {
-  const labels: Record<string, string> = {
-    date: "Date",
-    time: "Time",
-    amount: "Amount",
-    reference: "Reference",
-    description: "Description",
-    cardNumber: "Card Number",
-    paymentType: "Payment Type",
-  };
-  return labels[field] || field;
+  return FIELD_METADATA[field]?.title || field;
+}
+
+function getFieldDescription(field: string): string {
+  return FIELD_METADATA[field]?.description || "";
+}
+
+function getFieldTip(field: string): string {
+  return FIELD_METADATA[field]?.matchTip || "";
+}
+
+// Generate a friendly reason why a column is recommended
+function getFriendlyRecommendation(analysis: ColumnQuality, field: string): string {
+  const { validCount, headerCount, emptyCount, sampleValues, recommendation } = analysis;
+  const total = validCount + headerCount + emptyCount;
+  
+  if (recommendation === 'RECOMMENDED') {
+    // Check the sample data to give a more specific reason
+    if (field === 'reference' && sampleValues[0]?.length < 15) {
+      return "Short, clean reference codes - perfect for matching";
+    }
+    if (field === 'amount' && sampleValues.some(v => v.includes('R') || /^\d/.test(v))) {
+      return "Contains proper Rand amounts - ready to use";
+    }
+    if (field === 'date') {
+      return "Contains valid dates that can be matched";
+    }
+    return `${validCount} of ${total} rows have valid data`;
+  }
+  
+  if (recommendation === 'ACCEPTABLE') {
+    if (headerCount > 0) {
+      return `Usable, but contains ${headerCount} header row(s) mixed in`;
+    }
+    return "Data is usable but some values may not parse correctly";
+  }
+  
+  // NOT_RECOMMENDED
+  if (field === 'reference' && sampleValues[0]?.length > 30) {
+    return "Contains long processor codes - harder to read and match";
+  }
+  if (emptyCount > validCount) {
+    return "Too many empty values - may cause matching issues";
+  }
+  if (headerCount > 1) {
+    return "Contains multiple header rows mixed with data";
+  }
+  return "Data quality is low - consider using another column";
 }
 
 interface ConflictResolutionModalProps {
@@ -237,10 +326,17 @@ function ConflictResolutionModal({
   onResolve,
   onCancel
 }: ConflictResolutionModalProps) {
+  const [currentStep, setCurrentStep] = useState(0);
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  const [showSummary, setShowSummary] = useState(false);
   
+  // Reset state when modal opens
   useEffect(() => {
     if (open) {
+      setCurrentStep(0);
+      setShowSummary(false);
+      
+      // Pre-select recommended columns
       const autoResolutions: Record<string, string> = {};
       for (const conflict of conflicts) {
         const analyses = conflict.columns.map(col => 
@@ -256,161 +352,261 @@ function ConflictResolutionModal({
     }
   }, [open, conflicts, sampleRows]);
   
-  const allResolved = conflicts.every(c => resolutions[c.field]);
+  const totalSteps = conflicts.length;
+  const currentConflict = conflicts[currentStep];
+  const isLastStep = currentStep === totalSteps - 1;
+  const isFirstStep = currentStep === 0;
+  
+  const handleNext = () => {
+    if (isLastStep) {
+      setShowSummary(true);
+    } else {
+      setCurrentStep(prev => prev + 1);
+    }
+  };
+  
+  const handleBack = () => {
+    if (showSummary) {
+      setShowSummary(false);
+    } else if (!isFirstStep) {
+      setCurrentStep(prev => prev - 1);
+    }
+  };
   
   const handleApply = () => {
     onResolve(resolutions);
   };
   
+  const handleSelectColumn = (column: string) => {
+    setResolutions(prev => ({ ...prev, [currentConflict.field]: column }));
+  };
+  
+  // Summary view
+  if (showSummary) {
+    return (
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
+        <DialogContent className="max-w-lg" data-testid="dialog-conflict-summary">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Review Your Choices
+            </DialogTitle>
+            <DialogDescription>
+              Here's a summary of the columns you've chosen. Click "Apply" to save, or go back to make changes.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 py-4">
+            {conflicts.map((conflict, idx) => {
+              const chosenColumn = resolutions[conflict.field];
+              return (
+                <div 
+                  key={conflict.field}
+                  className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-lg">{FIELD_METADATA[conflict.field]?.icon || "📄"}</div>
+                    <div>
+                      <div className="font-medium text-sm">{getFieldLabel(conflict.field)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Using: <span className="font-mono">{chosenColumn}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => {
+                      setShowSummary(false);
+                      setCurrentStep(idx);
+                    }}
+                    data-testid={`button-edit-${conflict.field}`}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={handleBack} data-testid="button-back-to-steps">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back
+            </Button>
+            <Button onClick={handleApply} data-testid="button-apply-resolution">
+              <Check className="h-4 w-4 mr-1" />
+              Apply and Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+  
+  // Stepper view - one conflict at a time
+  if (!currentConflict) return null;
+  
+  const analyses = currentConflict.columns.map(col => 
+    analyzeColumnQuality(col, sampleRows, currentConflict.field)
+  );
+  const recommended = analyses.find(a => a.recommendation === 'RECOMMENDED')?.column ||
+                      analyses.sort((a, b) => b.validCount - a.validCount)[0]?.column;
+  const selectedColumn = resolutions[currentConflict.field];
+  
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-conflict-resolution">
+      <DialogContent className="max-w-2xl" data-testid="dialog-conflict-resolution">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-amber-500" />
-            Resolve Mapping Conflicts
+          <div className="flex items-center justify-between mb-2">
+            <Badge variant="outline" className="text-xs">
+              Step {currentStep + 1} of {totalSteps}
+            </Badge>
+            {/* Progress dots */}
+            <div className="flex gap-1.5">
+              {conflicts.map((_, idx) => (
+                <div 
+                  key={idx}
+                  className={`h-2 w-2 rounded-full transition-colors ${
+                    idx === currentStep 
+                      ? 'bg-primary' 
+                      : idx < currentStep 
+                        ? 'bg-green-500' 
+                        : 'bg-muted'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <span className="text-2xl">{FIELD_METADATA[currentConflict.field]?.icon || "📄"}</span>
+            Choose Your {getFieldLabel(currentConflict.field)} Column
           </DialogTitle>
-          <DialogDescription>
-            Multiple columns are mapped to the same field. We've analyzed your data to recommend the best column for each field.
+          <DialogDescription className="text-base mt-2">
+            {getFieldDescription(currentConflict.field)}
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-6 py-4">
-          {conflicts.map((conflict) => {
-            const analyses = conflict.columns.map(col => 
-              analyzeColumnQuality(col, sampleRows, conflict.field)
-            );
-            const recommended = analyses.find(a => a.recommendation === 'RECOMMENDED')?.column ||
-                                analyses.sort((a, b) => b.validCount - a.validCount)[0]?.column;
+        {/* Tip box */}
+        <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+            <strong>Tip:</strong> {getFieldTip(currentConflict.field)}
+          </AlertDescription>
+        </Alert>
+        
+        <div className="space-y-3 py-2">
+          <p className="text-sm text-muted-foreground">
+            Your file has {analyses.length} columns that could contain {getFieldLabel(currentConflict.field).toLowerCase()} data. 
+            Choose the one that looks correct:
+          </p>
+          
+          {analyses.map(analysis => {
+            const isRecommended = analysis.column === recommended;
+            const isSelected = selectedColumn === analysis.column;
+            const friendlyReason = getFriendlyRecommendation(analysis, currentConflict.field);
             
             return (
-              <div key={conflict.field} className="space-y-3">
-                <h3 className="font-semibold text-lg">
-                  {getFieldLabel(conflict.field)} Field
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {analyses.map(analysis => {
-                    const isRecommended = analysis.column === recommended;
-                    const isSelected = resolutions[conflict.field] === analysis.column;
+              <Card 
+                key={analysis.column}
+                className={`cursor-pointer transition-all hover-elevate ${
+                  isSelected 
+                    ? 'ring-2 ring-primary border-primary' 
+                    : ''
+                }`}
+                onClick={() => handleSelectColumn(analysis.column)}
+                data-testid={`card-column-option-${analysis.column}`}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Left side - column info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-medium truncate" title={analysis.column}>
+                          Column: "{analysis.column}"
+                        </span>
+                        {isRecommended && (
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 shrink-0">
+                            Best Choice
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {/* Sample data preview */}
+                      <div className="bg-muted/50 rounded p-2 font-mono text-xs mb-2">
+                        <div className="text-muted-foreground mb-1">Sample values from your file:</div>
+                        {analysis.sampleValues.slice(0, 3).map((val, i) => (
+                          <div key={i} className="truncate py-0.5" title={val}>
+                            {val}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Friendly recommendation */}
+                      <p className={`text-sm ${
+                        analysis.recommendation === 'RECOMMENDED' 
+                          ? 'text-green-700 dark:text-green-400' 
+                          : analysis.recommendation === 'ACCEPTABLE'
+                            ? 'text-blue-700 dark:text-blue-400'
+                            : 'text-amber-700 dark:text-amber-400'
+                      }`}>
+                        {analysis.recommendation === 'RECOMMENDED' && "✓ "}
+                        {analysis.recommendation === 'NOT_RECOMMENDED' && "⚠ "}
+                        {friendlyReason}
+                      </p>
+                    </div>
                     
-                    return (
-                      <Card 
-                        key={analysis.column}
-                        className={`cursor-pointer transition-all ${
-                          isSelected 
-                            ? 'ring-2 ring-primary border-primary' 
-                            : isRecommended 
-                              ? 'border-green-500/50' 
-                              : ''
-                        }`}
-                        onClick={() => setResolutions(prev => ({ ...prev, [conflict.field]: analysis.column }))}
-                        data-testid={`card-column-option-${analysis.column}`}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium truncate" title={analysis.column}>
-                                {analysis.column}
-                              </span>
-                              {isRecommended && (
-                                <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                                  Recommended
-                                </Badge>
-                              )}
-                            </div>
-                            {isSelected && (
-                              <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                                <Check className="h-3 w-3 text-primary-foreground" />
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Sample data:</p>
-                              <div className="bg-muted/50 rounded p-2 font-mono text-xs max-h-20 overflow-y-auto">
-                                {analysis.sampleValues.slice(0, 3).map((val, i) => (
-                                  <div key={i} className="truncate" title={val}>{val}</div>
-                                ))}
-                              </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-3 gap-2 text-xs">
-                              <div className="bg-muted/30 rounded p-2 text-center">
-                                <div className="font-semibold text-green-600">{analysis.validCount}</div>
-                                <div className="text-muted-foreground">Valid</div>
-                              </div>
-                              <div className="bg-muted/30 rounded p-2 text-center">
-                                <div className="font-semibold text-amber-600">{analysis.headerCount}</div>
-                                <div className="text-muted-foreground">Headers</div>
-                              </div>
-                              <div className="bg-muted/30 rounded p-2 text-center">
-                                <div className="font-semibold text-muted-foreground">{analysis.emptyCount}</div>
-                                <div className="text-muted-foreground">Empty</div>
-                              </div>
-                            </div>
-                            
-                            <Alert 
-                              className={`py-2 ${
-                                analysis.recommendation === 'RECOMMENDED' 
-                                  ? 'border-green-500/50 bg-green-50 dark:bg-green-950' 
-                                  : analysis.recommendation === 'ACCEPTABLE'
-                                    ? 'border-blue-500/50 bg-blue-50 dark:bg-blue-950'
-                                    : 'border-red-500/50 bg-red-50 dark:bg-red-950'
-                              }`}
-                            >
-                              <AlertDescription className={`text-xs ${
-                                analysis.recommendation === 'RECOMMENDED' 
-                                  ? 'text-green-700 dark:text-green-300' 
-                                  : analysis.recommendation === 'ACCEPTABLE'
-                                    ? 'text-blue-700 dark:text-blue-300'
-                                    : 'text-red-700 dark:text-red-300'
-                              }`}>
-                                {analysis.reason}
-                              </AlertDescription>
-                            </Alert>
-                            
-                            <Button 
-                              variant={isSelected ? "default" : "outline"}
-                              size="sm"
-                              className="w-full"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setResolutions(prev => ({ ...prev, [conflict.field]: analysis.column }));
-                              }}
-                              data-testid={`button-select-column-${analysis.column}`}
-                            >
-                              {isSelected ? (
-                                <>
-                                  <Check className="h-4 w-4 mr-1" />
-                                  Selected
-                                </>
-                              ) : (
-                                'Use This Column'
-                              )}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
+                    {/* Right side - selection indicator */}
+                    <div className="shrink-0">
+                      {isSelected ? (
+                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                          <Check className="h-5 w-5 text-primary-foreground" />
+                        </div>
+                      ) : (
+                        <div className="h-8 w-8 rounded-full border-2 border-muted" />
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
         
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onCancel} data-testid="button-cancel-resolution">
-            Cancel
+        <DialogFooter className="gap-2 mt-4">
+          <Button 
+            variant="outline" 
+            onClick={isFirstStep ? onCancel : handleBack}
+            data-testid="button-back-step"
+          >
+            {isFirstStep ? (
+              <>
+                <X className="h-4 w-4 mr-1" />
+                Cancel
+              </>
+            ) : (
+              <>
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </>
+            )}
           </Button>
           <Button 
-            onClick={handleApply}
-            disabled={!allResolved}
-            data-testid="button-apply-resolution"
+            onClick={handleNext}
+            disabled={!selectedColumn}
+            data-testid="button-next-step"
           >
-            Apply and Continue
+            {isLastStep ? (
+              <>
+                Review Choices
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </>
+            ) : (
+              <>
+                Next Step
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

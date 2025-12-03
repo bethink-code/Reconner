@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Download, Zap, ChevronLeft, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ArrowLeft, Download, Zap, ChevronLeft, ChevronRight, Settings, ChevronDown } from "lucide-react";
 import TransactionTable from "@/components/TransactionTable";
+import MatchingRulesPanel from "@/components/MatchingRulesPanel";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -43,6 +45,7 @@ export default function ReconcileTransactions() {
   const [activeTab, setActiveTab] = useState("all");
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const ITEMS_PER_PAGE = 50;
 
   useEffect(() => {
@@ -271,6 +274,30 @@ export default function ReconcileTransactions() {
               </CardContent>
             </Card>
           </div>
+
+          <Collapsible open={rulesOpen} onOpenChange={setRulesOpen}>
+            <CollapsibleTrigger asChild>
+              <Button 
+                variant="outline" 
+                className="w-full justify-between"
+                data-testid="button-toggle-rules"
+              >
+                <span className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Matching Rules
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${rulesOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-4">
+              <MatchingRulesPanel 
+                periodId={periodId} 
+                onRulesChanged={() => {
+                  queryClient.invalidateQueries({ queryKey: ['/api/periods', periodId, 'matching-rules'] });
+                }}
+              />
+            </CollapsibleContent>
+          </Collapsible>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>

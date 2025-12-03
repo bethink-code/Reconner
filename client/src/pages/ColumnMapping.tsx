@@ -468,11 +468,15 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        if (errorData.duplicates) {
-          throw { isDuplicateError: true, duplicates: errorData.duplicates };
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          if (errorData.duplicates) {
+            throw { isDuplicateError: true, duplicates: errorData.duplicates };
+          }
+          throw new Error(errorData.message || errorData.error || "Failed to save mapping");
         }
-        throw new Error(errorData.message || errorData.error || "Failed to save mapping");
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
       }
       return await response.json();
     },

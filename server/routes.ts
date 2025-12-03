@@ -9,7 +9,8 @@ import {
   insertReconciliationPeriodSchema,
   insertUploadedFileSchema,
   insertTransactionSchema,
-  insertMatchSchema 
+  insertMatchSchema,
+  matchingRulesConfigSchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -459,10 +460,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/periods/:periodId/matching-rules", async (req, res) => {
     try {
-      const rules = req.body;
-      const saved = await storage.saveMatchingRules(req.params.periodId, rules);
+      const validatedRules = matchingRulesConfigSchema.parse(req.body);
+      const saved = await storage.saveMatchingRules(req.params.periodId, validatedRules);
       res.json({ success: true, rules: saved });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        console.error("Validation error:", error.errors);
+        return res.status(400).json({ error: "Invalid matching rules data", details: error.errors });
+      }
       console.error("Error saving matching rules:", error);
       res.status(500).json({ error: "Failed to save matching rules" });
     }

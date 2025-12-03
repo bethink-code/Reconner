@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, jsonb, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -125,10 +125,10 @@ export const matchingRules = pgTable("matching_rules", {
   timeWindowMinutes: integer("time_window_minutes").notNull().default(60),
   
   // Grouping options
-  groupByInvoice: text("group_by_invoice").notNull().default("true"), // 'true' or 'false' as text
+  groupByInvoice: boolean("group_by_invoice").notNull().default(true),
   
   // Matching requirements
-  requireCardMatch: text("require_card_match").notNull().default("false"),
+  requireCardMatch: boolean("require_card_match").notNull().default(false),
   
   // Confidence thresholds (0-100)
   minimumConfidence: integer("minimum_confidence").notNull().default(70),
@@ -148,13 +148,15 @@ export const insertMatchingRulesSchema = createInsertSchema(matchingRules).omit(
 export type InsertMatchingRules = z.infer<typeof insertMatchingRulesSchema>;
 export type MatchingRules = typeof matchingRules.$inferSelect;
 
-// Interface for matching rules in application code
-export interface MatchingRulesConfig {
-  amountTolerance: number;
-  dateWindowDays: number;
-  timeWindowMinutes: number;
-  groupByInvoice: boolean;
-  requireCardMatch: boolean;
-  minimumConfidence: number;
-  autoMatchThreshold: number;
-}
+// Zod schema for API validation
+export const matchingRulesConfigSchema = z.object({
+  amountTolerance: z.number().min(0).max(10),
+  dateWindowDays: z.number().int().min(0).max(7),
+  timeWindowMinutes: z.number().int().min(15).max(180),
+  groupByInvoice: z.boolean(),
+  requireCardMatch: z.boolean(),
+  minimumConfidence: z.number().int().min(0).max(100),
+  autoMatchThreshold: z.number().int().min(0).max(100),
+});
+
+export type MatchingRulesConfig = z.infer<typeof matchingRulesConfigSchema>;

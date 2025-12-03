@@ -424,8 +424,8 @@ export class DatabaseStorage implements IStorage {
       amountTolerance: parseFloat(rules.amountTolerance),
       dateWindowDays: rules.dateWindowDays,
       timeWindowMinutes: rules.timeWindowMinutes,
-      groupByInvoice: rules.groupByInvoice === 'true',
-      requireCardMatch: rules.requireCardMatch === 'true',
+      groupByInvoice: rules.groupByInvoice,
+      requireCardMatch: rules.requireCardMatch,
       minimumConfidence: rules.minimumConfidence,
       autoMatchThreshold: rules.autoMatchThreshold
     };
@@ -440,16 +440,25 @@ export class DatabaseStorage implements IStorage {
       amountTolerance: String(rules.amountTolerance),
       dateWindowDays: rules.dateWindowDays,
       timeWindowMinutes: rules.timeWindowMinutes,
-      groupByInvoice: String(rules.groupByInvoice),
-      requireCardMatch: String(rules.requireCardMatch),
+      groupByInvoice: rules.groupByInvoice,
+      requireCardMatch: rules.requireCardMatch,
       minimumConfidence: rules.minimumConfidence,
       autoMatchThreshold: rules.autoMatchThreshold,
     };
     
     if (existing) {
-      // Update existing rules
+      // Update existing rules - exclude periodId to avoid unique constraint issues
       const [updated] = await db.update(matchingRules)
-        .set({ ...rulesData, updatedAt: new Date() })
+        .set({ 
+          amountTolerance: rulesData.amountTolerance,
+          dateWindowDays: rulesData.dateWindowDays,
+          timeWindowMinutes: rulesData.timeWindowMinutes,
+          groupByInvoice: rulesData.groupByInvoice,
+          requireCardMatch: rulesData.requireCardMatch,
+          minimumConfidence: rulesData.minimumConfidence,
+          autoMatchThreshold: rulesData.autoMatchThreshold,
+          updatedAt: new Date() 
+        })
         .where(eq(matchingRules.periodId, periodId))
         .returning();
       return updated;

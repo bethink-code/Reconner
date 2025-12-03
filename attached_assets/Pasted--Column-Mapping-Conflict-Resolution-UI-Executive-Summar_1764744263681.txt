@@ -1,0 +1,781 @@
+# Column Mapping Conflict Resolution UI
+
+## Executive Summary
+
+This document outlines the implementation of a smart conflict resolution UI for when users map multiple columns to the same field during file upload. The system automatically analyzes data quality and recommends the best column to use.
+
+---
+
+## Problem Statement
+
+### Current UX Issue
+
+When users upload files with similar column names (e.g., `_1` and `Date / Time` both containing date data), they can accidentally map both to the same field:
+
+```
+⚠ Warning: Both "_1" and "Date / Time" are mapped to Date
+
+User sees:
+[Dropdown: _1 → Date]
+[Dropdown: Date / Time → Date]  ← Which one do I ignore?!
+
+User thinks: "I have no idea which one has the actual data!"
+```
+
+**Result:** Users guess randomly, leading to:
+- Invalid data being imported (header rows as data)
+- Valid data being ignored
+- Zero matches in reconciliation
+- Confused and frustrated users
+
+---
+
+## Solution Overview
+
+### Smart Conflict Resolution System
+
+1. **Automatic Detection** - Detect duplicate mappings when user clicks "Confirm"
+2. **Data Quality Analysis** - Analyze sample rows to determine which column has valid data
+3. **Visual Comparison** - Show side-by-side comparison with recommendations
+4. **One-Click Resolution** - User clicks button to choose the correct column
+
+---
+
+## Implementation Guide
+
+### Step 1: Detect Mapping Conflicts
+
+```typescript
+interface MappingConflict {
+  field: string;        // e.g., "date", "amount"
+  columns: string[];    // e.g., ["_1", "Date / Time"]
+}
+
+function detectMappingConflicts(
+  columnMapping: Record<string, string>
+): MappingConflict[] {
+  const fieldToColumns: Record<string, string[]> = {};
+  
+  // Group columns by their mapped field
+  for (const [column, field] of Object.entries(columnMapping)) {
+    if (field === 'ignore') continue;
+    
+    if (!fieldToColumns[field]) {
+      fieldToColumns[field] = [];
+    }
+    fieldToColumns[field].push(column);
+  }
+  
+  // Return only fields with multiple columns
+  return Object.entries(fieldToColumns)
+    .filter(([_, columns]) => columns.length > 1)
+    .map(([field, columns]) => ({ field, columns }));
+}
+
+// Usage in your confirm handler:
+function handleConfirmMapping() {
+  const conflicts = detectMappingConflicts(columnMapping);
+  
+  if (conflicts.length > 0) {
+    // Show conflict resolution modal
+    setShowConflictModal(true);
+    setConflicts(conflicts);
+  } else {
+    // Proceed with processing
+    confirmMapping();
+  }
+}
+```
+
+---
+
+### Step 2: Analyze Column Data Quality
+
+```typescript
+interface ColumnQuality {
+  column: string;
+  validCount: number;
+  headerCount: number;
+  emptyCount: number;
+  recommendation: 'RECOMMENDED' | 'ACCEPTABLE' | 'NOT_RECOMMENDED';
+  reason: string;
+  sampleValues: string[];
+}
+
+function analyzeColumnQuality(
+  column: string,
+  sampleRows: any[],
+  field: string
+): ColumnQuality {
+  const values = sampleRows.map(row => row[column]);
+  
+  let validCount = 0;
+  let headerCount = 0;
+  let emptyCount = 0;
+  const sampleValues: string[] = [];
+  
+  for (const val of values) {
+    const str = String(val || '').trim();
+    
+    // Collect first 3 samples
+    if (sampleValues.length < 3) {
+      sampleValues.push(str || '(empty)');
+    }
+    
+    if (!str) {
+      emptyCount++;
+      continue;
+    }
+    
+    // Check if it's a header keyword
+    const headerKeywords = [
+      'Date', 'Time', 'Date / Time', 'Amount', 
+      'Reference', 'Description', 'Invoice', 'Card Number'
+    ];
+    if (headerKeywords.includes(str)) {
+      headerCount++;
+      continue;
+    }
+    
+    // Check if it looks like valid data for this field
+    let isValid = false;
+    switch (field) {
+      case 'date':
+        // Excel serial: 45948.938...
+        // ISO format: 2025-11-27
+        // Formatted: 27/11/2025 or 27 Nov
+        isValid = /^\d{4,5}/.test(str) || 
+                  /^\d{4}-\d{2}-\d{2}/.test(str) || 
+                  /^\d{1,2}[\/\-]\d{1,2}/.test(str) ||
+                  /^\d{1,2}\s+\w{3}/.test(str);
+        break;
+        
+      case 'time':
+        // HH:MM:SS or HH:MM
+        isValid = /^\d{1,2}:\d{2}(:\d{2})?$/.test(str);
+        break;
+        
+      case 'amount':
+        // Numeric with optional currency and comma separators
+        isValid = /^[R$€£]?\s?[\d,]+\.?\d*$/.test(str);
+        break;
+        
+      case 'reference':
+      case 'description':
+        // Any non-empty, non-header string
+        isValid = str.length > 0;
+        break;
+        
+      case 'cardNumber':
+        // Card numbers: ****1234 or full numbers
+        isValid = /^\*{4}\d{4}$/.test(str) || /^\d{12,19}$/.test(str);
+        break;
+        
+      default:
+        // For other fields, assume non-empty is valid
+        isValid = true;
+    }
+    
+    if (isValid) {
+      validCount++;
+    }
+  }
+  
+  // Calculate recommendation
+  const validPercent = (validCount / values.length) * 100;
+  const headerPercent = (headerCount / values.length) * 100;
+  
+  let recommendation: ColumnQuality['recommendation'];
+  let reason: string;
+  
+  if (validPercent > 80 && headerPercent < 10) {
+    recommendation = 'RECOMMENDED';
+    reason = `${validPercent.toFixed(0)}% valid data`;
+  } else if (validPercent > 50) {
+    recommendation = 'ACCEPTABLE';
+    reason = `${validPercent.toFixed(0)}% valid data, ${headerCount} headers found`;
+  } else {
+    recommendation = 'NOT_RECOMMENDED';
+    reason = `Only ${validPercent.toFixed(0)}% valid data, ${headerCount} headers found`;
+  }
+  
+  return {
+    column,
+    validCount,
+    headerCount,
+    emptyCount,
+    recommendation,
+    reason,
+    sampleValues
+  };
+}
+```
+
+---
+
+### Step 3: Conflict Resolution Modal Component
+
+```tsx
+import React from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Alert,
+  Box,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper
+} from '@mui/material';
+
+interface ConflictResolutionModalProps {
+  open: boolean;
+  conflicts: MappingConflict[];
+  sampleRows: any[];
+  onResolve: (field: string, chosenColumn: string) => void;
+  onCancel: () => void;
+}
+
+export function ConflictResolutionModal({
+  open,
+  conflicts,
+  sampleRows,
+  onResolve,
+  onCancel
+}: ConflictResolutionModalProps) {
+  const [resolutions, setResolutions] = React.useState<Record<string, string>>({});
+  
+  // Track which conflicts have been resolved
+  const allResolved = conflicts.every(c => resolutions[c.field]);
+  
+  const handleResolveAll = () => {
+    // Apply all resolutions
+    for (const [field, column] of Object.entries(resolutions)) {
+      onResolve(field, column);
+    }
+  };
+  
+  return (
+    <Dialog open={open} maxWidth="lg" fullWidth>
+      <DialogTitle>
+        Resolve Mapping Conflicts
+      </DialogTitle>
+      
+      <DialogContent>
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Multiple columns are mapped to the same field. 
+          We've analyzed your data to help you choose the best column for each field.
+        </Alert>
+        
+        {conflicts.map((conflict, index) => (
+          <ConflictResolver
+            key={conflict.field}
+            conflict={conflict}
+            sampleRows={sampleRows}
+            isLast={index === conflicts.length - 1}
+            selectedColumn={resolutions[conflict.field]}
+            onSelect={(column) => {
+              setResolutions(prev => ({ ...prev, [conflict.field]: column }));
+            }}
+          />
+        ))}
+      </DialogContent>
+      
+      <DialogActions>
+        <Button onClick={onCancel} color="inherit">
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleResolveAll}
+          variant="contained"
+          disabled={!allResolved}
+        >
+          Apply Changes
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+interface ConflictResolverProps {
+  conflict: MappingConflict;
+  sampleRows: any[];
+  isLast: boolean;
+  selectedColumn?: string;
+  onSelect: (column: string) => void;
+}
+
+function ConflictResolver({
+  conflict,
+  sampleRows,
+  isLast,
+  selectedColumn,
+  onSelect
+}: ConflictResolverProps) {
+  // Analyze each column
+  const analyses = conflict.columns.map(col => 
+    analyzeColumnQuality(col, sampleRows, conflict.field)
+  );
+  
+  // Find the recommended column
+  const recommended = analyses.find(a => a.recommendation === 'RECOMMENDED')?.column ||
+                      analyses.sort((a, b) => b.validCount - a.validCount)[0]?.column;
+  
+  return (
+    <Box sx={{ mb: isLast ? 0 : 4 }}>
+      <Typography variant="h6" gutterBottom>
+        {conflict.field.charAt(0).toUpperCase() + conflict.field.slice(1)} Field
+      </Typography>
+      
+      <Grid container spacing={2}>
+        {analyses.map(analysis => {
+          const isRecommended = analysis.column === recommended;
+          const isSelected = analysis.column === selectedColumn;
+          
+          return (
+            <Grid item xs={12} md={6} key={analysis.column}>
+              <Card 
+                variant="outlined"
+                sx={{
+                  border: isSelected ? 2 : 1,
+                  borderColor: isSelected 
+                    ? 'primary.main' 
+                    : isRecommended 
+                      ? 'success.main' 
+                      : 'divider',
+                  bgcolor: isSelected ? 'action.selected' : 'background.paper',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    boxShadow: 2
+                  }
+                }}
+                onClick={() => onSelect(analysis.column)}
+              >
+                <CardContent>
+                  {/* Column Name & Badge */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {analysis.column}
+                    </Typography>
+                    {isRecommended && (
+                      <Chip 
+                        label="Recommended" 
+                        color="success" 
+                        size="small" 
+                        sx={{ ml: 1 }}
+                      />
+                    )}
+                    {isSelected && (
+                      <Chip 
+                        label="Selected" 
+                        color="primary" 
+                        size="small" 
+                        sx={{ ml: 1 }}
+                      />
+                    )}
+                  </Box>
+                  
+                  {/* Sample Data */}
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Sample data:
+                  </Typography>
+                  <Box 
+                    sx={{ 
+                      fontFamily: 'monospace', 
+                      fontSize: '0.875rem',
+                      bgcolor: 'grey.100',
+                      p: 1.5,
+                      borderRadius: 1,
+                      mb: 2,
+                      maxHeight: 80,
+                      overflow: 'auto'
+                    }}
+                  >
+                    {analysis.sampleValues.map((val, i) => (
+                      <div key={i}>{val}</div>
+                    ))}
+                  </Box>
+                  
+                  {/* Statistics */}
+                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                    <Table size="small">
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>Valid data</TableCell>
+                          <TableCell align="right">
+                            <strong>{analysis.validCount}</strong> / {sampleRows.length}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>Headers found</TableCell>
+                          <TableCell align="right">
+                            {analysis.headerCount}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>Empty values</TableCell>
+                          <TableCell align="right">
+                            {analysis.emptyCount}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  
+                  {/* Recommendation Reason */}
+                  <Alert 
+                    severity={
+                      analysis.recommendation === 'RECOMMENDED' ? 'success' :
+                      analysis.recommendation === 'ACCEPTABLE' ? 'info' : 'error'
+                    }
+                    sx={{ mb: 2 }}
+                  >
+                    {analysis.reason}
+                  </Alert>
+                  
+                  {/* Action Button */}
+                  <Button
+                    fullWidth
+                    variant={isSelected ? 'contained' : isRecommended ? 'contained' : 'outlined'}
+                    color={isSelected ? 'primary' : isRecommended ? 'success' : 'inherit'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect(analysis.column);
+                    }}
+                  >
+                    {isSelected ? 'Selected' : 'Use This Column'}
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+          );
+        })}
+      </Grid>
+    </Box>
+  );
+}
+```
+
+---
+
+### Step 4: Apply Resolution
+
+```typescript
+function resolveConflict(
+  field: string,
+  chosenColumn: string,
+  columnMapping: Record<string, string>,
+  setColumnMapping: (mapping: Record<string, string>) => void
+) {
+  setColumnMapping(prev => {
+    const updated = { ...prev };
+    
+    // Find all columns currently mapped to this field
+    const conflictingColumns = Object.keys(updated).filter(
+      col => updated[col] === field
+    );
+    
+    // Set chosen column to the field
+    updated[chosenColumn] = field;
+    
+    // Set other conflicting columns to 'ignore'
+    for (const col of conflictingColumns) {
+      if (col !== chosenColumn) {
+        updated[col] = 'ignore';
+      }
+    }
+    
+    return updated;
+  });
+}
+```
+
+---
+
+### Step 5: Integration with Existing Mapping UI
+
+```tsx
+function ColumnMappingPage() {
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [conflicts, setConflicts] = useState<MappingConflict[]>([]);
+  const [sampleRows, setSampleRows] = useState<any[]>([]);
+  
+  const handleConfirmMapping = () => {
+    // Detect conflicts
+    const detectedConflicts = detectMappingConflicts(columnMapping);
+    
+    if (detectedConflicts.length > 0) {
+      setConflicts(detectedConflicts);
+      setShowConflictModal(true);
+    } else {
+      // No conflicts, proceed
+      processFile();
+    }
+  };
+  
+  const handleResolveConflict = (field: string, chosenColumn: string) => {
+    resolveConflict(field, chosenColumn, columnMapping, setColumnMapping);
+  };
+  
+  const handleApplyResolutions = () => {
+    setShowConflictModal(false);
+    // Now proceed with processing
+    processFile();
+  };
+  
+  return (
+    <>
+      {/* Existing mapping UI */}
+      <ColumnMappingForm
+        columnMapping={columnMapping}
+        onMappingChange={setColumnMapping}
+      />
+      
+      <Button onClick={handleConfirmMapping}>
+        Confirm Mapping
+      </Button>
+      
+      {/* Conflict Resolution Modal */}
+      <ConflictResolutionModal
+        open={showConflictModal}
+        conflicts={conflicts}
+        sampleRows={sampleRows}
+        onResolve={handleResolveConflict}
+        onCancel={() => setShowConflictModal(false)}
+      />
+    </>
+  );
+}
+```
+
+---
+
+## Visual Design Examples
+
+### Option A: Side-by-Side Cards (Recommended)
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Choose Date Column                                         │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  ┌─────────────────────┐  ┌─────────────────────┐        │
+│  │ _1 ✓ Recommended    │  │ Date / Time         │        │
+│  ├─────────────────────┤  ├─────────────────────┤        │
+│  │ Sample data:        │  │ Sample data:        │        │
+│  │ 45948.9380787037    │  │ Date / Time         │        │
+│  │ 45948.9451388889    │  │ Date / Time         │        │
+│  │ 45949.0234375       │  │ Date / Time         │        │
+│  │                     │  │                     │        │
+│  │ Valid: 27,894 (96%) │  │ Valid: 976 (4%)     │        │
+│  │ Headers: 0          │  │ Headers: 27,894     │        │
+│  │ Empty: 976          │  │ Empty: 0            │        │
+│  │                     │  │                     │        │
+│  │ ✓ 96% valid data    │  │ ⚠ Only 4% valid     │        │
+│  │                     │  │                     │        │
+│  │ [Use This Column]   │  │ [Use This Column]   │        │
+│  └─────────────────────┘  └─────────────────────┘        │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Option B: Comparison Table
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Date Field - Choose Best Column                           │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  Column      Valid    Headers  Empty  Recommendation      │
+│  ──────────  ───────  ───────  ─────  ──────────────      │
+│  _1          27,894   0        976    ✓ RECOMMENDED       │
+│              (96%)                     [Use This]          │
+│                                                            │
+│  Date/Time   976      27,894   0      ⚠ NOT RECOMMENDED   │
+│              (4%)                      [Use This]          │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## User Flow
+
+### Before Implementation
+
+```
+1. User uploads file
+2. User maps columns
+3. User accidentally maps both "_1" and "Date / Time" to Date
+4. System shows warning: "Duplicate mapping"
+5. User confused: "Which one do I change?"
+6. User guesses randomly
+7. Wrong column selected
+8. 28,000 rows imported with invalid dates
+9. Reconciliation fails (0 matches)
+10. User frustrated, contacts support
+```
+
+### After Implementation
+
+```
+1. User uploads file
+2. User maps columns
+3. User accidentally maps both "_1" and "Date / Time" to Date
+4. User clicks "Confirm Mapping"
+5. System detects conflict
+6. Modal shows: "_1 (Recommended) 96% valid" vs "Date / Time 4% valid"
+7. User sees clear recommendation
+8. User clicks "Use _1"
+9. System auto-sets "Date / Time" to "Ignore"
+10. Processing succeeds with clean data
+11. Reconciliation finds matches
+12. User happy! ✓
+```
+
+---
+
+## Benefits
+
+### For Users
+- **Clear guidance** - No guessing which column to use
+- **Data quality insight** - See exactly why one column is better
+- **One-click fix** - Resolve conflicts with single button click
+- **Confidence** - Know they're making the right choice
+
+### For Support Team
+- **Fewer tickets** - Users don't get stuck on mapping
+- **Better data quality** - Less garbage data imported
+- **Self-service** - Users can fix their own mapping issues
+
+### For Product
+- **Higher success rate** - More users complete reconciliation successfully
+- **Better UX** - Professional, polished experience
+- **Trust** - System actively helps users avoid mistakes
+
+---
+
+## Testing Scenarios
+
+### Test Case 1: Clear Winner
+```
+Columns: _1 (96% valid) vs Date / Time (4% valid)
+Expected: Recommend _1, clearly show why
+```
+
+### Test Case 2: Both Similar
+```
+Columns: Transaction Date (85% valid) vs Date (82% valid)
+Expected: Recommend Transaction Date (slightly better), show stats
+```
+
+### Test Case 3: Both Bad
+```
+Columns: Column A (20% valid) vs Column B (15% valid)
+Expected: Recommend Column A, warn user data quality is low
+```
+
+### Test Case 4: Multiple Conflicts
+```
+Conflicts: Date (2 columns), Amount (2 columns), Reference (3 columns)
+Expected: Show all conflicts, allow resolving one by one
+```
+
+---
+
+## Implementation Checklist
+
+- [ ] Add `detectMappingConflicts()` function
+- [ ] Add `analyzeColumnQuality()` function
+- [ ] Create `ConflictResolutionModal` component
+- [ ] Create `ConflictResolver` sub-component
+- [ ] Add conflict detection to confirm mapping handler
+- [ ] Add resolution logic to update column mapping
+- [ ] Add unit tests for conflict detection
+- [ ] Add unit tests for quality analysis
+- [ ] Add E2E test for conflict resolution flow
+- [ ] Update user documentation
+- [ ] Add analytics tracking for conflict resolutions
+
+---
+
+## Future Enhancements
+
+### Phase 2: Machine Learning
+- Learn from user choices
+- Improve recommendations over time
+- Detect common patterns in file formats
+
+### Phase 3: Bulk Operations
+- "Use all recommended" button
+- "Ignore all duplicates" button
+- Save resolution preferences per file type
+
+### Phase 4: Advanced Analysis
+- Cross-reference with other files in period
+- Detect date format mismatches
+- Suggest transformations (e.g., "Convert Excel serial to date")
+
+---
+
+## Conclusion
+
+This conflict resolution UI transforms a confusing, error-prone process into a guided, confident experience. By analyzing data quality and providing clear recommendations, we empower users to make the right choices and avoid importing invalid data.
+
+**Key Metrics to Track:**
+- % of file uploads with conflicts detected
+- % of conflicts resolved vs cancelled
+- % of users who follow recommendations
+- Change in successful reconciliation rate
+- Reduction in support tickets about mapping
+
+**Expected Impact:**
+- 90% reduction in invalid date imports
+- 50% reduction in mapping-related support tickets
+- 30% improvement in first-time reconciliation success rate
+
+---
+
+## Appendix: Code Repository Structure
+
+```
+src/
+├── components/
+│   ├── ColumnMapping/
+│   │   ├── ConflictResolutionModal.tsx
+│   │   ├── ConflictResolver.tsx
+│   │   └── ColumnMappingForm.tsx
+│   └── ...
+├── utils/
+│   ├── columnMappingValidation.ts
+│   │   ├── detectMappingConflicts()
+│   │   ├── analyzeColumnQuality()
+│   │   └── resolveConflict()
+│   └── ...
+└── types/
+    ├── columnMapping.ts
+    │   ├── MappingConflict
+    │   ├── ColumnQuality
+    │   └── ...
+    └── ...
+```
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** December 3, 2025  
+**Author:** Technical Architecture Team  
+**Status:** Ready for Implementation

@@ -724,25 +724,44 @@ export class FileParser {
     // Detect preset for source-specific normalization
     const preset = this.detectSourcePreset(headers);
 
+    // Track which fields have been processed (first-value-wins for duplicate mappings)
+    const processedFields = new Set<string>();
+
     for (const [column, mapping] of Object.entries(columnMapping)) {
+      if (mapping === 'ignore') continue;
+      
+      // Skip if we've already processed this field (first-value-wins)
+      if (processedFields.has(mapping)) {
+        continue;
+      }
+      
       const value = row[column] || '';
       
       switch (mapping) {
         case 'date':
           const rawDate = String(value).trim();
-          // Skip if empty value and we already have a date
-          if (!rawDate && transactionDate) break;
+          // Skip if empty value
+          if (!rawDate) break;
           
           // Apply source-specific date normalization
           if (preset?.name === 'FNB Merchant') {
             const normalizedDate = DataNormalizer.normalizeFNBDate(rawDate);
-            if (normalizedDate) transactionDate = normalizedDate;
+            if (normalizedDate) {
+              transactionDate = normalizedDate;
+              processedFields.add('date');
+            }
           } else if (preset?.name === 'ABSA Merchant') {
             const normalizedDate = DataNormalizer.normalizeABSADate(rawDate);
-            if (normalizedDate) transactionDate = normalizedDate;
+            if (normalizedDate) {
+              transactionDate = normalizedDate;
+              processedFields.add('date');
+            }
           } else if (preset?.name === 'Fuel Master') {
             const normalizedDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
-            if (normalizedDate) transactionDate = normalizedDate;
+            if (normalizedDate) {
+              transactionDate = normalizedDate;
+              processedFields.add('date');
+            }
             // Also extract time from combined field
             if (!transactionTime) {
               transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
@@ -752,39 +771,65 @@ export class FileParser {
             const serial = parseFloat(rawDate);
             if (!isNaN(serial) && serial > 40000 && serial < 60000) {
               const normalizedDate = DataNormalizer.normalizeFuelMasterDate(rawDate);
-              if (normalizedDate) transactionDate = normalizedDate;
+              if (normalizedDate) {
+                transactionDate = normalizedDate;
+                processedFields.add('date');
+              }
               if (!transactionTime) {
                 transactionTime = DataNormalizer.normalizeFuelMasterTime(rawDate);
               }
             } else if (rawDate) {
               transactionDate = rawDate;
+              processedFields.add('date');
             }
           }
           break;
         case 'time':
-          transactionTime = String(value).trim();
+          const timeVal = String(value).trim();
+          if (timeVal) {
+            transactionTime = timeVal;
+            processedFields.add('time');
+          }
           break;
         case 'amount':
-          // Use normalized amount extraction
-          amount = DataNormalizer.normalizeAmount(String(value), sourceType);
+          const amtVal = DataNormalizer.normalizeAmount(String(value), sourceType);
+          if (amtVal) {
+            amount = amtVal;
+            processedFields.add('amount');
+          }
           break;
         case 'reference':
-          referenceNumber = String(value).trim();
+          const refVal = String(value).trim();
+          if (refVal) {
+            referenceNumber = refVal;
+            processedFields.add('reference');
+          }
           break;
         case 'description':
-          description = String(value).trim();
+          const descVal = String(value).trim();
+          if (descVal) {
+            description = descVal;
+            processedFields.add('description');
+          }
           break;
         case 'cardNumber':
-          // Normalize card number to last 4 digits for comparison
-          cardNumber = DataNormalizer.normalizeCardNumber(String(value));
+          const cardVal = DataNormalizer.normalizeCardNumber(String(value));
+          if (cardVal) {
+            cardNumber = cardVal;
+            processedFields.add('cardNumber');
+          }
           break;
         case 'paymentType':
-          paymentType = String(value).trim();
-          // Determine if this is a card transaction
-          if (DataNormalizer.isCardPayment(paymentType)) {
-            isCardTransaction = 'yes';
-          } else if (paymentType) {
-            isCardTransaction = 'no';
+          const ptVal = String(value).trim();
+          if (ptVal) {
+            paymentType = ptVal;
+            processedFields.add('paymentType');
+            // Determine if this is a card transaction
+            if (DataNormalizer.isCardPayment(paymentType)) {
+              isCardTransaction = 'yes';
+            } else {
+              isCardTransaction = 'no';
+            }
           }
           break;
       }
@@ -806,6 +851,74 @@ export class FileParser {
       paymentType,
       isCardTransaction,
     };
+  }
+
+  /**
+   * Validates if a transaction row is valid or should be skipped.
+   * Returns { valid: true } or { valid: false, reason: string }
+   */
+  isValidTransactionRow(
+    extracted: {
+      transactionDate: string;
+      transactionTime: string;
+      amount: string;
+      referenceNumber: string;
+      description: string;
+      cardNumber: string;
+      paymentType: string;
+      isCardTransaction: 'yes' | 'no' | 'unknown';
+    },
+    rawRow: Record<string, any>,
+    columnMapping: Record<string, string>
+  ): { valid: boolean; reason?: string } {
+    // Rule 1: Skip header rows - date value equals column name
+    const dateColumns = Object.entries(columnMapping)
+      .filter(([_, mapping]) => mapping === 'date')
+      .map(([col, _]) => col);
+    
+    for (const col of dateColumns) {
+      const rawValue = String(rawRow[col] || '').trim();
+      // Check if the value equals the column name (case-insensitive)
+      if (rawValue.toLowerCase() === col.toLowerCase()) {
+        return { valid: false, reason: 'header_row' };
+      }
+      // Check for common header patterns
+      if (['date', 'date / time', 'date/time', 'transaction date', 'trans date'].includes(rawValue.toLowerCase())) {
+        return { valid: false, reason: 'header_row' };
+      }
+    }
+
+    // Rule 2: Skip rows with empty dates after normalization
+    if (!extracted.transactionDate || extracted.transactionDate.trim() === '') {
+      return { valid: false, reason: 'empty_date' };
+    }
+
+    // Rule 3: Skip rows with zero or invalid amounts
+    const amountNum = parseFloat(extracted.amount);
+    if (isNaN(amountNum) || amountNum === 0) {
+      return { valid: false, reason: 'zero_or_invalid_amount' };
+    }
+
+    // Rule 4: Skip page break rows
+    for (const value of Object.values(rawRow)) {
+      const strValue = String(value || '').trim();
+      // Check for page break patterns like "Page 405", "Page 1 of 50"
+      if (/^Page\s+\d+/i.test(strValue)) {
+        return { valid: false, reason: 'page_break' };
+      }
+    }
+
+    // Rule 5: Skip rows where all key fields look like headers
+    const headerPatterns = ['qty', 'cost', 'shift', 'total', 'account', 'invoice', 'description', 'amount'];
+    const keyValues = [extracted.description, extracted.referenceNumber].filter(v => v);
+    const allLookLikeHeaders = keyValues.length > 0 && keyValues.every(v => 
+      headerPatterns.includes(v.toLowerCase())
+    );
+    if (allLookLikeHeaders && keyValues.length >= 2) {
+      return { valid: false, reason: 'header_row' };
+    }
+
+    return { valid: true };
   }
 }
 

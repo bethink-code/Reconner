@@ -263,6 +263,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "File not found" });
       }
 
+      // Check for duplicate mappings (same field mapped to multiple columns)
+      const mappedFields: Record<string, string> = {};
+      const duplicates: { field: string; columns: string[] }[] = [];
+      
+      for (const [column, field] of Object.entries(validatedMapping)) {
+        if (field === 'ignore') continue;
+        
+        if (mappedFields[field]) {
+          // Found a duplicate - check if we already have this field in duplicates
+          const existing = duplicates.find(d => d.field === field);
+          if (existing) {
+            existing.columns.push(column);
+          } else {
+            duplicates.push({ field, columns: [mappedFields[field], column] });
+          }
+        } else {
+          mappedFields[field] = column;
+        }
+      }
+      
+      if (duplicates.length > 0) {
+        const errorMessages = duplicates.map(d => 
+          `"${d.field}" is mapped to both "${d.columns.join('" and "')}" - please choose only ONE column for each field`
+        );
+        return res.status(400).json({ 
+          error: "Duplicate mappings detected",
+          duplicates: duplicates,
+          message: errorMessages.join('. ')
+        });
+      }
+
       await storage.updateFile(req.params.fileId, { 
         columnMapping: validatedMapping,
         status: 'mapped'
@@ -295,7 +326,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const parsed = await fileParser.parse(buffer, file.fileType);
       
-      const transactions = parsed.rows.map(row => {
+      // Track skip statistics
+      const skipStats = {
+        header_row: 0,
+        empty_date: 0,
+        zero_or_invalid_amount: 0,
+        page_break: 0,
+        total_skipped: 0,
+        total_processed: 0,
+      };
+      
+      const validTransactions: any[] = [];
+      
+      for (const row of parsed.rows) {
         const extracted = fileParser.extractTransactionData(
           row, 
           file.columnMapping as Record<string, string>,
@@ -303,7 +346,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           file.sourceType
         );
         
-        return {
+        // Validate the row
+        const validation = fileParser.isValidTransactionRow(
+          extracted,
+          row,
+          file.columnMapping as Record<string, string>
+        );
+        
+        if (!validation.valid) {
+          skipStats.total_skipped++;
+          if (validation.reason && validation.reason in skipStats) {
+            (skipStats as any)[validation.reason]++;
+          }
+          continue;
+        }
+        
+        skipStats.total_processed++;
+        
+        validTransactions.push({
           fileId: file.id,
           periodId: file.periodId,
           sourceType: file.sourceType,
@@ -319,10 +379,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isCardTransaction: extracted.isCardTransaction,
           matchStatus: 'unmatched' as const,
           matchId: null,
-        };
-      });
+        });
+      }
 
-      const created = await storage.createTransactions(transactions);
+      const created = await storage.createTransactions(validTransactions);
       
       await storage.updateFile(file.id, { 
         status: 'processed',
@@ -331,7 +391,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         success: true, 
-        transactionsCreated: created.length 
+        transactionsCreated: created.length,
+        totalRows: parsed.rowCount,
+        skipStats: skipStats,
       });
     } catch (error) {
       console.error("Error processing file:", error);

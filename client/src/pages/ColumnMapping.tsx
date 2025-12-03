@@ -209,54 +209,56 @@ function analyzeColumnQuality(
   };
 }
 
+import { Calendar, Clock, DollarSign, Hash, FileText, CreditCard as CreditCardIcon, Tag } from "lucide-react";
+
 // Field metadata with friendly names and explanations
 const FIELD_METADATA: Record<string, { 
   title: string; 
   description: string; 
   matchTip: string;
-  icon: string;
+  IconComponent: typeof Calendar;
 }> = {
   date: {
     title: "Transaction Date",
     description: "When the transaction happened. This is essential for matching payments between your fuel system and bank statements.",
     matchTip: "Look for columns with dates like '2025-01-15' or '15/01/2025'",
-    icon: "📅"
+    IconComponent: Calendar
   },
   time: {
     title: "Transaction Time",
     description: "The exact time of day the transaction occurred. Helps match transactions that happen on the same day.",
     matchTip: "Look for columns with times like '14:30' or '2:30 PM'",
-    icon: "🕐"
+    IconComponent: Clock
   },
   amount: {
     title: "Transaction Amount",
     description: "The Rand value of the transaction. This is critical for matching - amounts must match exactly.",
     matchTip: "Look for columns with money values like 'R 150.00' or '150.00'",
-    icon: "💰"
+    IconComponent: DollarSign
   },
   reference: {
     title: "Reference Number",
     description: "A unique ID for the transaction. This helps identify and match specific payments.",
     matchTip: "Look for short codes or IDs, not long processor strings",
-    icon: "🔖"
+    IconComponent: Hash
   },
   description: {
     title: "Description",
     description: "Additional details about the transaction. Useful for manually identifying transactions.",
     matchTip: "Look for columns with text describing what was purchased",
-    icon: "📝"
+    IconComponent: FileText
   },
   cardNumber: {
     title: "Card Number",
     description: "The last 4 digits of the payment card. Helps match card transactions between systems.",
     matchTip: "Look for columns showing '****1234' or just the last 4 digits",
-    icon: "💳"
+    IconComponent: CreditCardIcon
   },
   paymentType: {
     title: "Payment Type",
     description: "Whether this was a card or cash payment. Only card payments are matched.",
     matchTip: "Look for columns with 'Card', 'Cash', 'Credit', etc.",
-    icon: "🏷️"
+    IconComponent: Tag
   }
 };
 
@@ -399,13 +401,16 @@ function ConflictResolutionModal({
           <div className="space-y-3 py-4">
             {conflicts.map((conflict, idx) => {
               const chosenColumn = resolutions[conflict.field];
+              const FieldIcon = FIELD_METADATA[conflict.field]?.IconComponent;
               return (
                 <div 
                   key={conflict.field}
                   className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="text-lg">{FIELD_METADATA[conflict.field]?.icon || "📄"}</div>
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      {FieldIcon && <FieldIcon className="h-4 w-4 text-primary" />}
+                    </div>
                     <div>
                       <div className="font-medium text-sm">{getFieldLabel(conflict.field)}</div>
                       <div className="text-xs text-muted-foreground">
@@ -479,7 +484,10 @@ function ConflictResolutionModal({
             </div>
           </div>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <span className="text-2xl">{FIELD_METADATA[currentConflict.field]?.icon || "📄"}</span>
+            {(() => {
+              const StepIcon = FIELD_METADATA[currentConflict.field]?.IconComponent;
+              return StepIcon ? <StepIcon className="h-6 w-6 text-primary" /> : null;
+            })()}
             Choose Your {getFieldLabel(currentConflict.field)} Column
           </DialogTitle>
           <DialogDescription className="text-base mt-2">

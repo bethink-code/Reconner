@@ -46,8 +46,15 @@ Preferred communication style: Simple, everyday language.
 - Replit Auth via OpenID Connect (OIDC) with Google login support
 - Session management using PostgreSQL-backed sessions (connect-pg-simple)
 - Protected API routes using `isAuthenticated` middleware
-- User profile stored in `users` table with email, firstName, lastName, profileImageUrl
+- User profile stored in `users` table with email, firstName, lastName, profileImageUrl, isAdmin
 - Sessions stored in `sessions` table with automatic expiration
+
+**Admin Features**
+- Admin users have `isAdmin = true` in the users table
+- Admin dashboard at `/admin` shows all users with admin toggle controls
+- `isAdmin` middleware protects admin-only API routes (GET /api/admin/users, PATCH /api/admin/users/:id/admin)
+- Admins see "Admin" badge and "User Management" link in the user dropdown
+- Safety check prevents removing own admin status
 
 **Database Layer**
 - Drizzle ORM for type-safe database queries and schema management

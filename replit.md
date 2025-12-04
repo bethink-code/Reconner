@@ -76,8 +76,13 @@ Preferred communication style: Simple, everyday language.
 - Issues classified by severity: critical (blocks processing), warning (may affect accuracy), info (cosmetic)
 - Suggested column mappings generated when column shifts detected
 - Frontend components:
-  - DataQualityWarnings component displays issues with expandable details
-  - "Apply Suggested Fix" button auto-configures column mappings
+  - **DataQualityWarnings V2** - Redesigned with reassurance-first UX:
+    - SummaryCard shows "Your file looks good!" with clean rows, auto-fixed, and to-review metrics
+    - Issues categorized: Auto-fixed (green checkmarks, no action) vs Needs Review (requires attention)
+    - IssueCard components with friendly explanations: "What happened?", "Why?", "What we'll do"
+    - ColumnMappingTip provides guidance when column shifts detected
+    - "Continue with X Clean Rows" button builds user confidence
+  - "Apply Suggested Mapping" button auto-configures column mappings
   - Warnings persist across page reloads via stored qualityReport
 - Quality report exposed via file preview endpoint for ColumnMapping page access
 

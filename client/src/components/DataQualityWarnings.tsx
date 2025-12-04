@@ -1,26 +1,39 @@
+/**
+ * DataQualityWarnings Component V2
+ * 
+ * User-friendly display of data quality issues with:
+ * - Plain English explanations
+ * - Clear indication of automatic vs manual actions
+ * - Contextual help for resolving issues
+ * - Reassuring tone that guides users through the process
+ */
+
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
 import { 
-  AlertTriangle, 
-  AlertCircle, 
-  Info, 
-  CheckCircle, 
+  CheckCircle2,
   ChevronDown, 
   ChevronUp, 
-  Wand2,
-  Eye
+  Sparkles,
+  Info,
+  AlertTriangle,
+  Trash2,
+  TableProperties,
+  HelpCircle,
+  ArrowRight,
+  Wrench
 } from 'lucide-react';
 
 export interface DataQualityIssue {
-  type: string; // Supports both uppercase (COLUMN_SHIFT) and lowercase (column_shift) formats
-  severity: string; // Supports both uppercase (CRITICAL) and lowercase (critical) formats
+  type: string;
+  severity: string;
   message: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   affectedRows?: number[];
   affectedColumns?: string[];
   rowNumbers?: number[];
@@ -52,8 +65,8 @@ export interface DataQualityReport {
   problematicRows: number;
   issues: DataQualityIssue[];
   columnAnalysis: ColumnAnalysis[] | Record<string, ColumnAnalysis>;
-  suggestedColumnMapping?: Record<string, string>; // Legacy format
-  suggestedMapping?: Record<string, string>; // New normalized format
+  suggestedColumnMapping?: Record<string, string>;
+  suggestedMapping?: Record<string, string>;
   rowsToRemove?: number[];
   columnShiftDetected?: boolean;
   shiftDetails?: {
@@ -67,330 +80,494 @@ export interface DataQualityReport {
 interface DataQualityWarningsProps {
   report: DataQualityReport;
   fileName: string;
-  onAcceptSuggestions?: () => void;
-  onViewProblematicRows?: (rowIndices: number[]) => void;
+  onContinue?: () => void;
+  onCancel?: () => void;
+  onPreviewRows?: (rowIndices: number[]) => void;
   onUseSuggestedMapping?: (mapping: Record<string, string>) => void;
 }
 
-export function DataQualityWarnings({
-  report,
-  fileName,
-  onAcceptSuggestions,
-  onViewProblematicRows,
-  onUseSuggestedMapping
-}: DataQualityWarningsProps) {
-  const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
-  const [showColumnAnalysis, setShowColumnAnalysis] = useState(false);
+interface IssueExplanation {
+  title: string;
+  whatHappened: string;
+  whyItHappened: string;
+  whatWeDo: string;
+  userAction: 'none' | 'review' | 'required';
+  userActionText?: string;
+  icon: React.ReactNode;
+  color: 'success' | 'info' | 'warning' | 'error';
+}
 
-  const toggleIssue = (index: number) => {
-    const newExpanded = new Set(expandedIssues);
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index);
-    } else {
-      newExpanded.add(index);
-    }
-    setExpandedIssues(newExpanded);
-  };
+function getIssueExplanation(issue: DataQualityIssue, report: DataQualityReport): IssueExplanation {
+  const normalizedType = issue.type.toUpperCase().replace(/-/g, '_');
+  const details = issue.details as Record<string, unknown> | undefined;
+  
+  switch (normalizedType) {
+    case 'PAGE_BREAK_ROWS':
+    case 'PAGE_BREAK':
+      return {
+        title: 'Page breaks detected',
+        whatHappened: `Found ${(details?.count as number)?.toLocaleString() || (issue.affectedRows?.length || 'some')} rows that contain page numbers or print headers instead of actual data.`,
+        whyItHappened: 'This happens when a file is exported from a paginated report or printed view. The page numbers (like "Page 1 of 10") get included as data rows.',
+        whatWeDo: "We'll automatically remove these rows before processing. Your actual transaction data won't be affected.",
+        userAction: 'none',
+        icon: <Trash2 className="h-5 w-5" />,
+        color: 'success'
+      };
 
-  const getSeverityIcon = (severity: string) => {
-    const normalizedSeverity = severity.toUpperCase();
-    switch (normalizedSeverity) {
-      case 'CRITICAL':
-        return <AlertCircle className="h-5 w-5 text-destructive" />;
-      case 'WARNING':
-        return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
-      default:
-        return <Info className="h-5 w-5 text-blue-500" />;
-    }
-  };
+    case 'REPEATED_HEADERS':
+    case 'REPEATED_HEADER':
+      const rowCount = (details?.count as number) || (details?.rows as number[])?.length || issue.affectedRows?.length;
+      return {
+        title: 'Repeated headers in data',
+        whatHappened: `Found ${rowCount?.toLocaleString() || 'some'} rows where the column headers appear again in the middle of the data.`,
+        whyItHappened: 'This file was exported from a paginated view. Every few rows the headers repeat. This happens when Excel repeats headers on each printed page.',
+        whatWeDo: "We'll automatically remove these duplicate header rows. Only your actual data will be processed.",
+        userAction: 'none',
+        icon: <Trash2 className="h-5 w-5" />,
+        color: 'success'
+      };
 
-  const getSeverityVariant = (severity: string): 'destructive' | 'secondary' | 'outline' => {
-    const normalizedSeverity = severity.toUpperCase();
-    switch (normalizedSeverity) {
-      case 'CRITICAL':
-        return 'destructive';
-      case 'WARNING':
-        return 'secondary';
-      default:
-        return 'outline';
-    }
-  };
+    case 'COLUMN_SHIFT':
+      return {
+        title: "Column headers don't match the data",
+        whatHappened: "The data in some columns doesn't match what the column header says it should be.",
+        whyItHappened: 'This can happen when columns get shifted during export, or when the source system uses generic column names. For example, a column named "Description" might actually contain quantity values.',
+        whatWeDo: "We've analyzed the actual data and will suggest the correct mapping.",
+        userAction: 'review',
+        userActionText: "When mapping columns in the next step, pay attention to the sample data shown - don't rely on header names alone.",
+        icon: <AlertTriangle className="h-5 w-5" />,
+        color: 'warning'
+      };
 
-  const getIssueTypeLabel = (type: string): string => {
-    const normalizedType = type.toUpperCase().replace(/_/g, '_');
-    switch (normalizedType) {
-      case 'COLUMN_SHIFT':
-        return 'Column Shift';
-      case 'PAGE_BREAK_ROWS':
-      case 'PAGE_BREAK':
-        return 'Page Breaks';
-      case 'REPEATED_HEADERS':
-      case 'REPEATED_HEADER':
-        return 'Repeated Headers';
-      case 'EMPTY_COLUMN':
-        return 'Empty Columns';
-      case 'DATA_TYPE_MISMATCH':
-      case 'TYPE_MISMATCH':
-        return 'Type Mismatch';
-      case 'MISSING_REQUIRED_DATA':
-        return 'Missing Data';
-      default:
-        return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-    }
-  };
+    case 'EMPTY_COLUMN':
+      return {
+        title: 'Empty columns found',
+        whatHappened: `Found ${(details?.columns as string[])?.length || 'some'} columns that are empty or mostly empty.`,
+        whyItHappened: 'These columns may be unused in your export, or the data might be in different columns than expected.',
+        whatWeDo: 'Empty columns will be available but you can skip them during mapping.',
+        userAction: 'none',
+        userActionText: 'You can ignore these columns when setting up your mapping.',
+        icon: <Info className="h-5 w-5" />,
+        color: 'info'
+      };
 
-  // Helper to get suggested mapping from either format
-  const getSuggestedMapping = (): Record<string, string> => {
-    return report.suggestedMapping || report.suggestedColumnMapping || {};
-  };
+    case 'DATA_TYPE_MISMATCH':
+    case 'TYPE_MISMATCH':
+      const colMatch = issue.message.match(/Column "([^"]+)"/);
+      const colName = colMatch ? colMatch[1] : 'Some columns';
+      return {
+        title: `${colName} contains unexpected data`,
+        whatHappened: issue.message,
+        whyItHappened: "This usually means the column contains a mix of data types, or the header name doesn't match the actual content.",
+        whatWeDo: "We'll show you sample values from each column so you can map them correctly.",
+        userAction: 'review',
+        userActionText: 'Check the sample data when mapping this column to make sure it contains what you expect.',
+        icon: <TableProperties className="h-5 w-5" />,
+        color: 'warning'
+      };
 
-  // Helper to check for column shift
-  const hasColumnShift = (): boolean => {
-    return report.columnShiftDetected || 
-           report.issues.some(i => i.type.toUpperCase().includes('COLUMN_SHIFT'));
-  };
+    case 'MISSING_REQUIRED_DATA':
+    case 'MISSING_DATA':
+      return {
+        title: 'Required data may be missing',
+        whatHappened: issue.message,
+        whyItHappened: 'The file may not contain all the required columns, or the data is in unexpected columns.',
+        whatWeDo: "We'll help you identify and map the correct columns in the next step.",
+        userAction: 'review',
+        userActionText: 'Look for columns that contain date and amount information during mapping.',
+        icon: <AlertTriangle className="h-5 w-5" />,
+        color: 'warning'
+      };
 
-  // Helper to get column analysis as array
-  const getColumnAnalysisArray = (): ColumnAnalysis[] => {
-    if (Array.isArray(report.columnAnalysis)) {
-      return report.columnAnalysis;
-    }
-    return Object.entries(report.columnAnalysis).map(([name, analysis]) => ({
-      columnName: name,
-      ...analysis
-    }));
-  };
-
-  // Check for critical issues
-  const hasCriticalIssues = (): boolean => {
-    return report.hasCriticalIssues || 
-           report.issues.some(i => i.severity.toUpperCase() === 'CRITICAL');
-  };
-
-  if (!report.hasIssues) {
-    return (
-      <Alert data-testid="alert-quality-success">
-        <CheckCircle className="h-5 w-5 text-green-500" />
-        <AlertTitle>File Validated Successfully</AlertTitle>
-        <AlertDescription>
-          <strong>{fileName}</strong> contains {report.totalRows.toLocaleString()} clean rows ready for processing.
-        </AlertDescription>
-      </Alert>
-    );
+    default:
+      return {
+        title: issue.message,
+        whatHappened: issue.message,
+        whyItHappened: 'An unexpected data quality issue was detected.',
+        whatWeDo: issue.suggestedFix || 'Please review before continuing.',
+        userAction: 'review',
+        icon: <AlertTriangle className="h-5 w-5" />,
+        color: 'warning'
+      };
   }
+}
 
-  const suggestedMapping = getSuggestedMapping();
-  const columnShiftDetected = hasColumnShift();
-  const criticalIssues = hasCriticalIssues();
-  const columnAnalysisArray = getColumnAnalysisArray();
+function IssueCard({ 
+  issue, 
+  report,
+  onPreviewRows 
+}: { 
+  issue: DataQualityIssue; 
+  report: DataQualityReport;
+  onPreviewRows?: (rows: number[]) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const explanation = getIssueExplanation(issue, report);
+
+  const actionBadge = {
+    none: { label: '✓ Auto-fixed', variant: 'default' as const, className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
+    review: { label: 'Review recommended', variant: 'outline' as const, className: 'border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-400' },
+    required: { label: 'Action required', variant: 'destructive' as const, className: '' }
+  }[explanation.userAction];
+
+  const borderColor = {
+    success: 'border-l-green-500',
+    info: 'border-l-blue-500',
+    warning: 'border-l-amber-500',
+    error: 'border-l-red-500'
+  }[explanation.color];
+
+  const iconColor = {
+    success: 'text-green-600 dark:text-green-400',
+    info: 'text-blue-600 dark:text-blue-400',
+    warning: 'text-amber-600 dark:text-amber-400',
+    error: 'text-red-600 dark:text-red-400'
+  }[explanation.color];
 
   return (
-    <div className="space-y-4" data-testid="data-quality-warnings">
-      <Alert variant={criticalIssues ? 'destructive' : 'default'} data-testid="alert-quality-summary">
-        {criticalIssues ? (
-          <AlertCircle className="h-5 w-5" />
-        ) : (
-          <AlertTriangle className="h-5 w-5" />
-        )}
-        <AlertTitle>
-          {criticalIssues 
-            ? 'Critical Data Quality Issues Detected' 
-            : 'Data Quality Warnings'}
-        </AlertTitle>
-        <AlertDescription>
-          Found {report.issues.length} issue(s) in <strong>{fileName}</strong>.
-          {report.problematicRows > 0 && (
-            <span className="ml-1">
-              {report.problematicRows.toLocaleString()} of {report.totalRows.toLocaleString()} rows 
-              ({((report.problematicRows / report.totalRows) * 100).toFixed(1)}%) need attention.
-            </span>
-          )}
-        </AlertDescription>
-      </Alert>
-
-      {columnShiftDetected && (
-        <Card className="border-2 border-destructive" data-testid="card-column-shift">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-destructive" />
-              <CardTitle className="text-destructive">Column Shift Detected</CardTitle>
-              <Badge variant="destructive">CRITICAL</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              The data in this file appears to be shifted from the expected columns. 
-              The column headers don't match the actual data they contain.
-            </p>
-
-            <div className="bg-muted p-4 rounded-md">
-              <p className="text-sm font-medium mb-2">Example of the Problem:</p>
-              <ul className="text-sm list-disc list-inside space-y-1 text-muted-foreground">
-                <li>Column named <code className="bg-background px-1 rounded">"Shift"</code> actually contains <strong>Pay Type</strong> (Card, Cash, Debtor)</li>
-                <li>Column named <code className="bg-background px-1 rounded">"Description"</code> actually contains <strong>Quantity</strong></li>
-                <li>Column named <code className="bg-background px-1 rounded">"_5"</code> contains the actual <strong>Transaction Amount</strong></li>
-              </ul>
-            </div>
-
-            {Object.keys(suggestedMapping).length > 0 && (
-              <>
-                <div>
-                  <p className="text-sm font-medium mb-2">Suggested Column Mapping:</p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Field</TableHead>
-                        <TableHead>Use Column</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Object.entries(suggestedMapping).map(([field, column]) => (
-                        <TableRow key={field}>
-                          <TableCell className="font-medium">
-                            {field.charAt(0).toUpperCase() + field.slice(1)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{column}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+    <Card className={`mb-3 border-l-4 ${borderColor}`} data-testid={`card-issue-${issue.type}`}>
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <CollapsibleTrigger 
+          className="w-full" 
+          aria-label={`${expanded ? 'Collapse' : 'Expand'} details for ${explanation.title}`}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 flex-1">
+                <div className={`mt-0.5 ${iconColor}`}>
+                  {explanation.icon}
                 </div>
-                
-                {onUseSuggestedMapping && (
-                  <Button
-                    onClick={() => onUseSuggestedMapping(suggestedMapping)}
-                    data-testid="button-apply-suggested-mapping"
-                  >
-                    <Wand2 className="h-4 w-4 mr-2" />
-                    Apply Suggested Mapping
-                  </Button>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card data-testid="card-all-issues">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">All Issues ({report.issues.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {report.issues.map((issue, index) => (
-            <Collapsible 
-              key={index} 
-              open={expandedIssues.has(index)}
-              onOpenChange={() => toggleIssue(index)}
-            >
-              <div 
-                className={`p-3 rounded-md border ${
-                  expandedIssues.has(index) ? 'bg-muted' : 'hover-elevate'
-                }`}
-              >
-                <CollapsibleTrigger className="w-full" data-testid={`trigger-issue-${index}`}>
-                  <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center gap-3">
-                      {getSeverityIcon(issue.severity)}
-                      <div className="text-left">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{issue.message}</span>
-                          <Badge variant={getSeverityVariant(issue.severity)} className="text-xs">
-                            {getIssueTypeLabel(issue.type)}
-                          </Badge>
-                        </div>
-                        {issue.suggestedFix && (
-                          <p className="text-xs text-muted-foreground mt-1">{issue.suggestedFix}</p>
-                        )}
-                      </div>
-                    </div>
-                    {expandedIssues.has(index) ? (
-                      <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    )}
+                <div className="flex-1 text-left">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-semibold text-sm">{explanation.title}</span>
+                    <Badge variant={actionBadge.variant} className={`text-xs ${actionBadge.className}`}>
+                      {actionBadge.label}
+                    </Badge>
                   </div>
-                </CollapsibleTrigger>
-                
-                <CollapsibleContent className="pt-3">
-                  {issue.details && Object.keys(issue.details).length > 0 && (
-                    <div className="border rounded-md p-3 bg-background">
-                      <p className="text-xs text-muted-foreground mb-2">Details:</p>
-                      <pre className="text-xs overflow-auto max-h-48 text-muted-foreground">
-                        {JSON.stringify(issue.details, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                  
-                  {issue.affectedRows && issue.affectedRows.length > 0 && onViewProblematicRows && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onViewProblematicRows(issue.affectedRows!)}
-                      className="mt-2"
-                      data-testid={`button-view-affected-rows-${index}`}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View {issue.affectedRows.length} Affected Rows
-                    </Button>
-                  )}
-                </CollapsibleContent>
+                  <p className="text-sm text-muted-foreground">
+                    {explanation.whatHappened}
+                  </p>
+                </div>
               </div>
-            </Collapsible>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Collapsible 
-        open={showColumnAnalysis} 
-        onOpenChange={setShowColumnAnalysis}
-      >
-        <Card>
-          <CardHeader className="pb-2">
-            <CollapsibleTrigger className="w-full" data-testid="trigger-column-analysis">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Column Analysis</CardTitle>
-                {showColumnAnalysis ? (
+              <div className="shrink-0">
+                {expanded ? (
                   <ChevronUp className="h-4 w-4 text-muted-foreground" />
                 ) : (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 )}
               </div>
-            </CollapsibleTrigger>
-          </CardHeader>
-          <CollapsibleContent>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Column</TableHead>
-                    <TableHead>Inferred Type</TableHead>
-                    <TableHead>Non-Null</TableHead>
-                    <TableHead>Unique</TableHead>
-                    <TableHead>Sample Values</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {columnAnalysisArray.map((col, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{col.columnName || `Column ${index + 1}`}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{col.inferredType || col.expectedType || 'unknown'}</Badge>
-                      </TableCell>
-                      <TableCell>{col.nonNullCount ?? '-'}</TableCell>
-                      <TableCell>{col.uniqueValues ?? '-'}</TableCell>
-                      <TableCell className="max-w-xs truncate text-muted-foreground">
-                        {col.sampleValues?.slice(0, 3).join(', ') || '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
+            </div>
+          </CardContent>
+        </CollapsibleTrigger>
+        
+        <CollapsibleContent>
+          <div className="px-4 pb-4 ml-8 space-y-3">
+            <div className="bg-muted/50 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <HelpCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Why did this happen?</p>
+                  <p className="text-sm">{explanation.whyItHappened}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2">
+              <Wrench className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">What we'll do</p>
+                <p className="text-sm">{explanation.whatWeDo}</p>
+              </div>
+            </div>
+
+            {explanation.userAction !== 'none' && explanation.userActionText && (
+              <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+                  <strong>Your action:</strong> {explanation.userActionText}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {issue.affectedRows && issue.affectedRows.length > 0 && onPreviewRows && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rowsToPreview = issue.affectedRows!.length <= 10 
+                    ? issue.affectedRows! 
+                    : issue.affectedRows!.slice(0, 10);
+                  onPreviewRows(rowsToPreview);
+                }}
+                aria-label={`Preview ${Math.min(issue.affectedRows.length, 10)} affected rows`}
+                data-testid={`button-preview-rows-${issue.type}`}
+              >
+                {issue.affectedRows.length <= 10 
+                  ? `Preview ${issue.affectedRows.length} affected rows`
+                  : `Preview first 10 of ${issue.affectedRows.length.toLocaleString()} affected rows`}
+              </Button>
+            )}
+          </div>
+        </CollapsibleContent>
       </Collapsible>
+    </Card>
+  );
+}
+
+function SummaryCard({ report }: { report: DataQualityReport }) {
+  const autoFixCount = report.issues.filter(i => {
+    const type = i.type.toUpperCase();
+    return type.includes('PAGE_BREAK') || type.includes('REPEATED_HEADER') || type.includes('EMPTY_COLUMN');
+  }).length;
+  
+  const reviewCount = report.issues.filter(i => {
+    const type = i.type.toUpperCase();
+    return type.includes('COLUMN_SHIFT') || type.includes('TYPE_MISMATCH') || type.includes('MISSING');
+  }).length;
+
+  const hasCritical = report.hasCriticalIssues || reviewCount > 0;
+
+  return (
+    <div 
+      className={`p-4 mb-4 rounded-lg border ${
+        hasCritical 
+          ? 'bg-amber-50 border-amber-200 dark:bg-amber-950 dark:border-amber-800' 
+          : 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+      }`}
+      data-testid="card-summary"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          {hasCritical ? (
+            <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 shrink-0" />
+          )}
+          <div>
+            <h3 className="text-lg font-semibold mb-1">
+              {hasCritical 
+                ? 'A few things need your attention'
+                : 'Your file looks good!'}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {report.problematicRows > 0 
+                ? `We'll automatically clean ${report.problematicRows.toLocaleString()} rows (${((report.problematicRows / report.totalRows) * 100).toFixed(1)}%) from your file.`
+                : 'No cleanup needed.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-6">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              {report.cleanRows.toLocaleString()}
+            </p>
+            <p className="text-xs text-muted-foreground">Clean rows</p>
+          </div>
+          {autoFixCount > 0 && (
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {autoFixCount}
+              </p>
+              <p className="text-xs text-muted-foreground">Auto-fixed</p>
+            </div>
+          )}
+          {reviewCount > 0 && (
+            <div className="text-center">
+              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                {reviewCount}
+              </p>
+              <p className="text-xs text-muted-foreground">To review</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
+function ColumnMappingTip({ report, onUseSuggestedMapping }: { 
+  report: DataQualityReport; 
+  onUseSuggestedMapping?: (mapping: Record<string, string>) => void;
+}) {
+  const hasColumnShift = report.columnShiftDetected || 
+    report.issues.some(i => i.type.toUpperCase().includes('COLUMN_SHIFT'));
+  
+  if (!hasColumnShift) return null;
+
+  const suggestedMapping = report.suggestedMapping || report.suggestedColumnMapping || {};
+
+  return (
+    <Alert className="mb-4 border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950" data-testid="alert-column-tip">
+      <TableProperties className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+      <AlertTitle className="text-blue-800 dark:text-blue-200">Tip for Column Mapping</AlertTitle>
+      <AlertDescription className="text-blue-700 dark:text-blue-300">
+        <p className="mb-2">
+          Some column headers in this file don't match their actual content. 
+          When you map columns in the next step:
+        </p>
+        <ul className="list-disc list-inside space-y-1 mb-3 text-sm">
+          <li><strong>Look at the sample data</strong> shown for each column, not just the header name</li>
+          <li><strong>Use the suggested mappings</strong> - we've analyzed the actual data to recommend the right columns</li>
+        </ul>
+        
+        {Object.keys(suggestedMapping).length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+              Suggested mappings based on data analysis:
+            </p>
+            <div className="flex flex-wrap gap-1 mb-3">
+              {Object.entries(suggestedMapping).slice(0, 5).map(([field, column]) => (
+                <Badge key={field} variant="outline" className="text-xs border-blue-300 dark:border-blue-700">
+                  {field} → "{column}"
+                </Badge>
+              ))}
+            </div>
+            {onUseSuggestedMapping && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onUseSuggestedMapping(suggestedMapping)}
+                className="border-blue-400 text-blue-700 hover:bg-blue-100 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900"
+                data-testid="button-use-suggested-mapping"
+              >
+                <Sparkles className="h-4 w-4 mr-1" />
+                Apply Suggested Mapping
+              </Button>
+            )}
+          </div>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+export function DataQualityWarnings({
+  report,
+  fileName,
+  onContinue,
+  onCancel,
+  onPreviewRows,
+  onUseSuggestedMapping
+}: DataQualityWarningsProps) {
+  
+  if (!report.hasIssues) {
+    return (
+      <div className="py-4" data-testid="quality-success">
+        <Alert className="mb-4 border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
+          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <AlertTitle className="text-green-800 dark:text-green-200">File validated successfully!</AlertTitle>
+          <AlertDescription className="text-green-700 dark:text-green-300">
+            <strong>{fileName}</strong> contains {report.totalRows.toLocaleString()} rows ready for processing.
+            No data quality issues were detected.
+          </AlertDescription>
+        </Alert>
+        
+        {onContinue && (
+          <div className="flex justify-end gap-2">
+            {onCancel && (
+              <Button variant="outline" onClick={onCancel} data-testid="button-cancel">
+                Cancel
+              </Button>
+            )}
+            <Button onClick={onContinue} data-testid="button-continue">
+              Continue to Column Mapping
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const autoFixIssues = report.issues.filter(i => {
+    const type = i.type.toUpperCase();
+    return type.includes('PAGE_BREAK') || type.includes('REPEATED_HEADER') || type.includes('EMPTY_COLUMN');
+  });
+  
+  const reviewIssues = report.issues.filter(i => {
+    const type = i.type.toUpperCase();
+    return type.includes('COLUMN_SHIFT') || type.includes('TYPE_MISMATCH') || 
+           type.includes('INCONSISTENT') || type.includes('MISSING');
+  });
+
+  return (
+    <div className="py-2" data-testid="data-quality-warnings">
+      <h3 className="text-lg font-semibold mb-1">Data Quality Check</h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        We've analyzed <strong>{fileName}</strong> and found a few things to address.
+      </p>
+
+      <SummaryCard report={report} />
+
+      <ColumnMappingTip report={report} onUseSuggestedMapping={onUseSuggestedMapping} />
+
+      {autoFixIssues.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+            <Trash2 className="h-4 w-4" />
+            <span className="font-medium">Will be fixed automatically</span>
+          </div>
+          {autoFixIssues.map((issue, index) => (
+            <IssueCard 
+              key={`auto-${index}`} 
+              issue={issue} 
+              report={report}
+              onPreviewRows={onPreviewRows}
+            />
+          ))}
+        </div>
+      )}
+
+      {reviewIssues.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span className="font-medium">Please review</span>
+          </div>
+          {reviewIssues.map((issue, index) => (
+            <IssueCard 
+              key={`review-${index}`} 
+              issue={issue} 
+              report={report}
+              onPreviewRows={onPreviewRows}
+            />
+          ))}
+        </div>
+      )}
+
+      {onContinue && (
+        <>
+          <Separator className="my-4" />
+          
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {report.cleanRows.toLocaleString()} rows will be processed
+            </p>
+            
+            <div className="flex gap-2">
+              {onCancel && (
+                <Button variant="outline" onClick={onCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+              )}
+              <Button 
+                onClick={onContinue}
+                variant={reviewIssues.length > 0 ? 'default' : 'default'}
+                data-testid="button-continue"
+              >
+                {report.problematicRows > 0 
+                  ? `Continue with ${report.cleanRows.toLocaleString()} Clean Rows`
+                  : 'Continue to Column Mapping'}
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default DataQualityWarnings;

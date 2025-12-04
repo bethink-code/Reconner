@@ -200,6 +200,7 @@ export default function UploadFiles() {
             <DataQualityWarnings
               report={qualityReports['fuel'].report}
               fileName={qualityReports['fuel'].fileName}
+              onContinue={handleContinue}
               onUseSuggestedMapping={() => {
                 toast({
                   title: "Suggested mapping ready",
@@ -227,6 +228,7 @@ export default function UploadFiles() {
             <DataQualityWarnings
               report={qualityReports['bank1'].report}
               fileName={qualityReports['bank1'].fileName}
+              onContinue={handleContinue}
               onUseSuggestedMapping={() => {
                 toast({
                   title: "Suggested mapping ready",
@@ -254,6 +256,7 @@ export default function UploadFiles() {
             <DataQualityWarnings
               report={qualityReports['bank2'].report}
               fileName={qualityReports['bank2'].fileName}
+              onContinue={handleContinue}
               onUseSuggestedMapping={() => {
                 toast({
                   title: "Suggested mapping ready",

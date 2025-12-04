@@ -1,0 +1,58 @@
+Done! Here's the updated component: [DataQualityWarningsV2.tsx](computer:///mnt/user-data/outputs/DataQualityWarningsV2.tsx)
+
+## What Changed
+
+### Before (Your Screenshot)
+```
+⚠ Found 724 rows that appear to be repeated header rows
+  "These rows will be excluded from processing"
+```
+User thinks: *"What? Why? Is my file broken?"*
+
+### After (New Design)
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ ✅ Your file looks good!                                   │
+│                                                            │
+│ We'll automatically clean 2,969 rows (10.5%) from your    │
+│ file.                                                      │
+│                                                            │
+│     26,821          2            0                         │
+│   Clean rows    Auto-fixed    To review                    │
+└────────────────────────────────────────────────────────────┘
+
+Will be fixed automatically
+┌────────────────────────────────────────────────────────────┐
+│ 🧹 Repeated headers in data          [✓ Auto-fixed]       │
+│                                                            │
+│ Found 724 rows where column headers appear again in the   │
+│ middle of the data.                                        │
+│                                                            │
+│ ▼ (expand for details)                                    │
+│ ┌──────────────────────────────────────────────────────┐  │
+│ │ ❓ Why did this happen?                               │  │
+│ │ This file was exported from a paginated view.        │  │
+│ │ Every ~39 rows the headers repeat.                   │  │
+│ │                                                       │  │
+│ │ 🔧 What we'll do                                     │  │
+│ │ We'll automatically remove these duplicate header    │  │
+│ │ rows. Only your actual data will be processed.       │  │
+│ └──────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
+
+              [ Continue with 26,821 Clean Rows → ]
+```
+
+## Key Features
+
+| Feature | What It Does |
+|---------|--------------|
+| **Summary card** | Shows clean rows count prominently, reassures user |
+| **Auto-fixed badge** | Green ✓ shows user this is handled |
+| **Expandable details** | "Why" and "What we'll do" hidden by default |
+| **Action indicators** | Clear distinction between auto-fixed vs needs review |
+| **Smart button text** | "Continue with 26,821 Clean Rows" not just "Continue" |
+| **Column shift tip** | Special guidance box when headers don't match data |
+
+The user now knows: *"Oh, this is normal, it's being handled, I just click Continue."*

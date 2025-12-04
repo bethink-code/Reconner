@@ -1,0 +1,756 @@
+# Pieter's Pomp Stasie Reconner
+## Sequential File Processing UX Specification
+
+---
+
+## 1. Executive Summary
+
+### The Problem
+The current UX presents users with three file uploads simultaneously, creating cognitive overload. Users don't know:
+- Which file to start with
+- What each file is for
+- Whether they're making progress
+- What happens if one file has issues
+
+### The Solution
+A **sequential wizard** that guides users through one file at a time, with clear context about why each file matters and what to do at each step.
+
+### Key Principle
+> "One file. One focus. Complete it. Move on."
+
+---
+
+## 2. Overview of the Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   ┌─────────┐      ┌─────────┐      ┌─────────┐      ┌─────────┐       │
+│   │ STEP 1  │ ──▶  │ STEP 2  │ ──▶  │ STEP 3  │ ──▶  │  DONE   │       │
+│   │  Fuel   │      │ Bank #1 │      │ Bank #2 │      │ Review  │       │
+│   │  Data   │      │  (FNB)  │      │ (ABSA)  │      │ & Match │       │
+│   └─────────┘      └─────────┘      └─────────┘      └─────────┘       │
+│                                                                         │
+│   Source of        Verification     Additional        Run               │
+│   Truth            Data             Verification      Reconciliation    │
+│                                     (Optional)                          │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Each Step Contains Sub-Steps
+
+```
+For each file:
+   1. Upload        → Drag/drop or browse for file
+   2. Quality Check → Auto-detect and fix issues (page breaks, headers, etc.)
+   3. Column Map    → Match columns to standard fields
+   4. Preview       → Confirm data looks correct
+   5. Complete      → Move to next step
+```
+
+---
+
+## 3. Step-by-Step Specification
+
+---
+
+### STEP 1: Fuel Transactions (Source of Truth)
+
+#### 3.1.1 Purpose
+This is the **master record** of all transactions at the fuel station. Every sale, whether paid by card, cash, or debtor account, is recorded here. This is what we're trying to verify against bank records.
+
+#### 3.1.2 Screen: Upload
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ● Step 1: Fuel Transactions    ○ Step 2: Bank #1    ○ Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   📊 FUEL TRANSACTIONS                                           │ │
+│   │   Your source of truth                                           │ │
+│   │                                                                   │ │
+│   │   This file contains all transactions from your fuel management  │ │
+│   │   system — every sale at every pump, including:                  │ │
+│   │                                                                   │ │
+│   │   • Card payments (we'll verify these against bank records)      │ │
+│   │   • Cash payments                                                │ │
+│   │   • Debtor accounts                                              │ │
+│   │                                                                   │ │
+│   │   ┌───────────────────────────────────────────────────────────┐  │ │
+│   │   │                                                           │  │ │
+│   │   │              📁 Drop your file here                       │  │ │
+│   │   │                                                           │  │ │
+│   │   │              or [Browse Files]                            │  │ │
+│   │   │                                                           │  │ │
+│   │   │              Excel (.xlsx) or CSV                         │  │ │
+│   │   │                                                           │  │ │
+│   │   └───────────────────────────────────────────────────────────┘  │ │
+│   │                                                                   │ │
+│   │   💡 Usually called "Fuel Master Shifts" or "Transaction Export" │ │
+│   │      from your fuel management system                            │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.1.3 Screen: Quality Check
+
+After upload, show the data quality warnings (using V3 component):
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ● Step 1: Fuel Transactions    ○ Step 2: Bank #1    ○ Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   📊 FUEL TRANSACTIONS                                           │ │
+│   │   Checking file: Fuel_Master_Shifts_Nov2025.xlsx                 │ │
+│   │                                                                   │ │
+│   │   ┌───────────────────────────────────────────────────────────┐  │ │
+│   │   │                                                           │  │ │
+│   │   │   [DataQualityWarningsV3 Component Here]                  │  │ │
+│   │   │                                                           │  │ │
+│   │   │   - Shows issues found                                    │  │ │
+│   │   │   - Shows auto-fixes applied                              │  │ │
+│   │   │   - Shows mapping guidance if needed                      │  │ │
+│   │   │                                                           │  │ │
+│   │   └───────────────────────────────────────────────────────────┘  │ │
+│   │                                                                   │ │
+│   │   [← Back: Choose Different File]    [Continue to Mapping →]     │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.1.4 Screen: Column Mapping
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ● Step 1: Fuel Transactions    ○ Step 2: Bank #1    ○ Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   📊 FUEL TRANSACTIONS                                           │ │
+│   │   Map your columns                                               │ │
+│   │                                                                   │ │
+│   │   Tell us which columns contain which data. We've made some      │ │
+│   │   suggestions based on your file — adjust if needed.             │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │  REQUIRED FIELDS                                        │    │ │
+│   │   ├─────────────────────────────────────────────────────────┤    │ │
+│   │   │                                                         │    │ │
+│   │   │  Date/Time         [_1                    ▼]           │    │ │
+│   │   │                    Sample: 2025-09-01 00:31:32          │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Amount (Total)    [_5                    ▼]           │    │ │
+│   │   │                    Sample: 400.45, 150.20               │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Invoice/Ref       [Invoice               ▼]           │    │ │
+│   │   │                    Sample: 1376522, 1376523             │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Pay Type          [Shift                 ▼]           │    │ │
+│   │   │                    Sample: Card, Cash, Debtor           │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │  OPTIONAL FIELDS                                        │    │ │
+│   │   ├─────────────────────────────────────────────────────────┤    │ │
+│   │   │                                                         │    │ │
+│   │   │  Quantity          [Description           ▼]           │    │ │
+│   │   │                    Sample: 17.26, 6.89                  │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Product           [_3                    ▼]           │    │ │
+│   │   │                    Sample: DSL50, ULP95                 │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Registration      [Pay Type              ▼]           │    │ │
+│   │   │                    Sample: DP76YVGP (Debtor only)       │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   [← Back]                              [Preview Data →]         │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key UX Elements:**
+- Sample values shown under each dropdown
+- Pre-selected based on data quality analysis
+- Required vs Optional clearly separated
+- Warning icons if a mapping looks wrong
+
+#### 3.1.5 Screen: Preview & Confirm
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ● Step 1: Fuel Transactions    ○ Step 2: Bank #1    ○ Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   📊 FUEL TRANSACTIONS                                           │ │
+│   │   Preview your data                                              │ │
+│   │                                                                   │ │
+│   │   Here's how your data will be imported. Check that it looks     │ │
+│   │   correct before continuing.                                     │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │ SUMMARY                                                 │    │ │
+│   │   │                                                         │    │ │
+│   │   │   Total Transactions:     25,301                        │    │ │
+│   │   │   Date Range:             01 Sep 2025 - 30 Nov 2025     │    │ │
+│   │   │   Total Value:            R 8,934,521.45                │    │ │
+│   │   │                                                         │    │ │
+│   │   │   By Payment Type:                                      │    │ │
+│   │   │   • Card:    12,138 transactions    R 6,534,892.30     │    │ │
+│   │   │   • Cash:    12,485 transactions    R 2,145,673.50     │    │ │
+│   │   │   • Debtor:     678 transactions    R   253,955.65     │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │ SAMPLE ROWS                                             │    │ │
+│   │   ├──────────┬─────────────────────┬───────────┬───────────┤    │ │
+│   │   │ Invoice  │ Date/Time           │ Amount    │ Pay Type  │    │ │
+│   │   ├──────────┼─────────────────────┼───────────┼───────────┤    │ │
+│   │   │ 1376522  │ 2025-09-01 00:31:32 │ R 400.45  │ Card      │    │ │
+│   │   │ 1376523  │ 2025-09-01 01:24:54 │ R 150.10  │ Card      │    │ │
+│   │   │ 1376526  │ 2025-09-01 03:32:37 │ R 830.15  │ Cash      │    │ │
+│   │   │ 1376527  │ 2025-09-01 02:20:32 │ R 400.05  │ Card      │    │ │
+│   │   │ 1376530  │ 2025-09-01 05:15:22 │ R 751.30  │ Debtor    │    │ │
+│   │   └──────────┴─────────────────────┴───────────┴───────────┘    │ │
+│   │                                     [View All Rows]              │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │ ✅ This data looks correct                              │    │ │
+│   │   │                                                         │    │ │
+│   │   │ Card transactions (12,138) will be matched against your │    │ │
+│   │   │ bank records in the next steps.                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   [← Back to Mapping]              [✓ Confirm & Continue →]      │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.1.6 Completion Transition
+
+After confirming, show a brief success state before moving to Step 2:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   ✅ FUEL TRANSACTIONS LOADED                                    │ │
+│   │                                                                   │ │
+│   │   25,301 transactions ready for reconciliation                   │ │
+│   │   12,138 card transactions to verify                             │ │
+│   │                                                                   │ │
+│   │   Next: Upload your first bank statement to verify these         │ │
+│   │   card transactions.                                             │ │
+│   │                                                                   │ │
+│   │                    [Continue to Bank #1 →]                       │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### STEP 2: Bank Account #1 (Verification)
+
+#### 3.2.1 Purpose
+This is **verification data** from the first bank account. We're checking: "Did the bank record the same card transactions that the fuel system shows?"
+
+#### 3.2.2 Screen: Upload
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ✓ Step 1: Fuel Transactions    ● Step 2: Bank #1    ○ Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   🏦 BANK ACCOUNT #1                                             │ │
+│   │   Verification data                                              │ │
+│   │                                                                   │ │
+│   │   ┌───────────────────────────────────────────────────────────┐  │ │
+│   │   │ 📊 FROM STEP 1                                            │  │ │
+│   │   │                                                           │  │ │
+│   │   │ You have 12,138 card transactions (R 6.5M) to verify     │  │ │
+│   │   │ Date range: 01 Sep 2025 - 30 Nov 2025                    │  │ │
+│   │   └───────────────────────────────────────────────────────────┘  │ │
+│   │                                                                   │ │
+│   │   Upload your bank's merchant transaction report for this        │ │
+│   │   period. We'll match it against your fuel transactions.         │ │
+│   │                                                                   │ │
+│   │   ┌───────────────────────────────────────────────────────────┐  │ │
+│   │   │                                                           │  │ │
+│   │   │              📁 Drop your bank file here                  │  │ │
+│   │   │                                                           │  │ │
+│   │   │              or [Browse Files]                            │  │ │
+│   │   │                                                           │  │ │
+│   │   │              Excel (.xlsx) or CSV                         │  │ │
+│   │   │                                                           │  │ │
+│   │   └───────────────────────────────────────────────────────────┘  │ │
+│   │                                                                   │ │
+│   │   Which bank is this from?                                       │ │
+│   │   [FNB ▼]  [ABSA]  [Standard Bank]  [Nedbank]  [Other...]       │ │
+│   │                                                                   │ │
+│   │   💡 Look for "Merchant Transactions" or "Card Settlements"      │ │
+│   │      in your bank's business portal                              │ │
+│   │                                                                   │ │
+│   │   ───────────────────────────────────────────────────────────    │ │
+│   │                                                                   │ │
+│   │   [Skip — I don't have this bank's data]                         │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key UX Elements:**
+- Shows context from Step 1 (what we're trying to verify)
+- Bank selector to help with column mapping defaults
+- "Skip" option if they don't have this data yet
+- Helpful hint about where to find the file
+
+#### 3.2.3 Screen: Quality Check
+
+Same pattern as Step 1, using DataQualityWarningsV3 component.
+
+#### 3.2.4 Screen: Column Mapping
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ✓ Step 1: Fuel Transactions    ● Step 2: Bank #1    ○ Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   🏦 FNB MERCHANT TRANSACTIONS                                   │ │
+│   │   Map your columns                                               │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │  REQUIRED FOR MATCHING                                  │    │ │
+│   │   ├─────────────────────────────────────────────────────────┤    │ │
+│   │   │                                                         │    │ │
+│   │   │  Transaction Date  [Transaction Date      ▼]           │    │ │
+│   │   │                    Sample: 27 Nov, 26 Nov               │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Transaction Time  [Time                  ▼]           │    │ │
+│   │   │                    Sample: 08:31:22, 14:45:01           │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Amount            [Amount                ▼]           │    │ │
+│   │   │                    Sample: 400.45, 150.20               │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │  OPTIONAL (helps with matching)                         │    │ │
+│   │   ├─────────────────────────────────────────────────────────┤    │ │
+│   │   │                                                         │    │ │
+│   │   │  Card Number       [PAN                   ▼]           │    │ │
+│   │   │                    Sample: ****1234, ****5678           │    │ │
+│   │   │                                                         │    │ │
+│   │   │  Reference         [Terminal ID           ▼]           │    │ │
+│   │   │                    Sample: TERM001, TERM002             │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   [← Back]                              [Preview Data →]         │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.2.5 Screen: Preview with Coverage Analysis
+
+This is unique to bank files — show how much of the fuel data this bank file covers:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   🏦 FNB MERCHANT TRANSACTIONS                                   │ │
+│   │   Preview your data                                              │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │ FILE SUMMARY                                            │    │ │
+│   │   │                                                         │    │ │
+│   │   │   Transactions in file:    79                           │    │ │
+│   │   │   Date Range:              27 Nov 2025 (1 day)          │    │ │
+│   │   │   Total Value:             R 45,231.50                  │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │ ⚠️ COVERAGE WARNING                                     │    │ │
+│   │   │                                                         │    │ │
+│   │   │ This bank file only covers 1 day of your 3-month fuel  │    │ │
+│   │   │ data period.                                            │    │ │
+│   │   │                                                         │    │ │
+│   │   │   Your fuel data:     01 Sep - 30 Nov (91 days)        │    │ │
+│   │   │   This bank file:     27 Nov only (1 day)              │    │ │
+│   │   │   Coverage:           ~1% of date range                │    │ │
+│   │   │                                                         │    │ │
+│   │   │ 💡 For better reconciliation, upload bank statements   │    │ │
+│   │   │    covering the full Sep-Nov period.                   │    │ │
+│   │   │                                                         │    │ │
+│   │   │   [Continue anyway]   [Upload different file]           │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   [← Back to Mapping]              [✓ Confirm & Continue →]      │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key UX Element:** 
+The coverage warning helps users understand WHY match rates might be low — it's not the system failing, it's incomplete data.
+
+---
+
+### STEP 3: Bank Account #2 (Optional)
+
+#### 3.3.1 Purpose
+Some fuel stations have multiple merchant accounts (e.g., FNB for Visa/Mastercard, ABSA for American Express). This step allows adding a second bank's data.
+
+#### 3.3.2 Screen: Upload (with Skip Option Prominent)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ✓ Step 1: Fuel Transactions    ✓ Step 2: Bank #1    ● Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   🏦 BANK ACCOUNT #2 (Optional)                                  │ │
+│   │   Additional verification data                                   │ │
+│   │                                                                   │ │
+│   │   ┌───────────────────────────────────────────────────────────┐  │ │
+│   │   │ 📊 PROGRESS SO FAR                                        │  │ │
+│   │   │                                                           │  │ │
+│   │   │ Fuel transactions:     12,138 card sales (R 6.5M)        │  │ │
+│   │   │ FNB coverage:          79 transactions (R 45K)           │  │ │
+│   │   │ Still unverified:      12,059 transactions (R 6.4M)      │  │ │
+│   │   └───────────────────────────────────────────────────────────┘  │ │
+│   │                                                                   │ │
+│   │   Do you have a second bank account for card transactions?       │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────┐    ┌─────────────────────┐            │ │
+│   │   │                     │    │                     │            │ │
+│   │   │  Yes, upload        │    │  No, skip to        │            │ │
+│   │   │  another bank file  │    │  reconciliation     │            │ │
+│   │   │                     │    │                     │            │ │
+│   │   │  [Upload File]      │    │  [Skip & Finish →]  │            │ │
+│   │   │                     │    │                     │            │ │
+│   │   └─────────────────────┘    └─────────────────────┘            │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+The rest of Step 3 follows the same pattern as Step 2.
+
+---
+
+### COMPLETION: Ready to Reconcile
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Reconciliation Setup                                                  │
+│                                                                         │
+│   ✓ Step 1: Fuel Transactions    ✓ Step 2: Bank #1    ✓ Step 3: Bank #2│
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+│                                                                         │
+│   ┌───────────────────────────────────────────────────────────────────┐ │
+│   │                                                                   │ │
+│   │   ✅ SETUP COMPLETE                                              │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │                                                         │    │ │
+│   │   │   📊 Fuel Transactions                                  │    │ │
+│   │   │      25,301 total (12,138 card / 12,485 cash / 678 debtor)│   │ │
+│   │   │      R 8,934,521.45                                     │    │ │
+│   │   │      01 Sep 2025 - 30 Nov 2025                          │    │ │
+│   │   │                                                         │    │ │
+│   │   │   🏦 FNB Merchant                                       │    │ │
+│   │   │      79 transactions                                    │    │ │
+│   │   │      R 45,231.50                                        │    │ │
+│   │   │      27 Nov 2025                                        │    │ │
+│   │   │                                                         │    │ │
+│   │   │   🏦 ABSA Merchant                                      │    │ │
+│   │   │      500 transactions                                   │    │ │
+│   │   │      R 287,492.30                                       │    │ │
+│   │   │      20 Nov - 27 Nov 2025                               │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │ ⚠️ COVERAGE NOTE                                        │    │ │
+│   │   │                                                         │    │ │
+│   │   │ Your bank files only cover ~8 days of your 91-day fuel │    │ │
+│   │   │ data period. We can only verify transactions for dates │    │ │
+│   │   │ where you have bank data.                               │    │ │
+│   │   │                                                         │    │ │
+│   │   │ Verifiable:     ~580 transactions (4.8%)               │    │ │
+│   │   │ Not verifiable: ~11,558 transactions (95.2%)           │    │ │
+│   │   │                                                         │    │ │
+│   │   │ 💡 Upload more bank statements to increase coverage.   │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   │   ┌─────────────────────────────────────────────────────────┐    │ │
+│   │   │                                                         │    │ │
+│   │   │   [← Edit Files]           [Run Reconciliation →]       │    │ │
+│   │   │                                                         │    │ │
+│   │   └─────────────────────────────────────────────────────────┘    │ │
+│   │                                                                   │ │
+│   └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. Component Architecture
+
+### 4.1 New Components Needed
+
+```
+src/components/
+├── ReconciliationWizard/
+│   ├── ReconciliationWizard.tsx       # Main wizard container
+│   ├── WizardProgress.tsx             # Step indicator (1-2-3)
+│   ├── WizardStep.tsx                 # Generic step wrapper
+│   │
+│   ├── steps/
+│   │   ├── FuelUploadStep.tsx         # Step 1: Upload fuel file
+│   │   ├── FuelQualityStep.tsx        # Step 1: Quality check
+│   │   ├── FuelMappingStep.tsx        # Step 1: Column mapping
+│   │   ├── FuelPreviewStep.tsx        # Step 1: Preview & confirm
+│   │   │
+│   │   ├── BankUploadStep.tsx         # Step 2/3: Upload bank file
+│   │   ├── BankQualityStep.tsx        # Step 2/3: Quality check
+│   │   ├── BankMappingStep.tsx        # Step 2/3: Column mapping
+│   │   ├── BankPreviewStep.tsx        # Step 2/3: Preview with coverage
+│   │   │
+│   │   └── CompletionStep.tsx         # Final summary before reconciliation
+│   │
+│   ├── shared/
+│   │   ├── FileDropzone.tsx           # File upload component
+│   │   ├── ColumnMapper.tsx           # Column mapping UI
+│   │   ├── DataPreviewTable.tsx       # Sample rows display
+│   │   ├── CoverageWarning.tsx        # Date range coverage alert
+│   │   └── StepTransition.tsx         # Success animation between steps
+│   │
+│   └── hooks/
+│       ├── useWizardState.ts          # Wizard state management
+│       ├── useFileProcessing.ts       # File upload & validation
+│       └── useCoverageAnalysis.ts     # Date range comparison
+```
+
+### 4.2 State Management
+
+```typescript
+interface WizardState {
+  currentStep: 1 | 2 | 3 | 'complete';
+  currentSubStep: 'upload' | 'quality' | 'mapping' | 'preview' | 'done';
+  
+  fuelFile: {
+    file: File | null;
+    qualityReport: DataQualityReport | null;
+    columnMapping: Record<string, string>;
+    processedData: Transaction[];
+    summary: {
+      totalRows: number;
+      dateRange: { start: Date; end: Date };
+      totalAmount: number;
+      byPayType: Record<string, { count: number; amount: number }>;
+    };
+  };
+  
+  bankFiles: Array<{
+    bankName: string;
+    file: File | null;
+    qualityReport: DataQualityReport | null;
+    columnMapping: Record<string, string>;
+    processedData: Transaction[];
+    summary: {
+      totalRows: number;
+      dateRange: { start: Date; end: Date };
+      totalAmount: number;
+    };
+    coverage: {
+      daysOverlap: number;
+      percentCoverage: number;
+      verifiableTransactions: number;
+    };
+  }>;
+  
+  skippedBankFile2: boolean;
+}
+```
+
+---
+
+## 5. Key UX Principles
+
+### 5.1 One Thing at a Time
+- Never show multiple file uploads simultaneously
+- Complete one file fully before moving to the next
+- Clear visual progress indicator
+
+### 5.2 Context at Every Step
+- Explain WHY this file matters
+- Show how it connects to previous steps
+- Indicate what comes next
+
+### 5.3 Reassuring Language
+- "Source of truth" not "primary file"
+- "Verification data" not "secondary file"  
+- "We'll fix this automatically" not "Error detected"
+
+### 5.4 Smart Defaults
+- Pre-select column mappings based on analysis
+- Remember bank selection for appropriate defaults
+- Show sample values to validate mappings
+
+### 5.5 Progressive Disclosure
+- Show summary first, details on expand
+- Don't overwhelm with technical information
+- Explain issues in plain language
+
+### 5.6 Clear Escape Hatches
+- "Choose different file" always available
+- "Skip" option for optional steps
+- "Back" to previous step/sub-step
+
+---
+
+## 6. Edge Cases
+
+### 6.1 User Wants to Change Step 1 After Completing Step 2
+- Allow going back, but warn: "Changing fuel data will reset your bank file mappings"
+- Offer to keep bank files uploaded but re-run coverage analysis
+
+### 6.2 Bank File Has No Overlapping Dates
+- Show clear warning with specific dates
+- Still allow proceeding (maybe they'll upload more data later)
+- Don't fail silently — make the coverage gap obvious
+
+### 6.3 User Only Has One Bank Account
+- "Skip" on Step 3 goes directly to completion
+- Completion screen adjusts messaging accordingly
+
+### 6.4 User Uploads Same File Twice
+- Detect duplicate files
+- "This looks like the same file as Bank #1. Upload a different file or skip this step."
+
+### 6.5 Very Large Files
+- Show upload progress
+- Process in background with progress indicator
+- Don't block UI during processing
+
+---
+
+## 7. Future Enhancements
+
+### 7.1 Save & Resume
+- Allow saving progress mid-wizard
+- Resume where they left off next session
+
+### 7.2 Templates
+- Remember column mappings per bank
+- "Use same mapping as last time?"
+
+### 7.3 Multiple Bank Files Per Step
+- Allow uploading multiple months for same bank
+- Combine into single dataset before proceeding
+
+### 7.4 Drag-and-Drop Reordering
+- Let advanced users reorder or add more bank files
+- Support unlimited bank sources
+
+---
+
+## 8. Success Metrics
+
+| Metric | Current | Target |
+|--------|---------|--------|
+| Setup completion rate | Unknown | >90% |
+| Time to complete setup | Unknown | <5 minutes |
+| Support tickets re: file upload | Unknown | -80% |
+| User understands coverage gaps | No | Yes |
+| User maps columns correctly first try | ~50% | >85% |
+
+---
+
+## 9. Implementation Priority
+
+### Phase 1: Core Wizard (MVP)
+1. WizardProgress component
+2. Fuel file steps (upload → quality → mapping → preview)
+3. Single bank file step
+4. Completion screen
+5. Basic state management
+
+### Phase 2: Enhanced UX
+1. Coverage analysis & warnings
+2. Second bank file (optional step)
+3. Smart column mapping suggestions
+4. File duplicate detection
+
+### Phase 3: Polish
+1. Save & resume
+2. Template mappings
+3. Animation/transitions
+4. Keyboard navigation
+
+---
+
+*Document Version: 1.0*
+*Last Updated: December 2024*
+*Author: Claude + Garth*

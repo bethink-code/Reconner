@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { createHash } from "crypto";
 import multer from "multer";
 import { storage } from "./storage";
 import { fileParser, DataNormalizer, SOURCE_PRESETS } from "./fileParser";
@@ -15,6 +16,10 @@ import {
   matchingRulesConfigSchema
 } from "@shared/schema";
 import { z } from "zod";
+
+function computeContentHash(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+}
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -180,14 +185,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "sourceType and sourceName are required" });
       }
 
-      // Check for existing file with same sourceType/sourceName and delete it
+      // Compute content hash for smart re-upload detection
+      const contentHash = computeContentHash(req.file.buffer);
+
+      // Check for existing file with same sourceType/sourceName
       const existingFiles = await storage.getFilesByPeriod(req.params.periodId);
       const existingFile = existingFiles.find(f => 
         f.sourceType === sourceType && f.sourceName === sourceName
       );
       
+      // Smart re-upload detection: if same content hash, return existing file
+      if (existingFile && existingFile.contentHash === contentHash) {
+        console.log(`Same file re-uploaded, skipping processing: ${existingFile.fileName}`);
+        return res.json({
+          file: existingFile,
+          parsed: {
+            headers: [], // These would need to be re-parsed if needed
+            rows: [],
+            rowCount: existingFile.rowCount || 0,
+          },
+          suggestedMappings: existingFile.columnMapping || {},
+          qualityReport: existingFile.qualityReport,
+          isReupload: true,
+          message: "Same file detected, using existing data"
+        });
+      }
+      
       if (existingFile) {
-        // Delete old file's transactions, matches, and the file record
+        // Different file uploaded - delete old file's transactions, matches, and the file record
         console.log(`Replacing existing file: ${existingFile.fileName} (${existingFile.id})`);
         await storage.deleteFile(existingFile.id);
         // Try to clean up object storage (but don't fail if it doesn't work)
@@ -301,6 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rowCount: parsed.rowCount,
         columnMapping: null,
         qualityReport: qualityReport,
+        contentHash,
         status: 'uploaded'
       });
 

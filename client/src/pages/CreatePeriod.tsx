@@ -33,7 +33,7 @@ export default function CreatePeriod() {
         title: "Period created",
         description: `${period.name} has been created successfully.`,
       });
-      setLocation(`/upload?periodId=${period.id}`);
+      setLocation(`/setup/${period.id}`);
     },
     onError: (error: Error) => {
       toast({

@@ -58,7 +58,7 @@ export default function Dashboard() {
   const draftCount = displayPeriods.filter(p => p.status === "draft").length;
 
   const handleEdit = (id: string) => {
-    setLocation(`/upload?periodId=${id}`);
+    setLocation(`/setup/${id}`);
   };
 
   const handleViewReport = (id: string) => {

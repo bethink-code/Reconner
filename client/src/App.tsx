@@ -13,6 +13,7 @@ import ColumnMapping from "@/pages/ColumnMapping";
 import ReconcileTransactions from "@/pages/ReconcileTransactions";
 import ReportView from "@/pages/ReportView";
 import Admin from "@/pages/Admin";
+import ReconciliationSetupWizard from "@/pages/ReconciliationSetupWizard";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -34,6 +35,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/create" component={CreatePeriod} />
+      <Route path="/setup/:periodId" component={ReconciliationSetupWizard} />
       <Route path="/upload" component={UploadFiles} />
       <Route path="/mapping" component={ColumnMapping} />
       <Route path="/reconcile" component={ReconcileTransactions} />

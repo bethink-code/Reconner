@@ -33,6 +33,7 @@ type WizardAction =
   | { type: "UPDATE_FILE"; payload: { stepIndex: number; file: UploadedFile; qualityReport: DataQualityReport | null } }
   | { type: "UPDATE_MAPPING"; payload: { stepIndex: number; mapping: Record<string, string> } }
   | { type: "UPDATE_BANK_PRESET"; payload: { stepIndex: number; preset: string } }
+  | { type: "MARK_FILE_PROCESSED"; payload: { stepIndex: number; transactionsCreated: number } }
   | { type: "COMPLETE_STEP"; payload: number }
   | { type: "ADD_BANK_STEP"; payload?: { sourceName?: string } }
   | { type: "REMOVE_BANK_STEP"; payload: number }
@@ -43,12 +44,15 @@ type WizardAction =
 function createInitialStep(type: StepType, sourceType: string, sourceName: string, file?: UploadedFile): FileStep {
   const hasFile = !!file;
   const hasMapping = file?.columnMapping && Object.keys(file.columnMapping as object).length > 0;
+  const isProcessed = file?.status === 'processed';
   
   let currentSubStep: SubStep = "upload";
-  if (hasFile && !hasMapping) {
-    currentSubStep = "quality";
-  } else if (hasFile && hasMapping) {
+  if (hasFile && isProcessed) {
     currentSubStep = "complete";
+  } else if (hasFile && hasMapping) {
+    currentSubStep = "preview";
+  } else if (hasFile && !hasMapping) {
+    currentSubStep = "quality";
   }
   
   return {
@@ -60,7 +64,7 @@ function createInitialStep(type: StepType, sourceType: string, sourceName: strin
     qualityReport: file?.qualityReport as DataQualityReport | null,
     columnMapping: file?.columnMapping as Record<string, string> | null,
     currentSubStep,
-    isComplete: hasFile && !!hasMapping,
+    isComplete: hasFile && isProcessed,
     bankPreset: undefined,
   };
 }
@@ -149,6 +153,21 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         ...state,
         steps: state.steps.map((step, idx) =>
           idx === stepIndex ? { ...step, bankPreset: preset } : step
+        ),
+      };
+    }
+    
+    case "MARK_FILE_PROCESSED": {
+      const { stepIndex, transactionsCreated } = action.payload;
+      return {
+        ...state,
+        steps: state.steps.map((step, idx) =>
+          idx === stepIndex && step.file
+            ? {
+                ...step,
+                file: { ...step.file, status: 'processed', rowCount: transactionsCreated },
+              }
+            : step
         ),
       };
     }
@@ -263,6 +282,7 @@ interface WizardContextValue {
   updateFile: (stepIndex: number, file: UploadedFile, qualityReport: DataQualityReport | null) => void;
   updateMapping: (stepIndex: number, mapping: Record<string, string>) => void;
   updateBankPreset: (stepIndex: number, preset: string) => void;
+  markFileProcessed: (stepIndex: number, transactionsCreated: number) => void;
   completeStep: (stepIndex: number) => void;
   addBankStep: (sourceName?: string) => void;
   removeBankStep: (stepIndex: number) => void;
@@ -305,6 +325,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   
   const updateBankPreset = useCallback((stepIndex: number, preset: string) => {
     dispatch({ type: "UPDATE_BANK_PRESET", payload: { stepIndex, preset } });
+  }, []);
+  
+  const markFileProcessed = useCallback((stepIndex: number, transactionsCreated: number) => {
+    dispatch({ type: "MARK_FILE_PROCESSED", payload: { stepIndex, transactionsCreated } });
   }, []);
   
   const completeStep = useCallback((stepIndex: number) => {
@@ -350,6 +374,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     updateFile,
     updateMapping,
     updateBankPreset,
+    markFileProcessed,
     completeStep,
     addBankStep,
     removeBankStep,

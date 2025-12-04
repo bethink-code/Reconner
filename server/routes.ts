@@ -543,7 +543,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      console.log(`[PROCESS] Creating ${validTransactions.length} transactions for file ${file.id}, period ${file.periodId}`);
+      if (validTransactions.length > 0) {
+        console.log(`[PROCESS] First transaction: date=${validTransactions[0].transactionDate}, amount=${validTransactions[0].amount}, ref=${validTransactions[0].referenceNumber}`);
+      }
+      
       const created = await storage.createTransactions(validTransactions);
+      
+      console.log(`[PROCESS] Created ${created.length} transactions in database`);
       
       await storage.updateFile(file.id, { 
         status: 'processed',
@@ -586,10 +593,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const matchStatus = req.query.matchStatus as string | undefined;
       const isCardTransaction = req.query.isCardTransaction as string | undefined;
       
+      console.log(`[TRANSACTIONS] Fetching for period ${req.params.periodId}, page ${page}, limit ${limit}`);
+      
       const result = await storage.getTransactionsByPeriodPaginated(
         req.params.periodId,
         { limit, offset, sourceType, matchStatus, isCardTransaction }
       );
+      
+      console.log(`[TRANSACTIONS] Found ${result.total} total, returning ${result.transactions.length} on page ${page}`);
       
       res.json({
         transactions: result.transactions,

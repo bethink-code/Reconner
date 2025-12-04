@@ -66,16 +66,28 @@ export function MappingPanel({
     enabled: !!fileId,
   });
   
+  const invertMapping = (m: Record<string, string>): Record<string, string> => {
+    const inverted: Record<string, string> = {};
+    for (const [key, value] of Object.entries(m)) {
+      if (value && value !== 'ignore') {
+        inverted[value] = key;
+      }
+    }
+    return inverted;
+  };
+  
   useEffect(() => {
     if (preview) {
-      const initialMapping = preview.currentMapping || preview.suggestedMappings || {};
-      setMapping(initialMapping);
+      const serverMapping = preview.currentMapping || preview.suggestedMappings || {};
+      const uiMapping = invertMapping(serverMapping);
+      setMapping(uiMapping);
     }
   }, [preview]);
   
   const saveMappingMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("PATCH", `/api/files/${fileId}/mapping`, { mapping });
+      const serverMapping = invertMapping(mapping);
+      return apiRequest("POST", `/api/files/${fileId}/column-mapping`, { columnMapping: serverMapping });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/files", fileId, "preview"] });
@@ -111,7 +123,8 @@ export function MappingPanel({
   
   const applyAutoMapping = () => {
     if (preview?.suggestedMappings) {
-      setMapping(preview.suggestedMappings);
+      const uiMapping = invertMapping(preview.suggestedMappings);
+      setMapping(uiMapping);
       toast({
         title: "Auto-mapping applied",
         description: "Column mappings have been suggested based on your data.",

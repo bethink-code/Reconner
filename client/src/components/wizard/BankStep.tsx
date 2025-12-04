@@ -22,7 +22,7 @@ interface BankStepProps {
 
 export function BankStep({ stepIndex, periodId }: BankStepProps) {
   const { toast } = useToast();
-  const { state, updateFile, setSubStep, completeStep, updateBankPreset } = useWizard();
+  const { state, updateFile, setSubStep, markFileProcessed, completeStep, updateBankPreset } = useWizard();
   
   const step = state.steps[stepIndex];
   if (!step) return null;
@@ -89,7 +89,8 @@ export function BankStep({ stepIndex, periodId }: BankStepProps) {
     setSubStep(stepIndex, "preview");
   };
   
-  const handlePreviewConfirm = () => {
+  const handlePreviewConfirm = (result: { transactionsCreated: number }) => {
+    markFileProcessed(stepIndex, result.transactionsCreated);
     completeStep(stepIndex);
   };
   

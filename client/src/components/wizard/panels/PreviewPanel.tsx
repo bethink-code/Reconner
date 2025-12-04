@@ -32,11 +32,15 @@ interface FilePreview {
   normalizedPreview: NormalizedTransaction[];
 }
 
+interface ProcessingResult {
+  transactionsCreated: number;
+}
+
 interface PreviewPanelProps {
   periodId: string;
   fileId: string;
   sourceType: "fuel" | "bank";
-  onConfirm: () => void;
+  onConfirm: (result: ProcessingResult) => void;
   onBack: () => void;
 }
 
@@ -55,17 +59,18 @@ export function PreviewPanel({
   });
   
   const processFileMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", `/api/files/${fileId}/process`);
+    mutationFn: async (): Promise<{ transactionsCreated: number }> => {
+      const response = await apiRequest("POST", `/api/files/${fileId}/process`);
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
       toast({
         title: "File processed",
-        description: "Transactions have been imported successfully.",
+        description: `${data.transactionsCreated} transactions imported successfully.`,
       });
-      onConfirm();
+      onConfirm({ transactionsCreated: data.transactionsCreated });
     },
     onError: (error: Error) => {
       toast({

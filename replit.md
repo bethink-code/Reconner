@@ -170,15 +170,30 @@ Preferred communication style: Simple, everyday language.
 
 ### User Workflow
 
+**Wizard-Based File Setup**
+The setup process follows a sequential wizard pattern: "One file. One focus. Complete it. Move on."
+Each file goes through 5 substeps:
+1. **Upload** - Select and upload file (CSV/Excel)
+2. **Quality Check** - Review data quality issues and warnings
+3. **Column Mapping** - Map columns to required fields (date, amount, reference)
+4. **Preview** - Review sample data before import
+5. **Confirm & Import** - Process file to create transactions (POST /api/files/{fileId}/process)
+
+**File Status Tracking**
+- Files use `status` field: 'uploaded' → 'processed'
+- Steps only marked complete when file.status === 'processed'
+- This prevents wizard from showing "Start Reconciliation" until transactions are actually created
+
 **Multi-Step Reconciliation Process**
-1. **Dashboard** - View all periods with status cards and period list; "Edit" opens existing period, "View Report" goes to report
+1. **Dashboard** - View all periods with status cards and period list
 2. **Create Period** - Define reconciliation period with name, description, and date range
-3. **Upload Files** - Upload fuel management and bank account transaction files (requires fuel + at least one bank file)
-   - Shows existing uploaded files with Replace button to upload new file over existing one
-   - File cards display: filename, size, row count, mapping status
-4. **Column Mapping** - Map detected columns to required fields (date, amount, reference, description, card number)
-5. **Reconcile Transactions** - Review automatic matches, resolve partial matches, manually match unmatched transactions
-6. **Report View** - Redesigned verification-based reconciliation dashboard with 6 sections
+3. **Setup Wizard** - Sequential wizard at `/setup/:periodId`
+   - First step: Fuel file (required)
+   - Subsequent steps: Bank files (at least one required)
+   - Each file goes through Upload → Quality → Mapping → Preview → Complete substeps
+   - "Start Reconciliation" button only appears when all files are processed
+4. **Reconcile Transactions** - Review automatic matches, resolve partial matches, manually match unmatched transactions
+5. **Report View** - Verification-based reconciliation dashboard with 6 sections
 
 **Page Components**
 - Dashboard: Period overview with metrics and quick actions

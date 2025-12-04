@@ -22,7 +22,7 @@ interface FuelStepProps {
 
 export function FuelStep({ stepIndex, periodId }: FuelStepProps) {
   const { toast } = useToast();
-  const { state, currentStep, updateFile, setSubStep, completeStep } = useWizard();
+  const { state, currentStep, updateFile, setSubStep, markFileProcessed, completeStep } = useWizard();
   
   const step = state.steps[stepIndex];
   if (!step) return null;
@@ -87,7 +87,8 @@ export function FuelStep({ stepIndex, periodId }: FuelStepProps) {
     setSubStep(stepIndex, "preview");
   };
   
-  const handlePreviewConfirm = () => {
+  const handlePreviewConfirm = (result: { transactionsCreated: number }) => {
+    markFileProcessed(stepIndex, result.transactionsCreated);
     completeStep(stepIndex);
   };
   

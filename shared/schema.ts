@@ -62,6 +62,7 @@ export const uploadedFiles = pgTable("uploaded_files", {
   fileSize: integer("file_size").notNull(),
   rowCount: integer("row_count").default(0),
   columnMapping: jsonb("column_mapping"),
+  qualityReport: jsonb("quality_report"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   status: text("status").notNull().default("uploaded"),
 });

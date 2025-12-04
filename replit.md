@@ -69,6 +69,18 @@ Preferred communication style: Simple, everyday language.
 - Custom FileParser service providing unified interface for multiple file formats
 - Column mapping detection with confidence scoring for automatic field suggestions
 
+**Data Quality Validation**
+- DataQualityValidator service (server/dataQualityValidator.ts) analyzes uploaded files for data issues
+- Detects: column shifts, page break rows, repeated headers, empty columns, type mismatches
+- Quality report stored with uploaded files in `qualityReport` JSONB field
+- Issues classified by severity: critical (blocks processing), warning (may affect accuracy), info (cosmetic)
+- Suggested column mappings generated when column shifts detected
+- Frontend components:
+  - DataQualityWarnings component displays issues with expandable details
+  - "Apply Suggested Fix" button auto-configures column mappings
+  - Warnings persist across page reloads via stored qualityReport
+- Quality report exposed via file preview endpoint for ColumnMapping page access
+
 **Report Generation**
 - jsPDF with autoTable plugin for PDF report generation
 - xlsx for Excel export functionality

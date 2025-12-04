@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
 import { fileParser, DataNormalizer, SOURCE_PRESETS } from "./fileParser";
+import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
 import { reportGenerator } from "./reportGenerator";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -225,6 +226,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         suggestedMappingsObject[mapping.detectedColumn] = mapping.suggestedMapping;
       }
 
+      // Run data quality validation
+      const rawQualityReport = dataQualityValidator.validate(
+        parsed,
+        sourceType as 'fuel' | 'bank',
+        sourceName
+      );
+      
+      // Transform quality report to match frontend expectations
+      const normalizeIssueType = (type: string): string => {
+        const normalized = type.toLowerCase();
+        // Normalize to canonical types
+        if (normalized.includes('column_shift')) return 'column_shift';
+        if (normalized.includes('page_break')) return 'page_break';
+        if (normalized.includes('repeated_header')) return 'repeated_header';
+        if (normalized.includes('empty_column')) return 'empty_column';
+        if (normalized.includes('type_mismatch') || normalized.includes('data_type_mismatch')) return 'type_mismatch';
+        if (normalized.includes('missing_required')) return 'missing_data';
+        if (normalized.includes('inconsistent')) return 'inconsistent_data';
+        return normalized;
+      };
+
+      const qualityReport = {
+        hasIssues: rawQualityReport.hasIssues,
+        hasCriticalIssues: rawQualityReport.hasCriticalIssues,
+        overallScore: 100 - (rawQualityReport.problematicRows / rawQualityReport.totalRows * 100),
+        totalRows: rawQualityReport.totalRows,
+        cleanRows: rawQualityReport.cleanRows,
+        problematicRows: rawQualityReport.problematicRows,
+        issues: rawQualityReport.issues.map(issue => ({
+          type: normalizeIssueType(issue.type),
+          severity: issue.severity.toLowerCase(),
+          message: issue.message,
+          details: issue.details,
+          affectedColumns: issue.details?.columns,
+          rowNumbers: issue.affectedRows,
+          suggestedFix: issue.suggestedFix,
+        })),
+        columnAnalysis: rawQualityReport.columnAnalysis.map(col => ({
+          columnName: col.columnName,
+          columnIndex: col.columnIndex,
+          inferredType: col.inferredType,
+          nullCount: col.nullCount,
+          nonNullCount: col.nonNullCount,
+          uniqueValues: col.uniqueValues,
+          sampleValues: col.sampleValues,
+          expectedType: col.inferredType,
+          actualType: col.inferredType,
+          nullPercentage: col.nullCount / (col.nullCount + col.nonNullCount) * 100,
+          consistencyScore: 100 - (col.headerLikeValues + col.pageLikeValues) / (col.nonNullCount || 1) * 100,
+        })),
+        suggestedMapping: rawQualityReport.suggestedColumnMapping,
+        suggestedColumnMapping: rawQualityReport.suggestedColumnMapping, // Keep legacy field too
+        rowsToRemove: rawQualityReport.rowsToRemove,
+        columnShiftDetected: rawQualityReport.columnShiftDetected,
+        shiftDetails: rawQualityReport.shiftDetails,
+        detectedPreset: rawQualityReport.detectedPreset,
+      };
+
       const fileUrl = await objectStorageService.uploadFile(
         req.file.buffer,
         req.file.originalname,
@@ -241,6 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileSize: req.file.size,
         rowCount: parsed.rowCount,
         columnMapping: null,
+        qualityReport: qualityReport,
         status: 'uploaded'
       });
 
@@ -252,6 +312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalRows: parsed.rowCount,
         },
         suggestedMappings: suggestedMappingsObject,
+        qualityReport,
       });
     } catch (error) {
       console.error("Error uploading file:", error);
@@ -314,13 +375,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalRows: parsed.rowCount,
         suggestedMappings,
         currentMapping: file.columnMapping,
-        // New fields for improved UI
         detectedPreset: detectedPreset ? {
           name: detectedPreset.name,
           description: detectedPreset.description,
         } : null,
         columnLabels,
         normalizedPreview,
+        qualityReport: file.qualityReport,
       });
     } catch (error) {
       console.error("Error fetching file preview:", error);

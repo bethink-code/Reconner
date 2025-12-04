@@ -4,15 +4,22 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import FileUploadZone from "@/components/FileUploadZone";
+import { DataQualityWarnings, type DataQualityReport } from "@/components/DataQualityWarnings";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import type { UploadedFile } from "@shared/schema";
 
+interface UploadResponse {
+  file: UploadedFile;
+  qualityReport: DataQualityReport;
+}
+
 export default function UploadFiles() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [periodId, setPeriodId] = useState<string>("");
+  const [qualityReports, setQualityReports] = useState<Record<string, { report: DataQualityReport; fileName: string }>>({});
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -35,8 +42,29 @@ export default function UploadFiles() {
   const bank1File = existingFiles.find(f => f.sourceType === 'bank1');
   const bank2File = existingFiles.find(f => f.sourceType === 'bank2');
 
+  // Populate quality reports from persisted files on load
+  useEffect(() => {
+    if (existingFiles.length > 0) {
+      const reports: Record<string, { report: DataQualityReport; fileName: string }> = {};
+      for (const file of existingFiles) {
+        if (file.qualityReport && (file.qualityReport as DataQualityReport).hasIssues) {
+          const sourceKey = file.sourceType === 'fuel' ? 'fuel' : 
+                           file.sourceType === 'bank1' ? 'bank1' : 
+                           file.sourceType === 'bank2' ? 'bank2' : file.sourceType;
+          reports[sourceKey] = {
+            report: file.qualityReport as DataQualityReport,
+            fileName: file.fileName,
+          };
+        }
+      }
+      if (Object.keys(reports).length > 0) {
+        setQualityReports(reports);
+      }
+    }
+  }, [existingFiles]);
+
   const uploadMutation = useMutation({
-    mutationFn: async ({ file, sourceType, sourceName }: { file: File; sourceType: string; sourceName: string }) => {
+    mutationFn: async ({ file, sourceType, sourceName }: { file: File; sourceType: string; sourceName: string }): Promise<UploadResponse> => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('sourceType', sourceType);
@@ -54,15 +82,38 @@ export default function UploadFiles() {
       }
 
       const result = await response.json();
-      return result.file as UploadedFile;
+      return result as UploadResponse;
     },
-    onSuccess: (uploadedFile) => {
-      // Refresh the files list
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['/api/periods', periodId, 'files'] });
-      toast({
-        title: "File uploaded",
-        description: `${uploadedFile.fileName} uploaded successfully.`,
-      });
+      
+      if (result.qualityReport) {
+        setQualityReports(prev => ({
+          ...prev,
+          [result.file.sourceType]: {
+            report: result.qualityReport,
+            fileName: result.file.fileName
+          }
+        }));
+      }
+      
+      if (result.qualityReport?.hasCriticalIssues) {
+        toast({
+          title: "File uploaded with issues",
+          description: `${result.file.fileName} has ${result.qualityReport.issues.length} quality issue(s) that need attention.`,
+          variant: "destructive",
+        });
+      } else if (result.qualityReport?.hasIssues) {
+        toast({
+          title: "File uploaded",
+          description: `${result.file.fileName} uploaded with ${result.qualityReport.issues.length} warning(s).`,
+        });
+      } else {
+        toast({
+          title: "File uploaded",
+          description: `${result.file.fileName} uploaded successfully.`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -144,6 +195,20 @@ export default function UploadFiles() {
             } : null}
             onFilesSelected={handleFilesSelected('fuel', 'Fuel Management System')}
           />
+          
+          {qualityReports['fuel'] && qualityReports['fuel'].report.hasIssues && (
+            <DataQualityWarnings
+              report={qualityReports['fuel'].report}
+              fileName={qualityReports['fuel'].fileName}
+              onUseSuggestedMapping={() => {
+                toast({
+                  title: "Suggested mapping ready",
+                  description: "Continue to the mapping page to apply the suggested column mapping.",
+                });
+                setLocation(`/mapping?periodId=${periodId}`);
+              }}
+            />
+          )}
 
           <FileUploadZone
             label="Bank Account 1 Transactions"
@@ -157,6 +222,20 @@ export default function UploadFiles() {
             } : null}
             onFilesSelected={handleFilesSelected('bank1', 'Bank Account 1')}
           />
+          
+          {qualityReports['bank1'] && qualityReports['bank1'].report.hasIssues && (
+            <DataQualityWarnings
+              report={qualityReports['bank1'].report}
+              fileName={qualityReports['bank1'].fileName}
+              onUseSuggestedMapping={() => {
+                toast({
+                  title: "Suggested mapping ready",
+                  description: "Continue to the mapping page to apply the suggested column mapping.",
+                });
+                setLocation(`/mapping?periodId=${periodId}`);
+              }}
+            />
+          )}
 
           <FileUploadZone
             label="Bank Account 2 Transactions (Optional)"
@@ -170,6 +249,20 @@ export default function UploadFiles() {
             } : null}
             onFilesSelected={handleFilesSelected('bank2', 'Bank Account 2')}
           />
+          
+          {qualityReports['bank2'] && qualityReports['bank2'].report.hasIssues && (
+            <DataQualityWarnings
+              report={qualityReports['bank2'].report}
+              fileName={qualityReports['bank2'].fileName}
+              onUseSuggestedMapping={() => {
+                toast({
+                  title: "Suggested mapping ready",
+                  description: "Continue to the mapping page to apply the suggested column mapping.",
+                });
+                setLocation(`/mapping?periodId=${periodId}`);
+              }}
+            />
+          )}
         </div>
       </main>
     </div>

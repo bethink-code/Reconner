@@ -47,6 +47,51 @@ type NormalizedTransaction = {
   isCardTransaction: 'yes' | 'no' | 'unknown';
 };
 
+type QualityIssue = {
+  type: string;
+  severity: string;
+  message: string;
+  details?: Record<string, unknown>;
+  affectedColumns?: string[];
+  rowNumbers?: number[];
+  suggestedFix?: string;
+};
+
+type ColumnAnalysisItem = {
+  columnName?: string;
+  columnIndex?: number;
+  inferredType?: string;
+  expectedType?: string;
+  actualType?: string;
+  nullCount?: number;
+  nonNullCount?: number;
+  uniqueValues?: number;
+  sampleValues?: string[];
+  nullPercentage?: number;
+  consistencyScore?: number;
+};
+
+type QualityReport = {
+  hasIssues: boolean;
+  hasCriticalIssues?: boolean;
+  overallScore?: number;
+  totalRows?: number;
+  cleanRows?: number;
+  problematicRows?: number;
+  issues: QualityIssue[];
+  columnAnalysis: ColumnAnalysisItem[] | Record<string, ColumnAnalysisItem>;
+  suggestedMapping?: Record<string, string>;
+  suggestedColumnMapping?: Record<string, string>;
+  columnShiftDetected?: boolean;
+  rowsToRemove?: number[];
+  shiftDetails?: {
+    expectedColumn: string;
+    actualDataType: string;
+    examples: string[];
+  };
+  detectedPreset?: string;
+};
+
 type FilePreview = {
   headers: string[];
   rows: Record<string, unknown>[];
@@ -56,6 +101,7 @@ type FilePreview = {
   detectedPreset: { name: string; description: string } | null;
   columnLabels: Record<string, string>;
   normalizedPreview: NormalizedTransaction[];
+  qualityReport?: QualityReport;
 };
 
 type DuplicateError = {
@@ -819,6 +865,61 @@ function FileMappingCard({ file }: { file: UploadedFile }) {
         )}
       </CardHeader>
       <CardContent>
+        {/* Quality warnings section */}
+        {preview.qualityReport?.hasIssues && (
+          <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-amber-700 dark:text-amber-300">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <strong>Data quality issues detected</strong>
+                  <p className="text-sm mt-1">
+                    {preview.qualityReport.issues.length} issue(s) found that may affect matching accuracy.
+                  </p>
+                  {preview.qualityReport.issues.filter(i => i.type === 'column_shift').length > 0 && (
+                    <p className="text-sm mt-1">
+                      Column shift detected - data may be misaligned. We've prepared a suggested mapping correction.
+                    </p>
+                  )}
+                </div>
+                {(() => {
+                  const suggestedMapping = preview.qualityReport?.suggestedMapping || preview.qualityReport?.suggestedColumnMapping;
+                  return suggestedMapping && Object.keys(suggestedMapping).length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Convert field→column to column→field format
+                        const columnToField: Record<string, string> = {};
+                        for (const [field, column] of Object.entries(suggestedMapping)) {
+                          if (column && typeof column === 'string') {
+                            columnToField[column] = field;
+                          }
+                        }
+                        // Merge with existing mappings, keeping columns not in suggested mapping as 'ignore'
+                        const newMappings: Record<string, string> = {};
+                        for (const header of preview.headers) {
+                          newMappings[header] = columnToField[header] || 'ignore';
+                        }
+                        setColumnMappings(newMappings);
+                        toast({
+                          title: "Suggested mapping applied",
+                          description: "Column mappings have been adjusted based on the data quality analysis. Review and confirm below.",
+                        });
+                      }}
+                      className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900"
+                      data-testid="button-apply-suggested-mapping"
+                    >
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      Apply Suggested Fix
+                    </Button>
+                  );
+                })()}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="space-y-3">
           <div className="grid grid-cols-[1fr_150px_1fr] gap-4 pb-2 border-b text-sm font-semibold">
             <div>Column</div>

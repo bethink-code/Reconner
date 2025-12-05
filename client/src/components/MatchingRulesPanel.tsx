@@ -27,7 +27,7 @@ const PRESETS: Record<string, MatchingRulesConfig> = {
     autoMatchThreshold: 95,
   },
   moderate: {
-    amountTolerance: 0.10,
+    amountTolerance: 0.50,  // Fuel prices often end in .05/.10/.15 cents
     dateWindowDays: 3,
     timeWindowMinutes: 60,
     groupByInvoice: true,
@@ -177,7 +177,7 @@ export default function MatchingRulesPanel({ periodId, onRulesChanged }: Matchin
           {activePreset && (
             <p className="text-xs text-muted-foreground">
               {activePreset === "conservative" && "Strict matching: exact amounts, same day, requires card match"}
-              {activePreset === "moderate" && "Balanced: ±R0.10, 3-day window, groups by invoice (recommended)"}
+              {activePreset === "moderate" && "Balanced: ±R0.50 (handles fuel cent variations), 3-day window, groups by invoice (recommended)"}
               {activePreset === "aggressive" && "Lenient: ±R1.00, 5-day window, lower confidence threshold"}
             </p>
           )}

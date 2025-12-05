@@ -852,6 +852,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Loaded: ${bankTransactions.length} unmatched bank, ${fuelTransactions.length} unmatched fuel transactions`);
 
+      // *** DATE RANGE VALIDATION ***
+      // Detect bank transactions that cannot be matched because no fuel data exists for those dates
+      const fuelDates = fuelTransactions
+        .map(t => t.transactionDate)
+        .filter(d => d && d.trim())
+        .map(d => new Date(d!).getTime())
+        .filter(d => !isNaN(d));
+      
+      const bankDates = bankTransactions
+        .map(t => t.transactionDate)
+        .filter(d => d && d.trim())
+        .map(d => new Date(d!).getTime())
+        .filter(d => !isNaN(d));
+
+      let unmatchableBankTransactions: typeof bankTransactions = [];
+      let dateRangeWarning = '';
+      
+      if (fuelDates.length > 0 && bankDates.length > 0) {
+        const maxFuelDate = Math.max(...fuelDates);
+        const minFuelDate = Math.min(...fuelDates);
+        const maxBankDate = Math.max(...bankDates);
+        const minBankDate = Math.min(...bankDates);
+        
+        // Find bank transactions outside fuel date range
+        unmatchableBankTransactions = bankTransactions.filter(t => {
+          if (!t.transactionDate) return false;
+          const bankTime = new Date(t.transactionDate).getTime();
+          if (isNaN(bankTime)) return false;
+          // Bank date is after fuel data ends OR before fuel data starts
+          return bankTime > maxFuelDate || bankTime < minFuelDate;
+        });
+        
+        if (unmatchableBankTransactions.length > 0) {
+          const maxFuelDateStr = new Date(maxFuelDate).toISOString().split('T')[0];
+          const minFuelDateStr = new Date(minFuelDate).toISOString().split('T')[0];
+          dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
+          console.warn('Date Range Warning:', dateRangeWarning);
+          
+          // Mark these as unmatchable (distinct from unmatched)
+          for (const tx of unmatchableBankTransactions) {
+            await storage.updateTransaction(tx.id, { matchStatus: 'unmatchable' });
+          }
+        }
+      }
+      
+      // Filter out unmatchable transactions for matching
+      const matchableBankTransactions = bankTransactions.filter(
+        t => !unmatchableBankTransactions.includes(t)
+      );
+      
+      console.log(`Matchable: ${matchableBankTransactions.length} bank transactions (${unmatchableBankTransactions.length} outside date range)`);
+
       // *** KEY STEP: Group fuel by invoice ***
       const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
       console.log(`Grouped into ${fuelInvoices.length} invoices (groupByInvoice: ${rules.groupByInvoice})`);
@@ -873,8 +925,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Track matched invoices to avoid double-matching
       const matchedInvoices = new Set<string>();
 
-      // Match bank transactions to invoices
-      for (const bankTx of bankTransactions) {
+      // Match bank transactions to invoices (only matchable ones)
+      for (const bankTx of matchableBankTransactions) {
         let bestMatch: { 
           invoice: FuelInvoice; 
           confidence: number; 
@@ -965,22 +1017,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
             confidence -= amountPenalty;
           }
 
-          // Card number check (optional or required based on rules)
+          // Card number check - CRITICAL for disambiguation when multiple matches exist
+          // Card numbers are normalized to last 4 digits during import
+          let cardMatch: 'yes' | 'no' | 'unknown' = 'unknown';
+          
           if (rules.requireCardMatch) {
             if (!bankTx.cardNumber || !invoice.cardNumber) continue;
             if (bankTx.cardNumber !== invoice.cardNumber) continue;
+            cardMatch = 'yes';
+            confidence += 25; // Strong boost for required card match
             reasons.push('Card numbers match (required)');
           } else {
-            // Optional card bonus/penalty
+            // When card numbers are available, they're the strongest discriminator
+            // for ambiguous cases (e.g., R200 on same day from different cards)
             if (bankTx.cardNumber && invoice.cardNumber) {
               if (bankTx.cardNumber === invoice.cardNumber) {
-                confidence += 10;
-                reasons.push('Card numbers match (bonus)');
+                cardMatch = 'yes';
+                confidence += 25; // Strong boost - card match is highly reliable
+                reasons.push('Card numbers match (strong)');
               } else {
-                confidence -= 15;
-                reasons.push('Card numbers differ');
+                cardMatch = 'no';
+                confidence -= 30; // Strong penalty - different cards should not match
+                reasons.push('Card numbers differ (penalty)');
               }
+            } else if (bankTx.cardNumber && !invoice.cardNumber) {
+              // Bank has card, fuel doesn't - likely different payment method or missing data
+              confidence -= 5;
+              reasons.push('Bank card number not found in fuel record');
             }
+            // If neither has card number, no adjustment (truly ambiguous)
           }
 
           // Multi-line invoice note
@@ -994,12 +1059,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Check minimum confidence threshold
           if (confidence < rules.minimumConfidence) continue;
 
-          // Prefer matches with: highest confidence, then smallest date diff, then smallest time diff
+          // Prefer matches with: highest confidence, then card match, then smallest date diff, then smallest time diff
           const absDiff = Math.abs(dateDiff);
+          const cardMatchScore = cardMatch === 'yes' ? 2 : cardMatch === 'unknown' ? 1 : 0;
+          const bestCardScore = bestMatch ? 
+            (bestMatch.reasons.some(r => r.includes('Card numbers match')) ? 2 : 
+             bestMatch.reasons.some(r => r.includes('Card numbers differ')) ? 0 : 1) : -1;
+          
           if (!bestMatch || 
               confidence > bestMatch.confidence ||
-              (confidence === bestMatch.confidence && absDiff < bestMatch.dateDiff) ||
-              (confidence === bestMatch.confidence && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
+              (confidence === bestMatch.confidence && cardMatchScore > bestCardScore) ||
+              (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff) ||
+              (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
             bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
           }
         }
@@ -1037,22 +1108,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const matchRate = bankTransactions.length > 0 
-        ? ((matchCount / bankTransactions.length) * 100).toFixed(1) 
+      // Calculate match rate based on matchable transactions (excluding unmatchable)
+      const matchableCount = matchableBankTransactions.length;
+      const matchRate = matchableCount > 0 
+        ? ((matchCount / matchableCount) * 100).toFixed(1) 
         : '0';
 
       console.log(`\n=== Auto-Match Complete ===`);
-      console.log(`Matches: ${matchCount}/${bankTransactions.length} = ${matchRate}%`);
+      console.log(`Matches: ${matchCount}/${matchableCount} matchable = ${matchRate}%`);
+      if (unmatchableBankTransactions.length > 0) {
+        console.log(`Unmatchable: ${unmatchableBankTransactions.length} bank transactions (outside fuel date range)`);
+      }
 
       res.json({ 
         success: true, 
         matchesCreated: matchCount,
         cardTransactionsProcessed: fuelTransactions.length,
         invoicesCreated: fuelInvoices.length,
-        bankTransactionsAvailable: bankTransactions.length,
+        bankTransactionsTotal: bankTransactions.length,
+        bankTransactionsMatchable: matchableCount,
+        bankTransactionsUnmatchable: unmatchableBankTransactions.length,
         nonCardTransactionsSkipped: skippedNonCardCount,
         matchRate: `${matchRate}%`,
-        rulesUsed: rules
+        rulesUsed: rules,
+        warnings: dateRangeWarning ? [dateRangeWarning] : []
       });
     } catch (error) {
       console.error("Error auto-matching:", error);

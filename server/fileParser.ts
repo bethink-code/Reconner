@@ -574,6 +574,7 @@ export class FileParser {
 
   autoDetectColumns(headers: string[]): ColumnMapping[] {
     const mappings: ColumnMapping[] = [];
+    const usedFields = new Set<string>(); // Track already-mapped fields to prevent duplicates
     
     // First, try to match a known source preset
     const detectedPreset = this.detectSourcePreset(headers);
@@ -582,23 +583,66 @@ export class FileParser {
       // Use preset mappings with high confidence
       for (const header of headers) {
         const presetMapping = detectedPreset.mappings[header];
-        if (presetMapping) {
+        if (presetMapping && presetMapping !== 'ignore') {
+          // Check if this field is already mapped
+          if (usedFields.has(presetMapping)) {
+            // Field already used, set to ignore
+            mappings.push({
+              detectedColumn: header,
+              suggestedMapping: 'ignore',
+              confidence: 0,
+            });
+          } else {
+            usedFields.add(presetMapping);
+            mappings.push({
+              detectedColumn: header,
+              suggestedMapping: presetMapping,
+              confidence: 1.0,
+            });
+          }
+        } else if (presetMapping === 'ignore') {
           mappings.push({
             detectedColumn: header,
-            suggestedMapping: presetMapping,
+            suggestedMapping: 'ignore',
             confidence: 1.0,
           });
         } else {
           // Header not in preset, try generic detection
-          mappings.push(this.detectColumnGeneric(header));
+          const detected = this.detectColumnGeneric(header);
+          if (detected.suggestedMapping !== 'ignore' && usedFields.has(detected.suggestedMapping)) {
+            // Field already used, set to ignore
+            mappings.push({
+              detectedColumn: header,
+              suggestedMapping: 'ignore',
+              confidence: 0,
+            });
+          } else {
+            if (detected.suggestedMapping !== 'ignore') {
+              usedFields.add(detected.suggestedMapping);
+            }
+            mappings.push(detected);
+          }
         }
       }
       return mappings;
     }
 
-    // Fallback to generic column detection
+    // Fallback to generic column detection - also prevent duplicates
     for (const header of headers) {
-      mappings.push(this.detectColumnGeneric(header));
+      const detected = this.detectColumnGeneric(header);
+      if (detected.suggestedMapping !== 'ignore' && usedFields.has(detected.suggestedMapping)) {
+        // Field already used, set to ignore
+        mappings.push({
+          detectedColumn: header,
+          suggestedMapping: 'ignore',
+          confidence: 0,
+        });
+      } else {
+        if (detected.suggestedMapping !== 'ignore') {
+          usedFields.add(detected.suggestedMapping);
+        }
+        mappings.push(detected);
+      }
     }
 
     return mappings;

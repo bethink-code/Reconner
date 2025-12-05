@@ -18,6 +18,7 @@ export interface ColumnMapping {
 export interface SourcePreset {
   name: string;
   description: string;
+  category: 'bank' | 'fuel'; // Source category for validation
   detectPattern: (headers: string[]) => boolean;
   mappings: Record<string, 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'ignore'>;
   columnLabels: Record<string, string>; // Human-readable labels for cryptic column names
@@ -27,6 +28,7 @@ export const SOURCE_PRESETS: SourcePreset[] = [
   {
     name: 'FNB Merchant',
     description: 'FNB Bank merchant transaction export',
+    category: 'bank',
     detectPattern: (headers) => {
       const normalized = headers.map(h => h.toLowerCase().trim());
       return normalized.includes('transaction date') && 
@@ -55,6 +57,7 @@ export const SOURCE_PRESETS: SourcePreset[] = [
   {
     name: 'ABSA Merchant',
     description: 'ABSA Bank merchant portal export',
+    category: 'bank',
     detectPattern: (headers) => {
       const normalized = headers.map(h => h.toLowerCase().trim());
       return normalized.includes('transaction amount') && 
@@ -92,6 +95,7 @@ export const SOURCE_PRESETS: SourcePreset[] = [
   {
     name: 'Fuel Master',
     description: 'Fuel Master shift/sales export',
+    category: 'fuel',
     detectPattern: (headers) => {
       const normalized = headers.map(h => h.toLowerCase().trim());
       // Fuel Master has cryptic column names like _1, _2, _3, _4, _5

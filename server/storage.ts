@@ -21,7 +21,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
-import { eq, and, or, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
 
 export interface PeriodSummary {
   totalTransactions: number;
@@ -147,6 +147,7 @@ export interface IStorage {
   getMatch(id: string): Promise<Match | undefined>;
   createMatch(match: InsertMatch): Promise<Match>;
   deleteMatch(id: string): Promise<void>;
+  deleteMatchesByFile(fileId: string): Promise<void>;
   
   getPeriodSummary(periodId: string): Promise<PeriodSummary>;
   getVerificationSummary(periodId: string): Promise<VerificationSummary>;
@@ -366,6 +367,26 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMatch(id: string): Promise<void> {
     await db.delete(matches).where(eq(matches.id, id));
+  }
+
+  async deleteMatchesByFile(fileId: string): Promise<void> {
+    // Get all transaction IDs for this file
+    const fileTransactions = await db.select({ id: transactions.id })
+      .from(transactions)
+      .where(eq(transactions.fileId, fileId));
+    
+    if (fileTransactions.length === 0) return;
+    
+    const transactionIds = fileTransactions.map(t => t.id);
+    
+    // Delete matches that reference any of these transactions
+    // (either as fuel or bank transaction)
+    await db.delete(matches).where(
+      or(
+        inArray(matches.fuelTransactionId, transactionIds),
+        inArray(matches.bankTransactionId, transactionIds)
+      )
+    );
   }
 
   async getPeriodSummary(periodId: string): Promise<PeriodSummary> {

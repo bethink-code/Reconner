@@ -211,16 +211,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      if (existingFile) {
-        // Different file uploaded - delete old file's transactions, matches, and the file record
-        console.log(`Replacing existing file: ${existingFile.fileName} (${existingFile.id})`);
-        await storage.deleteFile(existingFile.id);
-        // Try to clean up object storage (but don't fail if it doesn't work)
-        try {
-          await objectStorageService.deleteFile(existingFile.fileUrl);
-        } catch (e) {
-          console.warn("Could not delete old file from storage:", e);
-        }
+      // Store existing file info for cleanup AFTER successful upload
+      const fileToReplace = existingFile ? {
+        id: existingFile.id,
+        fileName: existingFile.fileName,
+        fileUrl: existingFile.fileUrl
+      } : null;
+      
+      if (fileToReplace) {
+        console.log(`Will replace existing file after successful upload: ${fileToReplace.fileName} (${fileToReplace.id})`);
       }
 
       const isCSV = req.file.mimetype.includes('csv') || 
@@ -245,6 +244,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const parsed = await fileParser.parse(req.file.buffer, fileType);
       const columnMappings = fileParser.autoDetectColumns(parsed.headers);
+      
+      // Detect source preset to validate file type
+      const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
+      
+      // Validate source type matches file content using preset's category
+      if (detectedPreset && detectedPreset.category !== sourceType) {
+        const detectedCategory = detectedPreset.category;
+        console.warn(`Source type mismatch: expected ${sourceType}, detected ${detectedCategory} (${detectedPreset.name})`);
+        return res.status(400).json({ 
+          error: `This looks like a ${detectedCategory === 'bank' ? 'bank statement' : 'fuel system export'}, but you're uploading it as ${sourceType === 'bank' ? 'bank data' : 'fuel data'}. Please check you're on the right step.`,
+          detectedType: detectedCategory,
+          expectedType: sourceType,
+          detectedPreset: detectedPreset.name
+        });
+      }
 
       const suggestedMappingsObject: Record<string, string> = {};
       for (const mapping of columnMappings) {
@@ -329,6 +343,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contentHash,
         status: 'uploaded'
       });
+
+      // NOW that new file is successfully created, safely delete the old one
+      if (fileToReplace) {
+        console.log(`Cleaning up replaced file: ${fileToReplace.fileName} (${fileToReplace.id})`);
+        try {
+          // First delete matches that reference this file's transactions (explicit cleanup)
+          await storage.deleteMatchesByFile(fileToReplace.id);
+          // Then delete transactions
+          await storage.deleteTransactionsByFile(fileToReplace.id);
+          // Then delete the file record
+          await storage.deleteFile(fileToReplace.id);
+          // Finally clean up object storage
+          await objectStorageService.deleteFile(fileToReplace.fileUrl);
+          console.log(`Successfully cleaned up old file, its transactions, and related matches`);
+        } catch (cleanupError) {
+          console.warn("Could not fully clean up old file:", cleanupError);
+          // Don't fail the upload if cleanup fails
+        }
+      }
 
       res.json({
         file: uploadedFile,

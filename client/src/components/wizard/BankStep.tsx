@@ -36,18 +36,34 @@ export function BankStep({ stepIndex, periodId }: BankStepProps) {
       formData.append("sourceType", step.sourceType);
       formData.append("sourceName", step.sourceName);
       
-      const response = await fetch(`/api/periods/${periodId}/files/upload`, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
+      // Use AbortController for timeout handling (3 minutes for large files)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Upload failed");
+      try {
+        const response = await fetch(`/api/periods/${periodId}/files/upload`, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          const errorMessage = errorData?.error || `Upload failed (Error ${response.status})`;
+          throw new Error(errorMessage);
+        }
+        
+        return response.json();
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error("Upload timed out. Large files may take a while - please try again.");
+        }
+        throw error;
       }
-      
-      return response.json();
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });

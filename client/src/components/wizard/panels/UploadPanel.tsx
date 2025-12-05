@@ -51,26 +51,46 @@ export function UploadPanel({
 }: UploadPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0);
   const [showReplace, setShowReplace] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
     if (isUploading) {
       setUploadProgress(0);
-      const interval = setInterval(() => {
+      setElapsedTime(0);
+      
+      // Simulate progress (faster at start, slower toward end)
+      const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(interval);
-            return prev;
-          }
-          return prev + 10;
+          if (prev >= 95) return prev;
+          if (prev < 30) return prev + 5;
+          if (prev < 60) return prev + 3;
+          if (prev < 80) return prev + 1;
+          return prev + 0.5;
         });
-      }, 100);
-      return () => clearInterval(interval);
+      }, 200);
+      
+      // Track elapsed time
+      const timeInterval = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+      
+      return () => {
+        clearInterval(progressInterval);
+        clearInterval(timeInterval);
+      };
     } else {
       setUploadProgress(100);
     }
   }, [isUploading]);
+  
+  const formatElapsedTime = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  };
   
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -96,7 +116,7 @@ export function UploadPanel({
           </CardTitle>
           <CardDescription>{guidance.subtitle}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center gap-4 p-4 bg-green-50/50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
             <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
               <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
@@ -114,16 +134,23 @@ export function UploadPanel({
                 )}
               </div>
             </div>
+          </div>
+          
+          <div className="flex justify-center">
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setShowReplace(true)}
+              className="w-full max-w-xs"
               data-testid="button-replace-file"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              Replace
+              Upload a Different File
             </Button>
           </div>
+          
+          <p className="text-xs text-center text-muted-foreground">
+            Click above if you need to use a different file
+          </p>
         </CardContent>
       </Card>
     );
@@ -190,8 +217,19 @@ export function UploadPanel({
           {isUploading ? (
             <div className="space-y-4">
               <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin" />
-              <p className="text-sm font-medium">Uploading file...</p>
+              <p className="text-sm font-medium">
+                {elapsedTime < 5 
+                  ? "Uploading file..." 
+                  : elapsedTime < 15 
+                    ? "Processing your data..." 
+                    : "Still working — large files take a bit longer..."}
+              </p>
               <Progress value={uploadProgress} className="max-w-xs mx-auto" />
+              {elapsedTime >= 3 && (
+                <p className="text-xs text-muted-foreground">
+                  Elapsed: {formatElapsedTime(elapsedTime)}
+                </p>
+              )}
             </div>
           ) : (
             <>

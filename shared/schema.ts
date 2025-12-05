@@ -64,6 +64,7 @@ export const uploadedFiles = pgTable("uploaded_files", {
   columnMapping: jsonb("column_mapping"),
   qualityReport: jsonb("quality_report"),
   contentHash: text("content_hash"),
+  bankName: text("bank_name"), // For bank files: FNB, ABSA, Standard Bank, Nedbank, Other
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   status: text("status").notNull().default("uploaded"),
 });

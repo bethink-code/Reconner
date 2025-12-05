@@ -890,9 +890,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
           console.warn('Date Range Warning:', dateRangeWarning);
           
-          // Mark these as unmatchable (distinct from unmatched)
+          // Mark these as unmatchable (distinct from unmatched) and clear any stale match links
           for (const tx of unmatchableBankTransactions) {
-            await storage.updateTransaction(tx.id, { matchStatus: 'unmatchable' });
+            await storage.updateTransaction(tx.id, { matchStatus: 'unmatchable', matchId: null });
           }
         }
       }

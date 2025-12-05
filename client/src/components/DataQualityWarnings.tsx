@@ -153,17 +153,15 @@ function getIssueExplanation(issue: DataQualityIssue, report: DataQualityReport)
 
     case 'DATA_TYPE_MISMATCH':
     case 'TYPE_MISMATCH':
-      const colMatch = issue.message.match(/Column "([^"]+)"/);
-      const colName = colMatch ? colMatch[1] : 'Some columns';
       return {
-        title: `${colName} contains unexpected data`,
-        whatHappened: issue.message,
-        whyItHappened: "This usually means the column contains a mix of data types, or the header name doesn't match the actual content.",
-        whatWeDo: "We'll show you sample values from each column so you can map them correctly.",
-        userAction: 'review',
-        userActionText: 'In the next step, look at the sample data shown in each dropdown - not just the column names. The values will help you pick the right column.',
+        title: 'Column mapping needed',
+        whatHappened: "Some columns have data that doesn't match their header names.",
+        whyItHappened: "This is common when column names are generic or the export format varies.",
+        whatWeDo: "We'll help you map columns correctly in the next step using sample data.",
+        userAction: 'none',
+        userActionText: '',
         icon: <TableProperties className="h-5 w-5" />,
-        color: 'warning'
+        color: 'info'
       };
 
     case 'MISSING_REQUIRED_DATA':

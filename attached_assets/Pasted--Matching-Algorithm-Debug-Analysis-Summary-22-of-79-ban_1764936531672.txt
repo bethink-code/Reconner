@@ -1,0 +1,165 @@
+# Matching Algorithm Debug Analysis
+
+## Summary
+
+**22 of 79 bank transactions matched (27.8%)**
+
+This is lower than expected. Here's the complete breakdown of why.
+
+---
+
+## Issue Breakdown
+
+### Category 1: No Fuel Data Exists (14 transactions)
+**Bank Date: Nov 27, 2025**
+
+Fuel Master data ends on Nov 26. These 14 bank transactions from Nov 27 **cannot match** because there's no fuel data for that date.
+
+**Fix:** The system should detect this and warn the user:
+> "14 bank transactions are from Nov 27, but your fuel data ends Nov 26. These cannot be matched."
+
+---
+
+### Category 2: Amount Tolerance Too Tight (23 transactions)
+
+**Example:**
+- Bank: R150.00 (exactly)
+- Fuel: R150.15, R150.40, R150.80
+
+**Current tolerance: ±R0.10**
+**Actual difference: R0.15 to R0.80**
+
+Fuel transactions rarely have exact round amounts:
+- Only 11.7% of fuel amounts are exact round numbers (R100.00, R200.00)
+- Most end in .05, .10, .15, .20 cents (fuel pricing)
+
+**Fix:** Either:
+1. Increase tolerance to ±R0.50 or ±R1.00
+2. Or add a "round number" matching rule: if bank is round (R150.00), match fuel within ±R1.00
+
+---
+
+### Category 3: Multiple Possible Matches (15 transactions)
+
+**Example:**
+- Bank: Nov 26, R200.00
+- Fuel: 24 card transactions of ~R200 on Nov 26
+
+Without card number matching, the algorithm can't determine which of 24 transactions is correct. 
+
+**Current behavior:** Appears to skip ambiguous matches
+**Expected behavior:** Should still match if card numbers align
+
+**Fix:** Card number MUST be used in matching. The fuel system likely has card numbers but they're not being extracted/compared.
+
+---
+
+### Category 4: Matched Successfully (22 transactions)
+
+These matched because:
+1. Unique amounts (R1337.80, R818.20, R1139.90, R1150.05)
+2. Or fewer candidates to choose from
+3. Some R200, R100, R500 matched - unclear why these succeeded and others didn't
+
+---
+
+## Root Causes
+
+### 1. Date Range Mismatch
+The system doesn't warn when bank data extends beyond fuel data date range.
+
+**Add validation:**
+```
+Bank data: Nov 27
+Fuel data: ends Nov 26
+⚠️ 14 transactions cannot be matched (no fuel data for Nov 27)
+```
+
+### 2. Tolerance Too Strict
+±R0.10 doesn't account for fuel pricing realities where amounts end in .05, .10, .15, etc.
+
+**Change default:**
+- Conservative: ±R0.10
+- Moderate: ±R0.50 ← Better default
+- Aggressive: ±R1.00
+
+### 3. Card Number Not Being Used
+The export shows no Card Number column. Matching is only on date + amount, which is ambiguous for common amounts.
+
+**Verify:**
+1. Is card number being extracted from both FNB and Fuel files?
+2. Is it being stored in the transactions table?
+3. Is the matching algorithm using it?
+
+### 4. Time Window Not Helping
+With 3-day window + no card number, R200 on Nov 26 matches against 24 fuel transactions across Nov 23-26.
+
+Time should be used as a tiebreaker when amounts match, not as a filter that still leaves ambiguity.
+
+---
+
+## Recommended Fixes (Priority Order)
+
+### 1. Add Date Range Validation (Quick Win)
+Before matching, check:
+```typescript
+if (maxBankDate > maxFuelDate) {
+  warn(`${count} bank transactions after fuel data ends - cannot match`);
+}
+```
+
+### 2. Increase Default Tolerance
+Change Moderate preset from ±R0.10 to ±R0.50
+
+### 3. Verify Card Number Matching
+Check if card numbers are:
+- Extracted from FNB (PAN column)
+- Extracted from Fuel (which column?)
+- Stored in transactions table
+- Used in matching query
+
+### 4. Add "Best Match" Logic for Ambiguous Cases
+When multiple fuel transactions match:
+1. If card numbers match exactly → use that one
+2. If times are close → prefer closest time
+3. If still ambiguous → flag for manual review
+
+---
+
+## Test After Fixes
+
+With fixes applied, expected results:
+
+| Category | Count | Expected Outcome |
+|----------|-------|------------------|
+| Nov 27 (no fuel data) | 14 | Flagged as "no data" |
+| Tolerance issue | 23 | Most should match with ±R0.50 |
+| Multiple matches | 15 | Should match with card# |
+| Already matched | 22 | Still matched |
+
+**Target: 60-70+ matches out of 79** (excluding the 14 impossible ones)
+
+---
+
+## Quick SQL Debug Queries
+
+```sql
+-- Check if card numbers exist in transactions
+SELECT source_type, COUNT(*), COUNT(card_number) as has_card
+FROM transactions 
+WHERE period_id = '...'
+GROUP BY source_type;
+
+-- Check tolerance issue
+SELECT * FROM transactions 
+WHERE source_type = 'bank1' 
+  AND amount = 150.00
+  AND match_status = 'unmatched';
+
+-- Find potential fuel matches with wider tolerance
+SELECT * FROM transactions
+WHERE source_type = 'fuel'
+  AND is_card_transaction = 'yes'
+  AND amount BETWEEN 149.00 AND 151.00
+  AND transaction_date BETWEEN '2025-11-23' AND '2025-11-26';
+```

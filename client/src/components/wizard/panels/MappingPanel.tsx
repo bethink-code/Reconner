@@ -223,11 +223,26 @@ export function MappingPanel({
     return values.join(", ");
   };
   
-  const isJunkColumn = (header: string): boolean => {
-    if (header.startsWith("_")) return true;
-    if (header.match(/^_\d+$/)) return true;
-    if (header.trim() === "") return true;
-    return false;
+  const hasColumnData = (header: string): boolean => {
+    if (!preview.rows.length) return false;
+    return preview.rows.slice(0, 3).some(row => {
+      const val = row[header];
+      return val !== undefined && val !== null && String(val).trim() !== "";
+    });
+  };
+  
+  const hasEmptyRequiredMappings = REQUIRED_FIELDS.some(field => {
+    const col = mapping[field.key];
+    return col && !hasColumnData(col);
+  });
+  const canProceed = requiredComplete && !hasEmptyRequiredMappings;
+  
+  const isEmptyColumn = (header: string): boolean => {
+    return header.trim() === "";
+  };
+  
+  const isCrypticColumn = (header: string): boolean => {
+    return header.startsWith("_") || /^_\d+$/.test(header);
   };
   
   const isColumnMapped = (header: string): boolean => {
@@ -235,7 +250,11 @@ export function MappingPanel({
   };
   
   const getValidHeaders = (): string[] => {
-    return preview.headers.filter(h => !isJunkColumn(h));
+    return preview.headers.filter(h => {
+      if (isEmptyColumn(h)) return false;
+      if (isCrypticColumn(h) && !hasColumnData(h)) return false;
+      return true;
+    });
   };
 
   const isSuggested = (fieldKey: string): boolean => {
@@ -282,19 +301,26 @@ export function MappingPanel({
                 const isMapped = isColumnMapped(header) && mapping[field.key] !== header;
                 const sample = getColumnSample(header);
                 const displayName = preview.columnLabels?.[header] || header;
+                const isCryptic = isCrypticColumn(header);
+                const hasData = hasColumnData(header);
                 return (
                   <SelectItem 
                     key={header} 
                     value={header}
                     disabled={isMapped}
-                    className={isMapped ? "opacity-50" : ""}
+                    className={`${isMapped ? "opacity-50" : ""} ${!hasData ? "text-muted-foreground" : ""}`}
                   >
                     <div className="flex items-center justify-between w-full gap-3">
-                      <span className={isMapped ? "line-through" : ""}>{displayName}</span>
-                      {sample && (
+                      <span className={isMapped ? "line-through" : ""}>
+                        {displayName}
+                        {isCryptic && <span className="text-xs ml-1">(data column)</span>}
+                      </span>
+                      {sample ? (
                         <span className="text-xs text-muted-foreground truncate max-w-32">
                           ({sample.slice(0, 20)}{sample.length > 20 ? "..." : ""})
                         </span>
+                      ) : (
+                        <span className="text-xs text-amber-600">(empty)</span>
                       )}
                     </div>
                   </SelectItem>
@@ -303,7 +329,21 @@ export function MappingPanel({
             </SelectContent>
           </Select>
           
-          {suggested && (
+          {currentValue && !hasColumnData(currentValue) && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="shrink-0 text-destructive border-destructive/50 bg-destructive/10">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Empty Column
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>This column appears to have no data. Check if you've selected the correct column.</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          
+          {suggested && hasColumnData(currentValue) && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Badge variant="outline" className="shrink-0 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
@@ -317,7 +357,7 @@ export function MappingPanel({
             </Tooltip>
           )}
           
-          {currentValue && !suggested && (
+          {currentValue && !suggested && hasColumnData(currentValue) && (
             <Badge variant="outline" className="shrink-0 text-green-600 border-green-300 bg-green-50 dark:bg-green-950 dark:border-green-800">
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Confirmed
@@ -354,10 +394,15 @@ export function MappingPanel({
                   {preview.detectedPreset.name}
                 </Badge>
               )}
-              {requiredComplete ? (
+              {canProceed ? (
                 <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
                   <CheckCircle2 className="h-3 w-3 mr-1" />
                   Ready
+                </Badge>
+              ) : hasEmptyRequiredMappings ? (
+                <Badge variant="outline" className="text-destructive border-destructive/50 bg-destructive/10">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Empty Columns
                 </Badge>
               ) : (
                 <Badge variant="secondary">
@@ -416,13 +461,13 @@ export function MappingPanel({
         
         <Button
           onClick={() => saveMappingMutation.mutate()}
-          disabled={!requiredComplete || saveMappingMutation.isPending}
+          disabled={!canProceed || saveMappingMutation.isPending}
           data-testid="button-preview-data"
         >
           {saveMappingMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : null}
-          Preview Data
+          {hasEmptyRequiredMappings ? "Fix Empty Column Mappings" : "Preview Data"}
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>

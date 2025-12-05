@@ -562,6 +562,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Alias route for periods-based URL pattern used by the flow components
+  app.post("/api/periods/:periodId/files/:fileId/process", isAuthenticated, async (req, res) => {
+    try {
+      const file = await storage.getFile(req.params.fileId);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      // Validate file belongs to the period
+      if (file.periodId !== req.params.periodId) {
+        return res.status(400).json({ error: "File does not belong to this period" });
+      }
+
+      if (!file.columnMapping) {
+        return res.status(400).json({ error: "Column mapping not set" });
+      }
+
+      // Delete existing transactions from this file before reprocessing
+      await storage.deleteTransactionsByFile(file.id);
+
+      const objectFile = await objectStorageService.getFile(file.fileUrl);
+      const [buffer] = await objectFile.download();
+      
+      const parsed = await fileParser.parse(buffer, file.fileType);
+      
+      // Track skip statistics
+      const skipStats = {
+        header_row: 0,
+        empty_date: 0,
+        zero_or_invalid_amount: 0,
+        page_break: 0,
+        total_skipped: 0,
+        total_processed: 0,
+      };
+      
+      const validTransactions: any[] = [];
+      
+      for (const row of parsed.rows) {
+        const extracted = fileParser.extractTransactionData(
+          row, 
+          file.columnMapping as Record<string, string>,
+          parsed.headers,
+          file.sourceType
+        );
+        
+        const validation = fileParser.isValidTransactionRow(
+          extracted,
+          row,
+          file.columnMapping as Record<string, string>
+        );
+        
+        if (!validation.valid) {
+          skipStats.total_skipped++;
+          if (validation.reason && validation.reason in skipStats) {
+            (skipStats as any)[validation.reason]++;
+          }
+          continue;
+        }
+        
+        skipStats.total_processed++;
+        
+        validTransactions.push({
+          fileId: file.id,
+          periodId: file.periodId,
+          sourceType: file.sourceType,
+          sourceName: file.sourceName,
+          rawData: row,
+          transactionDate: extracted.transactionDate,
+          transactionTime: extracted.transactionTime || null,
+          amount: extracted.amount,
+          description: extracted.description || '',
+          referenceNumber: extracted.referenceNumber || '',
+          cardNumber: extracted.cardNumber || null,
+          paymentType: extracted.paymentType || null,
+          isCardTransaction: extracted.isCardTransaction,
+          matchStatus: 'unmatched' as const,
+          matchId: null,
+        });
+      }
+
+      console.log(`[PROCESS] Creating ${validTransactions.length} transactions for file ${file.id}, period ${file.periodId}`);
+      
+      const created = await storage.createTransactions(validTransactions);
+      
+      console.log(`[PROCESS] Created ${created.length} transactions in database`);
+      
+      await storage.updateFile(file.id, { 
+        status: 'processed',
+        rowCount: created.length 
+      });
+
+      res.json({ 
+        success: true, 
+        transactionsCreated: created.length,
+        totalRows: parsed.rowCount,
+        skipStats: skipStats,
+      });
+    } catch (error) {
+      console.error("Error processing file:", error);
+      res.status(500).json({ error: "Failed to process file" });
+    }
+  });
+
   app.post("/api/files/:fileId/process", isAuthenticated, async (req, res) => {
     try {
       const file = await storage.getFile(req.params.fileId);

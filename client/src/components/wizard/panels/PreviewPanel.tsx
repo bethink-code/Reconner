@@ -269,16 +269,16 @@ export function PreviewPanel({
             </div>
           )}
           
-          {sourceType === "fuel" && cardTransactions.length > 0 && (
+          {sourceType === "fuel" && (preview.fullAnalysisStats?.cardTransactions || 0) > 0 && (
             <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
               <p className="text-sm">
-                <strong className="text-primary">{cardTransactions.length.toLocaleString()}</strong> card transactions 
-                ({formatCurrency(cardAmount)}) will be matched against your bank records.
+                <strong className="text-primary">{(preview.fullAnalysisStats?.cardTransactions || 0).toLocaleString()}</strong> card transactions 
+                will be matched against your bank records.
               </p>
             </div>
           )}
           
-          {sourceType === "fuel" && cardTransactions.length === 0 && (
+          {sourceType === "fuel" && (preview.fullAnalysisStats?.cardTransactions || 0) === 0 && (
             <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg" data-testid="alert-zero-transactions">
               <div className="flex items-start gap-3">
                 <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
@@ -296,15 +296,15 @@ export function PreviewPanel({
             </div>
           )}
           
-          {sourceType === "fuel" && cardTransactions.length > 0 && preview.totalRows > 100 && cardTransactions.length < preview.totalRows * 0.01 && (
+          {sourceType === "fuel" && (preview.fullAnalysisStats?.cardTransactions || 0) > 0 && preview.totalRows > 100 && (preview.fullAnalysisStats?.cardTransactions || 0) < preview.totalRows * 0.01 && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg" data-testid="alert-low-transactions">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium text-amber-700 dark:text-amber-400">Low transaction count</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Only <strong>{cardTransactions.length.toLocaleString()}</strong> card transactions from <strong>{preview.totalRows.toLocaleString()}</strong> rows 
-                    ({((cardTransactions.length / preview.totalRows) * 100).toFixed(1)}%). Does this seem right?
+                    Only <strong>{(preview.fullAnalysisStats?.cardTransactions || 0).toLocaleString()}</strong> card transactions from <strong>{preview.totalRows.toLocaleString()}</strong> rows 
+                    ({(((preview.fullAnalysisStats?.cardTransactions || 0) / preview.totalRows) * 100).toFixed(1)}%). Does this seem right?
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">
                     If not, go back and check your column mappings, especially the Payment Type field.
@@ -380,7 +380,7 @@ export function PreviewPanel({
         
         <Button
           onClick={() => processFileMutation.mutate()}
-          disabled={processFileMutation.isPending || (sourceType === "fuel" && cardTransactions.length === 0)}
+          disabled={processFileMutation.isPending || (sourceType === "fuel" && (preview.fullAnalysisStats?.cardTransactions || 0) === 0)}
           data-testid="button-confirm-import"
         >
           {processFileMutation.isPending ? (
@@ -388,7 +388,7 @@ export function PreviewPanel({
           ) : (
             <Check className="h-4 w-4 mr-2" />
           )}
-          {sourceType === "fuel" && cardTransactions.length === 0 
+          {sourceType === "fuel" && (preview.fullAnalysisStats?.cardTransactions || 0) === 0 
             ? "Cannot Continue - No Card Transactions" 
             : "Confirm & Continue"}
         </Button>

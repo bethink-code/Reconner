@@ -22,6 +22,7 @@ import type { DataQualityReport } from "@/components/DataQualityWarnings";
 interface UploadResponse {
   file: UploadedFile;
   qualityReport: DataQualityReport;
+  suggestedMappings: Record<string, string>; // Format: { columnName: fieldType }
 }
 
 interface FuelUploadStepProps {
@@ -42,6 +43,9 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
   const [currentFile, setCurrentFile] = useState<UploadedFile | null>(existingFile || null);
   const [qualityReport, setQualityReport] = useState<DataQualityReport | null>(
     (existingFile?.qualityReport as DataQualityReport) || null
+  );
+  const [suggestedMappings, setSuggestedMappings] = useState<Record<string, string> | null>(
+    (existingFile?.columnMapping as Record<string, string>) || null
   );
 
   const uploadMutation = useMutation({
@@ -87,6 +91,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
       setCurrentFile(result.file);
       setQualityReport(result.qualityReport);
+      setSuggestedMappings(result.suggestedMappings);
       setSubStep("quality");
       toast({
         title: "File uploaded",
@@ -106,20 +111,54 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
     mutationFn: async () => {
       if (!currentFile) throw new Error("No file to process");
       
-      // First, apply suggested column mapping if not already set
-      const suggestedMapping = qualityReport?.suggestedMapping || currentFile.columnMapping;
-      if (suggestedMapping && Object.keys(suggestedMapping).length > 0) {
-        const mappingResponse = await fetch(`/api/files/${currentFile.id}/column-mapping`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ columnMapping: suggestedMapping }),
-        });
-        
-        if (!mappingResponse.ok) {
-          const errorData = await mappingResponse.json().catch(() => null);
-          throw new Error(errorData?.error || "Failed to save column mapping");
+      // Build mapping from available sources (in priority order):
+      // 1. suggestedMappings from upload response (correct format: {columnName: fieldType})
+      // 2. Existing columnMapping on file
+      // 3. Invert qualityReport.suggestedMapping (fieldType -> columnName)
+      // 4. Fetch file preview to get fresh suggestedMappings
+      let mappingToApply = suggestedMappings || (currentFile.columnMapping as Record<string, string>);
+      
+      // If still no mapping, try inverting qualityReport.suggestedMapping
+      if ((!mappingToApply || Object.keys(mappingToApply).length === 0) && qualityReport?.suggestedMapping) {
+        const inverted: Record<string, string> = {};
+        for (const [fieldType, columnName] of Object.entries(qualityReport.suggestedMapping)) {
+          if (typeof columnName === 'string' && columnName && fieldType !== 'ignore') {
+            inverted[columnName] = fieldType;
+          }
         }
+        if (Object.keys(inverted).length > 0) {
+          mappingToApply = inverted;
+        }
+      }
+      
+      // Last resort: fetch file preview to get fresh suggestedMappings
+      if (!mappingToApply || Object.keys(mappingToApply).length === 0) {
+        const previewResponse = await fetch(`/api/files/${currentFile.id}/preview`, {
+          credentials: "include",
+        });
+        if (previewResponse.ok) {
+          const previewData = await previewResponse.json();
+          if (previewData.suggestedMappings && Object.keys(previewData.suggestedMappings).length > 0) {
+            mappingToApply = previewData.suggestedMappings;
+          }
+        }
+      }
+      
+      if (!mappingToApply || Object.keys(mappingToApply).length === 0) {
+        throw new Error("Could not detect column mappings. Please try re-uploading the file.");
+      }
+      
+      // Apply column mapping
+      const mappingResponse = await fetch(`/api/files/${currentFile.id}/column-mapping`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ columnMapping: mappingToApply }),
+      });
+      
+      if (!mappingResponse.ok) {
+        const errorData = await mappingResponse.json().catch(() => null);
+        throw new Error(errorData?.message || errorData?.error || "Failed to save column mapping");
       }
       
       // Then process the file

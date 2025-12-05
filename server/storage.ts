@@ -872,9 +872,9 @@ export class DatabaseStorage implements IStorage {
     
     if (!rules) {
       // Return default (moderate) rules
-      // Tolerance set to R0.50 to account for fuel pricing with .05/.10/.15 cent endings
+      // Tolerance set to R1.00 to handle fuel price variations and rounding
       return {
-        amountTolerance: 0.50,
+        amountTolerance: 1.00,
         dateWindowDays: 3,
         timeWindowMinutes: 60,
         groupByInvoice: true,

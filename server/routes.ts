@@ -1006,7 +1006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               confidence = 75;
               reasons.push(`Times within ${timeDiff} minutes`);
             } else {
-              confidence = 65;
+              confidence = 75;
               reasons.push(`Time difference: ${timeDiff} minutes`);
             }
           }
@@ -1040,12 +1040,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 confidence -= 30; // Strong penalty - different cards should not match
                 reasons.push('Card numbers differ (penalty)');
               }
-            } else if (bankTx.cardNumber && !invoice.cardNumber) {
-              // Bank has card, fuel doesn't - likely different payment method or missing data
-              confidence -= 5;
-              reasons.push('Bank card number not found in fuel record');
             }
-            // If neither has card number, no adjustment (truly ambiguous)
+            // If fuel has no card number, don't penalize - fuel systems often lack card data
+            // Only card mismatch (both have cards but different) gets penalized above
           }
 
           // Multi-line invoice note

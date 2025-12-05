@@ -269,21 +269,6 @@ export default function MatchingRulesPanel({ periodId, onRulesChanged }: Matchin
           </div>
         </div>
 
-        <div className="space-y-4 pt-2 border-t">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-1">
-              <Label className="text-sm font-medium">Require Card Match</Label>
-              <p className="text-xs text-muted-foreground">
-                Only match if card numbers (last 4 digits) are identical
-              </p>
-            </div>
-            <Switch
-              checked={rules.requireCardMatch}
-              onCheckedChange={(checked) => updateRule("requireCardMatch", checked)}
-              data-testid="switch-require-card-match"
-            />
-          </div>
-        </div>
 
         <div className="space-y-4 pt-2 border-t">
           <div className="space-y-3">

@@ -19,9 +19,14 @@ The application uses React 18 with TypeScript and Vite. The UI is built with `sh
 **Frontend:**
 - **State Management:** TanStack Query for server state and caching; React hooks for local state.
 - **Routing:** Wouter for client-side routing.
-- **File Upload Wizard:** A 5-step wizard (Upload, Quality Check, Column Mapping, Preview, Confirm & Import) guides users through file processing.
+- **4-Step Reconciliation Flow:** A streamlined workflow with clear steps:
+  1. **Upload Fuel Data** - Import fuel master file with quality validation
+  2. **Upload Bank Data** - Import bank statement with quality validation
+  3. **Configure Matching** - Select matching preset (Conservative/Moderate/Aggressive) or customize rules
+  4. **Results Dashboard** - View matched/unmatched/unmatchable transactions with bank-focused metrics
+- **Step Gating:** Prerequisites enforced at each step - users cannot advance until previous steps are completed.
 - **Data Quality:** A sophisticated `DataQualityValidator` service analyzes uploaded files for issues (column shifts, type mismatches, etc.), providing a "reassurance-first" UX with categorized warnings and suggested fixes.
-- **Reconciliation Workflow:** A multi-step process from period creation, file setup, transaction reconciliation, to report viewing.
+- **Investigation View:** Dedicated page (`/investigate`) for reviewing unmatched bank transactions with manual matching capability.
 - **Verification-Based Metrics:** Reports focus on verifiable transactions, distinguishing them from unverified ones to provide accurate reconciliation rates.
 
 **Backend:**

@@ -180,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No file provided" });
       }
 
-      const { sourceType, sourceName } = req.body;
+      const { sourceType, sourceName, bankName } = req.body;
       if (!sourceType || !sourceName) {
         return res.status(400).json({ error: "sourceType and sourceName are required" });
       }
@@ -345,6 +345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         columnMapping: null,
         qualityReport: qualityReport,
         contentHash,
+        bankName: bankName || null,
         status: 'uploaded'
       });
 

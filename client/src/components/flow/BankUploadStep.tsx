@@ -27,6 +27,7 @@ interface UploadResponse {
 
 interface BankUploadStepProps {
   periodId: string;
+  bankName: string;
   existingFile?: UploadedFile;
   onComplete: () => void;
   onBack: () => void;
@@ -34,7 +35,7 @@ interface BankUploadStepProps {
 
 type SubStep = "upload" | "quality" | "complete";
 
-export function BankUploadStep({ periodId, existingFile, onComplete, onBack }: BankUploadStepProps) {
+export function BankUploadStep({ periodId, bankName, existingFile, onComplete, onBack }: BankUploadStepProps) {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -54,7 +55,8 @@ export function BankUploadStep({ periodId, existingFile, onComplete, onBack }: B
       const formData = new FormData();
       formData.append("file", file);
       formData.append("sourceType", "bank");
-      formData.append("sourceName", "Bank Statement");
+      formData.append("sourceName", bankName || "Bank Statement");
+      formData.append("bankName", bankName);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -307,10 +309,9 @@ export function BankUploadStep({ periodId, existingFile, onComplete, onBack }: B
           <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
             <Building2 className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle>Upload Bank Data</CardTitle>
+          <CardTitle>Upload {bankName} Statement</CardTitle>
           <CardDescription>
-            Upload your bank statement to verify against your fuel records.
-            These are the transactions we'll try to match.
+            Upload your {bankName} bank statement to verify against your fuel records.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

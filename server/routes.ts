@@ -249,13 +249,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
       
       // Validate source type matches file content using preset's category
-      if (detectedPreset && detectedPreset.category !== sourceType) {
+      // sourceType can be 'fuel', 'bank', 'bank1', 'bank2', etc.
+      // category is always 'fuel' or 'bank'
+      const normalizeSourceType = (st: string) => st.replace(/\d+$/, ''); // 'bank1' -> 'bank'
+      if (detectedPreset && detectedPreset.category !== normalizeSourceType(sourceType)) {
         const detectedCategory = detectedPreset.category;
-        console.warn(`Source type mismatch: expected ${sourceType}, detected ${detectedCategory} (${detectedPreset.name})`);
+        const expectedCategory = normalizeSourceType(sourceType);
+        console.warn(`Source type mismatch: expected ${expectedCategory}, detected ${detectedCategory} (${detectedPreset.name})`);
         return res.status(400).json({ 
-          error: `This looks like a ${detectedCategory === 'bank' ? 'bank statement' : 'fuel system export'}, but you're uploading it as ${sourceType === 'bank' ? 'bank data' : 'fuel data'}. Please check you're on the right step.`,
+          error: `This looks like a ${detectedCategory === 'bank' ? 'bank statement' : 'fuel system export'}, but you're uploading it as ${expectedCategory === 'bank' ? 'bank data' : 'fuel data'}. Please check you're on the right step.`,
           detectedType: detectedCategory,
-          expectedType: sourceType,
+          expectedType: expectedCategory,
           detectedPreset: detectedPreset.name
         });
       }

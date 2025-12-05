@@ -10,7 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, ArrowRight, Sparkles, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ArrowLeft, ArrowRight, Sparkles, AlertCircle, CheckCircle2, Loader2, Lightbulb } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useWizard } from "@/contexts/WizardContext";
@@ -35,17 +40,59 @@ interface MappingPanelProps {
   onBack: () => void;
 }
 
-const REQUIRED_FIELDS = [
-  { key: "date", label: "Transaction Date", description: "When the transaction happened" },
-  { key: "amount", label: "Amount", description: "Transaction value in Rands" },
-  { key: "reference", label: "Reference Number", description: "Unique transaction ID" },
+interface FieldDefinition {
+  key: string;
+  label: string;
+  tip: string;
+  examples: string[];
+}
+
+const REQUIRED_FIELDS: FieldDefinition[] = [
+  { 
+    key: "date", 
+    label: "Transaction Date",
+    tip: "The date when the transaction occurred",
+    examples: ["Transaction Date", "Date", "Posted Date", "Trans Date"]
+  },
+  { 
+    key: "amount", 
+    label: "Amount (Rands)",
+    tip: "The transaction value. Bank statements may show debits as negative",
+    examples: ["Amount", "Total", "Value", "Debit", "Credit"]
+  },
+  { 
+    key: "reference", 
+    label: "Reference Number",
+    tip: "A unique identifier for matching transactions",
+    examples: ["Reference", "Ref No", "Invoice", "Receipt", "Trans ID"]
+  },
 ];
 
-const OPTIONAL_FIELDS = [
-  { key: "time", label: "Transaction Time", description: "Time of day (if separate from date)" },
-  { key: "description", label: "Description", description: "Additional details" },
-  { key: "cardNumber", label: "Card Number", description: "Last 4 digits of card" },
-  { key: "paymentType", label: "Payment Type", description: "Card, Cash, etc." },
+const OPTIONAL_FIELDS: FieldDefinition[] = [
+  { 
+    key: "time", 
+    label: "Time",
+    tip: "Time of day, if shown separately from the date",
+    examples: ["Time", "Trans Time", "Posted Time"]
+  },
+  { 
+    key: "description", 
+    label: "Description",
+    tip: "Additional transaction details or notes",
+    examples: ["Description", "Details", "Narrative", "Memo"]
+  },
+  { 
+    key: "cardNumber", 
+    label: "Card Number",
+    tip: "Last 4 digits of the card - helps match fuel sales to bank records",
+    examples: ["Card No", "Card", "Card Number", "PAN"]
+  },
+  { 
+    key: "paymentType", 
+    label: "Payment Type",
+    tip: "How the customer paid (Card, Cash, Account)",
+    examples: ["Payment Type", "Pay Method", "Tender", "Type"]
+  },
 ];
 
 export function MappingPanel({
@@ -60,6 +107,7 @@ export function MappingPanel({
   const { toast } = useToast();
   const { updateMapping } = useWizard();
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [suggestedFields, setSuggestedFields] = useState<Set<string>>(new Set());
   
   const { data: preview, isLoading } = useQuery<FilePreview>({
     queryKey: ["/api/files", fileId, "preview"],
@@ -81,6 +129,11 @@ export function MappingPanel({
       const serverMapping = preview.currentMapping || preview.suggestedMappings || {};
       const uiMapping = invertMapping(serverMapping);
       setMapping(uiMapping);
+      
+      if (preview.suggestedMappings && !preview.currentMapping) {
+        const suggested = new Set(Object.values(preview.suggestedMappings));
+        setSuggestedFields(suggested);
+      }
     }
   }, [preview]);
   
@@ -119,15 +172,21 @@ export function MappingPanel({
       }
       return newMapping;
     });
+    setSuggestedFields(prev => {
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
   };
   
   const applyAutoMapping = () => {
     if (preview?.suggestedMappings) {
       const uiMapping = invertMapping(preview.suggestedMappings);
       setMapping(uiMapping);
+      setSuggestedFields(new Set(Object.values(preview.suggestedMappings)));
       toast({
-        title: "Auto-mapping applied",
-        description: "Column mappings have been suggested based on your data.",
+        title: "Suggestions applied",
+        description: "We've filled in the mappings based on your column names. Review and adjust as needed.",
       });
     }
   };
@@ -136,7 +195,7 @@ export function MappingPanel({
   
   if (isLoading) {
     return (
-      <Card className="max-w-2xl mx-auto" data-testid="card-mapping-loading">
+      <Card className="max-w-3xl mx-auto" data-testid="card-mapping-loading">
         <CardContent className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </CardContent>
@@ -146,7 +205,7 @@ export function MappingPanel({
   
   if (!preview) {
     return (
-      <Card className="max-w-2xl mx-auto" data-testid="card-mapping-error">
+      <Card className="max-w-3xl mx-auto" data-testid="card-mapping-error">
         <CardContent className="text-center py-12">
           <AlertCircle className="h-8 w-8 mx-auto text-destructive mb-2" />
           <p className="text-muted-foreground">Failed to load file preview</p>
@@ -158,33 +217,127 @@ export function MappingPanel({
   const getColumnSample = (column: string): string => {
     if (!preview.rows.length) return "";
     const values = preview.rows
-      .slice(0, 3)
+      .slice(0, 2)
       .map(row => String(row[column] || ""))
       .filter(Boolean);
     return values.join(", ");
   };
+
+  const isSuggested = (fieldKey: string): boolean => {
+    return suggestedFields.has(fieldKey) && !!mapping[fieldKey];
+  };
+
+  const renderFieldRow = (field: FieldDefinition, isRequired: boolean) => {
+    const currentValue = mapping[field.key] || "";
+    const sample = currentValue ? getColumnSample(currentValue) : "";
+    const suggested = isSuggested(field.key);
+    
+    return (
+      <div 
+        key={field.key} 
+        className="flex items-center gap-3 py-3 border-b last:border-b-0"
+        data-testid={`field-${field.key}`}
+      >
+        <div className="w-48 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-sm font-medium ${isRequired ? '' : 'text-muted-foreground'}`}>
+              {field.label}
+            </span>
+            {isRequired && <span className="text-destructive">*</span>}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {field.tip}
+          </p>
+        </div>
+        
+        <div className="flex-1 flex items-center gap-2">
+          <Select
+            value={currentValue}
+            onValueChange={(value) => handleFieldChange(field.key, value)}
+          >
+            <SelectTrigger 
+              className="w-full"
+              data-testid={`select-${field.key}`}
+            >
+              <SelectValue placeholder="Select column..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ignore">-- Not mapped --</SelectItem>
+              {preview.headers.map(header => (
+                <SelectItem key={header} value={header}>
+                  {preview.columnLabels?.[header] || header}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          {suggested && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="shrink-0 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
+                  <Lightbulb className="h-3 w-3 mr-1" />
+                  Suggested
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>We detected this based on column name. Please confirm it's correct.</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          
+          {currentValue && !suggested && (
+            <Badge variant="outline" className="shrink-0 text-green-600 border-green-300 bg-green-50 dark:bg-green-950 dark:border-green-800">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Confirmed
+            </Badge>
+          )}
+        </div>
+        
+        {sample && (
+          <div className="w-36 shrink-0 text-right">
+            <span className="text-xs text-muted-foreground truncate block" title={sample}>
+              e.g. {sample}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
   
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <Card data-testid="card-mapping-panel">
-        <CardHeader>
-          <div className="flex items-center justify-between">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <CardTitle>Map Your Columns</CardTitle>
               <CardDescription>
-                Tell us which columns contain which data. We've made some suggestions based on your file.
+                Match each field to the correct column in your file
               </CardDescription>
             </div>
-            {preview.detectedPreset && (
-              <Badge variant="secondary" className="shrink-0">
-                <Sparkles className="h-3 w-3 mr-1" />
-                {preview.detectedPreset.name}
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {preview.detectedPreset && (
+                <Badge variant="secondary" className="shrink-0">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {preview.detectedPreset.name}
+                </Badge>
+              )}
+              {requiredComplete ? (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Ready
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  {REQUIRED_FIELDS.filter(f => mapping[f.key]).length} of {REQUIRED_FIELDS.length} required
+                </Badge>
+              )}
+            </div>
           </div>
         </CardHeader>
+        
         <CardContent className="space-y-6">
-          {Object.keys(preview.suggestedMappings || {}).length > 0 && (
+          {Object.keys(preview.suggestedMappings || {}).length > 0 && suggestedFields.size === 0 && (
             <Button
               variant="outline"
               size="sm"
@@ -193,87 +346,26 @@ export function MappingPanel({
               data-testid="button-auto-map"
             >
               <Sparkles className="h-4 w-4 mr-2" />
-              Apply Suggested Mapping
+              Apply Suggested Mappings
             </Button>
           )}
           
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-sm font-semibold">Required Fields</h3>
-              {requiredComplete ? (
-                <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Complete
-                </Badge>
-              ) : (
-                <Badge variant="secondary">
-                  {REQUIRED_FIELDS.filter(f => mapping[f.key]).length} of {REQUIRED_FIELDS.length}
-                </Badge>
-              )}
+          <div>
+            <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Required Fields</span>
             </div>
-            
-            {REQUIRED_FIELDS.map(field => (
-              <div key={field.key} className="space-y-1.5" data-testid={`field-${field.key}`}>
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">{field.label}</label>
-                  {mapping[field.key] && (
-                    <span className="text-xs text-muted-foreground">
-                      Sample: {getColumnSample(mapping[field.key])}
-                    </span>
-                  )}
-                </div>
-                <Select
-                  value={mapping[field.key] || ""}
-                  onValueChange={(value) => handleFieldChange(field.key, value)}
-                >
-                  <SelectTrigger data-testid={`select-${field.key}`}>
-                    <SelectValue placeholder={`Select ${field.label.toLowerCase()} column`} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ignore">-- Not mapped --</SelectItem>
-                    {preview.headers.map(header => (
-                      <SelectItem key={header} value={header}>
-                        {preview.columnLabels?.[header] || header}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">{field.description}</p>
-              </div>
-            ))}
+            <div className="divide-y">
+              {REQUIRED_FIELDS.map(field => renderFieldRow(field, true))}
+            </div>
           </div>
           
-          <div className="space-y-4 pt-4 border-t">
-            <h3 className="text-sm font-semibold text-muted-foreground">Optional Fields</h3>
-            
-            {OPTIONAL_FIELDS.map(field => (
-              <div key={field.key} className="space-y-1.5" data-testid={`field-${field.key}`}>
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-muted-foreground">{field.label}</label>
-                  {mapping[field.key] && (
-                    <span className="text-xs text-muted-foreground">
-                      Sample: {getColumnSample(mapping[field.key])}
-                    </span>
-                  )}
-                </div>
-                <Select
-                  value={mapping[field.key] || ""}
-                  onValueChange={(value) => handleFieldChange(field.key, value)}
-                >
-                  <SelectTrigger data-testid={`select-${field.key}`}>
-                    <SelectValue placeholder="Not mapped (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ignore">-- Not mapped --</SelectItem>
-                    {preview.headers.map(header => (
-                      <SelectItem key={header} value={header}>
-                        {preview.columnLabels?.[header] || header}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
+          <div>
+            <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Optional Fields</span>
+            </div>
+            <div className="divide-y">
+              {OPTIONAL_FIELDS.map(field => renderFieldRow(field, false))}
+            </div>
           </div>
         </CardContent>
       </Card>

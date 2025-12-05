@@ -285,6 +285,7 @@ export function BankUploadStep({ periodId, bankName, existingFile, onComplete, o
               report={qualityReport}
               fileName={currentFile?.fileName || ""}
               onContinue={handleQualityContinue}
+              isProcessing={processMutation.isPending}
             />
           </CardContent>
         </Card>

@@ -26,7 +26,8 @@ import {
   TableProperties,
   HelpCircle,
   ArrowRight,
-  Wrench
+  Wrench,
+  Loader2
 } from 'lucide-react';
 
 export interface DataQualityIssue {
@@ -84,6 +85,7 @@ interface DataQualityWarningsProps {
   onCancel?: () => void;
   onPreviewRows?: (rowIndices: number[]) => void;
   onUseSuggestedMapping?: (mapping: Record<string, string>) => void;
+  isProcessing?: boolean;
 }
 
 interface IssueExplanation {
@@ -447,7 +449,8 @@ export function DataQualityWarnings({
   onContinue,
   onCancel,
   onPreviewRows,
-  onUseSuggestedMapping
+  onUseSuggestedMapping,
+  isProcessing = false
 }: DataQualityWarningsProps) {
   
   if (!report.hasIssues) {
@@ -465,13 +468,22 @@ export function DataQualityWarnings({
         {onContinue && (
           <div className="flex justify-end gap-2">
             {onCancel && (
-              <Button variant="outline" onClick={onCancel} data-testid="button-cancel">
+              <Button variant="outline" onClick={onCancel} disabled={isProcessing} data-testid="button-cancel">
                 Cancel
               </Button>
             )}
-            <Button onClick={onContinue} data-testid="button-continue">
-              Continue to Column Mapping
-              <ArrowRight className="h-4 w-4 ml-1" />
+            <Button onClick={onContinue} disabled={isProcessing} data-testid="button-continue">
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Continue to Column Mapping
+                  <ArrowRight className="h-4 w-4 ml-1" />
+                </>
+              )}
             </Button>
           </div>
         )}
@@ -541,24 +553,33 @@ export function DataQualityWarnings({
           
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {report.cleanRows.toLocaleString()} rows will be processed
+              {isProcessing ? 'Processing...' : `${report.cleanRows.toLocaleString()} rows will be processed`}
             </p>
             
             <div className="flex gap-2">
               {onCancel && (
-                <Button variant="outline" onClick={onCancel} data-testid="button-cancel">
+                <Button variant="outline" onClick={onCancel} disabled={isProcessing} data-testid="button-cancel">
                   Cancel
                 </Button>
               )}
               <Button 
                 onClick={onContinue}
-                variant={reviewIssues.length > 0 ? 'default' : 'default'}
+                disabled={isProcessing}
                 data-testid="button-continue"
               >
-                {report.problematicRows > 0 
-                  ? `Continue with ${report.cleanRows.toLocaleString()} Clean Rows`
-                  : 'Continue to Column Mapping'}
-                <ArrowRight className="h-4 w-4 ml-1" />
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {report.problematicRows > 0 
+                      ? `Continue with ${report.cleanRows.toLocaleString()} Clean Rows`
+                      : 'Continue to Column Mapping'}
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </>
+                )}
               </Button>
             </div>
           </div>

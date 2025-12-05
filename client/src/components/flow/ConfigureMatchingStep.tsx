@@ -128,7 +128,7 @@ export function ConfigureMatchingStep({
   const saveMutation = useMutation({
     mutationFn: async (rules: MatchingRules) => {
       const response = await apiRequest("PUT", `/api/periods/${periodId}/matching-rules`, rules);
-      return response.json();
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matching-rules"] });

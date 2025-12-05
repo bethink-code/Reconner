@@ -272,6 +272,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
               report={qualityReport}
               fileName={currentFile?.fileName || ""}
               onContinue={handleQualityContinue}
+              isProcessing={processMutation.isPending}
             />
           </CardContent>
         </Card>

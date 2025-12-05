@@ -873,13 +873,14 @@ export class DatabaseStorage implements IStorage {
     if (!rules) {
       // Return default (moderate) rules
       // Tolerance set to R1.00 to handle fuel price variations and rounding
+      // Minimum confidence lowered to 60 to allow time-outside-window matches
       return {
         amountTolerance: 1.00,
         dateWindowDays: 3,
         timeWindowMinutes: 60,
         groupByInvoice: true,
         requireCardMatch: false,
-        minimumConfidence: 70,
+        minimumConfidence: 60,
         autoMatchThreshold: 85
       };
     }

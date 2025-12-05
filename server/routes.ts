@@ -980,8 +980,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             confidence = 68;
             reasons.push('2 days difference');
           } else {
-            confidence = 62;
-            reasons.push(`${Math.abs(dateDiff)} days difference (weekend processing)`);
+            confidence = 65;
+            reasons.push(`${Math.abs(dateDiff)} days difference (weekend/holiday processing)`);
           }
 
           // Time matching (only for same-day transactions)
@@ -1012,8 +1012,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Amount penalty (the further from exact, the lower confidence)
+          // Reduced from max 10 to max 5 to ensure within-tolerance amounts can still match
           if (amountDiff > 0) {
-            const amountPenalty = Math.min(10, (amountDiff / rules.amountTolerance) * 10);
+            const amountPenalty = Math.min(5, (amountDiff / rules.amountTolerance) * 5);
             confidence -= amountPenalty;
           }
 

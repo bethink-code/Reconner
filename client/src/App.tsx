@@ -14,6 +14,8 @@ import ReconcileTransactions from "@/pages/ReconcileTransactions";
 import ReportView from "@/pages/ReportView";
 import Admin from "@/pages/Admin";
 import ReconciliationSetupWizard from "@/pages/ReconciliationSetupWizard";
+import ReconciliationFlow from "@/pages/ReconciliationFlow";
+import InvestigateTransactions from "@/pages/InvestigateTransactions";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -36,6 +38,8 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/create" component={CreatePeriod} />
       <Route path="/setup/:periodId" component={ReconciliationSetupWizard} />
+      <Route path="/flow/:periodId" component={ReconciliationFlow} />
+      <Route path="/investigate" component={InvestigateTransactions} />
       <Route path="/upload" component={UploadFiles} />
       <Route path="/mapping" component={ColumnMapping} />
       <Route path="/reconcile" component={ReconcileTransactions} />

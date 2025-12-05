@@ -106,11 +106,28 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
     mutationFn: async () => {
       if (!currentFile) throw new Error("No file to process");
       
+      // First, apply suggested column mapping if not already set
+      const suggestedMapping = qualityReport?.suggestedMapping || currentFile.columnMapping;
+      if (suggestedMapping && Object.keys(suggestedMapping).length > 0) {
+        const mappingResponse = await fetch(`/api/files/${currentFile.id}/column-mapping`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ columnMapping: suggestedMapping }),
+        });
+        
+        if (!mappingResponse.ok) {
+          const errorData = await mappingResponse.json().catch(() => null);
+          throw new Error(errorData?.error || "Failed to save column mapping");
+        }
+      }
+      
+      // Then process the file
       const response = await fetch(`/api/periods/${periodId}/files/${currentFile.id}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ mapping: currentFile.columnMapping || {} }),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {

@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 
 interface StatusBadgeProps {
-  status: "draft" | "in_progress" | "complete" | "matched" | "unmatched" | "partial";
+  status: "draft" | "in_progress" | "complete" | "matched" | "unmatched" | "partial" | "unmatchable";
   className?: string;
 }
 
@@ -30,6 +30,10 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
     partial: { 
       label: "Partial Match", 
       className: "bg-chart-4/10 text-chart-4 border-chart-4/20" 
+    },
+    unmatchable: { 
+      label: "Unmatchable", 
+      className: "bg-muted text-muted-foreground border-muted-border" 
     },
   };
 

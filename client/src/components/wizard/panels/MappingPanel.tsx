@@ -222,6 +222,21 @@ export function MappingPanel({
       .filter(Boolean);
     return values.join(", ");
   };
+  
+  const isJunkColumn = (header: string): boolean => {
+    if (header.startsWith("_")) return true;
+    if (header.match(/^_\d+$/)) return true;
+    if (header.trim() === "") return true;
+    return false;
+  };
+  
+  const isColumnMapped = (header: string): boolean => {
+    return Object.values(mapping).includes(header);
+  };
+  
+  const getValidHeaders = (): string[] => {
+    return preview.headers.filter(h => !isJunkColumn(h));
+  };
 
   const isSuggested = (fieldKey: string): boolean => {
     return suggestedFields.has(fieldKey) && !!mapping[fieldKey];
@@ -263,11 +278,28 @@ export function MappingPanel({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ignore">-- Not mapped --</SelectItem>
-              {preview.headers.map(header => (
-                <SelectItem key={header} value={header}>
-                  {preview.columnLabels?.[header] || header}
-                </SelectItem>
-              ))}
+              {getValidHeaders().map(header => {
+                const isMapped = isColumnMapped(header) && mapping[field.key] !== header;
+                const sample = getColumnSample(header);
+                const displayName = preview.columnLabels?.[header] || header;
+                return (
+                  <SelectItem 
+                    key={header} 
+                    value={header}
+                    disabled={isMapped}
+                    className={isMapped ? "opacity-50" : ""}
+                  >
+                    <div className="flex items-center justify-between w-full gap-3">
+                      <span className={isMapped ? "line-through" : ""}>{displayName}</span>
+                      {sample && (
+                        <span className="text-xs text-muted-foreground truncate max-w-32">
+                          ({sample.slice(0, 20)}{sample.length > 20 ? "..." : ""})
+                        </span>
+                      )}
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
           
@@ -351,8 +383,11 @@ export function MappingPanel({
           )}
           
           <div>
-            <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+            <div className="mb-3 pb-2 border-b">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Required Fields</span>
+              <p className="text-xs text-muted-foreground mt-1">
+                These fields are needed to match transactions between your fuel data and bank records.
+              </p>
             </div>
             <div className="divide-y">
               {REQUIRED_FIELDS.map(field => renderFieldRow(field, true))}
@@ -360,8 +395,11 @@ export function MappingPanel({
           </div>
           
           <div>
-            <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+            <div className="mb-3 pb-2 border-b">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Optional Fields</span>
+              <p className="text-xs text-muted-foreground mt-1">
+                Improves reporting and helps with manual review. Card Number boosts match confidence.
+              </p>
             </div>
             <div className="divide-y">
               {OPTIONAL_FIELDS.map(field => renderFieldRow(field, false))}

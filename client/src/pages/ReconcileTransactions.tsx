@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, Download, Zap, ChevronLeft, ChevronRight, Settings, ChevronDown } from "lucide-react";
+import { ArrowLeft, Download, Zap, ChevronLeft, ChevronRight, Settings, ChevronDown, AlertTriangle, ArrowRight, HelpCircle } from "lucide-react";
 import TransactionTable from "@/components/TransactionTable";
 import MatchingRulesPanel from "@/components/MatchingRulesPanel";
 import { Link } from "wouter";
@@ -246,6 +246,63 @@ export default function ReconcileTransactions() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="space-y-6">
+          {(summary.fuelTransactions === 0 || summary.cardFuelTransactions === 0) && summary.bankTransactions > 0 && (
+            <Card className="bg-destructive/5 border-destructive/30 mb-6" data-testid="card-no-fuel-warning">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-destructive/10 rounded-full shrink-0">
+                    <AlertTriangle className="h-6 w-6 text-destructive" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-destructive">No fuel transactions to match against</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      You have <strong>{summary.bankTransactions}</strong> bank transactions but <strong>0</strong> card fuel transactions. 
+                      Bank records need card sales from your fuel system to match against.
+                    </p>
+                    <div className="mt-4 p-3 bg-muted/50 rounded-md">
+                      <p className="text-sm font-medium mb-2">What to do:</p>
+                      <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                        <li>Go back to setup and check your fuel file upload</li>
+                        <li>Make sure you've uploaded a file with card transactions</li>
+                        <li>Verify column mappings, especially Payment Type</li>
+                      </ol>
+                    </div>
+                    <Link href={`/setup/${periodId}`}>
+                      <Button variant="outline" className="mt-4" data-testid="button-go-to-setup">
+                        Go to Setup
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {summary.bankTransactions === 0 && summary.cardFuelTransactions > 0 && (
+            <Card className="bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800 mb-6" data-testid="card-no-bank-warning">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-full shrink-0">
+                    <AlertTriangle className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-amber-700 dark:text-amber-400">No bank transactions loaded</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      You have <strong>{summary.cardFuelTransactions}</strong> card fuel transactions but no bank statements to match them against.
+                    </p>
+                    <Link href={`/setup/${periodId}`}>
+                      <Button variant="outline" className="mt-4" data-testid="button-add-bank">
+                        Add Bank Statements
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card>
               <CardContent className="pt-6">

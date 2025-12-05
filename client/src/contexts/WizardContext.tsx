@@ -95,12 +95,13 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       }
       
       const firstIncompleteIndex = steps.findIndex(s => !s.isComplete);
+      const allComplete = firstIncompleteIndex < 0;
       
       return {
         periodId,
-        currentStepIndex: firstIncompleteIndex >= 0 ? firstIncompleteIndex : 0,
+        currentStepIndex: allComplete ? steps.length - 1 : firstIncompleteIndex,
         steps,
-        isAddingBank: false,
+        isAddingBank: allComplete,
       };
     }
     
@@ -149,10 +150,21 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
     
     case "UPDATE_BANK_PRESET": {
       const { stepIndex, preset } = action.payload;
+      const BANK_PRESET_NAMES: Record<string, string> = {
+        fnb_merchant: "FNB Merchant",
+        absa_merchant: "ABSA Merchant",
+        standard_merchant: "Standard Bank Merchant",
+        nedbank_merchant: "Nedbank Merchant",
+        capitec_merchant: "Capitec Merchant",
+        custom: "Other Bank",
+      };
+      const presetName = BANK_PRESET_NAMES[preset] || preset;
       return {
         ...state,
         steps: state.steps.map((step, idx) =>
-          idx === stepIndex ? { ...step, bankPreset: preset } : step
+          idx === stepIndex 
+            ? { ...step, bankPreset: preset, sourceName: presetName } 
+            : step
         ),
       };
     }

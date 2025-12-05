@@ -382,16 +382,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isCardTransaction: 'yes' | 'no' | 'unknown';
       }> = [];
       
+      // Full file analysis stats
+      const fullAnalysisStats = {
+        totalRows: parsed.rowCount,
+        validTransactions: 0,
+        cardTransactions: 0,
+        cashTransactions: 0,
+        unknownPaymentType: 0,
+        skippedRows: {
+          headerRows: 0,
+          emptyDate: 0,
+          zeroOrInvalidAmount: 0,
+          pageBreaks: 0,
+          other: 0,
+        }
+      };
+      
       const mappingToUse = file.columnMapping || suggestedMappings;
       if (mappingToUse && Object.keys(mappingToUse).length > 0) {
-        for (const row of parsed.rows.slice(0, 5)) {
+        // Analyze all rows for stats
+        for (let i = 0; i < parsed.rows.length; i++) {
+          const row = parsed.rows[i];
           const extracted = fileParser.extractTransactionData(
             row,
             mappingToUse as Record<string, string>,
             parsed.headers,
             file.sourceType
           );
-          normalizedPreview.push(extracted);
+          
+          // Get first 5 for preview
+          if (i < 5) {
+            normalizedPreview.push(extracted);
+          }
+          
+          // Validate for full stats
+          const validation = fileParser.isValidTransactionRow(
+            extracted,
+            row,
+            mappingToUse as Record<string, string>
+          );
+          
+          if (!validation.valid) {
+            switch (validation.reason) {
+              case 'header_row':
+                fullAnalysisStats.skippedRows.headerRows++;
+                break;
+              case 'empty_date':
+                fullAnalysisStats.skippedRows.emptyDate++;
+                break;
+              case 'zero_or_invalid_amount':
+                fullAnalysisStats.skippedRows.zeroOrInvalidAmount++;
+                break;
+              case 'page_break':
+                fullAnalysisStats.skippedRows.pageBreaks++;
+                break;
+              default:
+                fullAnalysisStats.skippedRows.other++;
+            }
+          } else {
+            fullAnalysisStats.validTransactions++;
+            if (extracted.isCardTransaction === 'yes') {
+              fullAnalysisStats.cardTransactions++;
+            } else if (extracted.isCardTransaction === 'no') {
+              fullAnalysisStats.cashTransactions++;
+            } else {
+              fullAnalysisStats.unknownPaymentType++;
+            }
+          }
         }
       }
 
@@ -408,6 +465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         columnLabels,
         normalizedPreview,
         qualityReport: file.qualityReport,
+        fullAnalysisStats,
       });
     } catch (error) {
       console.error("Error fetching file preview:", error);

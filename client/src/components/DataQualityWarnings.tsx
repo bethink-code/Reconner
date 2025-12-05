@@ -134,7 +134,7 @@ function getIssueExplanation(issue: DataQualityIssue, report: DataQualityReport)
         whyItHappened: 'This can happen when columns get shifted during export, or when the source system uses generic column names. For example, a column named "Description" might actually contain quantity values.',
         whatWeDo: "We've analyzed the actual data and will suggest the correct mapping.",
         userAction: 'review',
-        userActionText: "When mapping columns in the next step, pay attention to the sample data shown - don't rely on header names alone.",
+        userActionText: "In the next step, each dropdown shows sample values next to column names. Use these samples - not the column headers - to pick the right mapping.",
         icon: <AlertTriangle className="h-5 w-5" />,
         color: 'warning'
       };
@@ -161,7 +161,7 @@ function getIssueExplanation(issue: DataQualityIssue, report: DataQualityReport)
         whyItHappened: "This usually means the column contains a mix of data types, or the header name doesn't match the actual content.",
         whatWeDo: "We'll show you sample values from each column so you can map them correctly.",
         userAction: 'review',
-        userActionText: 'Check the sample data when mapping this column to make sure it contains what you expect.',
+        userActionText: 'In the next step, look at the sample data shown in each dropdown - not just the column names. The values will help you pick the right column.',
         icon: <TableProperties className="h-5 w-5" />,
         color: 'warning'
       };

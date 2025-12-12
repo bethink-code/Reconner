@@ -26,8 +26,11 @@ The application uses React 18 with TypeScript and Vite. The UI is built with `sh
   4. **Results Dashboard** - View matched/unmatched/unmatchable transactions with bank-focused metrics
 - **Step Gating:** Prerequisites enforced at each step - users cannot advance until previous steps are completed.
 - **Data Quality:** A sophisticated `DataQualityValidator` service analyzes uploaded files for issues (column shifts, type mismatches, etc.), providing a "reassurance-first" UX with categorized warnings and suggested fixes.
-- **Investigation View:** Dedicated page (`/investigate`) for reviewing unmatched bank transactions with manual matching capability.
+- **Investigation View:** Dedicated page (`/investigate`) for reviewing unmatched bank transactions with manual matching capability. Features smart categorization (Quick Wins >80%, Investigate 50-80%, No Match Found, Low Value <R50) and bulk actions.
+- **Bulk Actions:** "Confirm All" for Quick Wins and "Flag All for Review" for No Match Found categories.
+- **Resolution Tracking:** Distinguishes CLOSED (linked/reviewed/dismissed/written_off) from PENDING (flagged) resolutions with summary breakdown.
 - **Verification-Based Metrics:** Reports focus on verifiable transactions, distinguishing them from unverified ones to provide accurate reconciliation rates.
+- **Period Coverage Timeline:** Visual timeline showing reporting period, fuel data range, and bank data ranges with gap detection.
 
 **Backend:**
 - **Server:** Express.js with TypeScript and ESM modules, running on Node.js.

@@ -57,6 +57,8 @@ export interface PeriodSummary {
   unmatchableBankAmount: number;
   resolvedBankTransactions: number;
   resolvedBankAmount: number;
+  fuelDateRange?: { min: string; max: string };
+  bankDateRange?: { min: string; max: string };
 }
 
 export interface VerificationSummary {
@@ -433,7 +435,12 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
           
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN 1 END) as unmatched_card_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
+          
+          MIN(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_date_min,
+          MAX(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_date_max,
+          MIN(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_date_min,
+          MAX(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_date_max
           
         FROM transactions
         WHERE period_id = $1
@@ -527,6 +534,14 @@ export class DatabaseStorage implements IStorage {
       unmatchableBankAmount: parseFloat(row.unmatchable_bank_amount || '0'),
       resolvedBankTransactions: parseInt(row.resolved_bank_transactions || '0'),
       resolvedBankAmount: parseFloat(row.resolved_bank_amount || '0'),
+      fuelDateRange: row.fuel_date_min && row.fuel_date_max ? {
+        min: row.fuel_date_min,
+        max: row.fuel_date_max,
+      } : undefined,
+      bankDateRange: row.bank_date_min && row.bank_date_max ? {
+        min: row.bank_date_min,
+        max: row.bank_date_max,
+      } : undefined,
     };
   }
 

@@ -49,7 +49,7 @@ export function AddBankPrompt({ periodId }: AddBankPromptProps) {
   };
   
   const handleContinueToReconcile = () => {
-    setLocation(`/reconcile?periodId=${periodId}`);
+    setLocation(`/flow/${periodId}`);
   };
   
   const handleGoBack = () => {

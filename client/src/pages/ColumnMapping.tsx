@@ -1170,7 +1170,7 @@ export default function ColumnMapping() {
         title: "Files processed",
         description: "All files have been processed. Starting reconciliation...",
       });
-      setLocation(`/reconcile?periodId=${periodId}`);
+      setLocation(`/flow/${periodId}`);
     } catch (error) {
       toast({
         title: "Processing failed",

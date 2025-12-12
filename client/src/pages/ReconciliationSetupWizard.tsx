@@ -157,7 +157,7 @@ function WizardContent({ periodId }: { periodId: string }) {
   }
   
   const handleContinueToReconcile = () => {
-    setLocation(`/reconcile?periodId=${periodId}`);
+    setLocation(`/flow/${periodId}`);
   };
   
   const pageVariants = {

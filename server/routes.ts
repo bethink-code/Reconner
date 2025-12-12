@@ -772,8 +772,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const file = await storage.getFile(req.params.fileId);
       if (file) {
+        await storage.deleteMatchesByFile(file.id);
         await storage.deleteTransactionsByFile(file.id);
-        await objectStorageService.deleteFile(file.fileUrl);
+        if (file.fileUrl) {
+          await objectStorageService.deleteFile(file.fileUrl);
+        }
         await storage.deleteFile(file.id);
       }
       res.json({ success: true });

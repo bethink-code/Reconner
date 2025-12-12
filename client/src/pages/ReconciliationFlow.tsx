@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Loader2, Plus, CheckCircle2, Building2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { ReconciliationStepper, type ReconciliationStep, type StepEligibility } from "@/components/ReconciliationStepper";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -12,10 +12,11 @@ import type { ReconciliationPeriod, UploadedFile } from "@shared/schema";
 
 import { FuelUploadStep } from "@/components/flow/FuelUploadStep";
 import { BankUploadStep } from "@/components/flow/BankUploadStep";
+import { BankStatusScreen } from "@/components/flow/BankStatusScreen";
 import { ConfigureMatchingStep } from "@/components/flow/ConfigureMatchingStep";
 import { ResultsDashboard } from "@/components/flow/ResultsDashboard";
 
-type BankSubStep = "select" | "upload";
+type BankSubStep = "status" | "upload";
 
 export default function ReconciliationFlow() {
   const [, setLocation] = useLocation();
@@ -26,8 +27,9 @@ export default function ReconciliationFlow() {
   const [completedSteps, setCompletedSteps] = useState<ReconciliationStep[]>([]);
   const [isAutoMatching, setIsAutoMatching] = useState(false);
   
-  const [bankSubStep, setBankSubStep] = useState<BankSubStep>("select");
+  const [bankSubStep, setBankSubStep] = useState<BankSubStep>("status");
   const [currentBankName, setCurrentBankName] = useState<string>("");
+  const [replacingFileId, setReplacingFileId] = useState<string | null>(null);
 
   const periodId = params?.periodId || "";
 
@@ -74,6 +76,26 @@ export default function ReconciliationFlow() {
     },
   });
 
+  const deleteFileMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      await apiRequest("DELETE", `/api/files/${fileId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
+      toast({
+        title: "Bank file removed",
+        description: "The bank statement has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to remove file",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
     if (!match || !periodId) {
       setLocation("/");
@@ -98,10 +120,10 @@ export default function ReconciliationFlow() {
         setCurrentStep("fuel");
       } else if (bankFiles.length === 0) {
         setCurrentStep("bank");
-        setBankSubStep("select");
+        setBankSubStep("status");
       } else if (!newCompleted.includes("configure")) {
         setCurrentStep("bank");
-        setBankSubStep("select");
+        setBankSubStep("status");
       }
     }
   }, [files]);
@@ -117,7 +139,7 @@ export default function ReconciliationFlow() {
     
     if (step === "bank" && fuelProcessed) {
       setCurrentStep(step);
-      setBankSubStep("select");
+      setBankSubStep("status");
       return;
     }
     
@@ -135,18 +157,30 @@ export default function ReconciliationFlow() {
   const handleFuelComplete = () => {
     setCompletedSteps((prev) => [...prev.filter(s => s !== "fuel"), "fuel"]);
     setCurrentStep("bank");
-    setBankSubStep("select");
+    setBankSubStep("status");
   };
 
   const handleSelectBank = (bankName: string) => {
     setCurrentBankName(bankName);
+    setReplacingFileId(null);
     setBankSubStep("upload");
+  };
+
+  const handleReplaceBank = (fileId: string, bankName: string) => {
+    setCurrentBankName(bankName);
+    setReplacingFileId(fileId);
+    setBankSubStep("upload");
+  };
+
+  const handleRemoveBank = (fileId: string) => {
+    deleteFileMutation.mutate(fileId);
   };
 
   const handleBankUploadComplete = () => {
     setCompletedSteps((prev) => [...prev.filter(s => s !== "bank"), "bank"]);
-    setBankSubStep("select");
+    setBankSubStep("status");
     setCurrentBankName("");
+    setReplacingFileId(null);
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
   };
 
@@ -200,110 +234,6 @@ export default function ReconciliationFlow() {
       </div>
     );
   }
-
-  const renderBankSelection = () => (
-    <Card className="max-w-2xl mx-auto" data-testid="card-bank-selection">
-      <CardHeader>
-        <CardTitle>Bank Statements</CardTitle>
-        <CardDescription>
-          Upload bank statements to verify your fuel transactions. You can add multiple bank accounts.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {bankFiles.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">Uploaded Bank Statements</h3>
-            {bankFiles.map((file) => (
-              <div
-                key={file.id}
-                className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
-                data-testid={`bank-file-${file.id}`}
-              >
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                <div className="flex-1">
-                  <p className="font-medium">{file.bankName || file.sourceName || file.fileName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {file.rowCount?.toLocaleString()} transactions
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            {bankFiles.length === 0 ? "Select a bank to upload" : "Add another bank"}
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              variant="outline"
-              className="h-auto py-4 flex flex-col items-center gap-2"
-              onClick={() => handleSelectBank("FNB")}
-              data-testid="button-select-fnb"
-            >
-              <Building2 className="h-6 w-6" />
-              <span>FNB</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-4 flex flex-col items-center gap-2"
-              onClick={() => handleSelectBank("ABSA")}
-              data-testid="button-select-absa"
-            >
-              <Building2 className="h-6 w-6" />
-              <span>ABSA</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-4 flex flex-col items-center gap-2"
-              onClick={() => handleSelectBank("Standard Bank")}
-              data-testid="button-select-standard"
-            >
-              <Building2 className="h-6 w-6" />
-              <span>Standard Bank</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-4 flex flex-col items-center gap-2"
-              onClick={() => handleSelectBank("Nedbank")}
-              data-testid="button-select-nedbank"
-            >
-              <Building2 className="h-6 w-6" />
-              <span>Nedbank</span>
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            className="w-full"
-            onClick={() => handleSelectBank("Other")}
-            data-testid="button-select-other"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Other Bank
-          </Button>
-        </div>
-
-        <div className="flex justify-between pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentStep("fuel")}
-            data-testid="button-back-fuel"
-          >
-            Back
-          </Button>
-          {bankFiles.length > 0 && (
-            <Button 
-              onClick={handleContinueToMatching}
-              data-testid="button-continue-matching"
-            >
-              Continue to Matching Rules
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -362,17 +292,25 @@ export default function ReconciliationFlow() {
               />
             )}
 
-            {currentStep === "bank" && bankSubStep === "select" && (
-              renderBankSelection()
+            {currentStep === "bank" && bankSubStep === "status" && (
+              <BankStatusScreen
+                bankFiles={bankFiles}
+                onSelectBank={handleSelectBank}
+                onReplaceBank={handleReplaceBank}
+                onRemoveBank={handleRemoveBank}
+                onContinue={handleContinueToMatching}
+                onBack={() => setCurrentStep("fuel")}
+                isRemoving={deleteFileMutation.isPending}
+              />
             )}
 
             {currentStep === "bank" && bankSubStep === "upload" && (
               <BankUploadStep
                 periodId={periodId}
                 bankName={currentBankName}
-                existingFile={undefined}
+                existingFile={replacingFileId ? files.find(f => f.id === replacingFileId) : undefined}
                 onComplete={handleBankUploadComplete}
-                onBack={() => setBankSubStep("select")}
+                onBack={() => setBankSubStep("status")}
               />
             )}
 
@@ -382,7 +320,7 @@ export default function ReconciliationFlow() {
                 onStartMatching={handleStartMatching}
                 onBack={() => {
                   setCurrentStep("bank");
-                  setBankSubStep("select");
+                  setBankSubStep("status");
                 }}
                 isMatching={autoMatchMutation.isPending}
               />

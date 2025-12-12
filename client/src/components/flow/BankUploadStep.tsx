@@ -250,10 +250,10 @@ export function BankUploadStep({ periodId, bankName, existingFile, onComplete, o
             <Button 
               variant="outline"
               onClick={onBack}
-              data-testid="button-back-fuel"
+              data-testid="button-back-bank-status"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
+              Back to Bank Selection
             </Button>
             <Button 
               className="flex-1" 
@@ -382,10 +382,10 @@ export function BankUploadStep({ periodId, bankName, existingFile, onComplete, o
         <Button 
           variant="outline"
           onClick={onBack}
-          data-testid="button-back-fuel"
+          data-testid="button-back-bank-status"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Fuel Data
+          Back to Bank Selection
         </Button>
       </div>
     </div>

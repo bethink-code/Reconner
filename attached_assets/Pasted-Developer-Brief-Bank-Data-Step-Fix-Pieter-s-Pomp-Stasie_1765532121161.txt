@@ -1,0 +1,132 @@
+Developer Brief: Bank Data Step Fix
+Pieter's Pomp Stasie Reconner
+December 12, 2025 | Priority: BLOCKER
+Executive Summary
+Users cannot proceed past the Bank Data step in the reconciliation wizard. After successfully uploading bank files (FNB, ABSA), there is no way to continue to Configure Matching. This is a complete blocker — the wizard flow is broken.
+Current State vs Expected Behavior
+The Problem
+1.	User uploads FNB bank file → upload succeeds
+2.	User uploads ABSA bank file → upload succeeds
+3.	User is back on bank selection screen with NO indication files were uploaded
+4.	There is NO "Continue" button to proceed to Configure Matching
+5.	Wizard step headers are not clickable
+6.	USER IS STUCK — cannot complete reconciliation
+
+Expected Behavior
+The Bank Data step should be a STATUS SCREEN that shows uploaded files AND allows adding more banks. It should NOT be just a bank selection dialog.
+
+CORRECT SCREEN LAYOUT:
+Bank Statements
+Upload bank statements to verify your fuel transactions.
+UPLOADED FILES:
+  ✅ FNB          79 rows     FNB_Nov2025.xlsx     [Replace] [✕]
+  ✅ ABSA        156 rows     ABSA_Merchant.csv    [Replace] [✕]
+ADD ANOTHER BANK (optional):
+  [Standard Bank]  [Nedbank]  [+ Other Bank]
+                              [Continue to Configure Matching →]
+
+ 
+Implementation Requirements
+Requirement 1: Bank Status Screen
+Replace the current "select a bank" only view with a combined status + selection screen.
+
+Must show:
+•	List of already-uploaded bank files with: bank name, row count, filename
+•	"Replace" button for each uploaded file
+•	"Remove" (✕) button for each uploaded file
+•	Success indicator (✅ checkmark) for each uploaded file
+•	Bank selection options for banks NOT yet uploaded
+•	"Continue to Configure Matching" button (visible when ≥1 bank uploaded)
+
+Requirement 2: Continue Button Logic
+Condition	Continue Button State
+0 bank files uploaded	Hidden or disabled with tooltip "Upload at least one bank file"
+≥1 bank file uploaded	VISIBLE and ENABLED
+
+Requirement 3: After Bank Upload Success
+When a bank file upload completes successfully:
+1.	Close any upload dialog/modal
+2.	Return to the Bank Status Screen (NOT the bank selection dialog)
+3.	Show the newly uploaded file in the "Uploaded Files" list
+4.	Show brief success toast/notification (optional but nice)
+5.	Do NOT auto-open the bank selection dialog again
+
+Requirement 4: "Other Bank" Name Field
+When user clicks "+ Other Bank", show a name input field BEFORE the file upload:
+
+Add Other Bank
+Bank Name: [____________________]  ← REQUIRED
+             e.g. "Capitec", "Investec"
+[Upload File Area - only shown after name entered]
+
+This name is used throughout the app in results, reports, and investigation views.
+
+Requirement 5: Back/Cancel Navigation
+From any bank upload sub-screen:
+•	"← Back to Bank Selection" should return to the Bank Status Screen
+•	Do NOT say "Back to Fuel Data" — that's the wrong step
+•	Provide a Cancel/Close option to exit without uploading
+ 
+Suggested Component Structure
+React Component Hierarchy
+BankDataStep (main container)
+  ├── UploadedBanksList
+  │     └── UploadedBankItem (for each uploaded bank)
+  │           ├── Bank name + row count + filename
+  │           ├── Replace button
+  │           └── Remove button
+  ├── AvailableBanksList
+  │     └── BankOption (for banks NOT yet uploaded)
+  ├── OtherBankOption (with name input)
+  └── ContinueButton
+        └── Enabled when uploadedBanks.length >= 1
+
+State Management
+Required State
+uploadedBanks: Array<{
+  id: string,
+  bankName: string,      // 'FNB', 'ABSA', or custom name
+  fileName: string,
+  rowCount: number,
+  uploadedAt: Date
+}>
+currentView: 'status' | 'uploading'
+selectedBank: string | null
+otherBankName: string    // for custom bank input
+ 
+Complete Bug List from Testing
+BLOCKER
+Bug	Description
+#1	No "Continue" button on Bank Data step. User cannot proceed to Configure Matching after uploading bank files.
+
+HIGH Priority
+Bug	Description
+#2	Bank selection dialog covers success screen. After upload completes, user can't see that the file was uploaded.
+#3	No visibility of uploaded banks. The screen shows bank selection options but doesn't show which banks are already uploaded.
+#4	"Other Bank" doesn't ask for bank name. Custom banks are labeled generically, making reports confusing.
+#5	Wrong back navigation. From bank upload screen, "Back" goes to Fuel Data instead of Bank Selection.
+
+MEDIUM Priority (UX Improvements)
+Issue	Description
+#6	Data Quality Check screen too busy. Success should be simple with details collapsed by default.
+#7	No cancel option when in "Other Bank" upload flow. Only option is "Back to Fuel Data".
+ 
+Acceptance Test Cases
+Developer must verify ALL of these pass before marking complete:
+
+#	Test Case	Expected Result
+1	Upload FNB file, return to bank screen	FNB shows in "Uploaded" list with row count
+2	With 1 bank uploaded, look for Continue	"Continue to Configure Matching" button visible
+3	Click Continue button	Navigate to Configure Matching step
+4	Upload second bank (ABSA)	Both FNB and ABSA show in uploaded list
+5	Click "+ Other Bank"	Name input field appears before upload area
+6	Enter name "Capitec", upload file	Shows as "Capitec" (not "Other") in list
+7	Click Replace on uploaded bank	Can upload new file, replaces old one
+8	Click Remove (✕) on uploaded bank	Bank removed from list, Continue updates
+9	Remove all banks	Continue button hidden or disabled
+10	From upload screen, click Back	Returns to Bank Status Screen (not Fuel Data)
+
+Summary
+The Bank Data step needs to be restructured from a "bank selection dialog" to a "bank management screen" that shows status AND allows actions. The key missing piece is the Continue button — without it, users are completely stuck.
+
+Fix the blocker first (Continue button), then address the status visibility issues. The UX improvements (data quality screen simplification) can come later.

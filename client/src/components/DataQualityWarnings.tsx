@@ -455,42 +455,36 @@ export function DataQualityWarnings({
   
   if (!report.hasIssues) {
     return (
-      <div className="py-4" data-testid="quality-success">
-        <Alert className="mb-4 border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
-          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-          <AlertTitle className="text-green-800 dark:text-green-200">File validated successfully!</AlertTitle>
-          <AlertDescription className="text-green-700 dark:text-green-300">
-            <strong>{fileName}</strong> contains {report.totalRows.toLocaleString()} rows ready for processing.
-            No data quality issues were detected.
-          </AlertDescription>
-        </Alert>
+      <div className="py-4 text-center" data-testid="quality-success">
+        <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-4">
+          <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+        </div>
+        <h3 className="text-lg font-semibold mb-1">File looks great!</h3>
+        <p className="text-muted-foreground mb-6">
+          {report.totalRows.toLocaleString()} rows ready to process
+        </p>
         
         {onContinue && (
-          <div className="flex justify-end gap-2">
-            {onCancel && (
-              <Button variant="outline" onClick={onCancel} disabled={isProcessing} data-testid="button-cancel">
-                Cancel
-              </Button>
+          <Button onClick={onContinue} disabled={isProcessing} size="lg" data-testid="button-continue">
+            {isProcessing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </>
             )}
-            <Button onClick={onContinue} disabled={isProcessing} data-testid="button-continue">
-              {isProcessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  Continue to Column Mapping
-                  <ArrowRight className="h-4 w-4 ml-1" />
-                </>
-              )}
-            </Button>
-          </div>
+          </Button>
         )}
       </div>
     );
   }
 
+  const [showDetails, setShowDetails] = useState(false);
+  
   const autoFixIssues = report.issues.filter(i => {
     const type = i.type.toUpperCase();
     return type.includes('PAGE_BREAK') || type.includes('REPEATED_HEADER') || type.includes('EMPTY_COLUMN');
@@ -502,88 +496,113 @@ export function DataQualityWarnings({
            type.includes('INCONSISTENT') || type.includes('MISSING');
   });
 
+  const hasCritical = report.hasCriticalIssues || reviewIssues.length > 0;
+
   return (
-    <div className="py-2" data-testid="data-quality-warnings">
-      <h3 className="text-lg font-semibold mb-1">Data Quality Check</h3>
-      <p className="text-sm text-muted-foreground mb-4">
-        We've analyzed <strong>{fileName}</strong> and found a few things to address.
-      </p>
-
-      <SummaryCard report={report} />
-
-      <ColumnMappingTip report={report} onUseSuggestedMapping={onUseSuggestedMapping} />
-
-      {autoFixIssues.length > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            <Trash2 className="h-4 w-4" />
-            <span className="font-medium">Will be fixed automatically</span>
-          </div>
-          {autoFixIssues.map((issue, index) => (
-            <IssueCard 
-              key={`auto-${index}`} 
-              issue={issue} 
-              report={report}
-              onPreviewRows={onPreviewRows}
-            />
-          ))}
+    <div className="py-4" data-testid="data-quality-warnings">
+      <div className="text-center mb-6">
+        <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
+          hasCritical 
+            ? 'bg-amber-100 dark:bg-amber-900' 
+            : 'bg-green-100 dark:bg-green-900'
+        }`}>
+          {hasCritical ? (
+            <AlertTriangle className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+          ) : (
+            <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+          )}
         </div>
-      )}
+        <h3 className="text-lg font-semibold mb-1">
+          {hasCritical ? 'Minor issues found' : 'File looks good!'}
+        </h3>
+        <p className="text-muted-foreground">
+          {report.cleanRows.toLocaleString()} of {report.totalRows.toLocaleString()} rows ready to process
+          {report.problematicRows > 0 && (
+            <span className="text-sm"> ({report.problematicRows} will be cleaned automatically)</span>
+          )}
+        </p>
+      </div>
 
-      {reviewIssues.length > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            <AlertTriangle className="h-4 w-4" />
-            <span className="font-medium">Please review</span>
-          </div>
-          {reviewIssues.map((issue, index) => (
-            <IssueCard 
-              key={`review-${index}`} 
-              issue={issue} 
-              report={report}
-              onPreviewRows={onPreviewRows}
-            />
-          ))}
-        </div>
+      {report.issues.length > 0 && (
+        <Collapsible open={showDetails} onOpenChange={setShowDetails} className="mb-6">
+          <CollapsibleTrigger asChild>
+            <Button 
+              variant="ghost" 
+              className="w-full justify-between" 
+              data-testid="button-toggle-details"
+            >
+              <span className="flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                View {report.issues.length} issue{report.issues.length !== 1 ? 's' : ''} found
+              </span>
+              {showDetails ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-4 space-y-4">
+            <ColumnMappingTip report={report} onUseSuggestedMapping={onUseSuggestedMapping} />
+
+            {autoFixIssues.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                  <Sparkles className="h-4 w-4 text-green-600" />
+                  <span className="font-medium">Auto-fixed ({autoFixIssues.length})</span>
+                </div>
+                {autoFixIssues.map((issue, index) => (
+                  <IssueCard 
+                    key={`auto-${index}`} 
+                    issue={issue} 
+                    report={report}
+                    onPreviewRows={onPreviewRows}
+                  />
+                ))}
+              </div>
+            )}
+
+            {reviewIssues.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span className="font-medium">Review recommended ({reviewIssues.length})</span>
+                </div>
+                {reviewIssues.map((issue, index) => (
+                  <IssueCard 
+                    key={`review-${index}`} 
+                    issue={issue} 
+                    report={report}
+                    onPreviewRows={onPreviewRows}
+                  />
+                ))}
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {onContinue && (
-        <>
-          <Separator className="my-4" />
-          
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {isProcessing ? 'Processing...' : `${report.cleanRows.toLocaleString()} rows will be processed`}
-            </p>
-            
-            <div className="flex gap-2">
-              {onCancel && (
-                <Button variant="outline" onClick={onCancel} disabled={isProcessing} data-testid="button-cancel">
-                  Cancel
-                </Button>
-              )}
-              <Button 
-                onClick={onContinue}
-                disabled={isProcessing}
-                data-testid="button-continue"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    {report.problematicRows > 0 
-                      ? `Continue with ${report.cleanRows.toLocaleString()} Clean Rows`
-                      : 'Continue to Column Mapping'}
-                    <ArrowRight className="h-4 w-4 ml-1" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </>
+        <div className="text-center">
+          <Button 
+            onClick={onContinue}
+            disabled={isProcessing}
+            size="lg"
+            data-testid="button-continue"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                Continue with {report.cleanRows.toLocaleString()} Rows
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </>
+            )}
+          </Button>
+        </div>
       )}
     </div>
   );

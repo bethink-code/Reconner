@@ -58,7 +58,11 @@ export default function Dashboard() {
   const draftCount = displayPeriods.filter(p => p.status === "draft").length;
 
   const handleEdit = (id: string) => {
-    setLocation(`/flow/${id}`);
+    setLocation(`/flow/${id}?mode=edit`);
+  };
+
+  const handleView = (id: string) => {
+    setLocation(`/flow/${id}?mode=view`);
   };
 
   const handleViewReport = (id: string) => {
@@ -225,17 +229,24 @@ export default function Dashboard() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEdit(period.id)}>
+                              <DropdownMenuItem onClick={() => handleView(period.id)} data-testid={`button-view-${period.id}`}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Results
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEdit(period.id)} data-testid={`button-edit-${period.id}`}>
                                 <Pencil className="h-4 w-4 mr-2" />
-                                Edit
+                                Edit Data
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleViewReport(period.id)}>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleViewReport(period.id)} data-testid={`button-report-${period.id}`}>
                                 <FileBarChart className="h-4 w-4 mr-2" />
-                                View Report
+                                Export Report
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem 
                                 className="text-destructive"
                                 onClick={() => handleDelete(period.id)}
+                                data-testid={`button-delete-${period.id}`}
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete

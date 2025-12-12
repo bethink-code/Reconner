@@ -46,6 +46,14 @@ interface PeriodSummary {
   bankDateRange?: { min: string; max: string };
 }
 
+interface ResolutionSummary {
+  linked: number;
+  reviewed: number;
+  dismissed: number;
+  flagged: number;
+  writtenOff: number;
+}
+
 interface ResultsDashboardProps {
   periodId: string;
   onRerunMatching: () => void;
@@ -69,6 +77,11 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
 
   const { data: period } = useQuery<Period>({
     queryKey: ["/api/periods", periodId],
+    enabled: !!periodId,
+  });
+
+  const { data: resolutionSummary } = useQuery<ResolutionSummary>({
+    queryKey: ["/api/periods", periodId, "resolution-summary"],
     enabled: !!periodId,
   });
 
@@ -108,7 +121,19 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
   const needsReview = unmatchedBank;
   const outsideDateRange = unmatchableBank;
 
-  const allResolved = needsReview === 0;
+  // Resolution summary for completion state
+  const linked = resolutionSummary?.linked || 0;
+  const reviewed = resolutionSummary?.reviewed || 0;
+  const dismissed = resolutionSummary?.dismissed || 0;
+  const flagged = resolutionSummary?.flagged || 0;
+  const writtenOff = resolutionSummary?.writtenOff || 0;
+  const closedCount = linked + reviewed + dismissed + writtenOff;
+  const totalResolved = closedCount + flagged;
+
+  // All truly done only when flagged === 0 AND no unmatched transactions needing review
+  const allTrulyDone = needsReview === 0 && flagged === 0;
+  // Review complete means all transactions categorized but some are flagged
+  const reviewComplete = needsReview === 0 && flagged > 0;
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -174,8 +199,9 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
         </CardContent>
       </Card>
 
-      {/* SECTION 2: ACTION REQUIRED */}
-      {allResolved ? (
+      {/* SECTION 2: COMPLETION STATE */}
+      {allTrulyDone ? (
+        // STATE 1: All Done - no flagged items, no pending review
         <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" data-testid="card-all-done">
           <CardContent className="pt-6 pb-6">
             <div className="flex flex-col items-center text-center gap-3">
@@ -203,7 +229,81 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
             </div>
           </CardContent>
         </Card>
+      ) : reviewComplete ? (
+        // STATE 2: Review Complete - transactions categorized but some are flagged
+        <Card className="bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800" data-testid="card-review-complete">
+          <CardContent className="pt-6 pb-6 space-y-4">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-orange-800 dark:text-orange-200">
+                Review Complete
+              </h3>
+              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                {totalResolved} of {totalResolved} transactions categorized
+              </p>
+            </div>
+            
+            {/* Resolution Breakdown */}
+            <div className="border-t border-b border-orange-200 dark:border-orange-700 py-3 space-y-2">
+              {linked > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="h-4 w-4 text-green-600" />
+                  <span className="text-foreground">{linked} Linked to fuel records</span>
+                </div>
+              )}
+              {dismissed > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="h-4 w-4 text-green-600" />
+                  <span className="text-foreground">{dismissed} Dismissed (low value)</span>
+                </div>
+              )}
+              {reviewed > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="h-4 w-4 text-green-600" />
+                  <span className="text-foreground">{reviewed} Marked as reviewed — no issue</span>
+                </div>
+              )}
+              {writtenOff > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="h-4 w-4 text-green-600" />
+                  <span className="text-foreground">{writtenOff} Written off</span>
+                </div>
+              )}
+              {flagged > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <span className="text-orange-700 dark:text-orange-300 font-medium">{flagged} Flagged for follow-up</span>
+                </div>
+              )}
+            </div>
+
+            {/* Warning message */}
+            <div className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/30 p-2 rounded">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{flagged} transaction{flagged !== 1 ? 's' : ''} need{flagged === 1 ? 's' : ''} manager/accountant review</span>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 flex-wrap">
+              <Button 
+                onClick={() => setLocation(`/investigate?periodId=${periodId}&filter=flagged`)}
+                data-testid="button-view-flagged"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                View Flagged Items
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, '_blank')}
+                data-testid="button-export-flagged"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export for Review
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
+        // STATE 3: Action Required - still needs review
         <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-action-required">
           <CardContent className="pt-6 pb-6 space-y-4">
             <div className="flex items-start gap-4">

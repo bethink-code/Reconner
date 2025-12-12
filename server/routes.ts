@@ -1307,6 +1307,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Resolution Summary - counts by type for completion state logic
+  app.get("/api/periods/:periodId/resolution-summary", isAuthenticated, async (req, res) => {
+    try {
+      const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
+      
+      const summary = {
+        linked: 0,
+        reviewed: 0,
+        dismissed: 0,
+        flagged: 0,
+        writtenOff: 0,
+      };
+      
+      for (const r of resolutions) {
+        switch (r.resolutionType) {
+          case 'linked':
+            summary.linked++;
+            break;
+          case 'reviewed':
+            summary.reviewed++;
+            break;
+          case 'dismissed':
+            summary.dismissed++;
+            break;
+          case 'flagged':
+            summary.flagged++;
+            break;
+          case 'written_off':
+            summary.writtenOff++;
+            break;
+        }
+      }
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching resolution summary:", error);
+      res.status(500).json({ error: "Failed to fetch resolution summary" });
+    }
+  });
+
   app.get("/api/transactions/:transactionId/resolutions", isAuthenticated, async (req, res) => {
     try {
       const resolutions = await storage.getResolutionsByTransaction(req.params.transactionId);
@@ -1532,6 +1572,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching summary:", error);
       res.status(500).json({ error: "Failed to fetch summary" });
+    }
+  });
+
+  // Export flagged transactions only - for manager/accountant review
+  app.get("/api/periods/:periodId/export-flagged", isAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.getPeriod(req.params.periodId);
+      if (!period) {
+        return res.status(404).json({ error: "Period not found" });
+      }
+
+      const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
+      const flaggedResolutions = resolutions.filter(r => r.resolutionType === 'flagged');
+      
+      if (flaggedResolutions.length === 0) {
+        return res.status(404).json({ error: "No flagged transactions found" });
+      }
+
+      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      const transactionMap = new Map(transactions.map(t => [t.id, t]));
+      
+      const flaggedData = flaggedResolutions.map(r => {
+        const tx = transactionMap.get(r.transactionId);
+        return {
+          'Bank Transaction Date': tx?.transactionDate || '',
+          'Bank Amount': tx ? parseFloat(tx.amount) : 0,
+          'Bank Reference': tx?.referenceNumber || '',
+          'Description': tx?.description || '',
+          'Flagged By': r.userName || r.userEmail || 'Unknown',
+          'Flagged Date': r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-ZA') : '',
+          'Notes': r.notes || '',
+        };
+      });
+
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(flaggedData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Flagged Transactions');
+      
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="Flagged_Transactions_${period.name.replace(/\s+/g, '_')}.xlsx"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error exporting flagged transactions:", error);
+      res.status(500).json({ error: "Failed to export flagged transactions" });
     }
   });
 

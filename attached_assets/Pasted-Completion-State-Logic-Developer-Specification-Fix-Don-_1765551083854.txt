@@ -1,0 +1,111 @@
+Completion State Logic
+Developer Specification
+Fix: Don't show "All Done!" when items are flagged for review
+The Problem
+CURRENT BUG
+"All Done!" displays regardless of how transactions were resolved.
+If user flagged items for review, they're NOT done — work is pending.
+This misleads users into thinking reconciliation is complete when it isn't.
+Resolution Types & Their Status
+Resolution Action	Meaning	Status
+Linked	Matched to fuel record	✓ CLOSED
+Marked as Reviewed	Investigated, no issue found	✓ CLOSED
+Dismissed	Low value / test transaction	✓ CLOSED
+Flagged for Review	Handed off for investigation	⚠️ PENDING
+Key Insight: "Flagged for Review" is NOT closed. It's deferred work.
+ 
+Logic
+Data Structure
+interface ResolutionSummary {
+  linked: number;      // Matched to fuel record
+  reviewed: number;    // Marked as reviewed
+  dismissed: number;   // Low value dismissed
+  flagged: number;     // Flagged for review ← KEY FIELD
+}
+Decision Logic
+// Calculate totals
+const closedCount = linked + reviewed + dismissed;
+const pendingCount = flagged;
+
+// Decide which UI to show
+if (pendingCount === 0) {
+  // All truly done - show success state
+  showAllDoneState();
+} else {
+  // Work still pending - show summary state
+  showReviewCompleteState(summary);
+}
+ 
+UI States
+State 1: All Done (pendingCount === 0)
+Show this ONLY when all transactions are CLOSED (no flagged items):
+✓
+All Done!
+Your reconciliation is complete.
+All bank transactions have been verified.
+[  Export Report  ]
+State 2: Review Complete (pendingCount > 0)
+Show this when ANY transactions are FLAGGED:
+Review Complete
+29 of 29 transactions categorized
+────────────────────────────────────────────────────────
+✓  12 Linked to fuel records
+✓   7 Dismissed (low value)
+✓   4 Marked as reviewed — no issue
+⚠️   6 Flagged for follow-up
+────────────────────────────────────────────────────────
+⚠️ 6 transactions need manager/accountant review
+[  View Flagged Items  ]          [  Export for Review  ]
+ 
+Component Behavior Details
+Element	All Done (flagged = 0)	Review Complete (flagged > 0)
+Header Text	"All Done!"	"Review Complete"
+Icon	✓ Green checkmark	No icon (or ⚠️ yellow)
+Background Color	Light green (#F0FFF4)	Light orange (#FFFAF0)
+Border Color	Green (#48BB78)	Orange (#ED8936)
+Summary Breakdown	Hidden	Shown (with counts)
+Primary Button	[Export Report]	[View Flagged Items]
+Secondary Button	None	[Export for Review]
+"View Flagged Items" Button Behavior
+Navigates to Investigation View filtered to show only flagged transactions:
+Review Transactions
+6 transactions flagged for follow-up
+⚠️ Flagged for Review (6)
+   Awaiting manager/accountant investigation
+   R 8,563.10   26 Nov   Flagged by: Garth   [Resolve]
+   R 2,244.85   26 Nov   Flagged by: Garth   [Resolve]
+   R 1,719.40   26 Nov   Flagged by: Garth   [Resolve]
+   ...
+"Export for Review" Button Behavior
+Generates Excel report containing ONLY flagged items:
+•	Filename: Flagged_Transactions_Nov2025.xlsx
+•	Columns:
+   - Bank Transaction Date
+   - Bank Amount
+   - Bank Reference
+   - Merchant
+   - Flagged By (user name)
+   - Flagged Date
+   - Notes (if any)
+ 
+Test Cases
+Scenario	Linked	Reviewed	Dismissed	Flagged	Expected UI
+All linked	29	0	0	0	All Done! ✓
+All dismissed	0	0	29	0	All Done! ✓
+Mixed, none flagged	10	10	9	0	All Done! ✓
+Some flagged	10	5	8	6	Review Complete
+All flagged	0	0	0	29	Review Complete
+ 
+Acceptance Criteria
+1.	"All Done!" ONLY shows when flagged === 0
+2.	"Review Complete" shows when flagged > 0
+3.	Summary breakdown shows count per resolution type
+4.	Flagged count highlighted with warning styling (orange)
+5.	[View Flagged Items] button navigates to filtered Investigation View
+6.	[Export for Review] generates Excel with flagged items only
+7.	Resolution counts are accurate and match database totals
+
+TL;DR
+if (flagged === 0) → "All Done!"
+if (flagged > 0)  → "Review Complete" + summary + actions
+

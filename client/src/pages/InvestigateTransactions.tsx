@@ -30,6 +30,7 @@ import {
   XCircle,
   Coins,
   Info,
+  Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -65,6 +66,7 @@ export default function InvestigateTransactions() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [periodId, setPeriodId] = useState<string>("");
+  const [filterMode, setFilterMode] = useState<'all' | 'flagged'>('all');
   const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState<string>("");
   const [resolutionNotes, setResolutionNotes] = useState<string>("");
@@ -73,15 +75,20 @@ export default function InvestigateTransactions() {
     investigate: true,
     no_match: true,
     low_value: false,
+    flagged: true,
   });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("periodId");
+    const filter = params.get("filter");
     if (id) {
       setPeriodId(id);
     } else {
       setLocation("/");
+    }
+    if (filter === 'flagged') {
+      setFilterMode('flagged');
     }
   }, [setLocation]);
 
@@ -126,9 +133,47 @@ export default function InvestigateTransactions() {
     enabled: !!periodId,
   });
 
+  // Fetch all bank transactions (including resolved) for flagged filter mode
+  const { data: allBankData } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/periods", periodId, "transactions", "all", "bank"],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "500",
+        sourceType: "bank",
+      });
+      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch all bank transactions");
+      return response.json();
+    },
+    enabled: !!periodId && filterMode === 'flagged',
+  });
+
   const resolvedIds = useMemo(() => {
     return new Set(resolutions?.map(r => r.transactionId) || []);
   }, [resolutions]);
+
+  // Get flagged transaction IDs and their resolutions
+  const flaggedResolutions = useMemo(() => {
+    return (resolutions || []).filter(r => r.resolutionType === 'flagged');
+  }, [resolutions]);
+
+  const flaggedTransactionIds = useMemo(() => {
+    return new Set(flaggedResolutions.map(r => r.transactionId));
+  }, [flaggedResolutions]);
+
+  // Build list of flagged transactions with their resolution info
+  const flaggedTransactions = useMemo(() => {
+    if (!allBankData?.transactions || filterMode !== 'flagged') return [];
+    
+    return allBankData.transactions
+      .filter(txn => flaggedTransactionIds.has(txn.id))
+      .map(txn => {
+        const resolution = flaggedResolutions.find(r => r.transactionId === txn.id);
+        return { transaction: txn, resolution };
+      })
+      .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
+  }, [allBankData, flaggedTransactionIds, flaggedResolutions, filterMode]);
 
   // Count resolutions by type for completion state
   const resolutionCounts = useMemo(() => {
@@ -417,40 +462,165 @@ export default function InvestigateTransactions() {
               </Button>
             </Link>
             <div className="flex-1">
-              <h1 className="text-xl font-semibold">Review Transactions</h1>
+              <h1 className="text-xl font-semibold">
+                {filterMode === 'flagged' ? 'Flagged Transactions' : 'Review Transactions'}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                {totalUnresolved} transaction{totalUnresolved !== 1 ? "s" : ""} need your attention
+                {filterMode === 'flagged' 
+                  ? `${flaggedTransactions.length} transaction${flaggedTransactions.length !== 1 ? "s" : ""} flagged for follow-up`
+                  : `${totalUnresolved} transaction${totalUnresolved !== 1 ? "s" : ""} need your attention`
+                }
               </p>
             </div>
+            {filterMode === 'flagged' && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setFilterMode('all');
+                  setLocation(`/investigate?periodId=${periodId}`);
+                }}
+                data-testid="button-view-all"
+              >
+                View All
+              </Button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6">
         <div className="space-y-6">
-          {/* Filter Explanation */}
-          <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <Info className="h-3.5 w-3.5" />
-            <span>
-              Showing unmatched bank transactions within your fuel data date range. 
-              Matched and outside-date-range transactions are not included.
-            </span>
-          </div>
+          {/* Filter Mode Indicator */}
+          {filterMode === 'flagged' ? (
+            <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg text-sm">
+              <Flag className="h-4 w-4 text-orange-600" />
+              <span className="text-orange-800 dark:text-orange-200">
+                Showing only transactions flagged for manager/accountant review
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+              <Info className="h-3.5 w-3.5" />
+              <span>
+                Showing unmatched bank transactions within your fuel data date range. 
+                Matched and outside-date-range transactions are not included.
+              </span>
+            </div>
+          )}
 
-          {/* Progress Indicator */}
-          <Card data-testid="card-progress">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted-foreground">Progress</span>
-                <span className="text-sm font-medium" data-testid="text-progress">
-                  {totalResolved} of {totalAll} resolved
-                </span>
-              </div>
-              <Progress value={progressPercent} className="h-2" />
-            </CardContent>
-          </Card>
+          {/* Flagged Mode Content */}
+          {filterMode === 'flagged' ? (
+            <>
+              {/* Flagged Transactions List */}
+              {flaggedTransactions.length === 0 ? (
+                <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
+                  <CardContent className="pt-6 pb-6">
+                    <div className="flex flex-col items-center text-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                        <Check className="h-6 w-6 text-green-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                          No Flagged Items
+                        </h3>
+                        <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                          All flagged transactions have been resolved.
+                        </p>
+                      </div>
+                      <Link href={`/flow/${periodId}?mode=view`}>
+                        <Button variant="outline" data-testid="button-back-results">
+                          Back to Results
+                        </Button>
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {flaggedTransactions.map(({ transaction, resolution }) => (
+                    <Card key={transaction.id} className="border-orange-200 dark:border-orange-800" data-testid={`card-flagged-${transaction.id}`}>
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start gap-4">
+                          <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg shrink-0">
+                            <Flag className="h-4 w-4 text-orange-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-lg font-semibold font-mono">
+                                {formatCurrency(parseFloat(transaction.amount))}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                {formatDate(transaction.transactionDate)}
+                              </span>
+                            </div>
+                            {transaction.description && (
+                              <p className="text-sm text-muted-foreground mt-1 truncate">
+                                {transaction.description}
+                              </p>
+                            )}
+                            {resolution && (
+                              <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                                <div className="flex items-center gap-1">
+                                  <span>Flagged by:</span>
+                                  <span className="font-medium">{resolution.userName || resolution.userEmail || 'Unknown'}</span>
+                                </div>
+                                {resolution.notes && (
+                                  <div className="flex items-start gap-1">
+                                    <span>Notes:</span>
+                                    <span className="italic">{resolution.notes}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              setExpandedTxn(transaction.id);
+                            }}
+                            data-testid={`button-resolve-${transaction.id}`}
+                          >
+                            Resolve
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
 
-          {totalUnresolved === 0 ? (
+              {/* Export button for flagged items */}
+              {flaggedTransactions.length > 0 && (
+                <div className="flex justify-center">
+                  <Button 
+                    variant="outline"
+                    onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, '_blank')}
+                    data-testid="button-export-flagged-list"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Flagged Transactions
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Progress Indicator - Normal Mode */}
+              <Card data-testid="card-progress">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Progress</span>
+                    <span className="text-sm font-medium" data-testid="text-progress">
+                      {totalResolved} of {totalAll} resolved
+                    </span>
+                  </div>
+                  <Progress value={progressPercent} className="h-2" />
+                </CardContent>
+              </Card>
+
+              {totalUnresolved === 0 ? (
             resolutionCounts.flagged > 0 ? (
               // Items flagged - show summary with pending items
               <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-review-complete">
@@ -918,6 +1088,8 @@ export default function InvestigateTransactions() {
                   </Collapsible>
                 );
               })}
+            </>
+          )}
             </>
           )}
         </div>

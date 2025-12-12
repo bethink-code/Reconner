@@ -574,17 +574,90 @@ export default function InvestigateTransactions() {
                               </div>
                             )}
                           </div>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setExpandedTxn(transaction.id);
-                            }}
-                            data-testid={`button-resolve-${transaction.id}`}
-                          >
-                            Resolve
-                          </Button>
+                          {expandedTxn !== transaction.id && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                setExpandedTxn(transaction.id);
+                                setSelectedReason('');
+                                setResolutionNotes('');
+                              }}
+                              data-testid={`button-resolve-${transaction.id}`}
+                            >
+                              Resolve
+                            </Button>
+                          )}
+                          {expandedTxn === transaction.id && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => setExpandedTxn(null)}
+                              data-testid={`button-collapse-${transaction.id}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
+                        
+                        {/* Expanded Resolution Panel */}
+                        {expandedTxn === transaction.id && (
+                          <div className="mt-4 pt-4 border-t space-y-4">
+                            <p className="text-sm font-medium">How do you want to resolve this transaction?</p>
+                            
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <Select value={selectedReason} onValueChange={setSelectedReason}>
+                                  <SelectTrigger data-testid="select-reason-flagged">
+                                    <SelectValue placeholder="Select resolution" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {RESOLUTION_REASONS.map((reason) => (
+                                      <SelectItem key={reason.value} value={reason.value}>
+                                        {reason.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <Textarea 
+                                placeholder="Add notes (optional)..."
+                                value={resolutionNotes}
+                                onChange={(e) => setResolutionNotes(e.target.value)}
+                                className="min-h-[80px]"
+                                data-testid="input-notes-flagged"
+                              />
+                              
+                              <div className="flex gap-2 flex-wrap">
+                                <Button
+                                  onClick={() => {
+                                    if (selectedReason) {
+                                      createResolutionMutation.mutate({
+                                        transactionId: transaction.id,
+                                        resolutionType: selectedReason as 'reviewed' | 'dismissed' | 'written_off',
+                                        reason: selectedReason,
+                                        notes: resolutionNotes || undefined,
+                                      });
+                                    }
+                                  }}
+                                  disabled={!selectedReason || createResolutionMutation.isPending}
+                                  data-testid="button-confirm-resolution"
+                                >
+                                  <Check className="h-4 w-4 mr-2" />
+                                  Confirm Resolution
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setExpandedTxn(null)}
+                                  data-testid="button-cancel-resolution"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}

@@ -213,6 +213,15 @@ export default function ReconciliationFlow() {
     setCurrentStep("configure");
   };
 
+  const handleAddFuelData = () => {
+    setCurrentStep("fuel");
+  };
+
+  const handleAddBankData = () => {
+    setBankSubStep("upload");
+    setCurrentStep("bank");
+  };
+
   const fuelProcessed = !!fuelFile;
   const hasAnyBank = bankFiles.length > 0;
   const configureCompleted = completedSteps.includes("configure");
@@ -346,6 +355,8 @@ export default function ReconciliationFlow() {
               <ResultsDashboard
                 periodId={periodId}
                 onRerunMatching={handleRerunMatching}
+                onAddFuelData={handleAddFuelData}
+                onAddBankData={handleAddBankData}
               />
             )}
           </>

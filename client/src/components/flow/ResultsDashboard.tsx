@@ -1,32 +1,26 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Check, 
   AlertTriangle, 
-  Search,
   Download,
   Settings,
   FileText,
-  Fuel,
   ArrowRight,
   Plus,
-  ChevronDown,
-  ChevronRight,
-  Calendar,
   Flag,
   XCircle,
   CheckCircle2,
   Clock,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Search
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +65,8 @@ interface ResolutionSummary {
 interface ResultsDashboardProps {
   periodId: string;
   onRerunMatching: () => void;
+  onAddFuelData?: () => void;
+  onAddBankData?: () => void;
 }
 
 interface Period {
@@ -82,9 +78,8 @@ interface Period {
 
 type StatusState = 'success' | 'attention' | 'critical';
 
-export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboardProps) {
+export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onAddBankData }: ResultsDashboardProps) {
   const [, setLocation] = useLocation();
-  const [coverageExpanded, setCoverageExpanded] = useState(false);
 
   const { data: summary, isLoading } = useQuery<PeriodSummary>({
     queryKey: ["/api/periods", periodId, "summary"],
@@ -393,80 +388,20 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
         </div>
 
         {/* ─────────────────────────────────────────────────────────────────
-            BAND 3: COVERAGE & INSIGHTS STRIP
+            BAND 3: COVERAGE LEDGER (Always Visible)
         ───────────────────────────────────────────────────────────────── */}
-        <Collapsible open={coverageExpanded} onOpenChange={setCoverageExpanded}>
-          <CollapsibleTrigger asChild>
-            <button 
-              className="w-full px-6 py-3 flex items-center justify-between hover-elevate text-left"
-              data-testid="button-toggle-coverage"
-            >
-              <div className="flex items-center gap-6 flex-wrap">
-                {/* Key Stats Preview */}
-                <div className="flex items-center gap-2 text-sm">
-                  <Fuel className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Fuel:</span>
-                  <span className="font-medium">{summary.cardFuelTransactions.toLocaleString()} sales</span>
-                  <span className="text-muted-foreground">·</span>
-                  <span className="font-medium">{formatCurrency(summary.totalFuelAmount)}</span>
-                </div>
-
-                {/* Discrepancy Pill */}
-                <div className={cn("flex items-center gap-1.5 text-sm", discStyle.color)}>
-                  <DiscIcon className="h-4 w-4" />
-                  <span className="font-medium">{formatCurrency(Math.abs(summary.discrepancy))}</span>
-                  <span className="text-xs">{discStyle.label}</span>
-                </div>
-
-                {/* Gap Alert */}
-                {hasGaps && (
-                  <Badge variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-700">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    Gaps detected
-                  </Badge>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="text-xs">Details</span>
-                {coverageExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </div>
-            </button>
-          </CollapsibleTrigger>
-
-          <CollapsibleContent>
-            <div className="px-6 pb-6 space-y-4">
-              {/* Compact Coverage Ribbon */}
-              {period && (
-                <CoverageRibbon 
-                  period={period}
-                  summary={summary}
-                  formatDate={formatDate}
-                  hasGaps={hasGaps}
-                  onAddData={onRerunMatching}
-                />
-              )}
-
-              {/* Compact Stats Row */}
-              <div className="flex flex-wrap gap-4 text-sm pt-2 border-t">
-                <div>
-                  <span className="text-muted-foreground">Card Sales: </span>
-                  <span className="font-medium">{summary.cardFuelTransactions.toLocaleString()}</span>
-                  <span className="text-muted-foreground"> ({formatCurrency(summary.totalFuelAmount)})</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Bank Txns: </span>
-                  <span className="font-medium">{bankTotal.toLocaleString()}</span>
-                  <span className="text-muted-foreground"> ({formatCurrency(summary.totalBankAmount)})</span>
-                </div>
-              </div>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        <div className="px-6 pb-4 border-t">
+          {period && (
+            <CoverageLedger 
+              period={period}
+              summary={summary}
+              formatDate={formatDate}
+              formatCurrency={formatCurrency}
+              onAddFuelData={onAddFuelData}
+              onAddBankData={onAddBankData}
+            />
+          )}
+        </div>
       </Card>
 
       {/* ═══════════════════════════════════════════════════════════════════
@@ -540,15 +475,16 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
   );
 }
 
-interface CoverageRibbonProps {
+interface CoverageLedgerProps {
   period: Period;
   summary: PeriodSummary;
   formatDate: (d: string) => string;
-  hasGaps: boolean;
-  onAddData: () => void;
+  formatCurrency: (n: number) => string;
+  onAddFuelData?: () => void;
+  onAddBankData?: () => void;
 }
 
-function CoverageRibbon({ period, summary, formatDate, hasGaps, onAddData }: CoverageRibbonProps) {
+function CoverageLedger({ period, summary, formatDate, formatCurrency, onAddFuelData, onAddBankData }: CoverageLedgerProps) {
   const periodStart = new Date(period.startDate);
   const periodEnd = new Date(period.endDate);
   const totalDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
@@ -562,133 +498,155 @@ function CoverageRibbon({ period, summary, formatDate, hasGaps, onAddData }: Cov
   const checkGap = (minDate: string, maxDate: string) => {
     return new Date(minDate) > periodStart || new Date(maxDate) < periodEnd;
   };
-  
-  const fuelRange = summary.fuelDateRange;
-  const fuelHasGap = fuelRange && checkGap(fuelRange.min, fuelRange.max);
-  const bankAccounts = summary.bankAccountRanges || [];
-  
-  // Build all sources for the ribbon
-  const sources: Array<{
-    name: string;
+
+  // Build rows for ledger
+  interface LedgerRow {
+    label: string;
     min: string;
     max: string;
     count?: number;
+    amount?: number;
     hasGap: boolean;
     color: string;
-    type: 'fuel' | 'bank';
-  }> = [];
+    type: 'period' | 'fuel' | 'bank';
+    onAdd?: () => void;
+  }
+
+  const rows: LedgerRow[] = [];
   
-  if (fuelRange) {
-    sources.push({
-      name: 'Fuel',
-      min: fuelRange.min,
-      max: fuelRange.max,
+  // Period reference row
+  rows.push({
+    label: 'Period',
+    min: period.startDate,
+    max: period.endDate,
+    hasGap: false,
+    color: 'bg-slate-400 dark:bg-slate-500',
+    type: 'period'
+  });
+
+  // Fuel row
+  if (summary.fuelDateRange) {
+    const fuelHasGap = checkGap(summary.fuelDateRange.min, summary.fuelDateRange.max);
+    rows.push({
+      label: 'Fuel',
+      min: summary.fuelDateRange.min,
+      max: summary.fuelDateRange.max,
       count: summary.cardFuelTransactions,
-      hasGap: !!fuelHasGap,
+      amount: summary.totalFuelAmount,
+      hasGap: fuelHasGap,
       color: 'bg-orange-500',
-      type: 'fuel'
+      type: 'fuel',
+      onAdd: fuelHasGap ? onAddFuelData : undefined
     });
   }
+
+  // Bank account rows
+  const bankAccounts = summary.bankAccountRanges || [];
+  const bankColors = ['bg-blue-500', 'bg-purple-500', 'bg-teal-500', 'bg-indigo-500', 'bg-cyan-500'];
   
   bankAccounts.forEach((account, index) => {
-    const colors = ['bg-blue-500', 'bg-purple-500', 'bg-teal-500', 'bg-indigo-500', 'bg-cyan-500'];
-    sources.push({
-      name: account.bankName || account.sourceName || `Bank ${index + 1}`,
+    const accountHasGap = checkGap(account.min, account.max);
+    rows.push({
+      label: account.bankName || account.sourceName || `Bank ${index + 1}`,
       min: account.min,
       max: account.max,
       count: account.txCount,
-      hasGap: checkGap(account.min, account.max),
-      color: colors[index % colors.length],
-      type: 'bank'
+      hasGap: accountHasGap,
+      color: bankColors[index % bankColors.length],
+      type: 'bank',
+      onAdd: accountHasGap ? onAddBankData : undefined
     });
   });
-  
-  // Fallback if no individual bank accounts but have aggregate range
+
+  // Fallback for aggregate bank data
   if (bankAccounts.length === 0 && summary.bankDateRange) {
-    sources.push({
-      name: 'Bank',
+    const bankHasGap = checkGap(summary.bankDateRange.min, summary.bankDateRange.max);
+    rows.push({
+      label: 'Bank',
       min: summary.bankDateRange.min,
       max: summary.bankDateRange.max,
       count: summary.bankTransactions,
-      hasGap: checkGap(summary.bankDateRange.min, summary.bankDateRange.max),
+      amount: summary.totalBankAmount,
+      hasGap: bankHasGap,
       color: 'bg-blue-500',
-      type: 'bank'
+      type: 'bank',
+      onAdd: bankHasGap ? onAddBankData : undefined
     });
   }
 
   return (
-    <div className="space-y-2" data-testid="coverage-ribbon">
-      {/* Reference bar with period dates */}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span>{formatDate(period.startDate)}</span>
-        <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full relative">
-          {/* Fuel and bank coverage segments on single track */}
-          {sources.map((source, idx) => {
-            const left = getPositionPercent(source.min);
-            const width = getPositionPercent(source.max) - left;
-            return (
-              <Tooltip key={idx}>
-                <TooltipTrigger asChild>
-                  <div 
-                    className={cn(
-                      "absolute h-full rounded-full transition-all cursor-pointer",
-                      source.hasGap ? "bg-amber-400" : source.color
-                    )}
-                    style={{ 
-                      left: `${left}%`, 
-                      width: `${Math.max(width, 2)}%`,
-                      top: `${idx * 3}px`
-                    }}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-medium">{source.name}</p>
-                  <p className="text-xs">{formatDate(source.min)} — {formatDate(source.max)}</p>
-                  {source.count && <p className="text-xs">{source.count.toLocaleString()} transactions</p>}
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
-        <span>{formatDate(period.endDate)}</span>
-      </div>
-      
-      {/* Source chips - compact inline display */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {sources.map((source, idx) => (
-          <div 
-            key={idx}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs",
-              "bg-muted/50 border"
-            )}
-          >
-            <span className={cn("w-2 h-2 rounded-full", source.hasGap ? "bg-amber-400" : source.color)} />
-            <span className="font-medium">{source.name}</span>
-            <span className="text-muted-foreground">
-              {formatDate(source.min)}—{formatDate(source.max)}
-            </span>
-            {source.count && (
-              <span className="text-muted-foreground">({source.count.toLocaleString()})</span>
-            )}
-            {source.hasGap && (
-              <AlertTriangle className="h-3 w-3 text-amber-500" />
-            )}
-          </div>
-        ))}
+    <div className="pt-4 space-y-1" data-testid="coverage-ledger">
+      {rows.map((row, idx) => {
+        const leftPct = getPositionPercent(row.min);
+        const widthPct = getPositionPercent(row.max) - leftPct;
+        const isPeriod = row.type === 'period';
         
-        {/* Add Data action when gaps exist */}
-        {hasGaps && (
-          <button
-            onClick={onAddData}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 hover-elevate"
-            data-testid="button-add-missing-data"
+        return (
+          <div 
+            key={idx} 
+            className={cn(
+              "grid grid-cols-[72px_1fr_auto] gap-3 items-center py-1",
+              isPeriod && "pb-2 mb-1 border-b border-dashed"
+            )}
           >
-            <Plus className="h-3 w-3" />
-            Add data
-          </button>
-        )}
-      </div>
+            {/* Label with color dot */}
+            <div className="flex items-center gap-2">
+              <span className={cn("w-2 h-2 rounded-full shrink-0", row.color)} />
+              <span className={cn(
+                "text-sm truncate",
+                isPeriod ? "font-medium" : "text-muted-foreground"
+              )}>
+                {row.label}
+              </span>
+            </div>
+            
+            {/* Bar track with positioned segment */}
+            <div className="relative h-5 flex items-center">
+              {/* Track background */}
+              <div className="absolute inset-x-0 h-1.5 bg-muted rounded-full" />
+              
+              {/* Segment */}
+              <div 
+                className={cn(
+                  "absolute h-1.5 rounded-full",
+                  row.hasGap ? "bg-amber-400" : row.color
+                )}
+                style={{ 
+                  left: `${leftPct}%`, 
+                  width: `${Math.max(widthPct, 1)}%` 
+                }}
+              />
+              
+              {/* Add button at gap edge */}
+              {row.hasGap && row.onAdd && (
+                <button
+                  onClick={row.onAdd}
+                  className="absolute h-5 w-5 flex items-center justify-center rounded bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 hover-elevate"
+                  style={{ left: `calc(${leftPct + widthPct}% + 4px)` }}
+                  data-testid={`button-add-${row.type}-data`}
+                >
+                  <Plus className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                </button>
+              )}
+            </div>
+            
+            {/* Right column: dates + count */}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground whitespace-nowrap">
+              <span>{formatDate(row.min)} — {formatDate(row.max)}</span>
+              {row.count !== undefined && (
+                <span className="tabular-nums font-medium text-foreground">
+                  {row.count.toLocaleString()}
+                </span>
+              )}
+              {row.amount !== undefined && (
+                <span className="text-muted-foreground">
+                  ({formatCurrency(row.amount)})
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

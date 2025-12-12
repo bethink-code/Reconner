@@ -12,12 +12,15 @@ import {
   type MatchingRules,
   type InsertMatchingRules,
   type MatchingRulesConfig,
+  type TransactionResolution,
+  type InsertTransactionResolution,
   users,
   reconciliationPeriods,
   uploadedFiles,
   transactions,
   matches,
-  matchingRules
+  matchingRules,
+  transactionResolutions
 } from "@shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -50,6 +53,10 @@ export interface PeriodSummary {
   unmatchedBankAmount: number;
   unmatchedCardTransactions: number;
   unmatchedCardAmount: number;
+  unmatchableBankTransactions: number;
+  unmatchableBankAmount: number;
+  resolvedBankTransactions: number;
+  resolvedBankAmount: number;
 }
 
 export interface VerificationSummary {
@@ -154,6 +161,12 @@ export interface IStorage {
   
   getMatchingRules(periodId: string): Promise<MatchingRulesConfig>;
   saveMatchingRules(periodId: string, rules: MatchingRulesConfig): Promise<MatchingRules>;
+  
+  // Resolution methods
+  getResolutionsByPeriod(periodId: string): Promise<TransactionResolution[]>;
+  getResolutionsByTransaction(transactionId: string): Promise<TransactionResolution[]>;
+  createResolution(resolution: InsertTransactionResolution): Promise<TransactionResolution>;
+  getResolvedTransactionIds(periodId: string): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -412,8 +425,12 @@ export class DatabaseStorage implements IStorage {
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN 1 END) as matched_bank_transactions,
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched' THEN 1 END) as matched_card_fuel,
           
-          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status != 'matched' AND amount::numeric > 0 THEN 1 END) as unmatched_bank_transactions,
-          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0 THEN 1 END) as unmatched_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable' THEN 1 END) as unmatchable_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable' THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN 1 END) as resolved_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
           
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN 1 END) as unmatched_card_transactions,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount
@@ -506,6 +523,10 @@ export class DatabaseStorage implements IStorage {
       unmatchedBankAmount: parseFloat(row.unmatched_bank_amount || '0'),
       unmatchedCardTransactions: parseInt(row.unmatched_card_transactions || '0'),
       unmatchedCardAmount: parseFloat(row.unmatched_card_amount || '0'),
+      unmatchableBankTransactions: parseInt(row.unmatchable_bank_transactions || '0'),
+      unmatchableBankAmount: parseFloat(row.unmatchable_bank_amount || '0'),
+      resolvedBankTransactions: parseInt(row.resolved_bank_transactions || '0'),
+      resolvedBankAmount: parseFloat(row.resolved_bank_amount || '0'),
     };
   }
 
@@ -688,9 +709,9 @@ export class DatabaseStorage implements IStorage {
     const fuelDays = calculateDays(fuelEarliest, fuelLatest);
     const bankDays = calculateDays(bankEarliest, bankLatest);
     
-    // Coverage metrics
-    const volumeCoverage = cardAmount > 0 ? (totalBankAmount / cardAmount) * 100 : 0;
-    const dateRangeCoverage = fuelDays > 0 ? (bankDays / fuelDays) * 100 : 0;
+    // Coverage metrics - round to 1 decimal to avoid floating point display issues
+    const volumeCoverage = cardAmount > 0 ? Math.round((totalBankAmount / cardAmount) * 1000) / 10 : 0;
+    const dateRangeCoverage = fuelDays > 0 ? Math.round((bankDays / fuelDays) * 1000) / 10 : 0;
     const missingDays = Math.max(0, fuelDays - bankDays);
     
     // Daily averages
@@ -699,8 +720,9 @@ export class DatabaseStorage implements IStorage {
     const volumeGap = bankDailyAvg > 0 ? fuelDailyAvg / bankDailyAvg : 0;
     
     // Match rate calculation - KEY INSIGHT: calculate based on what CAN be verified
+    // Round to 1 decimal to avoid floating point display issues
     const bankMatchRate = totalBankTransactions > 0 
-      ? (matchedBankTransactions / totalBankTransactions) * 100 
+      ? Math.round((matchedBankTransactions / totalBankTransactions) * 1000) / 10
       : 0;
     
     // Performance rating (1-5 stars)
@@ -717,8 +739,9 @@ export class DatabaseStorage implements IStorage {
     const pendingVerificationTransactions = cardTransactions - matchedCardTransactions - unmatchedCardCount;
     
     // Unverified = card transactions that have bank data available but didn't match
+    // Round to 1 decimal to avoid floating point display issues
     const unverifiedPercentage = totalBankTransactions > 0 
-      ? ((totalBankTransactions - matchedBankTransactions) / totalBankTransactions) * 100 
+      ? Math.round(((totalBankTransactions - matchedBankTransactions) / totalBankTransactions) * 1000) / 10
       : 0;
 
     // Build recommended actions
@@ -832,7 +855,7 @@ export class DatabaseStorage implements IStorage {
         pendingVerification: { 
           amount: Math.max(0, pendingVerificationAmount), 
           transactions: Math.max(0, pendingVerificationTransactions),
-          percentageOfCardSales: cardAmount > 0 ? (Math.max(0, pendingVerificationAmount) / cardAmount) * 100 : 0
+          percentageOfCardSales: cardAmount > 0 ? Math.round((Math.max(0, pendingVerificationAmount) / cardAmount) * 1000) / 10 : 0
         },
         unmatchedIssues: { count: unmatchedBankCount, amount: totalBankAmount - matchedBankAmount }
       },
@@ -932,6 +955,33 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db.insert(matchingRules).values(rulesData).returning();
       return created;
     }
+  }
+
+  // Resolution methods
+  async getResolutionsByPeriod(periodId: string): Promise<TransactionResolution[]> {
+    return await db.select()
+      .from(transactionResolutions)
+      .where(eq(transactionResolutions.periodId, periodId))
+      .orderBy(desc(transactionResolutions.createdAt));
+  }
+
+  async getResolutionsByTransaction(transactionId: string): Promise<TransactionResolution[]> {
+    return await db.select()
+      .from(transactionResolutions)
+      .where(eq(transactionResolutions.transactionId, transactionId))
+      .orderBy(desc(transactionResolutions.createdAt));
+  }
+
+  async createResolution(resolution: InsertTransactionResolution): Promise<TransactionResolution> {
+    const [created] = await db.insert(transactionResolutions).values(resolution).returning();
+    return created;
+  }
+
+  async getResolvedTransactionIds(periodId: string): Promise<string[]> {
+    const resolutions = await db.select({ transactionId: transactionResolutions.transactionId })
+      .from(transactionResolutions)
+      .where(eq(transactionResolutions.periodId, periodId));
+    return resolutions.map(r => r.transactionId);
   }
 }
 

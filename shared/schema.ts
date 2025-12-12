@@ -175,3 +175,52 @@ export const matchingRulesConfigSchema = z.object({
 });
 
 export type MatchingRulesConfig = z.infer<typeof matchingRulesConfigSchema>;
+
+// Transaction Resolutions - Audit trail for resolved transactions
+export const transactionResolutions = pgTable("transaction_resolutions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionId: varchar("transaction_id").notNull().references(() => transactions.id, { onDelete: "cascade" }),
+  periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }),
+  
+  // Resolution type: 'linked', 'reviewed', 'flagged', 'written_off', 'dismissed'
+  resolutionType: text("resolution_type").notNull(),
+  
+  // Reason for reviewed resolutions
+  reason: text("reason"),
+  
+  // Additional notes
+  notes: text("notes"),
+  
+  // Who performed the action
+  userId: varchar("user_id").references(() => users.id),
+  userName: text("user_name"),
+  userEmail: text("user_email"),
+  
+  // For linked resolutions, the fuel transaction ID
+  linkedTransactionId: varchar("linked_transaction_id"),
+  
+  // For flagged resolutions, the assignee
+  assignee: text("assignee"),
+  
+  // Timestamp
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTransactionResolutionSchema = createInsertSchema(transactionResolutions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTransactionResolution = z.infer<typeof insertTransactionResolutionSchema>;
+export type TransactionResolution = typeof transactionResolutions.$inferSelect;
+
+// Resolution reason options
+export const RESOLUTION_REASONS = [
+  { value: "timing_difference", label: "Timing difference (posted next day)" },
+  { value: "cash_as_card", label: "Cash recorded as card (or vice versa)" },
+  { value: "test_transaction", label: "Test/pre-auth transaction" },
+  { value: "different_merchant", label: "Different merchant account" },
+  { value: "refund_reversal", label: "Refund/reversal" },
+  { value: "bank_fee", label: "Bank fee/charge" },
+  { value: "other", label: "Other" },
+] as const;

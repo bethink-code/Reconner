@@ -1,0 +1,200 @@
+UI Redesign Specification
+Results Dashboard & Investigation View
+Priority 2: Fix the Big Ticket Screens
+December 12, 2025
+CONTEXT
+The matching engine has been verified and works correctly. Match quality is excellent, totals add up, and the data is trustworthy. However, the UI doesn't communicate this clearly. Users can't easily understand what happened or what they need to do next.
+This spec focuses on the two most critical screens: the Results Dashboard (where users see outcomes) and the Investigation View (where users take action). These screens are the core value of the application.
+ 
+Part 1: Design Principles
+The Mantra: WE → YOU
+WE PROCESSED THIS
+What the system did (inputs, rules, scope)
+WE SAW THIS
+Summary of outcomes (matched, unmatched, totals)
+YOU NEED TO DO THIS
+Clear next actions with priority guidance
+Core Principles
+1.	Clarity over completeness — Show what matters, hide what doesn't
+2.	Action over information — Every screen should answer "What do I do?"
+3.	Progressive disclosure — Lead with summary, offer details on demand
+4.	Categorize by action — Group items by what the user needs to do, not by status
+5.	Prioritize by impact — Show high-value items first
+6.	Guide to completion — Help users finish, celebrate when done
+ 
+Part 2: Results Dashboard Redesign
+Current Problems
+•	Too much information competing for attention
+•	No clear visual hierarchy
+•	"Unmatched" mixes two different things (true unmatched vs outside date range)
+•	Multiple competing call-to-action buttons
+•	User doesn't know what to do next
+New Screen Structure
+The Results Dashboard should have THREE clear sections:
+SECTION 1: HEADLINE METRIC (Top)
+Purpose: Instant understanding of reconciliation status
+Content:
+• One big number: "94% of bank transactions verified"
+• Visual progress bar (green filled, red/yellow remaining)
+• Simple breakdown: "469 matched · 29 need review · 81 outside date range"
+
+SECTION 2: ACTION REQUIRED (Middle)
+Purpose: Tell user exactly what to do next
+Content:
+• Primary CTA card: "Review 29 unmatched transactions" with [Start Review] button
+• Secondary info: "81 transactions outside your fuel data date range — upload more data to match these"
+• If all resolved: "All done! Your reconciliation is complete."
+
+SECTION 3: DETAILS & EXPORT (Bottom, Collapsed)
+Purpose: Additional info for power users, not primary focus
+Content (collapsed by default):
+• Fuel coverage stats (how much of your fuel data was verified)
+• Amount summaries (total matched value, discrepancy)
+• Matching rules used
+• Export options: [Export Full Report] [Export for Accountant]
+ 
+Wireframe: Results Dashboard
+Reconciliation Complete
+November 2025 · Completed Dec 12, 2025
+94.2%
+of bank transactions verified
+████████████████████████████████████░░░░
+469 matched  ·  29 need review  ·  81 outside date range
+──────────────────────────────────────────────────────────────────────
+ACTION REQUIRED
+29 bank transactions need your review
+These couldn't be automatically matched to fuel records.
+[  Start Review  →  ]
+ℹ 81 transactions are from Nov 27, but your fuel data ends Nov 26.
+   Upload more fuel data to match these.  [Add Fuel Data]
+▼ View Details & Export Options
+ 
+Part 3: Investigation View Redesign
+Current Problems
+•	All items show same "No Match" badge regardless of whether potential match exists
+•	User must click into each item to discover its status
+•	No way to resolve/dismiss items (they stay in limbo)
+•	Percentage display bug (89.2499999999955%)
+•	No guidance on what user should do
+•	No prioritization (R1 test charge same prominence as R8,563 discrepancy)
+New Screen Structure
+The Investigation View should categorize items by ACTION REQUIRED, not just status:
+Category	Description	User Action
+Quick Wins	High-confidence potential match exists (>80%)	Review and confirm the suggested match
+Investigate	Lower confidence matches exist (50-80%)	Compare options, decide which (if any) is correct
+No Match	No potential matches found within tolerance	Investigate manually or mark as reviewed
+Low Value	Transactions under R50 (likely test/pre-auth)	Bulk dismiss or review if suspicious
+ 
+Wireframe: Investigation List View
+Review Transactions
+29 transactions need your attention
+Progress: 0 of 29 resolved
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+⚡ QUICK WINS (8)
+High-confidence matches ready to confirm
+  R 899,05  26 Nov 2025  → R 900,20 (94%)   [Confirm]
+  R 702,20  26 Nov 2025  → R 700,05 (89%)   [Confirm]
+🔍 NO MATCH FOUND (15)
+Requires manual investigation
+  R 8,563.10  26 Nov 2025  DESERT GENERAL  [Investigate]
+  R 2,244.85  26 Nov 2025  DESERT GENERAL  [Investigate]
+💤 LOW VALUE (6)
+Under R50 — likely test transactions
+  R 1,00 · R 20,00 · R 30,50 · R 31,00 · R 37,00 · R 37,50   [Dismiss All]
+ 
+Wireframe: Transaction Detail View
+← Back to List
+Bank Transaction
+R 899,05   26 Nov 2025 23:11
+Ref: 3P1J6L9 · DESERT GENERAL TRADING
+BEST MATCH FOUND
+┌─────────────────────────────────────────────────────────┐
+│  R 900,20                                               │
+│  Difference: R 1,15                                    │
+│  Same day · Invoice 1394357 · ULP95                    │
+│                                                         │
+│  94% confidence — LIKELY MATCH                         │
+│                                                         │
+│              [  Confirm This Match  ✓  ]               │
+└─────────────────────────────────────────────────────────┘
+Other possibilities (lower confidence):
+  • R 896,80 (73%) — R 2,25 difference
+  • R 887,90 (28%) — R 11,15 difference
+────────────────────────────────────────────────────────────
+Not a match? Resolve this transaction:
+[Mark as Reviewed — No Issue]
+[Flag for Manager Review]
+[Write Off (Requires Approval)]
+ 
+Part 4: Resolution Actions
+Every unmatched transaction must have a final resolution. Users need to close the loop.
+Resolution Options
+Action	When to Use	Requires
+Link to Fuel Record	Found the matching fuel transaction manually	Select fuel record
+Mark as Reviewed	Investigated, no problem found (timing, cash/card confusion, etc.)	Select reason from dropdown
+Flag for Follow-up	Needs someone else to investigate (manager, accountant)	Select assignee, optional note
+Write Off	Accepted loss, not worth investigating further	Manager approval (for amounts > threshold)
+Dismiss (Low Value)	Test transaction, pre-auth, or negligible amount	One click (for amounts < R50)
+"Mark as Reviewed" Reasons
+Dropdown options for explaining why no match was needed:
+•	Timing difference (posted next day)
+•	Cash recorded as card (or vice versa)
+•	Test/pre-auth transaction
+•	Different merchant account
+•	Refund/reversal
+•	Bank fee/charge
+•	Other (with note)
+ 
+Part 5: Real World Workflow Support
+The app doesn't exist in isolation. Users need to take actions outside the system.
+Export & Reporting
+Report	Purpose	Audience
+Executive Summary	Quick overview: match rate, totals, issues	Owner / Manager
+Unresolved Items	List of transactions still needing attention	Accountant / Bookkeeper
+Investigation Log	Audit trail: what was found, who reviewed, decisions made	Auditor
+Shift Discrepancies	Issues grouped by time/shift for staff follow-up	HR / Station Manager
+Audit Trail Requirements
+Every resolution action must be logged:
+•	Who took the action (user name)
+•	When (timestamp)
+•	What action was taken
+•	Reason selected (if applicable)
+•	Notes added (if any)
+Example audit entry:
+12 Dec 2025 14:32 — Garth marked R899.05 as "Reviewed"
+Reason: Timing difference (posted next day)
+Note: Confirmed with bank statement, card settled next business day
+ 
+Part 6: Bug Fixes Required
+Priority	Issue	Fix
+HIGH	Percentage display shows 89.2499999999955% instead of 89%	Round to integer or 1 decimal
+HIGH	No resolution actions available — transactions stay in limbo	Add resolution buttons as specified
+MED	All items show same badge — can't tell if potential match exists without clicking	Show different badges per category
+MED	Results page shows 468 matched but export shows 469 (off by 1)	Verify count logic consistency
+LOW	Investigation list header says "30" but results page said "111" — unclear filtering	Clarify what filter is applied, show totals consistently
+ 
+Part 7: Acceptance Criteria
+Results Dashboard
+1.	Shows single headline metric (% of bank transactions verified)
+2.	Visual progress bar reflects match status
+3.	Clearly separates: matched / needs review / outside date range
+4.	Single primary CTA: "Start Review" (when items need review)
+5.	Details section collapsed by default
+6.	When all resolved, shows completion message
+Investigation List
+1.	Items categorized by action type (Quick Wins / Investigate / No Match / Low Value)
+2.	High-value items shown first within each category
+3.	Progress indicator shows X of Y resolved
+4.	Badge on each item indicates match availability without clicking
+5.	"Dismiss All" option for low-value transactions
+Transaction Detail
+1.	Best match highlighted with clear recommendation
+2.	Shows Rand difference (not just percentage)
+3.	Confidence labeled in words: "Likely match" / "Possible" / "Unlikely"
+4.	Percentages rounded to whole number or 1 decimal
+5.	Resolution actions available: Link / Mark Reviewed / Flag / Write Off
+6.	All actions logged with timestamp and user
+
+REMEMBER
+These two screens are where the app delivers value. Everything else is setup. Get these right and the app becomes indispensable. Get them wrong and all the work uploading files and configuring matching was wasted.
+

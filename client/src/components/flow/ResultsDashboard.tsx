@@ -6,10 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Check, 
   AlertTriangle, 
-  X,
   Search,
   Download,
   Settings,
@@ -17,7 +17,11 @@ import {
   Building2,
   Fuel,
   ArrowRight,
-  Plus
+  Plus,
+  ChevronDown,
+  ChevronRight,
+  Calendar,
+  Info
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +40,9 @@ interface PeriodSummary {
   unmatchedBankTransactions: number;
   unmatchedCardTransactions: number;
   unmatchableBankTransactions?: number;
+  resolvedBankTransactions?: number;
+  fuelDateRange?: { min: string; max: string };
+  bankDateRange?: { min: string; max: string };
 }
 
 interface ResultsDashboardProps {
@@ -45,6 +52,7 @@ interface ResultsDashboardProps {
 
 export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboardProps) {
   const [, setLocation] = useLocation();
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const { data: summary, isLoading } = useQuery<PeriodSummary>({
     queryKey: ["/api/periods", periodId, "summary"],
@@ -58,255 +66,315 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
     }).format(amount);
   };
 
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-ZA", {
+      day: "numeric",
+      month: "short",
+    });
+  };
+
   if (isLoading || !summary) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-64 w-full" />
+      <div className="space-y-6 max-w-2xl mx-auto">
         <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-24 w-full" />
       </div>
     );
   }
 
   const bankTotal = summary.bankTransactions;
   const matchedBank = summary.matchedPairs;
+  const resolvedBank = summary.resolvedBankTransactions || 0;
+  const verifiedBank = matchedBank + resolvedBank; // Combined matched + manually resolved
   const unmatchableBank = summary.unmatchableBankTransactions || 0;
   const unmatchedBank = summary.unmatchedBankTransactions;
-  const bankAmount = summary.totalBankAmount;
 
-  const matchedPercent = bankTotal > 0 ? (matchedBank / bankTotal) * 100 : 0;
-  const unmatchablePercent = bankTotal > 0 ? (unmatchableBank / bankTotal) * 100 : 0;
-  const unmatchedPercent = bankTotal > 0 ? (unmatchedBank / bankTotal) * 100 : 0;
+  const verifiedPercent = bankTotal > 0 ? Math.round((verifiedBank / bankTotal) * 100) : 0;
+  const needsReview = unmatchedBank;
+  const outsideDateRange = unmatchableBank;
 
-  const needsInvestigation = unmatchedBank;
+  const allResolved = needsReview === 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Reconciliation Results</h2>
-          <p className="text-sm text-muted-foreground">
-            Review your matched transactions
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onRerunMatching} data-testid="button-rerun-matching">
-            <Settings className="h-4 w-4 mr-2" />
-            Adjust Rules
-          </Button>
-          <Button 
-            variant="outline"
-            onClick={() => setLocation(`/report?periodId=${periodId}`)}
-            data-testid="button-export"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
-          </Button>
-        </div>
-      </div>
-
-      <Card data-testid="card-bank-summary">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Bank Transactions</CardTitle>
-          </div>
-          <CardDescription>
-            {bankTotal.toLocaleString()} transactions ({formatCurrency(bankAmount)})
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500" />
-                  <span className="text-sm font-medium">Matched</span>
-                </div>
-                <div className="text-right">
-                  <span className="font-mono font-medium">{matchedBank}</span>
-                  <span className="text-muted-foreground text-sm ml-2">
-                    ({matchedPercent.toFixed(1)}%)
-                  </span>
-                </div>
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {/* SECTION 1: HEADLINE METRIC */}
+      <Card data-testid="card-headline-metric">
+        <CardContent className="pt-6 pb-8">
+          <div className="text-center space-y-4">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wide">
+                Bank Transactions Verified
+              </p>
+              <p className="text-6xl font-bold text-primary" data-testid="text-verified-percent">
+                {verifiedPercent}%
+              </p>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="w-full max-w-md mx-auto">
+              <div className="h-4 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full transition-all duration-500",
+                    verifiedPercent === 100 ? "bg-green-500" : "bg-primary"
+                  )}
+                  style={{ width: `${verifiedPercent}%` }}
+                />
               </div>
-              <Progress value={matchedPercent} className="h-2 bg-muted" />
             </div>
 
-            {unmatchableBank > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-amber-500" />
-                    <span className="text-sm font-medium">Unmatchable</span>
-                    <Badge variant="secondary" className="text-xs">
-                      outside date range
-                    </Badge>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-mono font-medium">{unmatchableBank}</span>
-                    <span className="text-muted-foreground text-sm ml-2">
-                      ({unmatchablePercent.toFixed(1)}%)
-                    </span>
-                  </div>
-                </div>
-                <Progress value={unmatchablePercent} className="h-2 bg-muted [&>div]:bg-amber-500" />
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500" />
-                  <span className="text-sm font-medium">Unmatched</span>
-                  <Badge variant="secondary" className="text-xs">
-                    needs review
-                  </Badge>
-                </div>
-                <div className="text-right">
-                  <span className="font-mono font-medium">{unmatchedBank}</span>
-                  <span className="text-muted-foreground text-sm ml-2">
-                    ({unmatchedPercent.toFixed(1)}%)
+            {/* Breakdown */}
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground flex-wrap">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="font-medium text-foreground">{verifiedBank}</span> verified
+                {resolvedBank > 0 && (
+                  <span className="text-xs">({matchedBank} matched + {resolvedBank} resolved)</span>
+                )}
+              </span>
+              <span className="text-muted-foreground/50">·</span>
+              {needsReview > 0 && (
+                <>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="font-medium text-foreground">{needsReview}</span> need review
                   </span>
-                </div>
-              </div>
-              <Progress value={unmatchedPercent} className="h-2 bg-muted [&>div]:bg-red-500" />
+                  <span className="text-muted-foreground/50">·</span>
+                </>
+              )}
+              {outsideDateRange > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-slate-400" />
+                  <span className="font-medium text-foreground">{outsideDateRange}</span> outside date range
+                </span>
+              )}
+              {needsReview === 0 && outsideDateRange === 0 && (
+                <span className="flex items-center gap-1 text-green-600">
+                  <Check className="h-4 w-4" />
+                  All transactions matched
+                </span>
+              )}
             </div>
           </div>
-
-          {needsInvestigation > 0 && (
-            <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <Search className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-medium text-amber-800 dark:text-amber-200">
-                      {needsInvestigation} bank transaction{needsInvestigation !== 1 ? "s" : ""} need investigation
-                    </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                      These couldn't be automatically matched to fuel records.
-                    </p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-3"
-                      onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
-                      data-testid="button-review-unmatched"
-                    >
-                      Review Unmatched
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {needsInvestigation === 0 && matchedBank > 0 && (
-            <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <Check className="h-5 w-5 text-green-600 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-medium text-green-800 dark:text-green-200">
-                      All matchable bank transactions are reconciled
-                    </p>
-                    <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                      Every bank transaction within the fuel data range has been matched.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </CardContent>
       </Card>
 
-      <Card data-testid="card-fuel-coverage">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <Fuel className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-lg text-muted-foreground">Fuel Data Coverage</CardTitle>
-          </div>
-          <CardDescription>Reference information about your fuel records</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs text-muted-foreground">Card Sales</p>
-              <p className="text-lg font-mono font-medium">
-                {summary.cardFuelTransactions.toLocaleString()}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatCurrency(summary.totalFuelAmount)}
-              </p>
-            </div>
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs text-muted-foreground">Bank Coverage</p>
-              <p className="text-lg font-mono font-medium">
-                {summary.cardFuelTransactions > 0 
-                  ? ((bankTotal / summary.cardFuelTransactions) * 100).toFixed(1)
-                  : 0}%
-              </p>
-              <p className="text-xs text-muted-foreground">
-                of card sales verified
-              </p>
-            </div>
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs text-muted-foreground">Discrepancy</p>
-              <p className={cn(
-                "text-lg font-mono font-medium",
-                summary.discrepancy > 0 ? "text-red-600" : "text-green-600"
-              )}>
-                {formatCurrency(Math.abs(summary.discrepancy))}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {summary.discrepancy > 0 ? "bank exceeds fuel" : "fuel exceeds bank"}
-              </p>
-            </div>
-          </div>
-
-          {summary.cardFuelTransactions > 0 && bankTotal < summary.cardFuelTransactions * 0.1 && (
-            <div className="mt-4 p-3 bg-muted/50 rounded-lg flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm text-muted-foreground">
-                  Bank data covers a small portion of your card sales.
-                  Upload more bank statements to increase coverage.
+      {/* SECTION 2: ACTION REQUIRED */}
+      {allResolved ? (
+        <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" data-testid="card-all-done">
+          <CardContent className="pt-6 pb-6">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                <Check className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                  All Done!
+                </h3>
+                <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                  Your reconciliation is complete. All bank transactions have been verified.
                 </p>
+              </div>
+              <div className="flex gap-2 mt-2">
                 <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="px-0 h-auto mt-1"
-                  onClick={() => setLocation(`/setup/${periodId}`)}
-                  data-testid="button-add-more-bank"
+                  variant="outline"
+                  onClick={() => setLocation(`/report?periodId=${periodId}`)}
+                  data-testid="button-export-report"
                 >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Bank Statement
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Report
                 </Button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-action-required">
+          <CardContent className="pt-6 pb-6 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-lg shrink-0">
+                <Search className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg">
+                  {needsReview} bank transaction{needsReview !== 1 ? "s" : ""} need{needsReview === 1 ? "s" : ""} your review
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  These couldn't be automatically matched to fuel records.
+                </p>
+              </div>
+            </div>
+            <Button 
+              size="lg"
+              className="w-full"
+              onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
+              data-testid="button-start-review"
+            >
+              Start Review
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
-      <div className="flex justify-center gap-4 pt-4">
-        <Button 
-          variant="outline"
-          onClick={() => setLocation(`/reconcile?periodId=${periodId}`)}
-          data-testid="button-view-all-transactions"
-        >
-          <FileText className="h-4 w-4 mr-2" />
-          View All Transactions
-        </Button>
-        <Button 
-          onClick={() => setLocation(`/report?periodId=${periodId}`)}
-          data-testid="button-generate-report"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Generate Full Report
-        </Button>
-      </div>
+      {/* Outside Date Range Info */}
+      {outsideDateRange > 0 && (
+        <Card className="bg-muted/30" data-testid="card-outside-date-range">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <Info className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm">
+                  <span className="font-medium">{outsideDateRange} transaction{outsideDateRange !== 1 ? "s are" : " is"}</span>{" "}
+                  outside your fuel data date range.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Upload more fuel data to match these transactions.
+                </p>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={onRerunMatching}
+                data-testid="button-add-fuel-data"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Fuel Data
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* SECTION 3: DETAILS & EXPORT (Collapsed) */}
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <CollapsibleTrigger asChild>
+          <Button 
+            variant="ghost" 
+            className="w-full justify-between h-auto py-3"
+            data-testid="button-toggle-details"
+          >
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <FileText className="h-4 w-4" />
+              View Details & Export Options
+            </span>
+            {detailsOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="space-y-4 pt-2">
+            {/* Fuel Coverage Stats */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Fuel className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Fuel Data Coverage</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Card Sales</p>
+                    <p className="text-lg font-mono font-medium">
+                      {summary.cardFuelTransactions.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatCurrency(summary.totalFuelAmount)}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Bank Coverage</p>
+                    <p className="text-lg font-mono font-medium">
+                      {summary.cardFuelTransactions > 0 
+                        ? Math.round((bankTotal / summary.cardFuelTransactions) * 100)
+                        : 0}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      of card sales verified
+                    </p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Discrepancy</p>
+                    <p className={cn(
+                      "text-lg font-mono font-medium",
+                      summary.discrepancy > 0 ? "text-red-600" : summary.discrepancy < 0 ? "text-amber-600" : "text-green-600"
+                    )}>
+                      {formatCurrency(Math.abs(summary.discrepancy))}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {summary.discrepancy > 0 ? "bank exceeds fuel" : summary.discrepancy < 0 ? "fuel exceeds bank" : "balanced"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Matching Rules Summary */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Matching Rules Used</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Current configuration
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={onRerunMatching}
+                    data-testid="button-adjust-rules"
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Adjust Rules
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Export Options */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Download className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Export Options</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-2">
+                  <Button 
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => setLocation(`/report?periodId=${periodId}`)}
+                    data-testid="button-export-full-report"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Full Report
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => setLocation(`/report?periodId=${periodId}&type=accountant`)}
+                    data-testid="button-export-accountant"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export for Accountant
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

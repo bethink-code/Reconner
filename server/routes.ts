@@ -13,7 +13,8 @@ import {
   insertUploadedFileSchema,
   insertTransactionSchema,
   insertMatchSchema,
-  matchingRulesConfigSchema
+  matchingRulesConfigSchema,
+  type User
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1292,6 +1293,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting match:", error);
       res.status(500).json({ error: "Failed to delete match" });
+    }
+  });
+
+  // Transaction Resolution Routes
+  app.get("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
+    try {
+      const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
+      res.json(resolutions);
+    } catch (error) {
+      console.error("Error fetching resolutions:", error);
+      res.status(500).json({ error: "Failed to fetch resolutions" });
+    }
+  });
+
+  app.get("/api/transactions/:transactionId/resolutions", isAuthenticated, async (req, res) => {
+    try {
+      const resolutions = await storage.getResolutionsByTransaction(req.params.transactionId);
+      res.json(resolutions);
+    } catch (error) {
+      console.error("Error fetching transaction resolutions:", error);
+      res.status(500).json({ error: "Failed to fetch resolutions" });
+    }
+  });
+
+  app.post("/api/resolutions", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { transactionId, periodId, resolutionType, reason, notes, linkedTransactionId, assignee } = req.body;
+
+      if (!transactionId || !periodId || !resolutionType) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const resolution = await storage.createResolution({
+        transactionId,
+        periodId,
+        resolutionType,
+        reason: reason || null,
+        notes: notes || null,
+        userId: user?.id || null,
+        userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : null,
+        userEmail: user?.email || null,
+        linkedTransactionId: linkedTransactionId || null,
+        assignee: assignee || null,
+      });
+
+      // Update the transaction's match status to 'resolved' for resolutions other than 'linked'
+      if (resolutionType !== 'linked') {
+        await storage.updateTransaction(transactionId, { 
+          matchStatus: 'resolved'
+        });
+      }
+
+      res.json({ success: true, resolution });
+    } catch (error) {
+      console.error("Error creating resolution:", error);
+      res.status(500).json({ error: "Failed to create resolution" });
+    }
+  });
+
+  // Bulk dismiss low-value transactions
+  app.post("/api/resolutions/bulk-dismiss", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { transactionIds, periodId } = req.body;
+
+      if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const resolutions = [];
+      for (const transactionId of transactionIds) {
+        const resolution = await storage.createResolution({
+          transactionId,
+          periodId,
+          resolutionType: 'dismissed',
+          reason: 'test_transaction',
+          notes: 'Bulk dismissed as low-value transaction',
+          userId: user?.id || null,
+          userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : null,
+          userEmail: user?.email || null,
+          linkedTransactionId: null,
+          assignee: null,
+        });
+        resolutions.push(resolution);
+
+        await storage.updateTransaction(transactionId, { 
+          matchStatus: 'resolved'
+        });
+      }
+
+      res.json({ success: true, count: resolutions.length });
+    } catch (error) {
+      console.error("Error bulk dismissing:", error);
+      res.status(500).json({ error: "Failed to bulk dismiss transactions" });
     }
   });
 

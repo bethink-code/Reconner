@@ -7,10 +7,7 @@ import {
   Building2, 
   Upload, 
   FileSpreadsheet, 
-  Check, 
-  ArrowRight,
   ArrowLeft,
-  RefreshCw,
   Lightbulb
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -29,19 +26,16 @@ interface BankUploadStepProps {
   periodId: string;
   bankName: string;
   existingFile?: UploadedFile;
-  onComplete: () => void;
   onBack: () => void;
 }
 
-type SubStep = "upload" | "quality" | "complete";
+type SubStep = "upload" | "quality";
 
-export function BankUploadStep({ periodId, bankName, existingFile, onComplete, onBack }: BankUploadStepProps) {
+export function BankUploadStep({ periodId, bankName, existingFile, onBack }: BankUploadStepProps) {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [subStep, setSubStep] = useState<SubStep>(
-    existingFile?.status === "processed" ? "complete" : "upload"
-  );
+  const [subStep, setSubStep] = useState<SubStep>("upload");
   const [currentFile, setCurrentFile] = useState<UploadedFile | null>(existingFile || null);
   const [qualityReport, setQualityReport] = useState<DataQualityReport | null>(
     (existingFile?.qualityReport as DataQualityReport) || null
@@ -181,7 +175,12 @@ export function BankUploadStep({ periodId, bankName, existingFile, onComplete, o
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
-      setSubStep("complete");
+      toast({
+        title: "Bank data imported",
+        description: "Your bank transactions have been processed successfully.",
+      });
+      // Return to BankStatusScreen so user can add more banks or proceed
+      onBack();
     },
     onError: (error: Error) => {
       toast({
@@ -211,63 +210,6 @@ export function BankUploadStep({ periodId, bankName, existingFile, onComplete, o
   const handleQualityContinue = () => {
     processMutation.mutate();
   };
-
-  if (subStep === "complete") {
-    return (
-      <Card className="max-w-2xl mx-auto" data-testid="card-bank-complete">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Check className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle>Bank Data Ready</CardTitle>
-          <CardDescription>
-            Your bank transactions are ready to be matched.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {currentFile && (
-            <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-              <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{currentFile.fileName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {currentFile.rowCount?.toLocaleString()} transactions imported
-                </p>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setSubStep("upload")}
-                data-testid="button-replace-bank"
-              >
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Replace
-              </Button>
-            </div>
-          )}
-          
-          <div className="flex gap-3">
-            <Button 
-              variant="outline"
-              onClick={onBack}
-              data-testid="button-back-bank-status"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Bank Selection
-            </Button>
-            <Button 
-              className="flex-1" 
-              onClick={onComplete}
-              data-testid="button-continue-to-configure"
-            >
-              Continue to Configure Matching
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   if (subStep === "quality" && qualityReport) {
     return (

@@ -186,14 +186,6 @@ export default function ReconciliationFlow() {
     deleteFileMutation.mutate(fileId);
   };
 
-  const handleBankUploadComplete = () => {
-    setCompletedSteps((prev) => [...prev.filter(s => s !== "bank"), "bank"]);
-    setBankSubStep("status");
-    setCurrentBankName("");
-    setReplacingFileId(null);
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
-  };
-
   const handleContinueToMatching = () => {
     setCurrentStep("configure");
   };
@@ -319,7 +311,6 @@ export default function ReconciliationFlow() {
                 periodId={periodId}
                 bankName={currentBankName}
                 existingFile={replacingFileId ? files.find(f => f.id === replacingFileId) : undefined}
-                onComplete={handleBankUploadComplete}
                 onBack={() => setBankSubStep("status")}
               />
             )}

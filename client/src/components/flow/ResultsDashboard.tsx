@@ -24,6 +24,7 @@ import {
   Info
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PeriodCoverageTimeline } from "@/components/PeriodCoverageTimeline";
 
 interface PeriodSummary {
   totalTransactions: number;
@@ -50,12 +51,24 @@ interface ResultsDashboardProps {
   onRerunMatching: () => void;
 }
 
+interface Period {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
 export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboardProps) {
   const [, setLocation] = useLocation();
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const { data: summary, isLoading } = useQuery<PeriodSummary>({
     queryKey: ["/api/periods", periodId, "summary"],
+    enabled: !!periodId,
+  });
+
+  const { data: period } = useQuery<Period>({
+    queryKey: ["/api/periods", periodId],
     enabled: !!periodId,
   });
 
@@ -227,11 +240,16 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
               <Info className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
               <div className="flex-1">
                 <p className="text-sm">
-                  <span className="font-medium">{outsideDateRange} transaction{outsideDateRange !== 1 ? "s are" : " is"}</span>{" "}
-                  outside your fuel data date range.
+                  <span className="font-medium">{outsideDateRange} bank transaction{outsideDateRange !== 1 ? "s" : ""}</span>{" "}
+                  need{outsideDateRange === 1 ? "s" : ""} fuel data
+                  {summary.fuelDateRange && (
+                    <span className="text-muted-foreground">
+                      {" "}— your fuel data ends {formatDate(summary.fuelDateRange.max)}
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Upload more fuel data to match these transactions.
+                  Upload fuel data for these dates to match these transactions.
                 </p>
               </div>
               <Button 
@@ -269,6 +287,21 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="space-y-4 pt-2">
+            {/* Period Coverage Timeline */}
+            {period && (
+              <PeriodCoverageTimeline
+                periodName={period.name}
+                data={{
+                  periodStart: new Date(period.startDate),
+                  periodEnd: new Date(period.endDate),
+                  fuelDateRange: summary.fuelDateRange,
+                  bankDateRange: summary.bankDateRange,
+                  unmatchableCount: summary.unmatchableBankTransactions,
+                }}
+                onAddFuelData={onRerunMatching}
+              />
+            )}
+
             {/* Fuel Coverage Stats */}
             <Card>
               <CardHeader className="pb-2">

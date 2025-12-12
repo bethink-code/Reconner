@@ -217,8 +217,29 @@ export function ConfigureMatchingStep({
 
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-sm text-center">
-              <span className="font-medium">Moderate</span> is recommended for most fuel stations.
-              It handles small price variations while maintaining accuracy.
+              {selectedPreset === "conservative" && (
+                <>
+                  <span className="font-medium">Conservative</span> requires exact matches.
+                  Best for high-accuracy reconciliation with minimal false positives.
+                </>
+              )}
+              {selectedPreset === "moderate" && (
+                <>
+                  <span className="font-medium">Moderate</span> is recommended for most fuel stations.
+                  It handles small price variations while maintaining accuracy.
+                </>
+              )}
+              {selectedPreset === "aggressive" && (
+                <>
+                  <span className="font-medium">Aggressive</span> maximizes match rate.
+                  Use when transactions often have timing or amount variations.
+                </>
+              )}
+              {!selectedPreset && (
+                <>
+                  Select a preset above or customize the settings below.
+                </>
+              )}
             </p>
           </div>
 

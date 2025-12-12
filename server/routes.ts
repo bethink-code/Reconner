@@ -1391,6 +1391,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk flag transactions for review
+  app.post("/api/resolutions/bulk-flag", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { transactionIds, periodId } = req.body;
+
+      if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const resolutions = [];
+      for (const transactionId of transactionIds) {
+        const resolution = await storage.createResolution({
+          transactionId,
+          periodId,
+          resolutionType: 'flagged',
+          reason: null,
+          notes: 'Flagged for manager review',
+          userId: user?.id || null,
+          userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : null,
+          userEmail: user?.email || null,
+          linkedTransactionId: null,
+          assignee: null,
+        });
+        resolutions.push(resolution);
+
+        await storage.updateTransaction(transactionId, { 
+          matchStatus: 'resolved'
+        });
+      }
+
+      res.json({ success: true, count: resolutions.length });
+    } catch (error) {
+      console.error("Error bulk flagging:", error);
+      res.status(500).json({ error: "Failed to bulk flag transactions" });
+    }
+  });
+
+  // Bulk confirm matches (quick wins)
+  app.post("/api/matches/bulk-confirm", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { matches, periodId } = req.body;
+
+      if (!matches || !Array.isArray(matches) || !periodId) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const createdMatches = [];
+      for (const { bankId, fuelId } of matches) {
+        try {
+          // Create the match
+          const match = await storage.createMatch({
+            periodId,
+            bankTransactionId: bankId,
+            fuelTransactionId: fuelId,
+            matchType: 'manual',
+            matchConfidence: '100',
+          });
+          createdMatches.push(match);
+
+          // Update transaction statuses
+          await storage.updateTransaction(bankId, { matchStatus: 'matched' });
+          await storage.updateTransaction(fuelId, { matchStatus: 'matched' });
+
+          // Create resolution for audit trail
+          await storage.createResolution({
+            transactionId: bankId,
+            periodId,
+            resolutionType: 'linked',
+            reason: null,
+            notes: 'Bulk confirmed as quick win match',
+            userId: user?.id || null,
+            userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : null,
+            userEmail: user?.email || null,
+            linkedTransactionId: fuelId,
+            assignee: null,
+          });
+        } catch (matchError) {
+          console.error(`Error creating match for bank ${bankId}:`, matchError);
+        }
+      }
+
+      res.json({ success: true, count: createdMatches.length });
+    } catch (error) {
+      console.error("Error bulk confirming:", error);
+      res.status(500).json({ error: "Failed to bulk confirm matches" });
+    }
+  });
+
   app.get("/api/periods/:periodId/report/:format", isAuthenticated, async (req, res) => {
     try {
       const { periodId, format } = req.params;

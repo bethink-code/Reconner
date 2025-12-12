@@ -130,6 +130,37 @@ export default function InvestigateTransactions() {
     return new Set(resolutions?.map(r => r.transactionId) || []);
   }, [resolutions]);
 
+  // Count resolutions by type for completion state
+  const resolutionCounts = useMemo(() => {
+    const counts = {
+      linked: 0,
+      reviewed: 0,
+      dismissed: 0,
+      flagged: 0,
+      total: 0,
+    };
+    if (!resolutions) return counts;
+    
+    resolutions.forEach(r => {
+      counts.total++;
+      switch (r.resolutionType) {
+        case 'linked':
+          counts.linked++;
+          break;
+        case 'reviewed':
+          counts.reviewed++;
+          break;
+        case 'dismissed':
+          counts.dismissed++;
+          break;
+        case 'flagged':
+          counts.flagged++;
+          break;
+      }
+    });
+    return counts;
+  }, [resolutions]);
+
   // Categorize transactions with potential matches
   const categorizedTransactions = useMemo((): CategorizedTransaction[] => {
     if (!unmatchedData?.transactions || !fuelData?.transactions) return [];
@@ -263,15 +294,15 @@ export default function InvestigateTransactions() {
   });
 
   const bulkDismissMutation = useMutation({
-    mutationFn: async (transactionIds: string[]) => {
-      return await apiRequest("POST", "/api/resolutions/bulk-dismiss", {
+    mutationFn: async (transactionIds: string[]): Promise<{ count: number }> => {
+      const response = await apiRequest("POST", "/api/resolutions/bulk-dismiss", {
         transactionIds,
         periodId,
       });
+      return response.json();
     },
     onSuccess: (data: { count: number }) => {
       toast({ title: "Transactions dismissed", description: `${data.count} low-value transactions dismissed.` });
-      // Invalidate all related queries to ensure UI updates
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "fuel"] });
@@ -279,6 +310,48 @@ export default function InvestigateTransactions() {
     },
     onError: (error: Error) => {
       toast({ title: "Failed to dismiss", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Bulk confirm all quick wins
+  const bulkConfirmMutation = useMutation({
+    mutationFn: async (matches: { bankId: string; fuelId: string }[]): Promise<{ count: number }> => {
+      const response = await apiRequest("POST", "/api/matches/bulk-confirm", {
+        matches,
+        periodId,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { count: number }) => {
+      toast({ title: "Matches confirmed", description: `${data.count} transactions linked successfully.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "fuel"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to confirm matches", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Bulk flag all for review
+  const bulkFlagMutation = useMutation({
+    mutationFn: async (transactionIds: string[]): Promise<{ count: number }> => {
+      const response = await apiRequest("POST", "/api/resolutions/bulk-flag", {
+        transactionIds,
+        periodId,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { count: number }) => {
+      toast({ title: "Transactions flagged", description: `${data.count} transactions flagged for review.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "fuel"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to flag", description: error.message, variant: "destructive" });
     },
   });
 
@@ -338,7 +411,7 @@ export default function InvestigateTransactions() {
       <header className="border-b bg-card sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <Link href={`/flow/${periodId}`}>
+            <Link href={`/flow/${periodId}?mode=view`}>
               <Button variant="ghost" size="icon" data-testid="button-back">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -378,22 +451,114 @@ export default function InvestigateTransactions() {
           </Card>
 
           {totalUnresolved === 0 ? (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4">
-                    <Check className="h-6 w-6 text-green-600" />
+            resolutionCounts.flagged > 0 ? (
+              // Items flagged - show summary with pending items
+              <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-review-complete">
+                <CardContent className="pt-6 pb-6">
+                  <div className="flex flex-col items-center text-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+                      <AlertTriangle className="h-6 w-6 text-amber-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Review Complete — {resolutionCounts.total} of {resolutionCounts.total} categorized
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Some transactions need manager/accountant follow-up
+                      </p>
+                    </div>
+                    
+                    {/* Summary breakdown */}
+                    <div className="w-full max-w-sm text-left space-y-2 px-4">
+                      {resolutionCounts.linked > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-green-600" />
+                          <span>{resolutionCounts.linked} Linked to fuel records</span>
+                        </div>
+                      )}
+                      {resolutionCounts.dismissed > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-green-600" />
+                          <span>{resolutionCounts.dismissed} Dismissed (low value)</span>
+                        </div>
+                      )}
+                      {resolutionCounts.reviewed > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-green-600" />
+                          <span>{resolutionCounts.reviewed} Marked as reviewed</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>{resolutionCounts.flagged} Flagged for follow-up</span>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      Next: {resolutionCounts.flagged} transaction{resolutionCounts.flagged !== 1 ? 's' : ''} need manager/accountant review
+                    </p>
+
+                    <div className="flex gap-2 flex-wrap justify-center">
+                      <Button 
+                        variant="outline"
+                        onClick={() => setLocation(`/report?periodId=${periodId}&filter=flagged`)}
+                        data-testid="button-export-flagged"
+                      >
+                        Export for Review
+                      </Button>
+                      <Link href={`/flow/${periodId}?mode=view`}>
+                        <Button variant="outline" data-testid="button-back-results">Back to Results</Button>
+                      </Link>
+                    </div>
                   </div>
-                  <h3 className="font-semibold mb-1">All Clear!</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    All transactions have been reviewed.
-                  </p>
-                  <Link href={`/flow/${periodId}`}>
-                    <Button variant="outline" data-testid="button-back-results">Back to Results</Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ) : (
+              // All items closed - show success
+              <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" data-testid="card-all-clear">
+                <CardContent className="pt-6 pb-6">
+                  <div className="flex flex-col items-center justify-center py-4 text-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                      <Check className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">All Clear!</h3>
+                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                        All transactions have been resolved.
+                      </p>
+                    </div>
+                    
+                    {/* Summary breakdown */}
+                    {resolutionCounts.total > 0 && (
+                      <div className="w-full max-w-sm text-left space-y-1.5 px-4 text-sm text-green-700 dark:text-green-300">
+                        {resolutionCounts.linked > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-3.5 w-3.5" />
+                            <span>{resolutionCounts.linked} Linked to fuel records</span>
+                          </div>
+                        )}
+                        {resolutionCounts.dismissed > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-3.5 w-3.5" />
+                            <span>{resolutionCounts.dismissed} Dismissed (low value)</span>
+                          </div>
+                        )}
+                        {resolutionCounts.reviewed > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-3.5 w-3.5" />
+                            <span>{resolutionCounts.reviewed} Marked as reviewed</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <Link href={`/flow/${periodId}?mode=view`}>
+                      <Button variant="outline" data-testid="button-back-results">Back to Results</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )
           ) : (
             <>
               {/* Category Sections */}
@@ -428,6 +593,43 @@ export default function InvestigateTransactions() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              {/* Confirm All for Quick Wins */}
+                              {category === 'quick_win' && items.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const matches = items
+                                      .filter(i => i.bestMatch)
+                                      .map(i => ({
+                                        bankId: i.transaction.id,
+                                        fuelId: i.bestMatch!.transaction.id,
+                                      }));
+                                    bulkConfirmMutation.mutate(matches);
+                                  }}
+                                  disabled={bulkConfirmMutation.isPending}
+                                  data-testid="button-confirm-all"
+                                >
+                                  Confirm All
+                                </Button>
+                              )}
+                              {/* Flag All for No Match */}
+                              {category === 'no_match' && items.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    bulkFlagMutation.mutate(items.map(i => i.transaction.id));
+                                  }}
+                                  disabled={bulkFlagMutation.isPending}
+                                  data-testid="button-flag-all"
+                                >
+                                  Flag All for Review
+                                </Button>
+                              )}
+                              {/* Dismiss All for Low Value */}
                               {category === 'low_value' && items.length > 0 && (
                                 <Button
                                   size="sm"

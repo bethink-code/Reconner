@@ -8,9 +8,6 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import CreatePeriod from "@/pages/CreatePeriod";
-import UploadFiles from "@/pages/UploadFiles";
-import ColumnMapping from "@/pages/ColumnMapping";
-import ReconcileTransactions from "@/pages/ReconcileTransactions";
 import ReportView from "@/pages/ReportView";
 import Admin from "@/pages/Admin";
 import ReconciliationSetupWizard from "@/pages/ReconciliationSetupWizard";
@@ -40,9 +37,6 @@ function Router() {
       <Route path="/setup/:periodId" component={ReconciliationSetupWizard} />
       <Route path="/flow/:periodId" component={ReconciliationFlow} />
       <Route path="/investigate" component={InvestigateTransactions} />
-      <Route path="/upload" component={UploadFiles} />
-      <Route path="/mapping" component={ColumnMapping} />
-      <Route path="/reconcile" component={ReconcileTransactions} />
       <Route path="/report" component={ReportView} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />

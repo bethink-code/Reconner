@@ -561,7 +561,42 @@ export class DatabaseStorage implements IStorage {
         min: row.bank_date_min,
         max: row.bank_date_max,
       } : undefined,
+      bankAccountRanges: await this.getBankAccountCoverageRanges(periodId),
     };
+  }
+  
+  private async getBankAccountCoverageRanges(periodId: string): Promise<Array<{
+    sourceName: string;
+    bankName: string | null;
+    fileId: string;
+    min: string;
+    max: string;
+    txCount: number;
+  }>> {
+    // Get date ranges per bank file/source
+    const result = await pool.query(`
+      SELECT 
+        t.file_id,
+        COALESCE(f.bank_name, t.source_name, 'Bank Account') as bank_name,
+        COALESCE(t.source_name, 'Bank Account') as source_name,
+        MIN(t.transaction_date) as min_date,
+        MAX(t.transaction_date) as max_date,
+        COUNT(*) as tx_count
+      FROM transactions t
+      LEFT JOIN uploaded_files f ON t.file_id = f.id
+      WHERE t.period_id = $1 AND t.source_type LIKE 'bank%'
+      GROUP BY t.file_id, f.bank_name, t.source_name
+      ORDER BY MIN(t.transaction_date)
+    `, [periodId]);
+    
+    return result.rows.map(row => ({
+      fileId: row.file_id,
+      sourceName: row.source_name || 'Bank Account',
+      bankName: row.bank_name,
+      min: row.min_date,
+      max: row.max_date,
+      txCount: parseInt(row.tx_count || '0'),
+    }));
   }
 
   async getVerificationSummary(periodId: string): Promise<VerificationSummary> {

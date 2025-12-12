@@ -30,6 +30,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+interface BankAccountRange {
+  fileId: string;
+  sourceName: string;
+  bankName: string | null;
+  min: string;
+  max: string;
+  txCount: number;
+}
+
 interface PeriodSummary {
   totalTransactions: number;
   matchedTransactions: number;
@@ -48,6 +57,7 @@ interface PeriodSummary {
   resolvedBankTransactions?: number;
   fuelDateRange?: { min: string; max: string };
   bankDateRange?: { min: string; max: string };
+  bankAccountRanges?: BankAccountRange[];
 }
 
 interface ResolutionSummary {
@@ -430,74 +440,16 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
 
           <CollapsibleContent>
             <div className="px-6 pb-6 space-y-4">
-              {/* Date Coverage Timeline */}
+              {/* Date Coverage Timeline - Stacked Visualization */}
               {period && (
-                <div className="p-4 bg-muted/30 rounded-lg space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Calendar className="h-4 w-4" />
-                      Period Coverage — {period.name}
-                    </div>
-                    {hasGaps && (
-                      <Badge variant="outline" className="text-amber-600 border-amber-300">
-                        Gaps detected
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="text-xs text-muted-foreground">
-                    Reporting Period: {formatDate(period.startDate)} — {formatDate(period.endDate)}
-                  </div>
-
-                  {/* Fuel Data Range */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">Fuel Data</span>
-                      {summary.fuelDateRange && (
-                        <span className="text-muted-foreground text-xs">
-                          {formatDate(summary.fuelDateRange.min)} — {formatDate(summary.fuelDateRange.max)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-orange-400 rounded-full" style={{ width: '100%' }} />
-                    </div>
-                    {hasGaps && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-6 text-xs"
-                        onClick={onRerunMatching}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Add
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Bank Data Range */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">Bank Data</span>
-                      {summary.bankDateRange && (
-                        <span className="text-muted-foreground text-xs">
-                          {formatDate(summary.bankDateRange.min)} — {formatDate(summary.bankDateRange.max)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-orange-500 rounded-full" style={{ width: '100%' }} />
-                    </div>
-                  </div>
-
-                  {/* Excluded transactions */}
-                  {unmatchableBank > 0 && (
-                    <div className="flex items-center justify-between text-sm pt-2 border-t">
-                      <span className="text-muted-foreground">Excluded (outside period):</span>
-                      <span className="font-medium">{unmatchableBank} transactions</span>
-                    </div>
-                  )}
-                </div>
+                <CoverageTimeline 
+                  period={period}
+                  summary={summary}
+                  unmatchableBank={unmatchableBank}
+                  hasGaps={hasGaps}
+                  onAddData={onRerunMatching}
+                  formatDate={formatDate}
+                />
               )}
 
               {/* Stats Grid */}
@@ -631,6 +583,228 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+const BANK_COLORS = [
+  { bar: "bg-blue-500", track: "bg-blue-100 dark:bg-blue-950" },
+  { bar: "bg-purple-500", track: "bg-purple-100 dark:bg-purple-950" },
+  { bar: "bg-teal-500", track: "bg-teal-100 dark:bg-teal-950" },
+  { bar: "bg-indigo-500", track: "bg-indigo-100 dark:bg-indigo-950" },
+  { bar: "bg-cyan-500", track: "bg-cyan-100 dark:bg-cyan-950" },
+];
+
+interface CoverageTimelineProps {
+  period: Period;
+  summary: PeriodSummary;
+  unmatchableBank: number;
+  hasGaps: boolean;
+  onAddData: () => void;
+  formatDate: (d: string) => string;
+}
+
+function CoverageTimeline({ period, summary, unmatchableBank, hasGaps, onAddData, formatDate }: CoverageTimelineProps) {
+  const periodStart = new Date(period.startDate);
+  const periodEnd = new Date(period.endDate);
+  
+  const totalDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
+  
+  const getPositionPercent = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const dayOffset = (date.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24);
+    return Math.max(0, Math.min(100, (dayOffset / totalDays) * 100));
+  };
+  
+  const fuelStart = summary.fuelDateRange?.min ? getPositionPercent(summary.fuelDateRange.min) : 0;
+  const fuelEnd = summary.fuelDateRange?.max ? getPositionPercent(summary.fuelDateRange.max) : 0;
+  const fuelHasGap = summary.fuelDateRange && (
+    new Date(summary.fuelDateRange.min) > periodStart || 
+    new Date(summary.fuelDateRange.max) < periodEnd
+  );
+  
+  const bankAccounts = summary.bankAccountRanges || [];
+  
+  return (
+    <div className="p-4 bg-muted/30 rounded-lg space-y-1" data-testid="coverage-timeline">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Calendar className="h-4 w-4" />
+          Period Coverage — {period.name}
+        </div>
+        {hasGaps ? (
+          <Badge variant="outline" className="text-amber-600 border-amber-300">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Gaps detected
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-green-600 border-green-300">
+            <Check className="h-3 w-3 mr-1" />
+            Full coverage
+          </Badge>
+        )}
+      </div>
+      
+      {/* Reporting Period Reference Row */}
+      <TimelineRow
+        label="Reporting Period"
+        dateRange={`${formatDate(period.startDate)} — ${formatDate(period.endDate)}`}
+        barColor="bg-slate-300 dark:bg-slate-600"
+        trackColor="bg-slate-100 dark:bg-slate-800"
+        startPercent={0}
+        widthPercent={100}
+        isReference
+      />
+      
+      {/* Fuel System Row */}
+      {summary.fuelDateRange ? (
+        <TimelineRow
+          label="Fuel System"
+          dateRange={`${formatDate(summary.fuelDateRange.min)} — ${formatDate(summary.fuelDateRange.max)}`}
+          barColor={fuelHasGap ? "bg-amber-500" : "bg-orange-500"}
+          trackColor="bg-orange-100 dark:bg-orange-950"
+          startPercent={fuelStart}
+          widthPercent={fuelEnd - fuelStart}
+          hasGap={!!fuelHasGap}
+          onAddData={onAddData}
+        />
+      ) : (
+        <TimelineRow
+          label="Fuel System"
+          trackColor="bg-orange-100 dark:bg-orange-950"
+          isEmpty
+        />
+      )}
+      
+      {/* Individual Bank Account Rows */}
+      {bankAccounts.length > 0 ? (
+        bankAccounts.map((account, index) => {
+          const startPct = getPositionPercent(account.min);
+          const endPct = getPositionPercent(account.max);
+          const accountStart = new Date(account.min);
+          const accountEnd = new Date(account.max);
+          const accountHasGap = accountStart > periodStart || accountEnd < periodEnd;
+          const colors = BANK_COLORS[index % BANK_COLORS.length];
+          const displayName = account.bankName || account.sourceName || `Bank Account ${index + 1}`;
+          
+          return (
+            <TimelineRow
+              key={account.fileId || index}
+              label={displayName}
+              dateRange={`${formatDate(account.min)} — ${formatDate(account.max)}`}
+              barColor={accountHasGap ? "bg-amber-500" : colors.bar}
+              trackColor={colors.track}
+              startPercent={startPct}
+              widthPercent={endPct - startPct}
+              hasGap={accountHasGap}
+              txCount={account.txCount}
+            />
+          );
+        })
+      ) : summary.bankDateRange ? (
+        <TimelineRow
+          label="Bank Data"
+          dateRange={`${formatDate(summary.bankDateRange.min)} — ${formatDate(summary.bankDateRange.max)}`}
+          barColor="bg-blue-500"
+          trackColor="bg-blue-100 dark:bg-blue-950"
+          startPercent={getPositionPercent(summary.bankDateRange.min)}
+          widthPercent={getPositionPercent(summary.bankDateRange.max) - getPositionPercent(summary.bankDateRange.min)}
+        />
+      ) : (
+        <TimelineRow
+          label="Bank Data"
+          trackColor="bg-blue-100 dark:bg-blue-950"
+          isEmpty
+        />
+      )}
+      
+      {/* Summary Footer */}
+      {unmatchableBank > 0 && (
+        <div className="flex items-center justify-between text-sm pt-3 mt-2 border-t">
+          <span className="text-muted-foreground">Excluded (outside fuel date range):</span>
+          <span className="font-medium">{unmatchableBank} transactions</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TimelineRowProps {
+  label: string;
+  dateRange?: string;
+  barColor?: string;
+  trackColor: string;
+  startPercent?: number;
+  widthPercent?: number;
+  hasGap?: boolean;
+  isEmpty?: boolean;
+  isReference?: boolean;
+  onAddData?: () => void;
+  txCount?: number;
+}
+
+function TimelineRow({
+  label,
+  dateRange,
+  barColor,
+  trackColor,
+  startPercent = 0,
+  widthPercent = 100,
+  hasGap,
+  isEmpty,
+  isReference,
+  onAddData,
+  txCount,
+}: TimelineRowProps) {
+  return (
+    <div className={cn(
+      "grid grid-cols-[120px_1fr_110px] gap-2 items-center py-1",
+      isReference && "pb-2 mb-1 border-b border-dashed"
+    )}>
+      {/* Label */}
+      <div className={cn(
+        "text-sm truncate",
+        isReference ? "font-medium" : "text-muted-foreground"
+      )}>
+        {label}
+      </div>
+      
+      {/* Bar */}
+      <div className="relative h-4">
+        <div className={cn("absolute inset-0 rounded", trackColor)} />
+        {!isEmpty && barColor && (
+          <div 
+            className={cn("absolute h-full rounded transition-all", barColor)}
+            style={{ 
+              left: `${startPercent}%`, 
+              width: `${Math.max(widthPercent, 2)}%` 
+            }}
+          />
+        )}
+        {isEmpty && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Badge variant="outline" className="text-red-600 text-xs h-4 px-1.5">
+              No data
+            </Badge>
+          </div>
+        )}
+        {hasGap && onAddData && (
+          <button
+            className="absolute right-0.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover-elevate"
+            onClick={onAddData}
+          >
+            <Plus className="h-3 w-3 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+      
+      {/* Date Range */}
+      <div className="text-xs text-right text-muted-foreground whitespace-nowrap">
+        {dateRange}
+        {txCount !== undefined && txCount > 0 && (
+          <span className="ml-1 opacity-60">({txCount})</span>
+        )}
+      </div>
     </div>
   );
 }

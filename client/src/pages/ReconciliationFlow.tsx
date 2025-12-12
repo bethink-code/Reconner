@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ export default function ReconciliationFlow() {
   const [bankSubStep, setBankSubStep] = useState<BankSubStep>("status");
   const [currentBankName, setCurrentBankName] = useState<string>("");
   const [replacingFileId, setReplacingFileId] = useState<string | null>(null);
+  
+  const hasInitialized = useRef(false);
 
   const periodId = params?.periodId || "";
 
@@ -103,6 +105,24 @@ export default function ReconciliationFlow() {
     }
   }, [match, periodId, setLocation]);
 
+  // Initialize on mount - mark as initialized once files query completes
+  useEffect(() => {
+    if (!filesLoading && !hasInitialized.current) {
+      hasInitialized.current = true;
+      
+      // Set initial step based on existing file state
+      if (fuelFile && bankFiles.length === 0) {
+        setCurrentStep("bank");
+        setBankSubStep("status");
+      } else if (fuelFile && bankFiles.length > 0) {
+        setCurrentStep("bank");
+        setBankSubStep("status");
+      }
+      // Otherwise default to "fuel" step (already set in useState)
+    }
+  }, [filesLoading, fuelFile, bankFiles.length]);
+
+  // Keep completedSteps in sync with file state (does NOT change currentStep)
   useEffect(() => {
     if (files.length > 0) {
       const newCompleted: ReconciliationStep[] = [];
@@ -115,18 +135,8 @@ export default function ReconciliationFlow() {
       }
 
       setCompletedSteps(newCompleted);
-
-      if (!fuelFile) {
-        setCurrentStep("fuel");
-      } else if (bankFiles.length === 0) {
-        setCurrentStep("bank");
-        setBankSubStep("status");
-      } else if (!newCompleted.includes("configure")) {
-        setCurrentStep("bank");
-        setBankSubStep("status");
-      }
     }
-  }, [files]);
+  }, [files, fuelFile, bankFiles.length]);
 
   const handleStepClick = (step: ReconciliationStep) => {
     const fuelProcessed = !!fuelFile;

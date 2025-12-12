@@ -440,77 +440,30 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
 
           <CollapsibleContent>
             <div className="px-6 pb-6 space-y-4">
-              {/* Date Coverage Timeline - Stacked Visualization */}
+              {/* Compact Coverage Ribbon */}
               {period && (
-                <CoverageTimeline 
+                <CoverageRibbon 
                   period={period}
                   summary={summary}
-                  unmatchableBank={unmatchableBank}
+                  formatDate={formatDate}
                   hasGaps={hasGaps}
                   onAddData={onRerunMatching}
-                  formatDate={formatDate}
                 />
               )}
 
-              {/* Stats Grid */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 bg-muted/30 rounded-lg text-center">
-                  <p className="text-xs text-muted-foreground">Card Sales</p>
-                  <p className="text-xl font-mono font-bold">
-                    {summary.cardFuelTransactions.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(summary.totalFuelAmount)}
-                  </p>
+              {/* Compact Stats Row */}
+              <div className="flex flex-wrap gap-4 text-sm pt-2 border-t">
+                <div>
+                  <span className="text-muted-foreground">Card Sales: </span>
+                  <span className="font-medium">{summary.cardFuelTransactions.toLocaleString()}</span>
+                  <span className="text-muted-foreground"> ({formatCurrency(summary.totalFuelAmount)})</span>
                 </div>
-                <div className="p-3 bg-muted/30 rounded-lg text-center">
-                  <p className="text-xs text-muted-foreground">Bank Coverage</p>
-                  <p className="text-xl font-mono font-bold">
-                    {summary.cardFuelTransactions > 0 
-                      ? Math.round((bankTotal / summary.cardFuelTransactions) * 100)
-                      : 0}%
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    of sales verified
-                  </p>
-                </div>
-                <div className="p-3 bg-muted/30 rounded-lg text-center">
-                  <p className="text-xs text-muted-foreground">Discrepancy</p>
-                  <p className={cn("text-xl font-mono font-bold", discStyle.color)}>
-                    {formatCurrency(Math.abs(summary.discrepancy))}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {discStyle.label.toLowerCase()}
-                  </p>
+                <div>
+                  <span className="text-muted-foreground">Bank Txns: </span>
+                  <span className="font-medium">{bankTotal.toLocaleString()}</span>
+                  <span className="text-muted-foreground"> ({formatCurrency(summary.totalBankAmount)})</span>
                 </div>
               </div>
-
-              {/* Gap Alert with Action */}
-              {hasGaps && summary.fuelDateRange && (
-                <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    <div>
-                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                        {unmatchableBank} transactions need fuel data
-                      </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                        Your fuel data ends {formatDate(summary.fuelDateRange.max)}
-                      </p>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={onRerunMatching}
-                    className="shrink-0"
-                    data-testid="button-add-missing-data"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Missing Data
-                  </Button>
-                </div>
-              )}
             </div>
           </CollapsibleContent>
         </Collapsible>
@@ -587,27 +540,17 @@ export function ResultsDashboard({ periodId, onRerunMatching }: ResultsDashboard
   );
 }
 
-const BANK_COLORS = [
-  { bar: "bg-blue-500", track: "bg-blue-100 dark:bg-blue-950" },
-  { bar: "bg-purple-500", track: "bg-purple-100 dark:bg-purple-950" },
-  { bar: "bg-teal-500", track: "bg-teal-100 dark:bg-teal-950" },
-  { bar: "bg-indigo-500", track: "bg-indigo-100 dark:bg-indigo-950" },
-  { bar: "bg-cyan-500", track: "bg-cyan-100 dark:bg-cyan-950" },
-];
-
-interface CoverageTimelineProps {
+interface CoverageRibbonProps {
   period: Period;
   summary: PeriodSummary;
-  unmatchableBank: number;
+  formatDate: (d: string) => string;
   hasGaps: boolean;
   onAddData: () => void;
-  formatDate: (d: string) => string;
 }
 
-function CoverageTimeline({ period, summary, unmatchableBank, hasGaps, onAddData, formatDate }: CoverageTimelineProps) {
+function CoverageRibbon({ period, summary, formatDate, hasGaps, onAddData }: CoverageRibbonProps) {
   const periodStart = new Date(period.startDate);
   const periodEnd = new Date(period.endDate);
-  
   const totalDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
   
   const getPositionPercent = (dateStr: string) => {
@@ -615,194 +558,135 @@ function CoverageTimeline({ period, summary, unmatchableBank, hasGaps, onAddData
     const dayOffset = (date.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24);
     return Math.max(0, Math.min(100, (dayOffset / totalDays) * 100));
   };
+
+  const checkGap = (minDate: string, maxDate: string) => {
+    return new Date(minDate) > periodStart || new Date(maxDate) < periodEnd;
+  };
   
-  const fuelStart = summary.fuelDateRange?.min ? getPositionPercent(summary.fuelDateRange.min) : 0;
-  const fuelEnd = summary.fuelDateRange?.max ? getPositionPercent(summary.fuelDateRange.max) : 0;
-  const fuelHasGap = summary.fuelDateRange && (
-    new Date(summary.fuelDateRange.min) > periodStart || 
-    new Date(summary.fuelDateRange.max) < periodEnd
-  );
-  
+  const fuelRange = summary.fuelDateRange;
+  const fuelHasGap = fuelRange && checkGap(fuelRange.min, fuelRange.max);
   const bankAccounts = summary.bankAccountRanges || [];
   
+  // Build all sources for the ribbon
+  const sources: Array<{
+    name: string;
+    min: string;
+    max: string;
+    count?: number;
+    hasGap: boolean;
+    color: string;
+    type: 'fuel' | 'bank';
+  }> = [];
+  
+  if (fuelRange) {
+    sources.push({
+      name: 'Fuel',
+      min: fuelRange.min,
+      max: fuelRange.max,
+      count: summary.cardFuelTransactions,
+      hasGap: !!fuelHasGap,
+      color: 'bg-orange-500',
+      type: 'fuel'
+    });
+  }
+  
+  bankAccounts.forEach((account, index) => {
+    const colors = ['bg-blue-500', 'bg-purple-500', 'bg-teal-500', 'bg-indigo-500', 'bg-cyan-500'];
+    sources.push({
+      name: account.bankName || account.sourceName || `Bank ${index + 1}`,
+      min: account.min,
+      max: account.max,
+      count: account.txCount,
+      hasGap: checkGap(account.min, account.max),
+      color: colors[index % colors.length],
+      type: 'bank'
+    });
+  });
+  
+  // Fallback if no individual bank accounts but have aggregate range
+  if (bankAccounts.length === 0 && summary.bankDateRange) {
+    sources.push({
+      name: 'Bank',
+      min: summary.bankDateRange.min,
+      max: summary.bankDateRange.max,
+      count: summary.bankTransactions,
+      hasGap: checkGap(summary.bankDateRange.min, summary.bankDateRange.max),
+      color: 'bg-blue-500',
+      type: 'bank'
+    });
+  }
+
   return (
-    <div className="p-4 bg-muted/30 rounded-lg space-y-1" data-testid="coverage-timeline">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Calendar className="h-4 w-4" />
-          Period Coverage — {period.name}
+    <div className="space-y-2" data-testid="coverage-ribbon">
+      {/* Reference bar with period dates */}
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span>{formatDate(period.startDate)}</span>
+        <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full relative">
+          {/* Fuel and bank coverage segments on single track */}
+          {sources.map((source, idx) => {
+            const left = getPositionPercent(source.min);
+            const width = getPositionPercent(source.max) - left;
+            return (
+              <Tooltip key={idx}>
+                <TooltipTrigger asChild>
+                  <div 
+                    className={cn(
+                      "absolute h-full rounded-full transition-all cursor-pointer",
+                      source.hasGap ? "bg-amber-400" : source.color
+                    )}
+                    style={{ 
+                      left: `${left}%`, 
+                      width: `${Math.max(width, 2)}%`,
+                      top: `${idx * 3}px`
+                    }}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-medium">{source.name}</p>
+                  <p className="text-xs">{formatDate(source.min)} — {formatDate(source.max)}</p>
+                  {source.count && <p className="text-xs">{source.count.toLocaleString()} transactions</p>}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
         </div>
-        {hasGaps ? (
-          <Badge variant="outline" className="text-amber-600 border-amber-300">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            Gaps detected
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-green-600 border-green-300">
-            <Check className="h-3 w-3 mr-1" />
-            Full coverage
-          </Badge>
-        )}
+        <span>{formatDate(period.endDate)}</span>
       </div>
       
-      {/* Reporting Period Reference Row */}
-      <TimelineRow
-        label="Reporting Period"
-        dateRange={`${formatDate(period.startDate)} — ${formatDate(period.endDate)}`}
-        barColor="bg-slate-300 dark:bg-slate-600"
-        trackColor="bg-slate-100 dark:bg-slate-800"
-        startPercent={0}
-        widthPercent={100}
-        isReference
-      />
-      
-      {/* Fuel System Row */}
-      {summary.fuelDateRange ? (
-        <TimelineRow
-          label="Fuel System"
-          dateRange={`${formatDate(summary.fuelDateRange.min)} — ${formatDate(summary.fuelDateRange.max)}`}
-          barColor={fuelHasGap ? "bg-amber-500" : "bg-orange-500"}
-          trackColor="bg-orange-100 dark:bg-orange-950"
-          startPercent={fuelStart}
-          widthPercent={fuelEnd - fuelStart}
-          hasGap={!!fuelHasGap}
-          onAddData={onAddData}
-        />
-      ) : (
-        <TimelineRow
-          label="Fuel System"
-          trackColor="bg-orange-100 dark:bg-orange-950"
-          isEmpty
-        />
-      )}
-      
-      {/* Individual Bank Account Rows */}
-      {bankAccounts.length > 0 ? (
-        bankAccounts.map((account, index) => {
-          const startPct = getPositionPercent(account.min);
-          const endPct = getPositionPercent(account.max);
-          const accountStart = new Date(account.min);
-          const accountEnd = new Date(account.max);
-          const accountHasGap = accountStart > periodStart || accountEnd < periodEnd;
-          const colors = BANK_COLORS[index % BANK_COLORS.length];
-          const displayName = account.bankName || account.sourceName || `Bank Account ${index + 1}`;
-          
-          return (
-            <TimelineRow
-              key={account.fileId || index}
-              label={displayName}
-              dateRange={`${formatDate(account.min)} — ${formatDate(account.max)}`}
-              barColor={accountHasGap ? "bg-amber-500" : colors.bar}
-              trackColor={colors.track}
-              startPercent={startPct}
-              widthPercent={endPct - startPct}
-              hasGap={accountHasGap}
-              txCount={account.txCount}
-            />
-          );
-        })
-      ) : summary.bankDateRange ? (
-        <TimelineRow
-          label="Bank Data"
-          dateRange={`${formatDate(summary.bankDateRange.min)} — ${formatDate(summary.bankDateRange.max)}`}
-          barColor="bg-blue-500"
-          trackColor="bg-blue-100 dark:bg-blue-950"
-          startPercent={getPositionPercent(summary.bankDateRange.min)}
-          widthPercent={getPositionPercent(summary.bankDateRange.max) - getPositionPercent(summary.bankDateRange.min)}
-        />
-      ) : (
-        <TimelineRow
-          label="Bank Data"
-          trackColor="bg-blue-100 dark:bg-blue-950"
-          isEmpty
-        />
-      )}
-      
-      {/* Summary Footer */}
-      {unmatchableBank > 0 && (
-        <div className="flex items-center justify-between text-sm pt-3 mt-2 border-t">
-          <span className="text-muted-foreground">Excluded (outside fuel date range):</span>
-          <span className="font-medium">{unmatchableBank} transactions</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface TimelineRowProps {
-  label: string;
-  dateRange?: string;
-  barColor?: string;
-  trackColor: string;
-  startPercent?: number;
-  widthPercent?: number;
-  hasGap?: boolean;
-  isEmpty?: boolean;
-  isReference?: boolean;
-  onAddData?: () => void;
-  txCount?: number;
-}
-
-function TimelineRow({
-  label,
-  dateRange,
-  barColor,
-  trackColor,
-  startPercent = 0,
-  widthPercent = 100,
-  hasGap,
-  isEmpty,
-  isReference,
-  onAddData,
-  txCount,
-}: TimelineRowProps) {
-  return (
-    <div className={cn(
-      "grid grid-cols-[120px_1fr_110px] gap-2 items-center py-1",
-      isReference && "pb-2 mb-1 border-b border-dashed"
-    )}>
-      {/* Label */}
-      <div className={cn(
-        "text-sm truncate",
-        isReference ? "font-medium" : "text-muted-foreground"
-      )}>
-        {label}
-      </div>
-      
-      {/* Bar */}
-      <div className="relative h-4">
-        <div className={cn("absolute inset-0 rounded", trackColor)} />
-        {!isEmpty && barColor && (
+      {/* Source chips - compact inline display */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {sources.map((source, idx) => (
           <div 
-            className={cn("absolute h-full rounded transition-all", barColor)}
-            style={{ 
-              left: `${startPercent}%`, 
-              width: `${Math.max(widthPercent, 2)}%` 
-            }}
-          />
-        )}
-        {isEmpty && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Badge variant="outline" className="text-red-600 text-xs h-4 px-1.5">
-              No data
-            </Badge>
-          </div>
-        )}
-        {hasGap && onAddData && (
-          <button
-            className="absolute right-0.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover-elevate"
-            onClick={onAddData}
+            key={idx}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs",
+              "bg-muted/50 border"
+            )}
           >
-            <Plus className="h-3 w-3 text-muted-foreground" />
+            <span className={cn("w-2 h-2 rounded-full", source.hasGap ? "bg-amber-400" : source.color)} />
+            <span className="font-medium">{source.name}</span>
+            <span className="text-muted-foreground">
+              {formatDate(source.min)}—{formatDate(source.max)}
+            </span>
+            {source.count && (
+              <span className="text-muted-foreground">({source.count.toLocaleString()})</span>
+            )}
+            {source.hasGap && (
+              <AlertTriangle className="h-3 w-3 text-amber-500" />
+            )}
+          </div>
+        ))}
+        
+        {/* Add Data action when gaps exist */}
+        {hasGaps && (
+          <button
+            onClick={onAddData}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 hover-elevate"
+            data-testid="button-add-missing-data"
+          >
+            <Plus className="h-3 w-3" />
+            Add data
           </button>
-        )}
-      </div>
-      
-      {/* Date Range */}
-      <div className="text-xs text-right text-muted-foreground whitespace-nowrap">
-        {dateRange}
-        {txCount !== undefined && txCount > 0 && (
-          <span className="ml-1 opacity-60">({txCount})</span>
         )}
       </div>
     </div>

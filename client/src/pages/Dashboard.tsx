@@ -1,7 +1,27 @@
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield, Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import PeriodCard from "@/components/PeriodCard";
@@ -24,7 +44,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Link, useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { ReconciliationPeriod } from "@shared/schema";
@@ -40,7 +60,12 @@ interface DisplayPeriod {
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [deleteTarget, setDeleteTarget] = useState<DisplayPeriod | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: "", description: "", startDate: "", endDate: "" });
 
   const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
     queryKey: ["/api/periods"],
@@ -56,6 +81,26 @@ export default function Dashboard() {
     },
   });
 
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof createForm) => {
+      const response = await apiRequest("POST", "/api/periods", data);
+      return await response.json() as ReconciliationPeriod;
+    },
+    onSuccess: (period) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
+      setShowCreateDialog(false);
+      setCreateForm({ name: "", description: "", startDate: "", endDate: "" });
+      toast({ title: "Period created", description: `${period.name} has been created successfully.` });
+      setLocation(`/flow/${period.id}`);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to create period", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const createDateError = createForm.startDate && createForm.endDate && createForm.endDate < createForm.startDate
+    ? "End date must be on or after the start date" : "";
+
   const displayPeriods: DisplayPeriod[] = periods.map(period => ({
     id: period.id,
     name: period.name,
@@ -64,6 +109,12 @@ export default function Dashboard() {
     lastModified: period.updatedAt ? new Date(period.updatedAt).toLocaleDateString() :
                    new Date(period.createdAt!).toLocaleDateString(),
   }));
+
+  const filteredPeriods = displayPeriods.filter(p => {
+    if (statusFilter !== "all" && p.status !== statusFilter) return false;
+    if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
 
   const completedCount = displayPeriods.filter(p => p.status === "complete").length;
   const inProgressCount = displayPeriods.filter(p => p.status === "in_progress").length;
@@ -94,12 +145,10 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <Link href="/create">
-                <Button data-testid="button-create-period">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Reconciliation
-                </Button>
-              </Link>
+              <Button data-testid="button-create-period" onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Reconciliation
+              </Button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -170,23 +219,48 @@ export default function Dashboard() {
         {/* Periods Table */}
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               <h2 className="text-lg font-semibold">Reconciliation Periods</h2>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search periods..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-search-periods"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-36" data-testid="select-status-filter">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="complete">Complete</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <p className="text-muted-foreground">Loading periods...</p>
               </div>
-            ) : displayPeriods.length === 0 ? (
+            ) : filteredPeriods.length === 0 && displayPeriods.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 gap-4">
                 <p className="text-muted-foreground">No reconciliation periods yet</p>
-                <Link href="/create">
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create First Period
-                  </Button>
-                </Link>
+                <Button onClick={() => setShowCreateDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create First Period
+                </Button>
+              </div>
+            ) : filteredPeriods.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-muted-foreground">No periods match your search</p>
               </div>
             ) : (
               <div className="border rounded-lg overflow-hidden">
@@ -202,7 +276,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {displayPeriods.map((period) => (
+                      {filteredPeriods.map((period) => (
                       <tr
                         key={period.id}
                         className="border-b hover-elevate"
@@ -291,6 +365,76 @@ export default function Dashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Period Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Reconciliation Period</DialogTitle>
+            <DialogDescription>
+              Define the period details for your reconciliation
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (createDateError) return;
+            createMutation.mutate(createForm);
+          }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="create-name">Period Name *</Label>
+              <Input
+                id="create-name"
+                placeholder="e.g., January 2024 Reconciliation"
+                value={createForm.name}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-description">Description</Label>
+              <Textarea
+                id="create-description"
+                placeholder="Optional description"
+                value={createForm.description}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="create-start">Start Date *</Label>
+                <Input
+                  id="create-start"
+                  type="date"
+                  value={createForm.startDate}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, startDate: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-end">End Date *</Label>
+                <Input
+                  id="create-end"
+                  type="date"
+                  value={createForm.endDate}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, endDate: e.target.value }))}
+                  required
+                />
+              </div>
+            </div>
+            {createDateError && (
+              <p className="text-sm text-destructive">{createDateError}</p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending || !!createDateError}>
+                {createMutation.isPending ? "Creating..." : "Create & Continue"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

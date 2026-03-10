@@ -349,9 +349,14 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
                 </span>
               </Button>
             </label>
-            <p className="text-xs text-muted-foreground mt-4">
-              Supported formats: Excel (.xlsx, .xls) or CSV
-            </p>
+            <div className="mt-4 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Supported: Excel (.xlsx, .xls) or CSV
+              </p>
+              <p className="text-xs text-muted-foreground">
+                File should include columns for: date, amount, reference/invoice number
+              </p>
+            </div>
           </div>
         )}
 

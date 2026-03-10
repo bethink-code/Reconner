@@ -304,9 +304,14 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
                   </span>
                 </Button>
               </label>
-              <p className="text-xs text-muted-foreground mt-4">
-                Supported formats: Excel (.xlsx, .xls) or CSV
-              </p>
+              <div className="mt-4 space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Supported: Excel (.xlsx, .xls) or CSV
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Bank statement should include: date, amount, and reference/description
+                </p>
+              </div>
             </div>
           )}
 

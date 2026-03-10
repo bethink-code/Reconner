@@ -11,6 +11,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   ArrowLeft,
   Search,
   Link as LinkIcon,
@@ -70,6 +85,11 @@ export default function InvestigateTransactions() {
   const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState<string>("");
   const [resolutionNotes, setResolutionNotes] = useState<string>("");
+  const [pendingBulkAction, setPendingBulkAction] = useState<{
+    type: 'confirm' | 'flag' | 'dismiss';
+    count: number;
+    action: () => void;
+  } | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     quick_win: true,
     investigate: true,
@@ -849,7 +869,11 @@ export default function InvestigateTransactions() {
                                         bankId: i.transaction.id,
                                         fuelId: i.bestMatch!.transaction.id,
                                       }));
-                                    bulkConfirmMutation.mutate(matches);
+                                    setPendingBulkAction({
+                                      type: 'confirm',
+                                      count: matches.length,
+                                      action: () => bulkConfirmMutation.mutate(matches),
+                                    });
                                   }}
                                   disabled={bulkConfirmMutation.isPending}
                                   data-testid="button-confirm-all"
@@ -864,7 +888,12 @@ export default function InvestigateTransactions() {
                                   variant="outline"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    bulkFlagMutation.mutate(items.map(i => i.transaction.id));
+                                    const ids = items.map(i => i.transaction.id);
+                                    setPendingBulkAction({
+                                      type: 'flag',
+                                      count: ids.length,
+                                      action: () => bulkFlagMutation.mutate(ids),
+                                    });
                                   }}
                                   disabled={bulkFlagMutation.isPending}
                                   data-testid="button-flag-all"
@@ -879,7 +908,12 @@ export default function InvestigateTransactions() {
                                   variant="outline"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    bulkDismissMutation.mutate(items.map(i => i.transaction.id));
+                                    const ids = items.map(i => i.transaction.id);
+                                    setPendingBulkAction({
+                                      type: 'dismiss',
+                                      count: ids.length,
+                                      action: () => bulkDismissMutation.mutate(ids),
+                                    });
                                   }}
                                   disabled={bulkDismissMutation.isPending}
                                   data-testid="button-dismiss-all"
@@ -960,9 +994,17 @@ export default function InvestigateTransactions() {
 
                                   {/* Badge for investigate */}
                                   {category === 'investigate' && item.bestMatch && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      {Math.round(item.bestMatch.confidence)}% match
-                                    </Badge>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge variant="secondary" className="text-xs cursor-help">
+                                          {Math.round(item.bestMatch.confidence)}% match
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left" className="max-w-xs text-xs">
+                                        Confidence is based on amount similarity, date proximity, time proximity, and card number match.
+                                        80%+ = Quick Win, 50-80% = Needs Review.
+                                      </TooltipContent>
+                                    </Tooltip>
                                   )}
 
                                   {/* Badge for no match */}
@@ -1167,6 +1209,35 @@ export default function InvestigateTransactions() {
           )}
         </div>
       </main>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <AlertDialog open={!!pendingBulkAction} onOpenChange={(open) => !open && setPendingBulkAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingBulkAction?.type === 'confirm' && 'Confirm All Quick Wins'}
+              {pendingBulkAction?.type === 'flag' && 'Flag All for Review'}
+              {pendingBulkAction?.type === 'dismiss' && 'Dismiss All Low Value'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingBulkAction?.type === 'confirm' && `This will confirm ${pendingBulkAction.count} matches. Each bank transaction will be linked to its best fuel match.`}
+              {pendingBulkAction?.type === 'flag' && `This will flag ${pendingBulkAction.count} transactions for manager review.`}
+              {pendingBulkAction?.type === 'dismiss' && `This will dismiss ${pendingBulkAction.count} low-value transactions as immaterial.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              pendingBulkAction?.action();
+              setPendingBulkAction(null);
+            }}>
+              {pendingBulkAction?.type === 'confirm' && 'Confirm All'}
+              {pendingBulkAction?.type === 'flag' && 'Flag All'}
+              {pendingBulkAction?.type === 'dismiss' && 'Dismiss All'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

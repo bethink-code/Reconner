@@ -1,14 +1,13 @@
 {
-  "buildCommand": "vite build",
+  "buildCommand": "vite build && esbuild api/index.ts --platform=node --packages=external --bundle --format=esm --outdir=api --out-extension:.js=.mjs --alias:@shared=./shared",
   "outputDirectory": "dist/public",
   "functions": {
-    "api/index.ts": {
-      "maxDuration": 30,
-      "includeFiles": "shared/**,server/**"
+    "api/index.mjs": {
+      "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/api/(.*)", "destination": "/api/index.mjs" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

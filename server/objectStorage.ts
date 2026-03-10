@@ -1,26 +1,7 @@
-import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
 import { randomUUID } from "crypto";
-
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
-
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
-    },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+import fs from "fs";
+import path from "path";
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -31,70 +12,60 @@ export class ObjectNotFoundError extends Error {
 }
 
 export class ObjectStorageService {
-  constructor() {}
+  private localStorageDir: string;
 
-  getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
-    if (!dir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
-      );
+  constructor() {
+    this.localStorageDir = process.env.PRIVATE_OBJECT_DIR || path.join(process.cwd(), "uploads");
+  }
+
+  private ensureDir(dir: string) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    return dir;
   }
 
   async uploadFile(buffer: Buffer, fileName: string, contentType: string): Promise<string> {
-    const privateObjectDir = this.getPrivateObjectDir();
     const fileId = randomUUID();
-    const objectPath = `${privateObjectDir}/uploads/${fileId}/${fileName}`;
+    const uploadDir = path.join(this.localStorageDir, fileId);
+    this.ensureDir(uploadDir);
 
-    const { bucketName, objectName } = this.parseObjectPath(objectPath);
-    const bucket = objectStorageClient.bucket(bucketName);
-    const file = bucket.file(objectName);
+    const filePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(filePath, buffer);
 
-    await file.save(buffer, {
-      metadata: {
-        contentType,
-      },
-    });
+    // Store metadata
+    fs.writeFileSync(filePath + ".meta", JSON.stringify({ contentType }));
 
-    return objectPath;
-  }
-
-  async getFile(objectPath: string): Promise<File> {
-    const { bucketName, objectName } = this.parseObjectPath(objectPath);
-    const bucket = objectStorageClient.bucket(bucketName);
-    const file = bucket.file(objectName);
-    
-    const [exists] = await file.exists();
-    if (!exists) {
-      throw new ObjectNotFoundError();
-    }
-
-    return file;
+    return `${fileId}/${fileName}`;
   }
 
   async downloadFile(objectPath: string, res: Response) {
     try {
-      const file = await this.getFile(objectPath);
-      const [metadata] = await file.getMetadata();
+      const filePath = path.join(this.localStorageDir, objectPath);
+      if (!fs.existsSync(filePath)) {
+        throw new ObjectNotFoundError();
+      }
 
+      let contentType = "application/octet-stream";
+      const metaPath = filePath + ".meta";
+      if (fs.existsSync(metaPath)) {
+        const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+        contentType = meta.contentType || contentType;
+      }
+
+      const stat = fs.statSync(filePath);
       res.set({
-        "Content-Type": metadata.contentType || "application/octet-stream",
-        "Content-Length": metadata.size,
+        "Content-Type": contentType,
+        "Content-Length": stat.size.toString(),
         "Cache-Control": "private, max-age=3600",
       });
 
-      const stream = file.createReadStream();
-
+      const stream = fs.createReadStream(filePath);
       stream.on("error", (err: Error) => {
         console.error("Stream error:", err);
         if (!res.headersSent) {
           res.status(500).json({ error: "Error streaming file" });
         }
       });
-
       stream.pipe(res);
     } catch (error) {
       console.error("Error downloading file:", error);
@@ -108,33 +79,27 @@ export class ObjectStorageService {
     }
   }
 
-  async deleteFile(objectPath: string): Promise<void> {
-    try {
-      const file = await this.getFile(objectPath);
-      await file.delete();
-    } catch (error) {
-      if (!(error instanceof ObjectNotFoundError)) {
-        throw error;
-      }
+  async getFile(objectPath: string): Promise<{ download: () => Promise<[Buffer]> }> {
+    const filePath = path.join(this.localStorageDir, objectPath);
+    if (!fs.existsSync(filePath)) {
+      throw new ObjectNotFoundError();
     }
+    return {
+      download: async () => [fs.readFileSync(filePath)] as [Buffer],
+    };
   }
 
-  private parseObjectPath(path: string): { bucketName: string; objectName: string } {
-    if (!path.startsWith("/")) {
-      path = `/${path}`;
+  async deleteFile(objectPath: string): Promise<void> {
+    try {
+      const filePath = path.join(this.localStorageDir, objectPath);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        const metaPath = filePath + ".meta";
+        if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
+      }
+    } catch (error) {
+      // Ignore delete errors for non-existent files
     }
-    const pathParts = path.split("/");
-    if (pathParts.length < 3) {
-      throw new Error("Invalid path: must contain at least a bucket name");
-    }
-
-    const bucketName = pathParts[1];
-    const objectName = pathParts.slice(2).join("/");
-
-    return {
-      bucketName,
-      objectName,
-    };
   }
 }
 

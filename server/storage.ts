@@ -21,7 +21,7 @@ import {
   matches,
   matchingRules,
   transactionResolutions
-} from "@shared/schema";
+} from "../shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
 import { eq, and, or, desc, sql, inArray } from "drizzle-orm";

@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { Transaction, Match, ReconciliationPeriod } from '@shared/schema';
+import { Transaction, Match, ReconciliationPeriod } from '../shared/schema';
 
 interface ReportData {
   period: ReconciliationPeriod;

@@ -15,7 +15,7 @@ import {
   insertMatchSchema,
   matchingRulesConfigSchema,
   type User
-} from "@shared/schema";
+} from "../shared/schema";
 import { z } from "zod";
 
 function computeContentHash(buffer: Buffer): string {

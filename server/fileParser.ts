@@ -196,7 +196,7 @@ export class DataNormalizer {
   }
 
   // Normalize FNB date: "27 Nov" → "2025-11-27" (uses provided year)
-  static normalizeFNBDate(value: string, year: string = '2025'): string {
+  static normalizeFNBDate(value: string, year: string = String(new Date().getFullYear())): string {
     if (!value) return '';
     const trimmed = String(value).trim();
     // Pattern: "DD Mon" (e.g., "27 Nov")

@@ -8,6 +8,13 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
+interface SessionUser {
+  claims: Record<string, string | number | undefined>;
+  access_token: string;
+  refresh_token?: string;
+  expires_at?: number;
+}
+
 const getOidcConfig = memoize(
   async () => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -62,16 +69,16 @@ export function getSession() {
 }
 
 function updateUserSession(
-  user: any,
+  user: SessionUser,
   tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers
 ) {
-  user.claims = tokens.claims();
+  user.claims = tokens.claims() as Record<string, string | number | undefined>;
   user.access_token = tokens.access_token;
   user.refresh_token = tokens.refresh_token;
-  user.expires_at = user.claims?.exp;
+  user.expires_at = user.claims?.exp as number | undefined;
 }
 
-async function upsertUser(claims: any) {
+async function upsertUser(claims: Record<string, string | number | undefined>) {
   await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
@@ -96,7 +103,7 @@ export async function setupAuth(app: Express) {
     tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
     verified: passport.AuthenticateCallback
   ) => {
-    const user = {};
+    const user = {} as SessionUser;
     updateUserSession(user, tokens);
     await upsertUser(tokens.claims());
     verified(null, user);
@@ -137,7 +144,7 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  const user = req.user as any;
+  const user = req.user as SessionUser | undefined;
 
   if (!req.isAuthenticated() || !user.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });

@@ -88,7 +88,9 @@ var uploadedFiles = pgTable("uploaded_files", {
   // For bank files: FNB, ABSA, Standard Bank, Nedbank, Other
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   status: text("status").notNull().default("uploaded")
-});
+}, (table) => [
+  index("IDX_uploaded_files_period_id").on(table.periodId)
+]);
 var insertUploadedFileSchema = createInsertSchema(uploadedFiles).omit({
   id: true,
   uploadedAt: true
@@ -115,7 +117,11 @@ var transactions = pgTable("transactions", {
   matchStatus: text("match_status").notNull().default("unmatched"),
   matchId: varchar("match_id"),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => [
+  index("IDX_transactions_period_id").on(table.periodId),
+  index("IDX_transactions_file_id").on(table.fileId),
+  index("IDX_transactions_match_status").on(table.matchStatus)
+]);
 var insertTransactionSchema = createInsertSchema(transactions).omit({
   id: true,
   createdAt: true
@@ -128,7 +134,9 @@ var matches = pgTable("matches", {
   matchType: text("match_type").notNull(),
   matchConfidence: decimal("match_confidence", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => [
+  index("IDX_matches_period_id").on(table.periodId)
+]);
 var insertMatchSchema = createInsertSchema(matches).omit({
   id: true,
   createdAt: true
@@ -182,12 +190,15 @@ var transactionResolutions = pgTable("transaction_resolutions", {
   userName: text("user_name"),
   userEmail: text("user_email"),
   // For linked resolutions, the fuel transaction ID
-  linkedTransactionId: varchar("linked_transaction_id"),
+  linkedTransactionId: varchar("linked_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
   // For flagged resolutions, the assignee
   assignee: text("assignee"),
   // Timestamp
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => [
+  index("IDX_transaction_resolutions_transaction_id").on(table.transactionId),
+  index("IDX_transaction_resolutions_period_id").on(table.periodId)
+]);
 var insertTransactionResolutionSchema = createInsertSchema(transactionResolutions).omit({
   id: true,
   createdAt: true
@@ -1079,7 +1090,7 @@ var DataNormalizer = class {
     return isNegative ? `-${cleaned}` : cleaned;
   }
   // Normalize FNB date: "27 Nov" → "2025-11-27" (uses provided year)
-  static normalizeFNBDate(value, year = "2025") {
+  static normalizeFNBDate(value, year = String((/* @__PURE__ */ new Date()).getFullYear())) {
     if (!value) return "";
     const trimmed = String(value).trim();
     const match = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3})/);
@@ -2263,7 +2274,7 @@ var ReportGenerator = class {
     const doc = new jsPDF();
     const summary = this.calculateSummary(data);
     doc.setFontSize(18);
-    doc.text("Pieter's Pomp Stasie Reconner - Report", 14, 20);
+    doc.text("Reconciliation Report", 14, 20);
     doc.setFontSize(12);
     doc.text(`Period: ${data.period.name}`, 14, 30);
     doc.text(`${data.period.startDate} to ${data.period.endDate}`, 14, 37);
@@ -2331,7 +2342,7 @@ var ReportGenerator = class {
     const wb = XLSX2.utils.book_new();
     const summary = this.calculateSummary(data);
     const summaryData = [
-      ["Pieter's Pomp Stasie Reconner - Report"],
+      ["Reconciliation Report"],
       [`Period: ${data.period.name}`],
       [`${data.period.startDate} to ${data.period.endDate}`],
       [],
@@ -2397,7 +2408,7 @@ var ReportGenerator = class {
   }
   generateCSV(data) {
     const summary = this.calculateSummary(data);
-    let csv = "Pieter's Pomp Stasie Reconner - Report\n";
+    let csv = "Reconciliation Report\n";
     csv += `Period: ${data.period.name}
 `;
     csv += `${data.period.startDate} to ${data.period.endDate}

@@ -67,7 +67,9 @@ export const uploadedFiles = pgTable("uploaded_files", {
   bankName: text("bank_name"), // For bank files: FNB, ABSA, Standard Bank, Nedbank, Other
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   status: text("status").notNull().default("uploaded"),
-});
+}, (table) => [
+  index("IDX_uploaded_files_period_id").on(table.periodId),
+]);
 
 export const insertUploadedFileSchema = createInsertSchema(uploadedFiles).omit({
   id: true,
@@ -96,7 +98,11 @@ export const transactions = pgTable("transactions", {
   matchStatus: text("match_status").notNull().default("unmatched"),
   matchId: varchar("match_id"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_transactions_period_id").on(table.periodId),
+  index("IDX_transactions_file_id").on(table.fileId),
+  index("IDX_transactions_match_status").on(table.matchStatus),
+]);
 
 export const insertTransactionSchema = createInsertSchema(transactions).omit({
   id: true,
@@ -115,7 +121,9 @@ export const matches = pgTable("matches", {
   matchType: text("match_type").notNull(),
   matchConfidence: decimal("match_confidence", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_matches_period_id").on(table.periodId),
+]);
 
 export const insertMatchSchema = createInsertSchema(matches).omit({
   id: true,
@@ -197,14 +205,17 @@ export const transactionResolutions = pgTable("transaction_resolutions", {
   userEmail: text("user_email"),
   
   // For linked resolutions, the fuel transaction ID
-  linkedTransactionId: varchar("linked_transaction_id"),
+  linkedTransactionId: varchar("linked_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
   
   // For flagged resolutions, the assignee
   assignee: text("assignee"),
   
   // Timestamp
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_transaction_resolutions_transaction_id").on(table.transactionId),
+  index("IDX_transaction_resolutions_period_id").on(table.periodId),
+]);
 
 export const insertTransactionResolutionSchema = createInsertSchema(transactionResolutions).omit({
   id: true,

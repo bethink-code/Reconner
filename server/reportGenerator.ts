@@ -180,7 +180,7 @@ export class ReportGenerator {
     const summary = this.calculateSummary(data);
 
     doc.setFontSize(18);
-    doc.text("Pieter's Pomp Stasie Reconner - Report", 14, 20);
+    doc.text("Reconciliation Report", 14, 20);
 
     doc.setFontSize(12);
     doc.text(`Period: ${data.period.name}`, 14, 30);
@@ -261,7 +261,7 @@ export class ReportGenerator {
     const summary = this.calculateSummary(data);
 
     const summaryData = [
-      ["Pieter's Pomp Stasie Reconner - Report"],
+      ["Reconciliation Report"],
       [`Period: ${data.period.name}`],
       [`${data.period.startDate} to ${data.period.endDate}`],
       [],
@@ -338,7 +338,7 @@ export class ReportGenerator {
   generateCSV(data: ReportData): string {
     const summary = this.calculateSummary(data);
     
-    let csv = "Pieter's Pomp Stasie Reconner - Report\n";
+    let csv = "Reconciliation Report\n";
     csv += `Period: ${data.period.name}\n`;
     csv += `${data.period.startDate} to ${data.period.endDate}\n\n`;
     

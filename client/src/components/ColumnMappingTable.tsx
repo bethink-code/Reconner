@@ -29,7 +29,6 @@ export default function ColumnMappingTable({ source, columns: initialColumns, on
     const updated = [...columns];
     updated[index].mappedTo = value;
     setColumns(updated);
-    console.log(`Column "${updated[index].detectedColumn}" mapped to "${value}"`);
   };
 
   const allMapped = columns.every((col) => col.mappedTo !== "");
@@ -93,7 +92,6 @@ export default function ColumnMappingTable({ source, columns: initialColumns, on
             <Button
               disabled={!hasAllRequired}
               onClick={() => {
-                console.log('Mapping confirmed:', columns);
                 onMappingConfirm?.(columns);
               }}
               data-testid="button-confirm-mapping"

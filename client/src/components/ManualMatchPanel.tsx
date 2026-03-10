@@ -47,7 +47,6 @@ export default function ManualMatchPanel({
 
   const handleConfirmMatch = () => {
     if (selectedMatchId) {
-      console.log('Match confirmed:', { transactionId: transaction.id, matchId: selectedMatchId, notes });
       onMatch?.(transaction.id, selectedMatchId, notes);
       onClose?.();
     }
@@ -172,7 +171,6 @@ export default function ManualMatchPanel({
               variant="outline"
               className="w-full"
               onClick={() => {
-                console.log('Match rejected');
                 onReject?.();
               }}
               data-testid="button-reject-match"

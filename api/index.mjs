@@ -2408,74 +2408,51 @@ var ReportGenerator = class {
   }
   generateCSV(data) {
     const summary = this.calculateSummary(data);
-    let csv = "Reconciliation Report\n";
-    csv += `Period: ${data.period.name}
-`;
-    csv += `${data.period.startDate} to ${data.period.endDate}
-
-`;
-    csv += "Summary\n";
-    csv += "Metric,Value\n";
-    csv += `Total Transactions,${summary.totalTransactions}
-`;
-    csv += `Fuel Transactions (Total),${summary.fuelTransactions}
-`;
-    csv += `  - Card Transactions,${summary.cardFuelTransactions}
-`;
-    csv += `  - Cash Transactions,${summary.cashFuelTransactions}
-`;
-    csv += `Bank Transactions (Total),${summary.bankTransactions}
-`;
-    csv += `  - Matchable (within date range),${summary.bankTransactionsMatchable}
-`;
-    csv += `  - Unmatchable (outside date range),${summary.bankTransactionsUnmatchable}
-`;
-    csv += `Matched Pairs,${summary.matchedPairs}
-`;
-    csv += `Matched Transactions,${summary.matchedTransactions}
-`;
-    csv += `Bank Match Rate (of matchable),${summary.bankMatchRate.toFixed(2)}%
-`;
-    csv += `Card Match Rate,${summary.cardMatchRate.toFixed(2)}%
-`;
-    csv += `Card Fuel Amount,${summary.cardFuelAmount.toFixed(2)}
-`;
-    csv += `Cash Fuel Amount,${summary.cashFuelAmount.toFixed(2)}
-`;
-    csv += `Total Bank Amount,${summary.totalBankAmount.toFixed(2)}
-`;
-    csv += `Matchable Bank Amount,${summary.matchableBankAmount.toFixed(2)}
-`;
-    csv += `Unmatchable Bank Amount,${summary.unmatchableBankAmount.toFixed(2)}
-`;
-    csv += `Discrepancy (Card vs Matchable Bank),${summary.discrepancy.toFixed(2)}
-
-`;
-    csv += "All Transactions\n";
-    csv += "Date,Source,Payment Type,Amount,Reference,Description,Match Status\n";
-    data.transactions.forEach((t) => {
-      csv += `${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""},${t.matchStatus}
-`;
-    });
+    const lines = [];
+    lines.push("Reconciliation Report");
+    lines.push(`Period: ${data.period.name}`);
+    lines.push(`${data.period.startDate} to ${data.period.endDate}`, "");
+    lines.push("Summary");
+    lines.push("Metric,Value");
+    lines.push(`Total Transactions,${summary.totalTransactions}`);
+    lines.push(`Fuel Transactions (Total),${summary.fuelTransactions}`);
+    lines.push(`  - Card Transactions,${summary.cardFuelTransactions}`);
+    lines.push(`  - Cash Transactions,${summary.cashFuelTransactions}`);
+    lines.push(`Bank Transactions (Total),${summary.bankTransactions}`);
+    lines.push(`  - Matchable (within date range),${summary.bankTransactionsMatchable}`);
+    lines.push(`  - Unmatchable (outside date range),${summary.bankTransactionsUnmatchable}`);
+    lines.push(`Matched Pairs,${summary.matchedPairs}`);
+    lines.push(`Matched Transactions,${summary.matchedTransactions}`);
+    lines.push(`Bank Match Rate (of matchable),${summary.bankMatchRate.toFixed(2)}%`);
+    lines.push(`Card Match Rate,${summary.cardMatchRate.toFixed(2)}%`);
+    lines.push(`Card Fuel Amount,${summary.cardFuelAmount.toFixed(2)}`);
+    lines.push(`Cash Fuel Amount,${summary.cashFuelAmount.toFixed(2)}`);
+    lines.push(`Total Bank Amount,${summary.totalBankAmount.toFixed(2)}`);
+    lines.push(`Matchable Bank Amount,${summary.matchableBankAmount.toFixed(2)}`);
+    lines.push(`Unmatchable Bank Amount,${summary.unmatchableBankAmount.toFixed(2)}`);
+    lines.push(`Discrepancy (Card vs Matchable Bank),${summary.discrepancy.toFixed(2)}`, "");
+    lines.push("All Transactions");
+    lines.push("Date,Source,Payment Type,Amount,Reference,Description,Match Status");
+    for (const t of data.transactions) {
+      lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""},${t.matchStatus}`);
+    }
     const unmatchedTransactions = data.transactions.filter((t) => t.matchStatus === "unmatched");
     if (unmatchedTransactions.length > 0) {
-      csv += "\nUnmatched Transactions (within date range)\n";
-      csv += "Date,Source,Payment Type,Amount,Reference,Description\n";
-      unmatchedTransactions.forEach((t) => {
-        csv += `${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""}
-`;
-      });
+      lines.push("", "Unmatched Transactions (within date range)");
+      lines.push("Date,Source,Payment Type,Amount,Reference,Description");
+      for (const t of unmatchedTransactions) {
+        lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""}`);
+      }
     }
     const unmatchableTransactions = data.transactions.filter((t) => t.matchStatus === "unmatchable");
     if (unmatchableTransactions.length > 0) {
-      csv += "\nUnmatchable Transactions (outside fuel date range)\n";
-      csv += "Date,Source,Payment Type,Amount,Reference,Description\n";
-      unmatchableTransactions.forEach((t) => {
-        csv += `${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""}
-`;
-      });
+      lines.push("", "Unmatchable Transactions (outside fuel date range)");
+      lines.push("Date,Source,Payment Type,Amount,Reference,Description");
+      for (const t of unmatchableTransactions) {
+        lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""}`);
+      }
     }
-    return csv;
+    return lines.join("\n");
   }
 };
 var reportGenerator = new ReportGenerator();
@@ -3265,9 +3242,7 @@ async function registerRoutes(app2) {
   }
   app2.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
-      console.log("=== Starting Auto-Match with Invoice Grouping ===");
       const rules = await storage.getMatchingRules(req.params.periodId);
-      console.log("Matching rules:", rules);
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
       const fuelTransactions = transactions2.filter(
         (t) => t.sourceType === "fuel" && t.isCardTransaction === "yes" && t.matchStatus === "unmatched"
@@ -3275,7 +3250,6 @@ async function registerRoutes(app2) {
       const bankTransactions = transactions2.filter(
         (t) => t.sourceType && t.sourceType.startsWith("bank") && t.matchStatus === "unmatched"
       );
-      console.log(`Loaded: ${bankTransactions.length} unmatched bank, ${fuelTransactions.length} unmatched fuel transactions`);
       const fuelDates = fuelTransactions.map((t) => t.transactionDate).filter((d) => d && d.trim()).map((d) => new Date(d).getTime()).filter((d) => !isNaN(d));
       const bankDates = bankTransactions.map((t) => t.transactionDate).filter((d) => d && d.trim()).map((d) => new Date(d).getTime()).filter((d) => !isNaN(d));
       let unmatchableBankTransactions = [];
@@ -3295,7 +3269,6 @@ async function registerRoutes(app2) {
           const maxFuelDateStr = new Date(maxFuelDate).toISOString().split("T")[0];
           const minFuelDateStr = new Date(minFuelDate).toISOString().split("T")[0];
           dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
-          console.warn("Date Range Warning:", dateRangeWarning);
           for (const tx of unmatchableBankTransactions) {
             await storage.updateTransaction(tx.id, { matchStatus: "unmatchable", matchId: null });
           }
@@ -3304,24 +3277,32 @@ async function registerRoutes(app2) {
       const matchableBankTransactions = bankTransactions.filter(
         (t) => !unmatchableBankTransactions.includes(t)
       );
-      console.log(`Matchable: ${matchableBankTransactions.length} bank transactions (${unmatchableBankTransactions.length} outside date range)`);
       const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
-      console.log(`Grouped into ${fuelInvoices.length} invoices (groupByInvoice: ${rules.groupByInvoice})`);
-      const multiLine = fuelInvoices.filter((inv) => inv.items.length > 1).slice(0, 5);
-      if (multiLine.length > 0) {
-        console.log("Multi-line invoice examples:");
-        multiLine.forEach((inv) => {
-          console.log(`  Invoice ${inv.invoiceNumber}: ${inv.items.length} items = R${inv.totalAmount.toFixed(2)}`);
-        });
+      const invoicesByDate = /* @__PURE__ */ new Map();
+      for (const invoice of fuelInvoices) {
+        const dayKey = parseDateToDays(invoice.firstDate || "");
+        if (dayKey !== null) {
+          for (let offset = -1; offset <= rules.dateWindowDays; offset++) {
+            const key = dayKey + offset;
+            if (!invoicesByDate.has(key)) invoicesByDate.set(key, []);
+            invoicesByDate.get(key).push(invoice);
+          }
+        }
       }
       let matchCount = 0;
       let skippedNonCardCount = transactions2.filter(
         (t) => t.sourceType === "fuel" && t.isCardTransaction !== "yes"
       ).length;
       const matchedInvoices = /* @__PURE__ */ new Set();
+      const pendingUpdates = [];
       for (const bankTx of matchableBankTransactions) {
         let bestMatch = null;
-        for (const invoice of fuelInvoices) {
+        const bankDayKey = parseDateToDays(bankTx.transactionDate || "");
+        const candidateInvoices = bankDayKey !== null ? invoicesByDate.get(bankDayKey) || [] : fuelInvoices;
+        const seen = /* @__PURE__ */ new Set();
+        for (const invoice of candidateInvoices) {
+          if (seen.has(invoice.invoiceNumber)) continue;
+          seen.add(invoice.invoiceNumber);
           if (matchedInvoices.has(invoice.invoiceNumber)) continue;
           if (invoice.items.some((item) => item.matchStatus === "matched")) continue;
           const reasons = [];
@@ -3421,29 +3402,21 @@ async function registerRoutes(app2) {
             matchType,
             matchConfidence: String(bestMatch.confidence)
           });
-          await storage.updateTransaction(bankTx.id, {
-            matchStatus: "matched",
-            matchId: match.id
-          });
+          pendingUpdates.push({ id: bankTx.id, updates: { matchStatus: "matched", matchId: match.id } });
           for (const fuelItem of bestMatch.invoice.items) {
-            await storage.updateTransaction(fuelItem.id, {
-              matchStatus: "matched",
-              matchId: match.id
-            });
+            pendingUpdates.push({ id: fuelItem.id, updates: { matchStatus: "matched", matchId: match.id } });
           }
           matchedInvoices.add(bestMatch.invoice.invoiceNumber);
           matchCount++;
-          console.log(`Match: Bank R${parseFloat(bankTx.amount).toFixed(2)} \u2192 Invoice ${bestMatch.invoice.invoiceNumber} (${bestMatch.invoice.items.length} items = R${bestMatch.invoice.totalAmount.toFixed(2)}) [${bestMatch.confidence}%]`);
         }
+      }
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < pendingUpdates.length; i += BATCH_SIZE) {
+        const batch = pendingUpdates.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(({ id, updates }) => storage.updateTransaction(id, updates)));
       }
       const matchableCount = matchableBankTransactions.length;
       const matchRate = matchableCount > 0 ? (matchCount / matchableCount * 100).toFixed(1) : "0";
-      console.log(`
-=== Auto-Match Complete ===`);
-      console.log(`Matches: ${matchCount}/${matchableCount} matchable = ${matchRate}%`);
-      if (unmatchableBankTransactions.length > 0) {
-        console.log(`Unmatchable: ${unmatchableBankTransactions.length} bank transactions (outside fuel date range)`);
-      }
       res.json({
         success: true,
         matchesCreated: matchCount,

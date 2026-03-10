@@ -833,11 +833,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
-      console.log('=== Starting Auto-Match with Invoice Grouping ===');
-      
       // Get user-configured matching rules (or defaults)
       const rules = await storage.getMatchingRules(req.params.periodId);
-      console.log('Matching rules:', rules);
 
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
       
@@ -856,7 +853,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         t.matchStatus === 'unmatched'
       );
       
-      console.log(`Loaded: ${bankTransactions.length} unmatched bank, ${fuelTransactions.length} unmatched fuel transactions`);
 
       // *** DATE RANGE VALIDATION ***
       // Detect bank transactions that cannot be matched because no fuel data exists for those dates
@@ -894,8 +890,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const maxFuelDateStr = new Date(maxFuelDate).toISOString().split('T')[0];
           const minFuelDateStr = new Date(minFuelDate).toISOString().split('T')[0];
           dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
-          console.warn('Date Range Warning:', dateRangeWarning);
-          
           // Mark these as unmatchable (distinct from unmatched) and clear any stale match links
           for (const tx of unmatchableBankTransactions) {
             await storage.updateTransaction(tx.id, { matchStatus: 'unmatchable', matchId: null });
@@ -908,28 +902,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         t => !unmatchableBankTransactions.includes(t)
       );
       
-      console.log(`Matchable: ${matchableBankTransactions.length} bank transactions (${unmatchableBankTransactions.length} outside date range)`);
 
       // *** KEY STEP: Group fuel by invoice ***
       const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
-      console.log(`Grouped into ${fuelInvoices.length} invoices (groupByInvoice: ${rules.groupByInvoice})`);
 
-      // Log multi-line invoice examples
-      const multiLine = fuelInvoices.filter(inv => inv.items.length > 1).slice(0, 5);
-      if (multiLine.length > 0) {
-        console.log('Multi-line invoice examples:');
-        multiLine.forEach(inv => {
-          console.log(`  Invoice ${inv.invoiceNumber}: ${inv.items.length} items = R${inv.totalAmount.toFixed(2)}`);
-        });
+      // Pre-index invoices by date bucket for O(1) lookup per date
+      const invoicesByDate = new Map<number, FuelInvoice[]>();
+      for (const invoice of fuelInvoices) {
+        const dayKey = parseDateToDays(invoice.firstDate || '');
+        if (dayKey !== null) {
+          // Index into each day within the matching window
+          for (let offset = -1; offset <= rules.dateWindowDays; offset++) {
+            const key = dayKey + offset;
+            if (!invoicesByDate.has(key)) invoicesByDate.set(key, []);
+            invoicesByDate.get(key)!.push(invoice);
+          }
+        }
       }
 
       let matchCount = 0;
-      let skippedNonCardCount = transactions.filter(t => 
+      let skippedNonCardCount = transactions.filter(t =>
         t.sourceType === 'fuel' && t.isCardTransaction !== 'yes'
       ).length;
 
       // Track matched invoices to avoid double-matching
       const matchedInvoices = new Set<string>();
+
+      // Collect transaction updates for batching
+      const pendingUpdates: Array<{ id: string; updates: Record<string, unknown> }> = [];
 
       // Match bank transactions to invoices (only matchable ones)
       for (const bankTx of matchableBankTransactions) {
@@ -942,7 +942,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reasons: string[];
         } | null = null;
 
-        for (const invoice of fuelInvoices) {
+        // Look up candidate invoices by bank transaction date
+        const bankDayKey = parseDateToDays(bankTx.transactionDate || '');
+        const candidateInvoices = bankDayKey !== null ? (invoicesByDate.get(bankDayKey) || []) : fuelInvoices;
+        // Deduplicate candidates (same invoice may appear in multiple date buckets)
+        const seen = new Set<string>();
+
+        for (const invoice of candidateInvoices) {
+          if (seen.has(invoice.invoiceNumber)) continue;
+          seen.add(invoice.invoiceNumber);
           // Skip if already matched
           if (matchedInvoices.has(invoice.invoiceNumber)) continue;
           if (invoice.items.some(item => item.matchStatus === 'matched')) continue;
@@ -1091,38 +1099,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
             matchConfidence: String(bestMatch.confidence),
           });
 
-          // Update bank transaction
-          await storage.updateTransaction(bankTx.id, {
-            matchStatus: 'matched',
-            matchId: match.id
-          });
-
-          // Update ALL fuel transactions in the invoice
+          // Collect updates for batching
+          pendingUpdates.push({ id: bankTx.id, updates: { matchStatus: 'matched', matchId: match.id } });
           for (const fuelItem of bestMatch.invoice.items) {
-            await storage.updateTransaction(fuelItem.id, {
-              matchStatus: 'matched',
-              matchId: match.id
-            });
+            pendingUpdates.push({ id: fuelItem.id, updates: { matchStatus: 'matched', matchId: match.id } });
           }
 
           matchedInvoices.add(bestMatch.invoice.invoiceNumber);
           matchCount++;
-
-          console.log(`Match: Bank R${parseFloat(bankTx.amount).toFixed(2)} → Invoice ${bestMatch.invoice.invoiceNumber} (${bestMatch.invoice.items.length} items = R${bestMatch.invoice.totalAmount.toFixed(2)}) [${bestMatch.confidence}%]`);
         }
+      }
+
+      // Flush all pending transaction updates in parallel batches
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < pendingUpdates.length; i += BATCH_SIZE) {
+        const batch = pendingUpdates.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(({ id, updates }) => storage.updateTransaction(id, updates)));
       }
 
       // Calculate match rate based on matchable transactions (excluding unmatchable)
       const matchableCount = matchableBankTransactions.length;
-      const matchRate = matchableCount > 0 
-        ? ((matchCount / matchableCount) * 100).toFixed(1) 
+      const matchRate = matchableCount > 0
+        ? ((matchCount / matchableCount) * 100).toFixed(1)
         : '0';
-
-      console.log(`\n=== Auto-Match Complete ===`);
-      console.log(`Matches: ${matchCount}/${matchableCount} matchable = ${matchRate}%`);
-      if (unmatchableBankTransactions.length > 0) {
-        console.log(`Unmatchable: ${unmatchableBankTransactions.length} bank transactions (outside fuel date range)`);
-      }
 
       res.json({ 
         success: true, 

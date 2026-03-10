@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield } from "lucide-react";
@@ -12,6 +13,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -23,13 +34,14 @@ interface DisplayPeriod {
   name: string;
   dateRange: string;
   status: "draft" | "in_progress" | "complete";
-  progress: number;
   lastModified: string;
 }
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const [deleteTarget, setDeleteTarget] = useState<DisplayPeriod | null>(null);
+
   const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
     queryKey: ["/api/periods"],
   });
@@ -40,6 +52,7 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
+      setDeleteTarget(null);
     },
   });
 
@@ -48,8 +61,7 @@ export default function Dashboard() {
     name: period.name,
     dateRange: `${period.startDate} to ${period.endDate}`,
     status: period.status as "draft" | "in_progress" | "complete",
-    progress: 0,
-    lastModified: period.updatedAt ? new Date(period.updatedAt).toLocaleDateString() : 
+    lastModified: period.updatedAt ? new Date(period.updatedAt).toLocaleDateString() :
                    new Date(period.createdAt!).toLocaleDateString(),
   }));
 
@@ -67,12 +79,6 @@ export default function Dashboard() {
 
   const handleViewReport = (id: string) => {
     setLocation(`/report?periodId=${id}`);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this period? This will also delete all associated files and transactions.")) {
-      deleteMutation.mutate(id);
-    }
   };
 
   return (
@@ -94,7 +100,7 @@ export default function Dashboard() {
                   New Reconciliation
                 </Button>
               </Link>
-              
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-user-menu">
@@ -151,9 +157,9 @@ export default function Dashboard() {
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <PeriodCard title="Total Periods" value={displayPeriods.length} icon="total" />
-          <PeriodCard 
-            title="Completed" 
-            value={completedCount} 
+          <PeriodCard
+            title="Completed"
+            value={completedCount}
             icon="complete"
             subtitle={displayPeriods.length > 0 ? `${Math.round((completedCount / displayPeriods.length) * 100)}% of total` : undefined}
           />
@@ -197,8 +203,8 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {displayPeriods.map((period) => (
-                      <tr 
-                        key={period.id} 
+                      <tr
+                        key={period.id}
                         className="border-b hover-elevate"
                         data-testid={`row-period-${period.id}`}
                       >
@@ -220,8 +226,8 @@ export default function Dashboard() {
                         <td className="p-4 text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button 
-                                variant="ghost" 
+                              <Button
+                                variant="ghost"
                                 size="icon"
                                 data-testid={`button-actions-${period.id}`}
                               >
@@ -243,9 +249,9 @@ export default function Dashboard() {
                                 Export Report
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 className="text-destructive"
-                                onClick={() => handleDelete(period.id)}
+                                onClick={() => setDeleteTarget(period)}
                                 data-testid={`button-delete-${period.id}`}
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
@@ -264,6 +270,27 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Reconciliation Period</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteTarget?.name}"? This will permanently delete all associated files, transactions, and matches. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Delete Period
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

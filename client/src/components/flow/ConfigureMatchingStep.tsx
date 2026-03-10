@@ -127,7 +127,7 @@ export function ConfigureMatchingStep({
 
   const saveMutation = useMutation({
     mutationFn: async (rules: MatchingRules) => {
-      const response = await apiRequest("PUT", `/api/periods/${periodId}/matching-rules`, rules);
+      const response = await apiRequest("POST", `/api/periods/${periodId}/matching-rules`, rules);
       return response;
     },
     onSuccess: () => {

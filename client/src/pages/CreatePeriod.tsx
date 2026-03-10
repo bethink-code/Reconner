@@ -44,8 +44,13 @@ export default function CreatePeriod() {
     },
   });
 
+  const dateError = formData.startDate && formData.endDate && formData.endDate < formData.startDate
+    ? "End date must be on or after the start date"
+    : "";
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (dateError) return;
     createPeriodMutation.mutate(formData);
   };
 
@@ -129,6 +134,9 @@ export default function CreatePeriod() {
                   />
                 </div>
               </div>
+              {dateError && (
+                <p className="text-sm text-destructive">{dateError}</p>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <Link href="/" className="flex-1">
@@ -142,10 +150,10 @@ export default function CreatePeriod() {
                     Cancel
                   </Button>
                 </Link>
-                <Button 
-                  type="submit" 
-                  className="flex-1" 
-                  disabled={createPeriodMutation.isPending}
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={createPeriodMutation.isPending || !!dateError}
                   data-testid="button-create-and-continue"
                 >
                   {createPeriodMutation.isPending ? "Creating..." : "Create & Continue"}

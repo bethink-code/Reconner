@@ -215,7 +215,7 @@ export default function ReportView() {
       <header className="border-b bg-card sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-wrap items-center gap-4">
-            <Link href={`/reconcile?periodId=${periodId}`}>
+            <Link href={`/flow/${periodId}`}>
               <Button variant="ghost" size="icon" data-testid="button-back">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -567,7 +567,7 @@ export default function ReportView() {
                 <div className="mt-6 p-4 rounded-lg border border-chart-1/30 bg-chart-1/5">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-medium">Matching Issues (Review Required)</h4>
-                    <Link href={`/reconcile?periodId=${periodId}&filter=unmatched`}>
+                    <Link href={`/investigate?periodId=${periodId}`}>
                       <Button variant="outline" size="sm" data-testid="button-review-unmatched">
                         <Eye className="h-4 w-4 mr-2" />
                         Review Unmatched
@@ -707,7 +707,7 @@ export default function ReportView() {
                         ))}
                       </ul>
                       {action.action === 'upload_bank_statements' && (
-                        <Link href={`/upload?periodId=${periodId}`}>
+                        <Link href={`/flow/${periodId}`}>
                           <Button variant="destructive" size="sm" data-testid="button-upload-bank">
                             <Upload className="h-4 w-4 mr-2" />
                             Upload Bank Files
@@ -734,7 +734,7 @@ export default function ReportView() {
                         ))}
                       </ul>
                       {action.action === 'review_unmatched' && (
-                        <Link href={`/reconcile?periodId=${periodId}&filter=unmatched`}>
+                        <Link href={`/investigate?periodId=${periodId}`}>
                           <Button variant="outline" size="sm" data-testid="button-review-unmatched-action">
                             <Eye className="h-4 w-4 mr-2" />
                             Review Unmatched
@@ -742,7 +742,7 @@ export default function ReportView() {
                         </Link>
                       )}
                       {action.action === 'adjust_rules' && (
-                        <Link href={`/reconcile?periodId=${periodId}`}>
+                        <Link href={`/flow/${periodId}`}>
                           <Button variant="outline" size="sm" data-testid="button-adjust-rules">
                             <Settings className="h-4 w-4 mr-2" />
                             Configure Rules
@@ -769,7 +769,7 @@ export default function ReportView() {
                         ))}
                       </ul>
                       {action.action === 'adjust_rules' && (
-                        <Link href={`/reconcile?periodId=${periodId}`}>
+                        <Link href={`/flow/${periodId}`}>
                           <Button variant="ghost" size="sm" data-testid="button-configure-rules">
                             <Settings className="h-4 w-4 mr-2" />
                             Configure Rules

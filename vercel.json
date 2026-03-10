@@ -1,5 +1,5 @@
 {
-  "buildCommand": "vite build && esbuild api/index.ts --platform=node --packages=external --bundle --format=esm --outdir=api --out-extension:.js=.mjs --alias:@shared=./shared",
+  "buildCommand": "vite build",
   "outputDirectory": "dist/public",
   "functions": {
     "api/index.mjs": {

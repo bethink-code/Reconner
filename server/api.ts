@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
 
 const app = express();
 
@@ -21,7 +22,6 @@ let initError: Error | null = null;
 
 const readyPromise = (async () => {
   try {
-    const { registerRoutes } = await import("../server/routes");
     await registerRoutes(app);
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -45,7 +45,7 @@ export default async function handler(req: any, res: any) {
     res.status(500).json({
       error: "Server initialization failed",
       message: initError.message,
-      stack: initError.stack
+      stack: initError.stack,
     });
     return;
   }

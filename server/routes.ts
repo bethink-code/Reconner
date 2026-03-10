@@ -7,7 +7,7 @@ import { fileParser, DataNormalizer, SOURCE_PRESETS } from "./fileParser";
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
 import { reportGenerator } from "./reportGenerator";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated } from "./auth";
 import { 
   insertReconciliationPeriodSchema,
   insertUploadedFileSchema,

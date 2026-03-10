@@ -42,11 +42,7 @@ export default async function handler(req: any, res: any) {
     await readyPromise;
   }
   if (initError) {
-    res.status(500).json({
-      error: "Server initialization failed",
-      message: initError.message,
-      stack: initError.stack,
-    });
+    res.status(500).json({ error: "Server initialization failed" });
     return;
   }
   return app(req, res);

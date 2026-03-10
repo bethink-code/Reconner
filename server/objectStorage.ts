@@ -24,12 +24,20 @@ export class ObjectStorageService {
     }
   }
 
+  private safePath(objectPath: string): string {
+    const resolved = path.resolve(this.localStorageDir, objectPath);
+    if (!resolved.startsWith(path.resolve(this.localStorageDir))) {
+      throw new Error("Invalid file path");
+    }
+    return resolved;
+  }
+
   async uploadFile(buffer: Buffer, fileName: string, contentType: string): Promise<string> {
     const fileId = randomUUID();
     const uploadDir = path.join(this.localStorageDir, fileId);
     this.ensureDir(uploadDir);
 
-    const filePath = path.join(uploadDir, fileName);
+    const filePath = this.safePath(`${fileId}/${fileName}`);
     fs.writeFileSync(filePath, buffer);
 
     // Store metadata
@@ -40,7 +48,7 @@ export class ObjectStorageService {
 
   async downloadFile(objectPath: string, res: Response) {
     try {
-      const filePath = path.join(this.localStorageDir, objectPath);
+      const filePath = this.safePath(objectPath);
       if (!fs.existsSync(filePath)) {
         throw new ObjectNotFoundError();
       }
@@ -80,7 +88,7 @@ export class ObjectStorageService {
   }
 
   async getFile(objectPath: string): Promise<{ download: () => Promise<[Buffer]> }> {
-    const filePath = path.join(this.localStorageDir, objectPath);
+    const filePath = this.safePath(objectPath);
     if (!fs.existsSync(filePath)) {
       throw new ObjectNotFoundError();
     }
@@ -91,7 +99,7 @@ export class ObjectStorageService {
 
   async deleteFile(objectPath: string): Promise<void> {
     try {
-      const filePath = path.join(this.localStorageDir, objectPath);
+      const filePath = this.safePath(objectPath);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
         const metaPath = filePath + ".meta";

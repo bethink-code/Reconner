@@ -2086,18 +2086,25 @@ var ObjectStorageService = class {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
+  safePath(objectPath) {
+    const resolved = path.resolve(this.localStorageDir, objectPath);
+    if (!resolved.startsWith(path.resolve(this.localStorageDir))) {
+      throw new Error("Invalid file path");
+    }
+    return resolved;
+  }
   async uploadFile(buffer, fileName, contentType) {
     const fileId = randomUUID();
     const uploadDir = path.join(this.localStorageDir, fileId);
     this.ensureDir(uploadDir);
-    const filePath = path.join(uploadDir, fileName);
+    const filePath = this.safePath(`${fileId}/${fileName}`);
     fs.writeFileSync(filePath, buffer);
     fs.writeFileSync(filePath + ".meta", JSON.stringify({ contentType }));
     return `${fileId}/${fileName}`;
   }
   async downloadFile(objectPath, res) {
     try {
-      const filePath = path.join(this.localStorageDir, objectPath);
+      const filePath = this.safePath(objectPath);
       if (!fs.existsSync(filePath)) {
         throw new ObjectNotFoundError();
       }
@@ -2133,7 +2140,7 @@ var ObjectStorageService = class {
     }
   }
   async getFile(objectPath) {
-    const filePath = path.join(this.localStorageDir, objectPath);
+    const filePath = this.safePath(objectPath);
     if (!fs.existsSync(filePath)) {
       throw new ObjectNotFoundError();
     }
@@ -2143,7 +2150,7 @@ var ObjectStorageService = class {
   }
   async deleteFile(objectPath) {
     try {
-      const filePath = path.join(this.localStorageDir, objectPath);
+      const filePath = this.safePath(objectPath);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
         const metaPath = filePath + ".meta";
@@ -2487,6 +2494,16 @@ var getOidcConfig = memoize(
   },
   { maxAge: 3600 * 1e3 }
 );
+function getSessionSecret() {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET environment variable is required in production");
+    }
+    return "dev-only-insecure-secret";
+  }
+  return secret;
+}
 function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1e3;
   const pgStore = connectPg(session);
@@ -2497,13 +2514,14 @@ function getSession() {
     tableName: "sessions"
   });
   return session({
-    secret: process.env.SESSION_SECRET || "dev-secret-change-me",
+    secret: getSessionSecret(),
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: sessionTtl
     }
   });
@@ -3863,11 +3881,7 @@ async function handler(req, res) {
     await readyPromise;
   }
   if (initError) {
-    res.status(500).json({
-      error: "Server initialization failed",
-      message: initError.message,
-      stack: initError.stack
-    });
+    res.status(500).json({ error: "Server initialization failed" });
     return;
   }
   return app(req, res);

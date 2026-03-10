@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -82,6 +83,7 @@ export default function InvestigateTransactions() {
   const { toast } = useToast();
   const [periodId, setPeriodId] = useState<string>("");
   const [filterMode, setFilterMode] = useState<'all' | 'flagged'>('all');
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState<string>("");
   const [resolutionNotes, setResolutionNotes] = useState<string>("");
@@ -293,6 +295,23 @@ export default function InvestigateTransactions() {
       .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
   }, [unmatchedData, fuelData, resolvedIds]);
 
+  // Filter by search query
+  const filteredTransactions = useMemo(() => {
+    if (!searchQuery.trim()) return categorizedTransactions;
+    const q = searchQuery.toLowerCase().trim();
+    return categorizedTransactions.filter(ct => {
+      const txn = ct.transaction;
+      const amount = parseFloat(txn.amount).toFixed(2);
+      return (
+        txn.description?.toLowerCase().includes(q) ||
+        txn.reference?.toLowerCase().includes(q) ||
+        txn.sourceName?.toLowerCase().includes(q) ||
+        amount.includes(q) ||
+        formatDate(txn.transactionDate).toLowerCase().includes(q)
+      );
+    });
+  }, [categorizedTransactions, searchQuery]);
+
   // Group by category
   const groupedTransactions = useMemo(() => {
     const groups: Record<CategorizedTransaction['category'], CategorizedTransaction[]> = {
@@ -301,11 +320,11 @@ export default function InvestigateTransactions() {
       no_match: [],
       low_value: [],
     };
-    categorizedTransactions.forEach(ct => {
+    filteredTransactions.forEach(ct => {
       groups[ct.category].push(ct);
     });
     return groups;
-  }, [categorizedTransactions]);
+  }, [filteredTransactions]);
 
   const totalUnresolved = categorizedTransactions.length;
   const totalResolved = resolvedIds.size;
@@ -824,6 +843,43 @@ export default function InvestigateTransactions() {
             )
           ) : (
             <>
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by amount, description, reference, or date..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-transactions"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                    onClick={() => setSearchQuery("")}
+                    data-testid="button-clear-search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+
+              {searchQuery && filteredTransactions.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6 pb-6 text-center">
+                    <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      No transactions match "{searchQuery}"
+                    </p>
+                    <Button variant="link" size="sm" onClick={() => setSearchQuery("")}>
+                      Clear search
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+              <>
               {/* Category Sections */}
               {(['quick_win', 'investigate', 'no_match', 'low_value'] as const).map((category) => {
                 const items = groupedTransactions[category];
@@ -1205,6 +1261,8 @@ export default function InvestigateTransactions() {
               })}
             </>
           )}
+              </>
+              )}
             </>
           )}
         </div>

@@ -377,9 +377,12 @@ export default function ReportView() {
                       <Clock className="h-5 w-5 text-yellow-600" />
                       <span className="font-semibold">Pending Verification (Bank Missing)</span>
                     </div>
-                    <Badge variant="outline" className="text-yellow-600 border-yellow-600/30">
-                      No bank data
-                    </Badge>
+                    <Link href={`/flow/${periodId}`}>
+                      <Button variant="outline" size="sm" className="text-yellow-700 border-yellow-600/30" data-testid="button-upload-missing-bank">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Bank Data
+                      </Button>
+                    </Link>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <span data-testid="text-pending-transactions">{vs?.pendingVerification.transactions ?? 0} transactions</span>
@@ -397,13 +400,19 @@ export default function ReportView() {
                       <XCircle className="h-5 w-5 text-chart-1" />
                       <span className="font-semibold">Unverified (No Match in Bank)</span>
                     </div>
-                    <span className="text-lg font-bold text-chart-1" data-testid="text-unverified-percentage">
-                      {(vs?.unverified.percentage ?? 0).toFixed(1)}%
-                    </span>
+                    <Link href={`/investigate?periodId=${periodId}`}>
+                      <Button variant="outline" size="sm" className="text-chart-1 border-chart-1/30" data-testid="button-review-unverified">
+                        <Eye className="h-4 w-4 mr-2" />
+                        Review ({vs?.unverified.transactions ?? 0})
+                      </Button>
+                    </Link>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <span data-testid="text-unverified-transactions">{vs?.unverified.transactions ?? 0} transactions</span>
                     <span className="font-mono">{formatCurrency(vs?.unverified.amount ?? 0)}</span>
+                    <span className="text-lg font-bold text-chart-1 ml-auto" data-testid="text-unverified-percentage">
+                      {(vs?.unverified.percentage ?? 0).toFixed(1)}%
+                    </span>
                   </div>
                 </div>
               )}
@@ -555,9 +564,13 @@ export default function ReportView() {
                   <p className="text-sm text-muted-foreground">
                     {(dr?.pendingVerification.percentageOfCardSales ?? 0).toFixed(1)}% of card sales • {dr?.pendingVerification.transactions ?? 0} transactions
                   </p>
-                  <div className="mt-3 flex items-center gap-2 text-xs text-yellow-700">
-                    <AlertTriangle className="h-4 w-4" />
-                    Action Required: Upload additional bank statements
+                  <div className="mt-3">
+                    <Link href={`/flow/${periodId}`}>
+                      <Button variant="outline" size="sm" className="text-yellow-700 border-yellow-600/30" data-testid="button-upload-additional-bank">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Additional Bank Statements
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -621,7 +634,15 @@ export default function ReportView() {
                 <div className="mt-4 text-sm text-muted-foreground">
                   Of {(mr?.bankTransactions.matched ?? 0) + (mr?.bankTransactions.unmatched ?? 0)} Bank Transactions:
                   <span className="text-chart-2 ml-2">Matched: {mr?.bankTransactions.matched ?? 0}</span>
-                  <span className="text-chart-1 ml-2">Unmatched: {mr?.bankTransactions.unmatched ?? 0}</span>
+                  {(mr?.bankTransactions.unmatched ?? 0) > 0 ? (
+                    <Link href={`/investigate?periodId=${periodId}`}>
+                      <span className="text-chart-1 ml-2 underline hover:no-underline cursor-pointer">
+                        Unmatched: {mr?.bankTransactions.unmatched ?? 0}
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="text-chart-1 ml-2">Unmatched: {mr?.bankTransactions.unmatched ?? 0}</span>
+                  )}
                 </div>
                 {(mr?.bankTransactions.matchRate ?? 0) >= 70 && (
                   <p className="text-xs text-chart-2 mt-2">

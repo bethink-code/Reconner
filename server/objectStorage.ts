@@ -15,7 +15,11 @@ export class ObjectStorageService {
   private localStorageDir: string;
 
   constructor() {
-    this.localStorageDir = process.env.PRIVATE_OBJECT_DIR || path.join(process.cwd(), "uploads");
+    // On Vercel, process.cwd() is read-only /var/task — use /tmp instead
+    const defaultDir = process.env.NODE_ENV === 'production'
+      ? '/tmp/uploads'
+      : path.join(process.cwd(), 'uploads');
+    this.localStorageDir = process.env.PRIVATE_OBJECT_DIR || defaultDir;
   }
 
   private ensureDir(dir: string) {

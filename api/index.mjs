@@ -2447,7 +2447,8 @@ var ObjectNotFoundError = class _ObjectNotFoundError extends Error {
 var ObjectStorageService = class {
   localStorageDir;
   constructor() {
-    this.localStorageDir = process.env.PRIVATE_OBJECT_DIR || path.join(process.cwd(), "uploads");
+    const defaultDir = process.env.NODE_ENV === "production" ? "/tmp/uploads" : path.join(process.cwd(), "uploads");
+    this.localStorageDir = process.env.PRIVATE_OBJECT_DIR || defaultDir;
   }
   ensureDir(dir) {
     if (!fs.existsSync(dir)) {

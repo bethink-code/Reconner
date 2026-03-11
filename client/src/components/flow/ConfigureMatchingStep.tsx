@@ -25,8 +25,8 @@ interface MatchingRules {
   dateWindowDays: number;
   timeWindowMinutes: number;
   requireCardMatch: boolean;
-  invoiceGrouping: boolean;
-  minConfidence: number;
+  groupByInvoice: boolean;
+  minimumConfidence: number;
   autoMatchThreshold: number;
 }
 
@@ -52,9 +52,9 @@ const PRESETS: PresetConfig[] = [
       amountTolerance: 0.01,
       dateWindowDays: 1,
       timeWindowMinutes: 480,
-      minConfidence: 90,
+      minimumConfidence: 90,
       autoMatchThreshold: 95,
-      invoiceGrouping: true,
+      groupByInvoice: true,
       requireCardMatch: false,
     },
   },
@@ -69,9 +69,9 @@ const PRESETS: PresetConfig[] = [
       amountTolerance: 1.0,
       dateWindowDays: 3,
       timeWindowMinutes: 720,
-      minConfidence: 60,
+      minimumConfidence: 60,
       autoMatchThreshold: 85,
-      invoiceGrouping: true,
+      groupByInvoice: true,
       requireCardMatch: false,
     },
   },
@@ -86,9 +86,9 @@ const PRESETS: PresetConfig[] = [
       amountTolerance: 2.0,
       dateWindowDays: 5,
       timeWindowMinutes: 1440,
-      minConfidence: 50,
+      minimumConfidence: 50,
       autoMatchThreshold: 75,
-      invoiceGrouping: true,
+      groupByInvoice: true,
       requireCardMatch: false,
     },
   },
@@ -115,8 +115,8 @@ export function ConfigureMatchingStep({
     dateWindowDays: 3,
     timeWindowMinutes: 720,
     requireCardMatch: false,
-    invoiceGrouping: true,
-    minConfidence: 60,
+    groupByInvoice: true,
+    minimumConfidence: 60,
     autoMatchThreshold: 85,
   });
 
@@ -301,19 +301,19 @@ export function ConfigureMatchingStep({
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Minimum Confidence</Label>
-                    <span className="text-sm font-mono">{customRules.minConfidence}%</span>
+                    <Label>Match Quality Threshold</Label>
+                    <span className="text-sm font-mono">{customRules.minimumConfidence}%</span>
                   </div>
                   <Slider
-                    value={[customRules.minConfidence]}
-                    onValueChange={([v]) => updateRule("minConfidence", v)}
+                    value={[customRules.minimumConfidence]}
+                    onValueChange={([v]) => updateRule("minimumConfidence", v)}
                     min={40}
                     max={95}
                     step={5}
                     data-testid="slider-min-confidence"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Matches below this confidence are ignored.
+                    How sure should we be before pairing a fuel sale with a bank transaction? Lower = more matches but less accurate. Higher = fewer but more reliable.
                   </p>
                 </div>
 
@@ -325,8 +325,8 @@ export function ConfigureMatchingStep({
                     </p>
                   </div>
                   <Switch
-                    checked={customRules.invoiceGrouping}
-                    onCheckedChange={(v) => updateRule("invoiceGrouping", v)}
+                    checked={customRules.groupByInvoice}
+                    onCheckedChange={(v) => updateRule("groupByInvoice", v)}
                     data-testid="switch-invoice-grouping"
                   />
                 </div>

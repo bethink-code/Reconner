@@ -3,15 +3,26 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Fuel, 
-  Upload, 
-  FileSpreadsheet, 
-  Check, 
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Fuel,
+  Upload,
+  FileSpreadsheet,
+  Check,
   AlertCircle,
   ArrowRight,
+  ArrowLeft,
   RefreshCw,
-  Lightbulb
+  Lightbulb,
+  Columns,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
@@ -206,8 +217,52 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
   };
 
   const handleQualityContinue = () => {
+    setSubStep("mapping");
+  };
+
+  const handleMappingConfirm = () => {
     processMutation.mutate();
   };
+
+  const FIELD_LABELS: Record<string, string> = {
+    date: "Date",
+    time: "Time",
+    amount: "Amount",
+    reference: "Reference",
+    description: "Description",
+    cardNumber: "Card Number",
+    ignore: "Ignore",
+  };
+
+  const FIELD_OPTIONS = [
+    { value: "date", label: "Date" },
+    { value: "time", label: "Time" },
+    { value: "amount", label: "Amount" },
+    { value: "reference", label: "Reference" },
+    { value: "description", label: "Description" },
+    { value: "cardNumber", label: "Card Number" },
+    { value: "ignore", label: "Ignore" },
+  ];
+
+  const updateMapping = (columnName: string, newField: string) => {
+    setSuggestedMappings((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      updated[columnName] = newField;
+      return updated;
+    });
+  };
+
+  const [showIgnored, setShowIgnored] = useState(false);
+
+  const mappedFields = suggestedMappings
+    ? Object.entries(suggestedMappings).filter(([_, field]) => field !== "ignore")
+    : [];
+  const ignoredCount = suggestedMappings
+    ? Object.values(suggestedMappings).filter((f) => f === "ignore").length
+    : 0;
+  const hasDate = mappedFields.some(([_, f]) => f === "date");
+  const hasAmount = mappedFields.some(([_, f]) => f === "amount");
 
   if (subStep === "complete") {
     return (
@@ -253,6 +308,121 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
           </Button>
         </CardContent>
       </Card>
+    );
+  }
+
+  if (subStep === "mapping" && suggestedMappings) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <Card data-testid="card-column-mapping">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Columns className="h-5 w-5 text-primary" />
+              Confirm Column Mapping
+            </CardTitle>
+            <CardDescription>
+              We detected these columns from your file. Review and adjust if needed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {mappedFields.length} mapped, {ignoredCount} ignored
+              </p>
+              {ignoredCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowIgnored(!showIgnored)}
+                  className="text-xs h-7"
+                >
+                  {showIgnored ? "Hide" : "Show"} ignored ({ignoredCount})
+                </Button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {Object.entries(suggestedMappings)
+                .filter(([_, fieldType]) => showIgnored || fieldType !== "ignore")
+                .map(([columnName, fieldType]) => (
+                <div
+                  key={columnName}
+                  className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                    fieldType !== "ignore"
+                      ? "bg-primary/5 border border-primary/20"
+                      : "bg-muted/20 opacity-60"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm truncate ${
+                      fieldType !== "ignore" ? "font-medium" : "text-muted-foreground"
+                    }`}>{columnName}</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="w-40">
+                    <Select
+                      value={fieldType}
+                      onValueChange={(value) => updateMapping(columnName, value)}
+                    >
+                      <SelectTrigger className="h-8 text-sm" data-testid={`select-mapping-${columnName}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FIELD_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {(!hasDate || !hasAmount) && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>
+                  {!hasDate && !hasAmount
+                    ? "Date and Amount columns are required."
+                    : !hasDate
+                    ? "A Date column is required."
+                    : "An Amount column is required."}
+                </span>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setSubStep("quality")}
+                data-testid="button-back-quality"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleMappingConfirm}
+                disabled={!hasDate || !hasAmount || processMutation.isPending}
+                data-testid="button-confirm-mapping"
+              >
+                {processMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    Confirm & Process
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -335,7 +505,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
             </p>
             <input
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.xls,.csv,.txt"
               onChange={handleFileSelect}
               className="hidden"
               id="fuel-upload"

@@ -4,7 +4,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { ReconciliationStepper, type ReconciliationStep, type StepEligibility } from "@/components/ReconciliationStepper";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -30,7 +31,18 @@ export default function ReconciliationFlow() {
   const [currentStep, setCurrentStep] = useState<ReconciliationStep>("fuel");
   const [completedSteps, setCompletedSteps] = useState<ReconciliationStep[]>([]);
   const [isAutoMatching, setIsAutoMatching] = useState(false);
-  
+  const [matchResult, setMatchResult] = useState<{
+    matchesCreated: number;
+    bankTransactionsTotal: number;
+    bankTransactionsMatchable: number;
+    bankTransactionsUnmatchable: number;
+    cardTransactionsProcessed: number;
+    invoicesCreated: number;
+    matchRate: string;
+    warnings: string[];
+  } | null>(null);
+  const [txCounts, setTxCounts] = useState<{ bank: number; fuel: number } | null>(null);
+
   const [bankSubStep, setBankSubStep] = useState<BankSubStep>("status");
   const [currentBankName, setCurrentBankName] = useState<string>("");
   const [replacingFileId, setReplacingFileId] = useState<string | null>(null);
@@ -55,6 +67,18 @@ export default function ReconciliationFlow() {
   const autoMatchMutation = useMutation({
     mutationFn: async () => {
       setIsAutoMatching(true);
+      setMatchResult(null);
+      // Fetch transaction counts for progress display
+      try {
+        const summaryRes = await fetch(`/api/periods/${periodId}/verification-summary`, { credentials: "include" });
+        if (summaryRes.ok) {
+          const summary = await summaryRes.json();
+          setTxCounts({
+            bank: summary.overview?.bankStatements?.totalTransactions || 0,
+            fuel: summary.overview?.fuelSystem?.cardTransactions || 0,
+          });
+        }
+      } catch { /* non-critical */ }
       const response = await apiRequest("POST", `/api/periods/${periodId}/auto-match`, {});
       return await response.json();
     },
@@ -63,17 +87,11 @@ export default function ReconciliationFlow() {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
       setIsAutoMatching(false);
-      
-      setCompletedSteps((prev) => [...prev.filter(s => s !== "configure"), "configure"]);
-      setCurrentStep("results");
-      
-      toast({
-        title: "Matching complete",
-        description: `Found ${result.matchesCreated} matches. Review your results below.`,
-      });
+      setMatchResult(result);
     },
     onError: (error: Error) => {
       setIsAutoMatching(false);
+      setTxCounts(null);
       toast({
         title: "Matching failed",
         description: error.message,
@@ -294,18 +312,86 @@ export default function ReconciliationFlow() {
         {isAutoMatching ? (
           <Card className="max-w-2xl mx-auto">
             <CardHeader className="text-center">
-              <div className="mx-auto mb-4">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              </div>
               <CardTitle>Matching Transactions</CardTitle>
               <CardDescription>
                 Comparing your bank transactions against fuel records...
               </CardDescription>
             </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-sm text-muted-foreground">
+            <CardContent className="space-y-4">
+              <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div className="h-full w-1/3 rounded-full bg-primary animate-indeterminate" />
+              </div>
+              {txCounts && (
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-2xl font-semibold">{txCounts.bank}</p>
+                    <p className="text-xs text-muted-foreground">Bank transactions</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-2xl font-semibold">{txCounts.fuel}</p>
+                    <p className="text-xs text-muted-foreground">Fuel records</p>
+                  </div>
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground text-center">
                 This may take a moment depending on the number of transactions.
               </p>
+            </CardContent>
+          </Card>
+        ) : matchResult ? (
+          <Card className="max-w-2xl mx-auto">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4">
+                <CheckCircle2 className="h-12 w-12 text-green-500" />
+              </div>
+              <CardTitle className="text-2xl">Matching Complete</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Hero: the answer to "how well did my period match?" */}
+              <div className="text-center space-y-1">
+                <p className="text-5xl font-bold text-green-600 dark:text-green-400">{matchResult.matchRate}</p>
+                <p className="text-lg font-medium">of your {period?.name || "period"} bank transactions verified</p>
+                <p className="text-sm text-muted-foreground">
+                  {matchResult.matchesCreated} of {matchResult.bankTransactionsMatchable} transactions automatically matched to fuel records
+                </p>
+              </div>
+
+              {/* Key stats */}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-3">
+                  <p className="text-2xl font-semibold text-green-700 dark:text-green-400">{matchResult.matchesCreated}</p>
+                  <p className="text-xs text-muted-foreground">Verified</p>
+                </div>
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3">
+                  <p className="text-2xl font-semibold text-amber-700 dark:text-amber-400">{matchResult.bankTransactionsMatchable - matchResult.matchesCreated}</p>
+                  <p className="text-xs text-muted-foreground">To Investigate</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <p className="text-2xl font-semibold">{matchResult.invoicesCreated}</p>
+                  <p className="text-xs text-muted-foreground">Fuel Invoices</p>
+                </div>
+              </div>
+
+              {/* Secondary info: data outside range */}
+              {matchResult.bankTransactionsUnmatchable > 0 && (
+                <div className="rounded-lg border bg-muted/20 p-3 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {matchResult.bankTransactionsUnmatchable} bank transaction{matchResult.bankTransactionsUnmatchable !== 1 ? 's' : ''} from your upload fell outside the period dates
+                    {period ? ` (${period.startDate} to ${period.endDate})` : ''} and were excluded.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-center pt-2">
+                <Button onClick={() => {
+                  setMatchResult(null);
+                  setTxCounts(null);
+                  setCompletedSteps((prev) => [...prev.filter(s => s !== "configure"), "configure"]);
+                  setCurrentStep("results");
+                }}>
+                  View Results Dashboard
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (

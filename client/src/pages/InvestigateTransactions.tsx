@@ -71,11 +71,19 @@ interface PotentialMatch {
   amountDiff: number;
 }
 
+interface TransactionInsight {
+  type: 'possible_tip' | 'overfill' | 'duplicate_charge' | 'no_fuel_record';
+  message: string;
+  detail?: string;
+}
+
 interface CategorizedTransaction {
   transaction: Transaction;
   category: 'quick_win' | 'investigate' | 'no_match' | 'low_value';
   bestMatch?: PotentialMatch;
   potentialMatches: PotentialMatch[];
+  nearestByAmount: PotentialMatch[];
+  insights: TransactionInsight[];
 }
 
 export default function InvestigateTransactions() {
@@ -234,14 +242,14 @@ export default function InvestigateTransactions() {
 
     const fuelTxns = fuelData.transactions;
 
-    return unmatchedData.transactions
+    const result = unmatchedData.transactions
       .filter(txn => !resolvedIds.has(txn.id))
       .map((bankTxn): CategorizedTransaction => {
         const bankAmount = parseFloat(bankTxn.amount);
         const bankDate = new Date(bankTxn.transactionDate);
 
         // Find potential matches
-        const potentialMatches = fuelTxns
+        const allScored = fuelTxns
           .map((fuelTxn): PotentialMatch => {
             const fuelAmount = parseFloat(fuelTxn.amount);
             const fuelDate = new Date(fuelTxn.transactionDate);
@@ -252,7 +260,11 @@ export default function InvestigateTransactions() {
 
             let confidence = 100;
             if (daysDiff > 0) confidence -= daysDiff * 10;
-            if (amountDiff > 0) confidence -= amountDiff * 5;
+            // Graduated amount penalty: fuel vs bank often differs by a few Rand
+            if (amountDiff <= 1) confidence -= amountDiff * 2;
+            else if (amountDiff <= 10) confidence -= amountDiff * 1;
+            else if (amountDiff <= 50) confidence -= 10 + (amountDiff - 10) * 0.5;
+            else confidence -= 30 + (amountDiff - 50) * 0.3;
             confidence = Math.max(0, Math.min(100, confidence));
 
             return {
@@ -266,10 +278,17 @@ export default function InvestigateTransactions() {
                     : `${Math.floor(daysDiff)} day${daysDiff >= 2 ? "s" : ""}`,
               amountDiff,
             };
-          })
+          });
+
+        const potentialMatches = allScored
           .filter((m) => m.confidence > 20)
           .sort((a, b) => b.confidence - a.confidence)
           .slice(0, 5);
+
+        // Always keep top 3 nearest by amount (for "no match" cases)
+        const nearestByAmount = [...allScored]
+          .sort((a, b) => a.amountDiff - b.amountDiff)
+          .slice(0, 3);
 
         const bestMatch = potentialMatches[0];
 
@@ -285,14 +304,90 @@ export default function InvestigateTransactions() {
           category = 'no_match';
         }
 
+        // Generate insights for near-misses
+        const insights: TransactionInsight[] = [];
+        try {
+        const nearest = nearestByAmount[0];
+        if (nearest && (category === 'no_match' || category === 'investigate')) {
+          const diff = bankAmount - parseFloat(nearest.transaction.amount);
+          const absDiff = Math.abs(diff);
+          if (absDiff > 2 && absDiff <= 25) {
+            // Bank paid more than fuel record — likely tip
+            if (diff > 0) {
+              const fuelAmt = parseFloat(nearest.transaction.amount).toFixed(2);
+              const fuelDate = nearest.transaction.transactionDate;
+              insights.push({
+                type: 'possible_tip',
+                message: `Bank paid R${absDiff.toFixed(2)} more than fuel record`,
+                detail: `Fuel: R${fuelAmt} on ${fuelDate} — difference may include attendant tip`,
+              });
+            } else {
+              const fuelAmt = parseFloat(nearest.transaction.amount).toFixed(2);
+              const fuelDate = nearest.transaction.transactionDate;
+              insights.push({
+                type: 'overfill',
+                message: `Fuel record R${absDiff.toFixed(2)} more than bank payment`,
+                detail: `Fuel: R${fuelAmt} on ${fuelDate} — possible overfill by attendant`,
+              });
+            }
+          } else if (absDiff > 25) {
+            insights.push({
+              type: 'no_fuel_record',
+              message: `Nearest fuel record is R${absDiff.toFixed(2)} away`,
+              detail: `No close fuel match found — may be a non-fuel POS charge or missing fuel record`,
+            });
+          }
+        }
+        } catch (e) {
+          console.error('Insight generation error:', e);
+        }
+
         return {
           transaction: bankTxn,
           category,
           bestMatch,
           potentialMatches,
+          nearestByAmount,
+          insights,
         };
       })
       .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
+
+    // Second pass: detect duplicate bank charges
+    try {
+    const amountDateGroups = new Map<string, CategorizedTransaction[]>();
+    for (const ct of result) {
+      const key = `${parseFloat(ct.transaction.amount).toFixed(2)}_${ct.transaction.transactionDate}`;
+      if (!amountDateGroups.has(key)) amountDateGroups.set(key, []);
+      amountDateGroups.get(key)!.push(ct);
+    }
+    Array.from(amountDateGroups.values()).forEach((group) => {
+      if (group.length > 1) {
+        // Count how many fuel records exist at this amount on this date
+        const bankAmt = parseFloat(group[0].transaction.amount);
+        const bankDateStr = group[0].transaction.transactionDate;
+        const fuelOnDate = fuelTxns.filter((ft: Transaction) => {
+          const diff = Math.abs(parseFloat(ft.amount) - bankAmt);
+          const sameDate = ft.transactionDate === bankDateStr;
+          return diff < 15 && sameDate;
+        }).length;
+
+        group.forEach((ct: CategorizedTransaction) => {
+          ct.insights.unshift({
+            type: 'duplicate_charge',
+            message: `${group.length} identical bank charges of R${parseFloat(group[0].transaction.amount).toFixed(2)} on this date`,
+            detail: fuelOnDate < group.length
+              ? `Only ${fuelOnDate} matching fuel record${fuelOnDate !== 1 ? 's' : ''} found — ${group.length - fuelOnDate} may be duplicate bank charge${group.length - fuelOnDate !== 1 ? 's' : ''} or missing fuel records`
+              : `${fuelOnDate} fuel records found at similar amounts`,
+          });
+        });
+      }
+    });
+    } catch (e) {
+      console.error('Duplicate detection error:', e);
+    }
+
+    return result;
   }, [unmatchedData, fuelData, resolvedIds]);
 
   // Filter by search query
@@ -304,7 +399,7 @@ export default function InvestigateTransactions() {
       const amount = parseFloat(txn.amount).toFixed(2);
       return (
         txn.description?.toLowerCase().includes(q) ||
-        txn.reference?.toLowerCase().includes(q) ||
+        txn.referenceNumber?.toLowerCase().includes(q) ||
         txn.sourceName?.toLowerCase().includes(q) ||
         amount.includes(q) ||
         formatDate(txn.transactionDate).toLowerCase().includes(q)
@@ -1063,11 +1158,21 @@ export default function InvestigateTransactions() {
                                     </Tooltip>
                                   )}
 
-                                  {/* Badge for no match */}
+                                  {/* Badge for no match — with insight hint */}
                                   {category === 'no_match' && (
-                                    <Badge variant="outline" className="text-xs text-muted-foreground">
-                                      No match
-                                    </Badge>
+                                    item.insights.some(i => i.type === 'possible_tip') ? (
+                                      <Badge variant="outline" className="text-xs text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                                        Possible tip
+                                      </Badge>
+                                    ) : item.insights.some(i => i.type === 'duplicate_charge') ? (
+                                      <Badge variant="outline" className="text-xs text-red-700 border-red-300 dark:text-red-400 dark:border-red-700">
+                                        Duplicate?
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-xs text-muted-foreground">
+                                        No match
+                                      </Badge>
+                                    )
                                   )}
 
                                   <ChevronRight className={cn(
@@ -1087,10 +1192,41 @@ export default function InvestigateTransactions() {
                                         {txn.transactionTime && <span> {txn.transactionTime}</span>}
                                       </div>
                                       <div>
-                                        <span className="text-muted-foreground">Ref:</span>{" "}
-                                        <span>{txn.referenceNumber || "N/A"}</span>
+                                        <span className="text-muted-foreground">Source:</span>{" "}
+                                        <span>{txn.sourceName || "N/A"}</span>
                                       </div>
                                     </div>
+
+                                    {/* Insights */}
+                                    {item.insights.length > 0 && (
+                                      <div className="space-y-2">
+                                        {item.insights.map((insight, i) => (
+                                          <div
+                                            key={i}
+                                            className={cn(
+                                              "p-3 rounded-lg border text-sm",
+                                              insight.type === 'possible_tip' && "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800",
+                                              insight.type === 'overfill' && "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
+                                              insight.type === 'duplicate_charge' && "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800",
+                                              insight.type === 'no_fuel_record' && "bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700",
+                                            )}
+                                          >
+                                            <div className="flex items-start gap-2">
+                                              {insight.type === 'possible_tip' && <Coins className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />}
+                                              {insight.type === 'overfill' && <Fuel className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
+                                              {insight.type === 'duplicate_charge' && <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />}
+                                              {insight.type === 'no_fuel_record' && <HelpCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />}
+                                              <div>
+                                                <p className="font-medium">{insight.message}</p>
+                                                {insight.detail && (
+                                                  <p className="text-xs text-muted-foreground mt-1">{insight.detail}</p>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
 
                                     {/* Best Match (if exists) */}
                                     {item.bestMatch && (
@@ -1166,12 +1302,60 @@ export default function InvestigateTransactions() {
                                       </div>
                                     )}
 
-                                    {/* No matches message */}
-                                    {item.potentialMatches.length === 0 && (
+                                    {/* No confident matches — show nearest by amount */}
+                                    {item.potentialMatches.length === 0 && item.nearestByAmount.length > 0 && (
+                                      <div>
+                                        <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                                          <Search className="h-4 w-4 text-muted-foreground" />
+                                          Nearest fuel transactions by amount
+                                        </p>
+                                        <div className="space-y-1">
+                                          {item.nearestByAmount.map((match) => (
+                                            <div
+                                              key={match.transaction.id}
+                                              className="flex items-center justify-between text-sm p-2 border rounded hover-elevate"
+                                            >
+                                              <div className="min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                  <span className="font-mono font-medium">
+                                                    {formatCurrency(match.transaction.amount)}
+                                                  </span>
+                                                  <span className="text-muted-foreground">
+                                                    {formatDate(match.transaction.transactionDate)}
+                                                  </span>
+                                                  <span className="text-xs text-muted-foreground">
+                                                    {match.timeDiff}
+                                                  </span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                  Difference: {formatCurrency(match.amountDiff)}
+                                                  {match.transaction.description && ` · ${match.transaction.description}`}
+                                                </p>
+                                              </div>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => createMatchMutation.mutate({
+                                                  bankId: txn.id,
+                                                  fuelId: match.transaction.id,
+                                                })}
+                                                disabled={createMatchMutation.isPending}
+                                              >
+                                                <LinkIcon className="h-3 w-3 mr-1" />
+                                                Link
+                                              </Button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Truly no fuel transactions at all */}
+                                    {item.potentialMatches.length === 0 && item.nearestByAmount.length === 0 && (
                                       <div className="p-3 bg-muted/50 rounded-lg text-center">
                                         <XCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                                         <p className="text-sm text-muted-foreground">
-                                          No matching fuel transactions found within tolerance.
+                                          No unmatched fuel transactions available.
                                         </p>
                                       </div>
                                     )}

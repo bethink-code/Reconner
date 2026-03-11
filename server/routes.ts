@@ -195,18 +195,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         f.sourceType === sourceType && f.sourceName === sourceName
       );
       
-      // Smart re-upload detection: if same content hash, return existing file
+      // Smart re-upload detection: if same content hash, re-parse for mappings but skip DB insert
       if (existingFile && existingFile.contentHash === contentHash) {
-        console.log(`Same file re-uploaded, skipping processing: ${existingFile.fileName}`);
+        console.log(`Same file re-uploaded, re-parsing for mappings: ${existingFile.fileName}`);
+
+        // Re-parse to get fresh suggested mappings (needed for mapping confirmation step)
+        const isCSVReupload = req.file.mimetype.includes('csv') ||
+                      req.file.mimetype === 'text/csv' ||
+                      req.file.mimetype === 'text/plain' ||
+                      req.file.originalname.toLowerCase().endsWith('.csv') ||
+                      req.file.originalname.toLowerCase().endsWith('.txt');
+        const fileType = isCSVReupload ? 'csv' : 'excel';
+        const reuploadParsed = await fileParser.parse(req.file.buffer, fileType);
+        const reuploadMappingsArray = fileParser.autoDetectColumns(reuploadParsed.headers);
+        const reuploadDetectedPreset = fileParser.detectSourcePreset(reuploadParsed.headers);
+
+        // Build suggested mappings: preset mappings take priority, then auto-detect
+        const reuploadMappings: Record<string, string> = {};
+        if (reuploadDetectedPreset) {
+          for (const header of reuploadParsed.headers) {
+            reuploadMappings[header] = reuploadDetectedPreset.mappings[header] || 'ignore';
+          }
+        } else {
+          for (const mapping of reuploadMappingsArray) {
+            reuploadMappings[mapping.detectedColumn] = mapping.mappedTo || 'ignore';
+          }
+          // Fill in unmapped headers
+          for (const header of reuploadParsed.headers) {
+            if (!reuploadMappings[header]) {
+              reuploadMappings[header] = 'ignore';
+            }
+          }
+        }
+
         return res.json({
           file: existingFile,
           parsed: {
-            headers: [], // These would need to be re-parsed if needed
+            headers: reuploadParsed.headers,
             rows: [],
-            rowCount: existingFile.rowCount || 0,
+            rowCount: existingFile.rowCount || reuploadParsed.rowCount,
           },
-          suggestedMappings: existingFile.columnMapping || {},
-          qualityReport: existingFile.qualityReport,
+          suggestedMappings: reuploadMappings,
+          qualityReport: existingFile.qualityReport || { hasIssues: false, totalRows: reuploadParsed.rowCount, cleanRows: reuploadParsed.rowCount, issues: [] },
           isReupload: true,
           message: "Same file detected, using existing data"
         });
@@ -223,9 +253,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Will replace existing file after successful upload: ${fileToReplace.fileName} (${fileToReplace.id})`);
       }
 
-      const isCSV = req.file.mimetype.includes('csv') || 
-                    req.file.mimetype === 'text/csv' || 
-                    req.file.originalname.endsWith('.csv');
+      const isCSV = req.file.mimetype.includes('csv') ||
+                    req.file.mimetype === 'text/csv' ||
+                    req.file.mimetype === 'text/plain' ||
+                    req.file.originalname.endsWith('.csv') ||
+                    req.file.originalname.endsWith('.txt');
       
       const isExcel = req.file.mimetype.includes('spreadsheet') || 
                       req.file.mimetype.includes('excel') ||
@@ -236,8 +268,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     req.file.originalname.endsWith('.pdf');
 
       if (!isCSV && !isExcel && !isPDF) {
-        return res.status(400).json({ 
-          error: "Invalid file format. Please upload CSV, Excel, or PDF files only." 
+        return res.status(400).json({
+          error: "Invalid file format. Please upload CSV, TXT, Excel, or PDF files only."
         });
       }
 
@@ -650,13 +682,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[PROCESS] Created ${created.length} transactions in database`);
       
-      await storage.updateFile(file.id, { 
+      await storage.updateFile(file.id, {
         status: 'processed',
-        rowCount: created.length 
+        rowCount: created.length
       });
 
-      res.json({ 
-        success: true, 
+      // Update period status to in_progress once files are being processed
+      const currentPeriod = await storage.getPeriod(file.periodId);
+      if (currentPeriod && currentPeriod.status === 'draft') {
+        await storage.updatePeriod(file.periodId, { status: 'in_progress' });
+      }
+
+      res.json({
+        success: true,
         transactionsCreated: created.length,
         totalRows: parsed.rowCount,
         skipStats: skipStats,
@@ -833,6 +871,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
+      // Reset previous matches so re-running always gives accurate totals
+      await storage.resetMatchesByPeriod(req.params.periodId);
+
       // Get user-configured matching rules (or defaults)
       const rules = await storage.getMatchingRules(req.params.periodId);
 
@@ -890,10 +931,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const maxFuelDateStr = new Date(maxFuelDate).toISOString().split('T')[0];
           const minFuelDateStr = new Date(minFuelDate).toISOString().split('T')[0];
           dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
-          // Mark these as unmatchable (distinct from unmatched) and clear any stale match links
-          for (const tx of unmatchableBankTransactions) {
-            await storage.updateTransaction(tx.id, { matchStatus: 'unmatchable', matchId: null });
-          }
+          // Mark these as unmatchable in bulk
+          await storage.updateTransactionsBatch(
+            unmatchableBankTransactions.map(tx => ({ id: tx.id, data: { matchStatus: 'unmatchable', matchId: null } }))
+          );
         }
       }
       
@@ -928,8 +969,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Track matched invoices to avoid double-matching
       const matchedInvoices = new Set<string>();
 
-      // Collect transaction updates for batching
-      const pendingUpdates: Array<{ id: string; updates: Record<string, unknown> }> = [];
+      // Collect matches and transaction updates for bulk creation
+      const pendingMatches: Array<{
+        matchData: { periodId: string; fuelTransactionId: string; bankTransactionId: string; matchType: string; matchConfidence: string };
+        bankTxId: string;
+        fuelItemIds: string[];
+      }> = [];
 
       // Match bank transactions to invoices (only matchable ones)
       for (const bankTx of matchableBankTransactions) {
@@ -1087,35 +1132,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Create match if found
+        // Collect match for bulk creation
         if (bestMatch) {
           const matchType = bestMatch.confidence >= rules.autoMatchThreshold ? 'auto' : 'auto_review';
-          
-          const match = await storage.createMatch({
-            periodId: req.params.periodId,
-            fuelTransactionId: bestMatch.invoice.items[0].id, // Link to first item
-            bankTransactionId: bankTx.id,
-            matchType,
-            matchConfidence: String(bestMatch.confidence),
-          });
 
-          // Collect updates for batching
-          pendingUpdates.push({ id: bankTx.id, updates: { matchStatus: 'matched', matchId: match.id } });
-          for (const fuelItem of bestMatch.invoice.items) {
-            pendingUpdates.push({ id: fuelItem.id, updates: { matchStatus: 'matched', matchId: match.id } });
-          }
+          pendingMatches.push({
+            matchData: {
+              periodId: req.params.periodId,
+              fuelTransactionId: bestMatch.invoice.items[0].id,
+              bankTransactionId: bankTx.id,
+              matchType,
+              matchConfidence: String(bestMatch.confidence),
+            },
+            bankTxId: bankTx.id,
+            fuelItemIds: bestMatch.invoice.items.map(item => item.id),
+          });
 
           matchedInvoices.add(bestMatch.invoice.invoiceNumber);
           matchCount++;
         }
       }
 
-      // Flush all pending transaction updates in parallel batches
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < pendingUpdates.length; i += BATCH_SIZE) {
-        const batch = pendingUpdates.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(({ id, updates }) => storage.updateTransaction(id, updates)));
+      // Bulk create all matches at once
+      console.log(`[MATCH] Creating ${pendingMatches.length} matches in bulk...`);
+      const createdMatches = await storage.createMatchesBatch(
+        pendingMatches.map(pm => pm.matchData)
+      );
+
+      // Build transaction updates from created matches
+      const txUpdates: Array<{ id: string; data: { matchStatus: string; matchId: string } }> = [];
+      for (let i = 0; i < createdMatches.length; i++) {
+        const match = createdMatches[i];
+        const pending = pendingMatches[i];
+        txUpdates.push({ id: pending.bankTxId, data: { matchStatus: 'matched', matchId: match.id } });
+        for (const fuelId of pending.fuelItemIds) {
+          txUpdates.push({ id: fuelId, data: { matchStatus: 'matched', matchId: match.id } });
+        }
       }
+
+      // Bulk update all transactions
+      console.log(`[MATCH] Updating ${txUpdates.length} transactions in bulk...`);
+      await storage.updateTransactionsBatch(txUpdates);
 
       // Calculate match rate based on matchable transactions (excluding unmatchable)
       const matchableCount = matchableBankTransactions.length;
@@ -1123,8 +1180,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? ((matchCount / matchableCount) * 100).toFixed(1)
         : '0';
 
-      res.json({ 
-        success: true, 
+      // Update period status to complete after matching
+      await storage.updatePeriod(req.params.periodId, { status: 'complete' });
+
+      res.json({
+        success: true,
         matchesCreated: matchCount,
         cardTransactionsProcessed: fuelTransactions.length,
         invoicesCreated: fuelInvoices.length,
@@ -1366,6 +1426,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clear all resolutions for a period (undo)
+  app.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
+    try {
+      const count = await storage.clearResolutionsByPeriod(req.params.periodId);
+      res.json({ success: true, count });
+    } catch (error) {
+      console.error("Error clearing resolutions:", error);
+      res.status(500).json({ error: "Failed to clear resolutions" });
+    }
+  });
+
   // Bulk confirm matches (quick wins)
   app.post("/api/matches/bulk-confirm", isAuthenticated, async (req, res) => {
     try {
@@ -1473,6 +1544,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export flagged transactions only - for manager/accountant review
+  // Export full reconciliation report as Excel
+  app.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.getPeriod(req.params.periodId);
+      if (!period) {
+        return res.status(404).json({ error: "Period not found" });
+      }
+
+      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      const matchesData = await storage.getMatchesByPeriod(req.params.periodId);
+      const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
+
+      // Build lookup maps
+      const matchMap = new Map<string, typeof matchesData[0]>();
+      for (const m of matchesData) {
+        matchMap.set(m.bankTransactionId, m);
+        matchMap.set(m.fuelTransactionId, m);
+      }
+      const resolutionMap = new Map(resolutions.map(r => [r.transactionId, r]));
+      const txMap = new Map(transactions.map(t => [t.id, t]));
+
+      // Sheet 1: Matched pairs
+      const matchedRows = matchesData.map(m => {
+        const bank = txMap.get(m.bankTransactionId);
+        const fuel = txMap.get(m.fuelTransactionId);
+        const bankAmt = bank ? parseFloat(bank.amount) : 0;
+        const fuelAmt = fuel ? parseFloat(fuel.amount) : 0;
+        return {
+          'Date': bank?.transactionDate || fuel?.transactionDate || '',
+          'Bank Amount': bankAmt,
+          'Fuel Amount': fuelAmt,
+          'Difference': Math.round((bankAmt - fuelAmt) * 100) / 100,
+          'Bank Description': bank?.description || '',
+          'Bank Source': bank?.sourceName || '',
+          'Fuel Description': fuel?.description || '',
+          'Confidence': m.confidence ? `${m.confidence}%` : '',
+          'Match Type': m.matchType || 'auto',
+        };
+      });
+
+      // Sheet 2: Unmatched bank transactions
+      const unmatchedBank = transactions
+        .filter(t => t.sourceType === 'bank' && t.matchStatus === 'unmatched')
+        .map(t => {
+          const resolution = resolutionMap.get(t.id);
+          return {
+            'Date': t.transactionDate,
+            'Amount': parseFloat(t.amount),
+            'Description': t.description || '',
+            'Source': t.sourceName || '',
+            'Status': resolution ? resolution.resolutionType : 'unresolved',
+            'Resolution Notes': resolution?.notes || '',
+          };
+        });
+
+      // Sheet 3: Summary
+      const bankTxns = transactions.filter(t => t.sourceType === 'bank');
+      const fuelTxns = transactions.filter(t => t.sourceType === 'fuel');
+      const matchable = bankTxns.filter(t => t.matchStatus !== 'unmatchable');
+      const matched = bankTxns.filter(t => t.matchStatus === 'matched');
+      const summaryRows = [
+        { 'Metric': 'Period', 'Value': period.name },
+        { 'Metric': 'Period Dates', 'Value': `${period.startDate} to ${period.endDate}` },
+        { 'Metric': 'Total Fuel Transactions', 'Value': fuelTxns.length },
+        { 'Metric': 'Total Bank Transactions', 'Value': bankTxns.length },
+        { 'Metric': 'In-Range Bank Transactions', 'Value': matchable.length },
+        { 'Metric': 'Matched', 'Value': matched.length },
+        { 'Metric': 'Match Rate', 'Value': matchable.length > 0 ? `${Math.round((matched.length / matchable.length) * 100)}%` : 'N/A' },
+        { 'Metric': 'Unmatched Bank', 'Value': unmatchedBank.length },
+        { 'Metric': 'Outside Date Range', 'Value': bankTxns.filter(t => t.matchStatus === 'unmatchable').length },
+      ];
+
+      const XLSX = await import('xlsx');
+      const wb = XLSX.utils.book_new();
+
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+      const wsMatched = XLSX.utils.json_to_sheet(matchedRows);
+      XLSX.utils.book_append_sheet(wb, wsMatched, 'Matched');
+
+      const wsUnmatched = XLSX.utils.json_to_sheet(unmatchedBank);
+      XLSX.utils.book_append_sheet(wb, wsUnmatched, 'Unmatched Bank');
+
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="Reconciliation_${period.name.replace(/\s+/g, '_')}.xlsx"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error exporting reconciliation:", error);
+      res.status(500).json({ error: "Failed to export reconciliation" });
+    }
+  });
+
   app.get("/api/periods/:periodId/export-flagged", isAuthenticated, async (req, res) => {
     try {
       const period = await storage.getPeriod(req.params.periodId);

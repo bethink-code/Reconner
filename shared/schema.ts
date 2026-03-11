@@ -138,8 +138,8 @@ export const matchingRules = pgTable("matching_rules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }).unique(),
   
-  // Amount tolerance in Rand (e.g., 0.10 = ±R0.10)
-  amountTolerance: decimal("amount_tolerance", { precision: 10, scale: 2 }).notNull().default("0.10"),
+  // Amount tolerance in Rand — tight for overfill/underfill only. Tips should be flagged.
+  amountTolerance: decimal("amount_tolerance", { precision: 10, scale: 2 }).notNull().default("2.00"),
   
   // Date window in days (0-7)
   dateWindowDays: integer("date_window_days").notNull().default(3),
@@ -173,9 +173,9 @@ export type MatchingRules = typeof matchingRules.$inferSelect;
 
 // Zod schema for API validation
 export const matchingRulesConfigSchema = z.object({
-  amountTolerance: z.number().min(0).max(10),
+  amountTolerance: z.number().min(0).max(50),
   dateWindowDays: z.number().int().min(0).max(7),
-  timeWindowMinutes: z.number().int().min(15).max(180),
+  timeWindowMinutes: z.number().int().min(15).max(1440),
   groupByInvoice: z.boolean(),
   requireCardMatch: z.boolean(),
   minimumConfidence: z.number().int().min(0).max(100),

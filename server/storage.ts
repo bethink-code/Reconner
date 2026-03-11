@@ -157,6 +157,7 @@ export interface IStorage {
   createMatch(match: InsertMatch): Promise<Match>;
   deleteMatch(id: string): Promise<void>;
   deleteMatchesByFile(fileId: string): Promise<void>;
+  resetMatchesByPeriod(periodId: string): Promise<void>;
   
   getPeriodSummary(periodId: string): Promise<PeriodSummary>;
   getVerificationSummary(periodId: string): Promise<VerificationSummary>;
@@ -169,6 +170,7 @@ export interface IStorage {
   getResolutionsByTransaction(transactionId: string): Promise<TransactionResolution[]>;
   createResolution(resolution: InsertTransactionResolution): Promise<TransactionResolution>;
   getResolvedTransactionIds(periodId: string): Promise<string[]>;
+  clearResolutionsByPeriod(periodId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -399,6 +401,31 @@ export class DatabaseStorage implements IStorage {
     return newMatch;
   }
 
+  async createMatchesBatch(matchData: InsertMatch[]): Promise<Match[]> {
+    if (matchData.length === 0) return [];
+    // Drizzle supports bulk insert with .values(array)
+    const BATCH_SIZE = 100;
+    const results: Match[] = [];
+    for (let i = 0; i < matchData.length; i += BATCH_SIZE) {
+      const batch = matchData.slice(i, i + BATCH_SIZE);
+      const inserted = await db.insert(matches).values(batch).returning();
+      results.push(...inserted);
+    }
+    return results;
+  }
+
+  async updateTransactionsBatch(updates: Array<{ id: string; data: Partial<InsertTransaction> }>): Promise<void> {
+    if (updates.length === 0) return;
+    // Use parallel batches for speed
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+      const batch = updates.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(({ id, data }) =>
+        db.update(transactions).set(data).where(eq(transactions.id, id))
+      ));
+    }
+  }
+
   async deleteMatch(id: string): Promise<void> {
     await db.delete(matches).where(eq(matches.id, id));
   }
@@ -421,6 +448,15 @@ export class DatabaseStorage implements IStorage {
         inArray(matches.bankTransactionId, transactionIds)
       )
     );
+  }
+
+  async resetMatchesByPeriod(periodId: string): Promise<void> {
+    // Delete all matches for this period
+    await db.delete(matches).where(eq(matches.periodId, periodId));
+    // Reset all transactions in this period back to unmatched
+    await db.update(transactions)
+      .set({ matchStatus: 'unmatched', matchId: null })
+      .where(eq(transactions.periodId, periodId));
   }
 
   async getPeriodSummary(periodId: string): Promise<PeriodSummary> {
@@ -572,23 +608,25 @@ export class DatabaseStorage implements IStorage {
     min: string;
     max: string;
     txCount: number;
+    inRangeCount: number;
   }>> {
     // Get date ranges per bank file/source
     const result = await pool.query(`
-      SELECT 
+      SELECT
         t.file_id,
         COALESCE(f.bank_name, t.source_name, 'Bank Account') as bank_name,
         COALESCE(t.source_name, 'Bank Account') as source_name,
         MIN(t.transaction_date) as min_date,
         MAX(t.transaction_date) as max_date,
-        COUNT(*) as tx_count
+        COUNT(*) as tx_count,
+        COUNT(*) FILTER (WHERE t.match_status != 'unmatchable') as in_range_count
       FROM transactions t
       LEFT JOIN uploaded_files f ON t.file_id = f.id
       WHERE t.period_id = $1 AND t.source_type LIKE 'bank%'
       GROUP BY t.file_id, f.bank_name, t.source_name
       ORDER BY MIN(t.transaction_date)
     `, [periodId]);
-    
+
     return result.rows.map(row => ({
       fileId: row.file_id,
       sourceName: row.source_name || 'Bank Account',
@@ -596,6 +634,7 @@ export class DatabaseStorage implements IStorage {
       min: row.min_date,
       max: row.max_date,
       txCount: parseInt(row.tx_count || '0'),
+      inRangeCount: parseInt(row.in_range_count || '0'),
     }));
   }
 
@@ -616,11 +655,13 @@ export class DatabaseStorage implements IStorage {
         WHERE period_id = $1 AND source_type = 'fuel'
       ),
       bank_stats AS (
-        SELECT 
+        SELECT
           COUNT(*) as total_bank,
           COALESCE(SUM(amount::numeric), 0) as total_bank_amount,
           COUNT(CASE WHEN match_status = 'matched' THEN 1 END) as matched_bank,
           COALESCE(SUM(CASE WHEN match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
+          COUNT(CASE WHEN match_status = 'unmatched' THEN 1 END) as unmatched_bank,
+          COALESCE(SUM(CASE WHEN match_status = 'unmatched' THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
           MIN(transaction_date) as bank_earliest,
           MAX(transaction_date) as bank_latest
         FROM transactions
@@ -756,6 +797,8 @@ export class DatabaseStorage implements IStorage {
     const totalBankTransactions = parseInt(row.total_bank || '0');
     const matchedBankTransactions = parseInt(row.matched_bank || '0');
     const matchedBankAmount = parseFloat(row.matched_bank_amount || '0');
+    const unmatchedBankOnly = parseInt(row.unmatched_bank || '0');
+    const unmatchedBankOnlyAmount = parseFloat(row.unmatched_bank_amount || '0');
     
     const matchedCardTransactions = parseInt(row.matched_card_transactions || '0');
     const matchedCardAmount = parseFloat(row.matched_card_amount || '0');
@@ -926,7 +969,7 @@ export class DatabaseStorage implements IStorage {
           transactions: Math.max(0, pendingVerificationTransactions),
           percentageOfCardSales: cardAmount > 0 ? Math.round((Math.max(0, pendingVerificationAmount) / cardAmount) * 1000) / 10 : 0
         },
-        unmatchedIssues: { count: unmatchedBankCount, amount: totalBankAmount - matchedBankAmount }
+        unmatchedIssues: { count: unmatchedBankOnly, amount: unmatchedBankOnlyAmount }
       },
       matchingResults: {
         performanceRating,
@@ -964,10 +1007,10 @@ export class DatabaseStorage implements IStorage {
     
     if (!rules) {
       // Return default (moderate) rules
-      // Tolerance set to R1.00 to handle fuel price variations and rounding
+      // Tight tolerance: overfill/underfill rounding only. Tips (R5-R20) should be flagged, not hidden.
       // Minimum confidence lowered to 60 to allow time-outside-window matches
       return {
-        amountTolerance: 1.00,
+        amountTolerance: 2.00,
         dateWindowDays: 3,
         timeWindowMinutes: 60,
         groupByInvoice: true,
@@ -1032,6 +1075,27 @@ export class DatabaseStorage implements IStorage {
       .from(transactionResolutions)
       .where(eq(transactionResolutions.periodId, periodId))
       .orderBy(desc(transactionResolutions.createdAt));
+  }
+
+  async clearResolutionsByPeriod(periodId: string): Promise<number> {
+    // Reset transaction match statuses back to 'unmatched' for resolved (non-matched) transactions
+    const resolutions = await this.getResolutionsByPeriod(periodId);
+    const resolvedTxIds = resolutions
+      .filter(r => r.resolutionType !== 'linked')
+      .map(r => r.transactionId);
+
+    if (resolvedTxIds.length > 0) {
+      await db.update(transactions)
+        .set({ matchStatus: 'unmatched' })
+        .where(and(
+          eq(transactions.periodId, periodId),
+          inArray(transactions.id, resolvedTxIds)
+        ));
+    }
+
+    const result = await db.delete(transactionResolutions)
+      .where(eq(transactionResolutions.periodId, periodId));
+    return result.rowCount ?? 0;
   }
 
   async getResolutionsByTransaction(transactionId: string): Promise<TransactionResolution[]> {

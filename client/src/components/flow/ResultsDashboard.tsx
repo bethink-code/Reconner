@@ -1,3 +1,4 @@
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import {
   AlertTriangle, 
   Download,
   Settings,
-  FileText,
   Plus,
   Flag,
   Clock
@@ -23,6 +23,7 @@ interface BankAccountRange {
   min: string;
   max: string;
   txCount: number;
+  inRangeCount?: number;
 }
 
 interface PeriodSummary {
@@ -44,6 +45,31 @@ interface PeriodSummary {
   fuelDateRange?: { min: string; max: string };
   bankDateRange?: { min: string; max: string };
   bankAccountRanges?: BankAccountRange[];
+}
+
+interface VerificationSummary {
+  overview: {
+    fuelSystem: {
+      totalSales: number;
+      cardSales: number;
+      cardTransactions: number;
+      cashSales: number;
+      cashTransactions: number;
+    };
+    bankStatements: {
+      totalAmount: number;
+      totalTransactions: number;
+    };
+  };
+  verificationStatus: {
+    verified: { transactions: number; amount: number; percentage: number };
+    pendingVerification: { transactions: number; amount: number };
+    unverified: { transactions: number; amount: number; percentage: number };
+    cashSales: { transactions: number; amount: number };
+  };
+  discrepancyReport: {
+    unmatchedIssues: { count: number; amount: number };
+  };
 }
 
 interface ResolutionSummary {
@@ -86,6 +112,11 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
     enabled: !!periodId,
   });
 
+  const { data: verification } = useQuery<VerificationSummary>({
+    queryKey: ["/api/periods", periodId, "verification-summary"],
+    enabled: !!periodId,
+  });
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString("en-ZA", {
@@ -96,6 +127,13 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat("en-ZA").format(num);
+  };
+
+  const formatRand = (amount: number) => {
+    if (Math.abs(amount) >= 1000) {
+      return "R" + new Intl.NumberFormat("en-ZA", { maximumFractionDigits: 0 }).format(amount);
+    }
+    return "R" + new Intl.NumberFormat("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   };
 
   if (isLoading || !summary) {
@@ -114,7 +152,9 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
   const verifiedBank = matchedBank + resolvedBank;
   const unmatchableBank = summary.unmatchableBankTransactions || 0;
   const unmatchedBank = summary.unmatchedBankTransactions;
-  const verifiedPercent = bankTotal > 0 ? Math.round((verifiedBank / bankTotal) * 100) : 0;
+  // Only count in-range (matchable) bank transactions for the verified %
+  const matchableBankTotal = bankTotal - unmatchableBank;
+  const verifiedPercent = matchableBankTotal > 0 ? Math.round((verifiedBank / matchableBankTotal) * 100) : 0;
 
   // Resolution counts
   const linked = resolutionSummary?.linked || 0;
@@ -134,12 +174,89 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
         <CardContent className="p-6 space-y-6">
           
           {/* ─────────────────────────────────────────────────────────────────
-              HERO: Large Verified % + CTA
+              HERO: Financial summary — leads with money
           ───────────────────────────────────────────────────────────────── */}
-          <div className="flex items-start justify-between gap-4">
+          {verification ? (() => {
+            const totalSales = verification.overview.fuelSystem.totalSales;
+            const verifiedAmount = verification.verificationStatus.verified.amount;
+            const notOnBank = totalSales - verifiedAmount;
+            const verifiedPct = totalSales > 0 ? Math.round((verifiedAmount / totalSales) * 100) : 0;
+            const unmatchedBankAmount = verification.discrepancyReport.unmatchedIssues.amount;
+            // Use count-based % for "bank records verified" (consistent with matching complete screen)
+            const bankMatchPct = verifiedPercent;
+            const unmatchedBankPct = 100 - bankMatchPct;
+
+            return (
+              <>
+                {/* Lens 1: The Period — total fuel sales */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Period Fuel Sales
+                  </p>
+                  <span className="text-3xl font-bold tracking-tight">
+                    {formatRand(totalSales)}
+                  </span>
+                </div>
+
+                {/* Lens 2: Bank Verified */}
+                <div className="rounded-lg border bg-green-50/50 dark:bg-green-950/20 p-4">
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-2xl font-bold">
+                      {bankMatchPct}%
+                    </span>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      of Bank Records Verified
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold tracking-tight text-green-600 dark:text-green-400">
+                      {formatRand(verifiedAmount)}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      of {formatRand(totalSales)} total sales
+                    </span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden mt-3">
+                    <div
+                      className="h-full bg-green-500 transition-all duration-500 rounded-full"
+                      style={{ width: `${bankMatchPct}%` }}
+                    />
+                  </div>
+                  {unmatchedBankAmount > 0 && (
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-green-200 dark:border-green-900">
+                      <p className="text-sm text-muted-foreground">
+                        {formatRand(unmatchedBankAmount)} ({unmatchedBankPct}% of bank records) didn't match fuel data
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
+                        data-testid="button-investigate"
+                      >
+                        Investigate
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Lens 3: Not on Bank */}
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Not on Bank Records
+                  </p>
+                  <span className="text-3xl font-bold tracking-tight">
+                    {formatRand(notOnBank)}
+                  </span>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {100 - verifiedPct}% of period fuel sales not covered in this reconciliation (likely cash payments, missing bank statements, or other unreconciled methods)
+                  </p>
+                </div>
+              </>
+            );
+          })() : (
             <div>
               <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-bold tracking-tight" data-testid="text-verified-percent">
+                <span className="text-5xl font-bold tracking-tight">
                   {verifiedPercent}%
                 </span>
                 <span className="text-lg text-muted-foreground font-medium uppercase tracking-wide">
@@ -147,90 +264,9 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                {verifiedBank} of {bankTotal} bank transactions
+                {verifiedBank} of {matchableBankTotal} bank transactions matched
               </p>
             </div>
-            
-            <div className="flex flex-col items-end gap-2">
-              {(unmatchedBank > 0 || flagged > 0) && (
-                <Badge 
-                  variant="outline" 
-                  className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
-                  data-testid="badge-needs-review"
-                >
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  {unmatchedBank + flagged} need review
-                </Badge>
-              )}
-              
-              {unmatchedBank > 0 ? (
-                <Button 
-                  className="bg-primary"
-                  onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
-                  data-testid="button-investigate"
-                >
-                  <AlertTriangle className="h-4 w-4 mr-2" />
-                  Investigate {unmatchedBank} Unmatched
-                </Button>
-              ) : flagged > 0 ? (
-                <Button 
-                  className="bg-primary"
-                  onClick={() => setLocation(`/investigate?periodId=${periodId}&filter=flagged`)}
-                  data-testid="button-review-flagged"
-                >
-                  <Flag className="h-4 w-4 mr-2" />
-                  Review {flagged} Flagged
-                </Button>
-              ) : (
-                <Button 
-                  variant="outline"
-                  onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}
-                  data-testid="button-export-hero"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Report
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="h-3 bg-muted rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-green-500 transition-all duration-500"
-              style={{ width: `${verifiedPercent}%` }}
-            />
-          </div>
-
-          {/* ─────────────────────────────────────────────────────────────────
-              STATUS ROW: Inline badges
-          ───────────────────────────────────────────────────────────────── */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <StatusBadge color="bg-green-500" count={matchedBank + linked} label="Matched" />
-            {reviewed > 0 && <StatusBadge color="bg-blue-500" count={reviewed} label="Reviewed" />}
-            {dismissed > 0 && <StatusBadge color="bg-slate-400" count={dismissed} label="Dismissed" />}
-            {flagged > 0 && <StatusBadge color="bg-orange-500" count={flagged} label="Flagged" />}
-          </div>
-
-          {/* ─────────────────────────────────────────────────────────────────
-              ALERT BANNER: Transactions outside date range
-          ───────────────────────────────────────────────────────────────── */}
-          {unmatchableBank > 0 && (
-            <Alert className="bg-muted/50 border-muted-foreground/20">
-              <Clock className="h-4 w-4" />
-              <AlertDescription className="flex items-center justify-between w-full">
-                <span>{unmatchableBank} transactions outside date range</span>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={onAddBankData}
-                  data-testid="button-add-data-alert"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Data
-                </Button>
-              </AlertDescription>
-            </Alert>
           )}
 
           {/* ─────────────────────────────────────────────────────────────────
@@ -238,29 +274,18 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
           ───────────────────────────────────────────────────────────────── */}
           <div className="pt-2">
             {/* Section Header */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Data Coverage
               </h3>
-              {hasAnyGap && (
-                <Badge 
-                  variant="outline" 
-                  className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
-                  data-testid="badge-gap-detected"
-                >
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  Gap detected
-                </Badge>
-              )}
             </div>
 
             {/* Column Headers */}
-            <div className="grid grid-cols-[80px_1fr_120px_80px_40px] gap-3 text-xs text-muted-foreground uppercase tracking-wider mb-2 px-1">
+            <div className="grid grid-cols-[100px_1fr_120px_60px] gap-3 text-xs text-muted-foreground uppercase tracking-wider mb-2 px-1">
               <span>Source</span>
               <span></span>
               <span className="text-right">Dates</span>
               <span className="text-right">Count</span>
-              <span></span>
             </div>
 
             {/* Coverage Rows */}
@@ -280,21 +305,13 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
               FOOTER: Export Buttons
           ───────────────────────────────────────────────────────────────── */}
           <div className="flex flex-wrap gap-3 pt-4 border-t">
-            <Button 
+            <Button
               variant="outline"
               onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}
               data-testid="button-export-full"
             >
-              <FileText className="h-4 w-4 mr-2" />
-              Export Full Report
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => setLocation(`/report?periodId=${periodId}&type=accountant`)}
-              data-testid="button-export-accountant"
-            >
               <Download className="h-4 w-4 mr-2" />
-              Export for Accountant
+              Download Report (Excel)
             </Button>
           </div>
         </CardContent>
@@ -325,6 +342,20 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
 }
 
 // Helper component for status badges
+function RevenueRow({ color, label, amount, total, formatRand }: {
+  color: string; label: string; amount: number; total: number; formatRand: (n: number) => string;
+}) {
+  const pct = total > 0 ? (amount / total) * 100 : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", color)} />
+      <span className="text-sm flex-1">{label}</span>
+      <span className="text-sm font-semibold tabular-nums">{formatRand(amount)}</span>
+      <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{pct.toFixed(0)}%</span>
+    </div>
+  );
+}
+
 function StatusBadge({ color, count, label }: { color: string; count: number; label: string }) {
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -377,12 +408,30 @@ interface CoverageLedgerProps {
 function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelData, onAddBankData }: CoverageLedgerProps) {
   const periodStart = new Date(period.startDate);
   const periodEnd = new Date(period.endDate);
-  const totalDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
-  
-  const getPositionPercent = (dateStr: string) => {
+
+  // Calculate the full date range across ALL data sources (not just the period)
+  // so the timeline shows where each source sits relative to the period
+  const allDates: Date[] = [periodStart, periodEnd];
+  if (summary.fuelDateRange) {
+    allDates.push(new Date(summary.fuelDateRange.min), new Date(summary.fuelDateRange.max));
+  }
+  if (summary.bankDateRange) {
+    allDates.push(new Date(summary.bankDateRange.min), new Date(summary.bankDateRange.max));
+  }
+  (summary.bankAccountRanges || []).forEach(a => {
+    allDates.push(new Date(a.min), new Date(a.max));
+  });
+  const timelineStart = new Date(Math.min(...allDates.map(d => d.getTime())));
+  const timelineEnd = new Date(Math.max(...allDates.map(d => d.getTime())));
+  // Add 1 day so end dates represent end-of-day (e.g. "28 Feb" means through end of 28 Feb)
+  const totalMs = timelineEnd.getTime() + 86400000 - timelineStart.getTime();
+  const totalDays = Math.max(1, totalMs / (1000 * 60 * 60 * 24));
+
+  const getPositionPercent = (dateStr: string, isEnd = false) => {
     const date = new Date(dateStr);
-    const dayOffset = (date.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24);
-    return Math.max(0, Math.min(100, (dayOffset / totalDays) * 100));
+    // End dates should go to end-of-day
+    const ms = date.getTime() + (isEnd ? 86400000 : 0) - timelineStart.getTime();
+    return Math.max(0, Math.min(100, (ms / (totalDays * 86400000)) * 100));
   };
 
   const checkGap = (minDate: string, maxDate: string) => {
@@ -409,7 +458,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
     min: period.startDate,
     max: period.endDate,
     hasGap: false,
-    color: 'bg-slate-400 dark:bg-slate-500',
+    color: 'bg-slate-300 dark:bg-slate-600',
     type: 'period'
   });
 
@@ -438,7 +487,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
       label: account.bankName || account.sourceName || `Bank ${index + 1}`,
       min: account.min,
       max: account.max,
-      count: account.txCount,
+      count: account.inRangeCount ?? account.txCount,
       hasGap: accountHasGap,
       color: bankColors[index % bankColors.length],
       type: 'bank',
@@ -461,109 +510,128 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
     });
   }
 
+  // Pre-calculate period position for overlay markers on non-period rows
+  const periodLeftPct = getPositionPercent(period.startDate);
+  const periodRightPct = getPositionPercent(period.endDate, true);
+
+  const periodWidthPct = periodRightPct - periodLeftPct;
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const barRef = React.useRef<HTMLDivElement>(null);
+  const [bandStyle, setBandStyle] = React.useState<{ left: number; width: number } | null>(null);
+
+  React.useEffect(() => {
+    const measure = () => {
+      if (!containerRef.current || !barRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const barRect = barRef.current.getBoundingClientRect();
+      const barLeft = barRect.left - containerRect.left;
+      const barWidth = barRect.width;
+      setBandStyle({
+        left: barLeft + (periodLeftPct / 100) * barWidth,
+        width: (periodWidthPct / 100) * barWidth,
+      });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [periodLeftPct, periodWidthPct]);
+
   return (
-    <div className="space-y-1" data-testid="coverage-ledger">
-      {rows.map((row, idx) => {
-        const leftPct = getPositionPercent(row.min);
-        const rightPct = getPositionPercent(row.max);
-        const widthPct = rightPct - leftPct;
-        const isPeriod = row.type === 'period';
-        
-        // Calculate gap regions for striped pattern
-        const hasLeftGap = leftPct > 0;
-        const hasRightGap = rightPct < 100;
-        
-        return (
-          <div 
-            key={idx} 
-            className="grid grid-cols-[80px_1fr_120px_80px_40px] gap-3 items-center py-2"
-            data-testid={`coverage-row-${row.type}-${idx}`}
-          >
-            {/* Source: Color dot + label */}
-            <div className="flex items-center gap-2">
-              <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", row.color)} />
-              <span className={cn(
-                "text-sm truncate",
-                isPeriod ? "text-muted-foreground" : "font-medium"
-              )}>
-                {row.label}
-              </span>
-            </div>
-            
-            {/* Bar visualization */}
-            <div className="relative h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-              {/* Striped gap on left */}
-              {row.hasGap && hasLeftGap && (
-                <div 
-                  className="absolute h-full"
-                  style={{ 
-                    left: 0, 
-                    width: `${leftPct}%`,
-                    background: `repeating-linear-gradient(
-                      -45deg,
-                      transparent,
-                      transparent 2px,
-                      rgba(251, 146, 60, 0.3) 2px,
-                      rgba(251, 146, 60, 0.3) 4px
-                    )`
+    <div className="relative" ref={containerRef} data-testid="coverage-ledger">
+      {/* Period band spanning all rows — measured from actual bar position */}
+      {bandStyle && (
+        <div
+          className="absolute top-0 bottom-0 bg-slate-200/60 dark:bg-slate-700/30 pointer-events-none"
+          style={{
+            left: `${bandStyle.left}px`,
+            width: `${bandStyle.width}px`
+          }}
+        />
+      )}
+
+      <div className="space-y-1 relative">
+        {rows.map((row, idx) => {
+          const leftPct = getPositionPercent(row.min);
+          const rightPct = getPositionPercent(row.max, true);
+          const widthPct = rightPct - leftPct;
+          const isPeriod = row.type === 'period';
+
+          return (
+            <div
+              key={idx}
+              className="grid grid-cols-[100px_1fr_120px_60px] gap-3 items-center py-2"
+              data-testid={`coverage-row-${row.type}-${idx}`}
+            >
+              {/* Source: Color dot + label */}
+              <div className="flex items-center gap-2">
+                <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", row.color)} />
+                <span className={cn(
+                  "text-sm",
+                  isPeriod ? "text-muted-foreground" : "font-medium"
+                )}>
+                  {row.label}
+                </span>
+              </div>
+
+              {/* Bar visualization */}
+              <div className="relative h-3" ref={idx === 0 ? barRef : undefined}>
+                {/* Gap indicators: dashed outline for uncovered period portions */}
+                {!isPeriod && row.hasGap && (() => {
+                  const pL = getPositionPercent(period.startDate);
+                  const pR = getPositionPercent(period.endDate, true);
+                  const segments: React.ReactNode[] = [];
+                  // Gap before source starts (within period)
+                  if (leftPct > pL) {
+                    const gapW = leftPct - pL;
+                    segments.push(
+                      <div
+                        key="gap-before"
+                        className="absolute h-full rounded-full border-2 border-dashed border-amber-400/60"
+                        style={{ left: `${pL}%`, width: `${gapW}%` }}
+                      />
+                    );
+                  }
+                  // Gap after source ends (within period)
+                  if (rightPct < pR) {
+                    const gapW = pR - rightPct;
+                    segments.push(
+                      <div
+                        key="gap-after"
+                        className="absolute h-full rounded-full border-2 border-dashed border-amber-400/60"
+                        style={{ left: `${rightPct}%`, width: `${gapW}%` }}
+                      />
+                    );
+                  }
+                  return segments;
+                })()}
+                {/* Solid coverage bar */}
+                <div
+                  className={cn("absolute h-full rounded-full", row.color)}
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `${Math.max(widthPct, 1)}%`
                   }}
                 />
-              )}
-              
-              {/* Solid coverage bar */}
-              <div 
-                className={cn("absolute h-full rounded-full", row.color)}
-                style={{ 
-                  left: `${leftPct}%`, 
-                  width: `${Math.max(widthPct, 1)}%` 
-                }}
-              />
-              
-              {/* Striped gap on right */}
-              {row.hasGap && hasRightGap && (
-                <div 
-                  className="absolute h-full"
-                  style={{ 
-                    left: `${rightPct}%`, 
-                    width: `${100 - rightPct}%`,
-                    background: `repeating-linear-gradient(
-                      -45deg,
-                      transparent,
-                      transparent 2px,
-                      rgba(251, 146, 60, 0.3) 2px,
-                      rgba(251, 146, 60, 0.3) 4px
-                    )`
-                  }}
-                />
-              )}
+              </div>
+
+              {/* Dates column */}
+              <div className="text-sm text-muted-foreground text-right whitespace-nowrap">
+                {formatDate(row.min)} — {formatDate(row.max)}
+              </div>
+
+              {/* Count column */}
+              <div className="text-sm text-right tabular-nums">
+                {row.count !== undefined ? (
+                  <span className="font-semibold">{formatNumber(row.count)}</span>
+                ) : '—'}
+                {!isPeriod && row.hasGap && (
+                  <span className="block text-[10px] text-amber-600 dark:text-amber-400 font-medium leading-tight">Partial</span>
+                )}
+              </div>
             </div>
-            
-            {/* Dates column */}
-            <div className="text-sm text-muted-foreground text-right whitespace-nowrap">
-              {formatDate(row.min)} — {formatDate(row.max)}
-            </div>
-            
-            {/* Count column */}
-            <div className="text-sm font-semibold text-right tabular-nums">
-              {row.count !== undefined ? formatNumber(row.count) : '—'}
-            </div>
-            
-            {/* Action column: Add Data button for gaps */}
-            <div className="flex justify-end">
-              {row.hasGap && row.onAdd && (
-                <button
-                  onClick={row.onAdd}
-                  className="h-6 w-6 flex items-center justify-center rounded bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 hover-elevate"
-                  data-testid={`button-add-${row.type}-data`}
-                  title="Add data to fill gap"
-                >
-                  <Plus className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

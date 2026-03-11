@@ -144,8 +144,8 @@ var insertMatchSchema = createInsertSchema(matches).omit({
 var matchingRules = pgTable("matching_rules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }).unique(),
-  // Amount tolerance in Rand (e.g., 0.10 = ±R0.10)
-  amountTolerance: decimal("amount_tolerance", { precision: 10, scale: 2 }).notNull().default("0.10"),
+  // Amount tolerance in Rand — tight for overfill/underfill only. Tips should be flagged.
+  amountTolerance: decimal("amount_tolerance", { precision: 10, scale: 2 }).notNull().default("2.00"),
   // Date window in days (0-7)
   dateWindowDays: integer("date_window_days").notNull().default(3),
   // Time window in minutes (15-180)
@@ -167,9 +167,9 @@ var insertMatchingRulesSchema = createInsertSchema(matchingRules).omit({
   updatedAt: true
 });
 var matchingRulesConfigSchema = z.object({
-  amountTolerance: z.number().min(0).max(10),
+  amountTolerance: z.number().min(0).max(50),
   dateWindowDays: z.number().int().min(0).max(7),
-  timeWindowMinutes: z.number().int().min(15).max(180),
+  timeWindowMinutes: z.number().int().min(15).max(1440),
   groupByInvoice: z.boolean(),
   requireCardMatch: z.boolean(),
   minimumConfidence: z.number().int().min(0).max(100),
@@ -361,6 +361,27 @@ var DatabaseStorage = class {
     const [newMatch] = await db.insert(matches).values(match).returning();
     return newMatch;
   }
+  async createMatchesBatch(matchData) {
+    if (matchData.length === 0) return [];
+    const BATCH_SIZE = 100;
+    const results = [];
+    for (let i = 0; i < matchData.length; i += BATCH_SIZE) {
+      const batch = matchData.slice(i, i + BATCH_SIZE);
+      const inserted = await db.insert(matches).values(batch).returning();
+      results.push(...inserted);
+    }
+    return results;
+  }
+  async updateTransactionsBatch(updates) {
+    if (updates.length === 0) return;
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+      const batch = updates.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(
+        ({ id, data }) => db.update(transactions).set(data).where(eq(transactions.id, id))
+      ));
+    }
+  }
   async deleteMatch(id) {
     await db.delete(matches).where(eq(matches.id, id));
   }
@@ -374,6 +395,10 @@ var DatabaseStorage = class {
         inArray(matches.bankTransactionId, transactionIds)
       )
     );
+  }
+  async resetMatchesByPeriod(periodId) {
+    await db.delete(matches).where(eq(matches.periodId, periodId));
+    await db.update(transactions).set({ matchStatus: "unmatched", matchId: null }).where(eq(transactions.periodId, periodId));
   }
   async getPeriodSummary(periodId) {
     const result = await pool.query(`
@@ -506,13 +531,14 @@ var DatabaseStorage = class {
   }
   async getBankAccountCoverageRanges(periodId) {
     const result = await pool.query(`
-      SELECT 
+      SELECT
         t.file_id,
         COALESCE(f.bank_name, t.source_name, 'Bank Account') as bank_name,
         COALESCE(t.source_name, 'Bank Account') as source_name,
         MIN(t.transaction_date) as min_date,
         MAX(t.transaction_date) as max_date,
-        COUNT(*) as tx_count
+        COUNT(*) as tx_count,
+        COUNT(*) FILTER (WHERE t.match_status != 'unmatchable') as in_range_count
       FROM transactions t
       LEFT JOIN uploaded_files f ON t.file_id = f.id
       WHERE t.period_id = $1 AND t.source_type LIKE 'bank%'
@@ -525,7 +551,8 @@ var DatabaseStorage = class {
       bankName: row.bank_name,
       min: row.min_date,
       max: row.max_date,
-      txCount: parseInt(row.tx_count || "0")
+      txCount: parseInt(row.tx_count || "0"),
+      inRangeCount: parseInt(row.in_range_count || "0")
     }));
   }
   async getVerificationSummary(periodId) {
@@ -544,11 +571,13 @@ var DatabaseStorage = class {
         WHERE period_id = $1 AND source_type = 'fuel'
       ),
       bank_stats AS (
-        SELECT 
+        SELECT
           COUNT(*) as total_bank,
           COALESCE(SUM(amount::numeric), 0) as total_bank_amount,
           COUNT(CASE WHEN match_status = 'matched' THEN 1 END) as matched_bank,
           COALESCE(SUM(CASE WHEN match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
+          COUNT(CASE WHEN match_status = 'unmatched' THEN 1 END) as unmatched_bank,
+          COALESCE(SUM(CASE WHEN match_status = 'unmatched' THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
           MIN(transaction_date) as bank_earliest,
           MAX(transaction_date) as bank_latest
         FROM transactions
@@ -678,6 +707,8 @@ var DatabaseStorage = class {
     const totalBankTransactions = parseInt(row.total_bank || "0");
     const matchedBankTransactions = parseInt(row.matched_bank || "0");
     const matchedBankAmount = parseFloat(row.matched_bank_amount || "0");
+    const unmatchedBankOnly = parseInt(row.unmatched_bank || "0");
+    const unmatchedBankOnlyAmount = parseFloat(row.unmatched_bank_amount || "0");
     const matchedCardTransactions = parseInt(row.matched_card_transactions || "0");
     const matchedCardAmount = parseFloat(row.matched_card_amount || "0");
     const unmatchedCardCount = parseInt(row.unmatched_card_count || "0");
@@ -827,7 +858,7 @@ var DatabaseStorage = class {
           transactions: Math.max(0, pendingVerificationTransactions),
           percentageOfCardSales: cardAmount > 0 ? Math.round(Math.max(0, pendingVerificationAmount) / cardAmount * 1e3) / 10 : 0
         },
-        unmatchedIssues: { count: unmatchedBankCount, amount: totalBankAmount - matchedBankAmount }
+        unmatchedIssues: { count: unmatchedBankOnly, amount: unmatchedBankOnlyAmount }
       },
       matchingResults: {
         performanceRating,
@@ -863,7 +894,7 @@ var DatabaseStorage = class {
     const [rules] = await db.select().from(matchingRules).where(eq(matchingRules.periodId, periodId));
     if (!rules) {
       return {
-        amountTolerance: 1,
+        amountTolerance: 2,
         dateWindowDays: 3,
         timeWindowMinutes: 60,
         groupByInvoice: true,
@@ -915,6 +946,18 @@ var DatabaseStorage = class {
   async getResolutionsByPeriod(periodId) {
     return await db.select().from(transactionResolutions).where(eq(transactionResolutions.periodId, periodId)).orderBy(desc(transactionResolutions.createdAt));
   }
+  async clearResolutionsByPeriod(periodId) {
+    const resolutions = await this.getResolutionsByPeriod(periodId);
+    const resolvedTxIds = resolutions.filter((r) => r.resolutionType !== "linked").map((r) => r.transactionId);
+    if (resolvedTxIds.length > 0) {
+      await db.update(transactions).set({ matchStatus: "unmatched" }).where(and(
+        eq(transactions.periodId, periodId),
+        inArray(transactions.id, resolvedTxIds)
+      ));
+    }
+    const result = await db.delete(transactionResolutions).where(eq(transactionResolutions.periodId, periodId));
+    return result.rowCount ?? 0;
+  }
   async getResolutionsByTransaction(transactionId) {
     return await db.select().from(transactionResolutions).where(eq(transactionResolutions.transactionId, transactionId)).orderBy(desc(transactionResolutions.createdAt));
   }
@@ -943,19 +986,21 @@ var SOURCE_PRESETS = [
       return normalized.includes("transaction date") && normalized.includes("terminal id") && normalized.includes("pan");
     },
     mappings: {
+      "Transaction date": "date",
       "Transaction Date": "date",
-      "Time": "time",
       "Amount": "amount",
       "Terminal ID": "reference",
+      "Transaction type": "description",
       "Transaction Type": "description",
       "PAN": "cardNumber",
       "Source": "ignore"
     },
     columnLabels: {
-      "Transaction Date": 'Transaction Date (e.g., "27 Nov")',
-      "Time": "Transaction Time",
-      "Amount": "Transaction Amount",
+      "Transaction date": 'Date & Time (e.g., "28 Feb 23:38:59")',
+      "Transaction Date": 'Date & Time (e.g., "28 Feb 23:38:59")',
+      "Amount": "Transaction Amount (R currency)",
       "Terminal ID": "Terminal Reference ID",
+      "Transaction type": "Transaction Type (Purchase, etc.)",
       "Transaction Type": "Transaction Type (Purchase, etc.)",
       "PAN": "Card Number (masked)",
       "Source": "Source System"
@@ -967,28 +1012,43 @@ var SOURCE_PRESETS = [
     category: "bank",
     detectPattern: (headers) => {
       const normalized = headers.map((h) => h.toLowerCase().trim());
-      return normalized.includes("transaction amount") && normalized.includes("short reference") && normalized.includes("merchant name");
+      const hasAmount = normalized.some((h) => h.includes("transaction amount") || h === "amount");
+      const hasReference = normalized.some((h) => h.includes("short reference") || h === "uti short reference");
+      const hasMerchant = normalized.some((h) => h.includes("merchant"));
+      return hasAmount && hasReference && hasMerchant;
     },
     mappings: {
       "Date": "date",
       "Time": "time",
       "Transaction Amount": "amount",
+      "Amount": "amount",
       "Short Reference": "reference",
+      "UTI Short Reference": "reference",
       "Merchant Name": "description",
+      "MerchantName": "description",
       "Receipt No": "ignore",
       "Terminal ID": "ignore",
       "Card Number": "cardNumber",
       "PAN": "cardNumber",
       "Card Type": "ignore",
       "Payment Method": "paymentType",
-      "Invoice No": "ignore"
+      "Invoice No": "ignore",
+      "MID": "ignore",
+      "Batch": "ignore",
+      "RRN": "ignore",
+      "Invoice No": "ignore",
+      "Sequence No": "ignore",
+      "STAN": "ignore"
     },
     columnLabels: {
       "Date": "Transaction Date (YYYY/MM/DD)",
       "Time": "Transaction Time",
       "Transaction Amount": "Amount (R currency format)",
+      "Amount": "Amount (R currency format)",
       "Short Reference": "Short Reference Code",
+      "UTI Short Reference": "Short Reference Code",
       "Merchant Name": "Merchant/Store Name",
+      "MerchantName": "Merchant/Store Name",
       "Receipt No": "Receipt Number",
       "Terminal ID": "Terminal ID",
       "Card Number": "Masked Card Number",
@@ -1041,6 +1101,128 @@ var SOURCE_PRESETS = [
       "Card No": "Masked Card Number",
       "CardNo": "Masked Card Number"
     }
+  },
+  {
+    name: "Standard Bank Digital",
+    description: "Standard Bank / TotalEnergies merchant export",
+    category: "bank",
+    detectPattern: (headers) => {
+      const normalized = headers.map((h) => h.toLowerCase().trim().replace(/\s+/g, " "));
+      return normalized.includes("transaction amount") && normalized.includes("transaction date") && normalized.includes("batch id") && normalized.includes("card number");
+    },
+    mappings: {
+      "Transaction  Date": "date",
+      "Transaction  Time": "time",
+      "Transaction  Amount": "amount",
+      "Reference  Number": "reference",
+      "Transaction  Type": "description",
+      "Card  Number": "cardNumber",
+      // Ignore the rest
+      "Batch  ID": "ignore",
+      "Card  Type": "ignore",
+      "Merchant  Number": "ignore",
+      "Reject  Code": "ignore",
+      "Settlement  Date": "ignore",
+      "Terminal  ID": "ignore",
+      "Authorisation  Code": "ignore",
+      "Batch  Sequence  Number": "ignore",
+      "Cashback  Amount": "ignore",
+      "Cashier  Number": "ignore",
+      "GUID": "ignore",
+      "Interchange  Rate": "ignore",
+      "Item  Rate": "ignore",
+      "Origin  ID": "ignore",
+      "POS Entry  Mode": "ignore",
+      "Record  Type": "ignore",
+      "RRN": "ignore",
+      "STAN": "ignore"
+    },
+    columnLabels: {
+      "Transaction  Date": "Transaction Date (DD/MM/YYYY)",
+      "Transaction  Time": "Transaction Time",
+      "Transaction  Amount": "Transaction Amount",
+      "Reference  Number": "Reference Number",
+      "Transaction  Type": "Transaction Type",
+      "Card  Number": "Card Number (masked)"
+    }
+  },
+  {
+    name: "Sale Master",
+    description: "Sale Master fuel POS export (semicolon-delimited)",
+    category: "fuel",
+    detectPattern: (headers) => {
+      const normalized = headers.map((h) => h.toLowerCase().trim());
+      return normalized.includes("transdatetime") && normalized.includes("saletotal") && normalized.includes("invoicenumber");
+    },
+    mappings: {
+      "transdatetime": "date",
+      "TransTime": "time",
+      "SaleTotal": "amount",
+      "InvoiceNumber": "reference",
+      "Description": "description",
+      "PayType": "paymentType",
+      "accnum": "cardNumber",
+      // Ignore the rest
+      "AutoInPumpDisplayNumber": "ignore",
+      "branch": "ignore",
+      "TransDate": "ignore",
+      "unitname": "ignore",
+      "shiftnumber": "ignore",
+      "pump": "ignore",
+      "hose": "ignore",
+      "PluCode": "ignore",
+      "allgroups": "ignore",
+      "subgroups": "ignore",
+      "AttendantKey": "ignore",
+      "AttendantMiniPOSKey": "ignore",
+      "Attendant": "ignore",
+      "Cashier": "ignore",
+      "UnitCost": "ignore",
+      "CostPrice": "ignore",
+      "UnitVAT": "ignore",
+      "UnitTotalCurr": "ignore",
+      "VAT": "ignore",
+      "TotalCurr": "ignore",
+      "Selling": "ignore",
+      "Quantity": "ignore",
+      "WANPLU": "ignore",
+      "MiniPOSCode": "ignore",
+      "MiniPOSLineItemNumber": "ignore",
+      "FuelSale": "ignore",
+      "SaleType": "ignore",
+      "Standalone": "ignore",
+      "Debtor": "ignore",
+      "accname": "ignore",
+      "RegNum": "ignore",
+      "OdoMeter": "ignore",
+      "OrderNum": "ignore",
+      "paytypedescription": "ignore",
+      "AccountCode": "ignore",
+      "MemoNumber": "ignore",
+      "ManagerApproval": "ignore",
+      "Updated": "ignore",
+      "ExternalAccount": "ignore",
+      "UniqueID": "ignore",
+      "DriverName": "ignore",
+      "PostCount": "ignore",
+      "DayEndshiftnumber": "ignore",
+      "RequestNum": "ignore",
+      "FleetNum": "ignore",
+      "vatnumber": "ignore",
+      "TotaliserLiter": "ignore",
+      "PreAuthNumber": "ignore",
+      "salelineuniqueid": "ignore",
+      "fuelsalekey": "ignore"
+    },
+    columnLabels: {
+      "transdatetime": "Transaction Date & Time",
+      "TransTime": "Transaction Time",
+      "SaleTotal": "Sale Total Amount",
+      "InvoiceNumber": "Invoice Number",
+      "Description": "Product Description (fuel type)",
+      "PayType": "Payment Type (Card/Cash)",
+      "accnum": "Account/Card Number"
+    }
   }
 ];
 var DataNormalizer = class {
@@ -1087,6 +1269,21 @@ var DataNormalizer = class {
     cleaned = cleaned.replace(/,/g, "");
     const isNegative = cleaned.startsWith("(") && cleaned.endsWith(")") || cleaned.startsWith("-") || cleaned.toLowerCase().includes("cr");
     cleaned = cleaned.replace(/[^0-9.]/g, "");
+    return isNegative ? `-${cleaned}` : cleaned;
+  }
+  // Normalize FNB amount: "R100,00" → "100.00" (comma is decimal separator in SA format)
+  static normalizeFNBAmount(value) {
+    if (!value) return "0";
+    let cleaned = String(value).trim();
+    cleaned = cleaned.replace(/^R\s*/i, "");
+    const isNegative = cleaned.startsWith("-") || cleaned.startsWith("(") && cleaned.endsWith(")");
+    cleaned = cleaned.replace(/[()]/g, "");
+    cleaned = cleaned.replace(/\s/g, "");
+    if (/,\d{1,2}$/.test(cleaned) && !cleaned.includes(".")) {
+      cleaned = cleaned.replace(",", ".");
+    }
+    cleaned = cleaned.replace(/[^0-9.]/g, "");
+    if (!cleaned) return "0";
     return isNegative ? `-${cleaned}` : cleaned;
   }
   // Normalize FNB date: "27 Nov" → "2025-11-27" (uses provided year)
@@ -1163,8 +1360,11 @@ var DataNormalizer = class {
     return "";
   }
   // General amount normalization
-  static normalizeAmount(value, sourceType) {
+  static normalizeAmount(value, sourceType, presetName) {
     if (!value) return "0";
+    if (presetName === "FNB Merchant" || String(value).match(/^R\s*[\d\s]*,\d{2}$/) && !String(value).includes(".")) {
+      return this.normalizeFNBAmount(value);
+    }
     if (sourceType && sourceType.startsWith("bank") && String(value).includes("R")) {
       return this.normalizeABSAAmount(value);
     }
@@ -1200,18 +1400,132 @@ var DataNormalizer = class {
 var FileParser = class {
   parseCSV(buffer) {
     const text2 = buffer.toString("utf-8");
-    const result = Papa.parse(text2, {
+    const firstLine = text2.split("\n")[0] || "";
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    let delimiter = tabCount > semicolonCount && tabCount > commaCount ? "	" : semicolonCount > commaCount ? ";" : ",";
+    let result = Papa.parse(text2, {
       header: true,
       skipEmptyLines: true,
-      dynamicTyping: false
+      dynamicTyping: false,
+      delimiter
     });
-    if (result.errors.length > 0) {
-      throw new Error(`CSV parsing error: ${result.errors[0].message}`);
+    let headers = result.meta.fields || [];
+    if (headers.length <= 1 && delimiter !== "	") {
+      const tabResult = Papa.parse(text2, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+        delimiter: "	"
+      });
+      const tabHeaders = tabResult.meta.fields || [];
+      if (tabHeaders.length > 1) {
+        result = tabResult;
+        headers = tabHeaders;
+        delimiter = "	";
+      }
     }
-    const headers = result.meta.fields || [];
+    if (headers.length <= 1) {
+      console.log(`[PARSER] Only ${headers.length} column(s) detected with delimiter "${delimiter}", trying fixed-width parser`);
+      const parsed = this.parseFixedWidth(text2);
+      if (parsed && parsed.headers.length > 1) {
+        console.log(`[PARSER] Fixed-width parser found ${parsed.headers.length} columns: ${parsed.headers.join(", ")}`);
+        return parsed;
+      }
+      console.log(`[PARSER] Fixed-width parser also failed`);
+    }
+    const criticalErrors = result.errors.filter(
+      (e) => e.type !== "FieldMismatch"
+    );
+    if (criticalErrors.length > 0) {
+      throw new Error(`CSV parsing error: ${criticalErrors[0].message}`);
+    }
+    headers = result.meta.fields || [];
     const rows = result.data;
     return {
       headers,
+      rows,
+      rowCount: rows.length
+    };
+  }
+  // Parse fixed-width or space-delimited text files (e.g., FNB .txt exports)
+  // Uses known header patterns to identify column boundaries
+  parseFixedWidth(text2) {
+    const lines = text2.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return null;
+    const headerLine = lines[0];
+    console.log(`[PARSER] Fixed-width: header line = "${headerLine.substring(0, 120)}..."`);
+    let headerParts = headerLine.split(/\s{2,}/).map((h) => h.trim()).filter(Boolean);
+    let columnStarts = [];
+    if (headerParts.length >= 2) {
+      let searchFrom = 0;
+      for (const part of headerParts) {
+        const idx = headerLine.indexOf(part, searchFrom);
+        columnStarts.push(idx);
+        searchFrom = idx + part.length;
+      }
+    }
+    if (headerParts.length < 2) {
+      const knownHeaders = [
+        "Transaction date",
+        "Transaction Date",
+        "Transaction time",
+        "Transaction Time",
+        "Transaction type",
+        "Transaction Type",
+        "Transaction amount",
+        "Transaction Amount",
+        "Terminal ID",
+        "Card Number",
+        "Card number",
+        "Reference Number",
+        "Reference number",
+        "PAN",
+        "Source",
+        "Amount",
+        "Date",
+        "Time",
+        "Description",
+        "Type"
+      ];
+      const found = [];
+      const headerLower = headerLine;
+      for (const kh of knownHeaders) {
+        let searchPos = 0;
+        while (true) {
+          const idx = headerLower.indexOf(kh, searchPos);
+          if (idx === -1) break;
+          const alreadyMatched = found.some(
+            (f) => idx >= f.start && idx < f.start + f.name.length
+          );
+          if (!alreadyMatched) {
+            found.push({ name: kh, start: idx });
+          }
+          searchPos = idx + 1;
+        }
+      }
+      if (found.length < 2) return null;
+      found.sort((a, b) => a.start - b.start);
+      headerParts = found.map((f) => f.name);
+      columnStarts = found.map((f) => f.start);
+      console.log(`[PARSER] Fixed-width: matched ${found.length} known headers: ${headerParts.join(", ")}`);
+    }
+    if (headerParts.length < 2 || columnStarts.length < 2) return null;
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      const row = {};
+      for (let c = 0; c < headerParts.length; c++) {
+        const start = columnStarts[c];
+        const end = c < headerParts.length - 1 ? columnStarts[c + 1] : line.length;
+        row[headerParts[c]] = line.substring(start, end).trim();
+      }
+      rows.push(row);
+    }
+    return {
+      headers: headerParts,
       rows,
       rowCount: rows.length
     };
@@ -1230,7 +1544,20 @@ var FileParser = class {
     if (data.length === 0) {
       throw new Error("Excel file is empty");
     }
-    const headers = data[0].map((h) => String(h).trim());
+    let headers = data[0].map((h) => String(h).trim());
+    if (headers.length === 1 && headers[0].includes(";")) {
+      headers = headers[0].split(";").map((h) => h.trim());
+      const rows2 = data.slice(1).map((row) => {
+        const cellValue = String(row[0] || "");
+        const values = cellValue.split(";");
+        const obj = {};
+        headers.forEach((header, index2) => {
+          obj[header] = values[index2] !== void 0 ? values[index2].trim() : "";
+        });
+        return obj;
+      });
+      return { headers, rows: rows2, rowCount: rows2.length };
+    }
     const rows = data.slice(1).map((row) => {
       const obj = {};
       headers.forEach((header, index2) => {
@@ -1454,7 +1781,7 @@ var FileParser = class {
   }
   // Generic column detection based on column name patterns
   detectColumnGeneric(header) {
-    const normalized = header.toLowerCase().trim();
+    const normalized = header.toLowerCase().trim().replace(/\s+/g, " ");
     let suggestedMapping = "ignore";
     let confidence = 0;
     if (normalized.includes("date") || normalized.includes("transaction date") || normalized.includes("posted") || normalized === "dt" || normalized === "_1") {
@@ -1526,10 +1853,37 @@ var FileParser = class {
               transactionDate = normalizedDate;
               processedFields.add("date");
             }
+            if (!transactionTime) {
+              const timeMatch = rawDate.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
+              if (timeMatch) {
+                transactionTime = timeMatch[1];
+              }
+            }
           } else if (preset?.name === "ABSA Merchant") {
             const normalizedDate = DataNormalizer.normalizeABSADate(rawDate);
             if (normalizedDate) {
               transactionDate = normalizedDate;
+              processedFields.add("date");
+            }
+          } else if (preset?.name === "Standard Bank Digital") {
+            const parts = rawDate.split("/");
+            if (parts.length === 3) {
+              transactionDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+              processedFields.add("date");
+            } else {
+              transactionDate = rawDate;
+              processedFields.add("date");
+            }
+          } else if (preset?.name === "Sale Master") {
+            const spaceIdx = rawDate.indexOf(" ");
+            if (spaceIdx > 0) {
+              transactionDate = rawDate.substring(0, spaceIdx);
+              processedFields.add("date");
+              if (!transactionTime) {
+                transactionTime = rawDate.substring(spaceIdx + 1).trim();
+              }
+            } else {
+              transactionDate = rawDate;
               processedFields.add("date");
             }
           } else if (preset?.name === "Fuel Master") {
@@ -1566,7 +1920,7 @@ var FileParser = class {
           }
           break;
         case "amount":
-          const amtVal = DataNormalizer.normalizeAmount(String(value), sourceType);
+          const amtVal = DataNormalizer.normalizeAmount(String(value), sourceType, preset?.name);
           if (amtVal) {
             amount = amtVal;
             processedFields.add("amount");
@@ -2747,17 +3101,36 @@ async function registerRoutes(app2) {
         (f) => f.sourceType === sourceType && f.sourceName === sourceName
       );
       if (existingFile && existingFile.contentHash === contentHash) {
-        console.log(`Same file re-uploaded, skipping processing: ${existingFile.fileName}`);
+        console.log(`Same file re-uploaded, re-parsing for mappings: ${existingFile.fileName}`);
+        const isCSVReupload = req.file.mimetype.includes("csv") || req.file.mimetype === "text/csv" || req.file.mimetype === "text/plain" || req.file.originalname.toLowerCase().endsWith(".csv") || req.file.originalname.toLowerCase().endsWith(".txt");
+        const fileType2 = isCSVReupload ? "csv" : "excel";
+        const reuploadParsed = await fileParser.parse(req.file.buffer, fileType2);
+        const reuploadMappingsArray = fileParser.autoDetectColumns(reuploadParsed.headers);
+        const reuploadDetectedPreset = fileParser.detectSourcePreset(reuploadParsed.headers);
+        const reuploadMappings = {};
+        if (reuploadDetectedPreset) {
+          for (const header of reuploadParsed.headers) {
+            reuploadMappings[header] = reuploadDetectedPreset.mappings[header] || "ignore";
+          }
+        } else {
+          for (const mapping of reuploadMappingsArray) {
+            reuploadMappings[mapping.detectedColumn] = mapping.mappedTo || "ignore";
+          }
+          for (const header of reuploadParsed.headers) {
+            if (!reuploadMappings[header]) {
+              reuploadMappings[header] = "ignore";
+            }
+          }
+        }
         return res.json({
           file: existingFile,
           parsed: {
-            headers: [],
-            // These would need to be re-parsed if needed
+            headers: reuploadParsed.headers,
             rows: [],
-            rowCount: existingFile.rowCount || 0
+            rowCount: existingFile.rowCount || reuploadParsed.rowCount
           },
-          suggestedMappings: existingFile.columnMapping || {},
-          qualityReport: existingFile.qualityReport,
+          suggestedMappings: reuploadMappings,
+          qualityReport: existingFile.qualityReport || { hasIssues: false, totalRows: reuploadParsed.rowCount, cleanRows: reuploadParsed.rowCount, issues: [] },
           isReupload: true,
           message: "Same file detected, using existing data"
         });
@@ -2770,12 +3143,12 @@ async function registerRoutes(app2) {
       if (fileToReplace) {
         console.log(`Will replace existing file after successful upload: ${fileToReplace.fileName} (${fileToReplace.id})`);
       }
-      const isCSV = req.file.mimetype.includes("csv") || req.file.mimetype === "text/csv" || req.file.originalname.endsWith(".csv");
+      const isCSV = req.file.mimetype.includes("csv") || req.file.mimetype === "text/csv" || req.file.mimetype === "text/plain" || req.file.originalname.endsWith(".csv") || req.file.originalname.endsWith(".txt");
       const isExcel = req.file.mimetype.includes("spreadsheet") || req.file.mimetype.includes("excel") || req.file.originalname.endsWith(".xlsx") || req.file.originalname.endsWith(".xls");
       const isPDF = req.file.mimetype === "application/pdf" || req.file.originalname.endsWith(".pdf");
       if (!isCSV && !isExcel && !isPDF) {
         return res.status(400).json({
-          error: "Invalid file format. Please upload CSV, Excel, or PDF files only."
+          error: "Invalid file format. Please upload CSV, TXT, Excel, or PDF files only."
         });
       }
       const fileType = isCSV ? "csv" : isExcel ? "xlsx" : "pdf";
@@ -3111,6 +3484,10 @@ async function registerRoutes(app2) {
         status: "processed",
         rowCount: created.length
       });
+      const currentPeriod = await storage.getPeriod(file.periodId);
+      if (currentPeriod && currentPeriod.status === "draft") {
+        await storage.updatePeriod(file.periodId, { status: "in_progress" });
+      }
       res.json({
         success: true,
         transactionsCreated: created.length,
@@ -3242,6 +3619,7 @@ async function registerRoutes(app2) {
   }
   app2.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
+      await storage.resetMatchesByPeriod(req.params.periodId);
       const rules = await storage.getMatchingRules(req.params.periodId);
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
       const fuelTransactions = transactions2.filter(
@@ -3269,9 +3647,9 @@ async function registerRoutes(app2) {
           const maxFuelDateStr = new Date(maxFuelDate).toISOString().split("T")[0];
           const minFuelDateStr = new Date(minFuelDate).toISOString().split("T")[0];
           dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
-          for (const tx of unmatchableBankTransactions) {
-            await storage.updateTransaction(tx.id, { matchStatus: "unmatchable", matchId: null });
-          }
+          await storage.updateTransactionsBatch(
+            unmatchableBankTransactions.map((tx) => ({ id: tx.id, data: { matchStatus: "unmatchable", matchId: null } }))
+          );
         }
       }
       const matchableBankTransactions = bankTransactions.filter(
@@ -3294,7 +3672,7 @@ async function registerRoutes(app2) {
         (t) => t.sourceType === "fuel" && t.isCardTransaction !== "yes"
       ).length;
       const matchedInvoices = /* @__PURE__ */ new Set();
-      const pendingUpdates = [];
+      const pendingMatches = [];
       for (const bankTx of matchableBankTransactions) {
         let bestMatch = null;
         const bankDayKey = parseDateToDays(bankTx.transactionDate || "");
@@ -3394,29 +3772,39 @@ async function registerRoutes(app2) {
         }
         if (bestMatch) {
           const matchType = bestMatch.confidence >= rules.autoMatchThreshold ? "auto" : "auto_review";
-          const match = await storage.createMatch({
-            periodId: req.params.periodId,
-            fuelTransactionId: bestMatch.invoice.items[0].id,
-            // Link to first item
-            bankTransactionId: bankTx.id,
-            matchType,
-            matchConfidence: String(bestMatch.confidence)
+          pendingMatches.push({
+            matchData: {
+              periodId: req.params.periodId,
+              fuelTransactionId: bestMatch.invoice.items[0].id,
+              bankTransactionId: bankTx.id,
+              matchType,
+              matchConfidence: String(bestMatch.confidence)
+            },
+            bankTxId: bankTx.id,
+            fuelItemIds: bestMatch.invoice.items.map((item) => item.id)
           });
-          pendingUpdates.push({ id: bankTx.id, updates: { matchStatus: "matched", matchId: match.id } });
-          for (const fuelItem of bestMatch.invoice.items) {
-            pendingUpdates.push({ id: fuelItem.id, updates: { matchStatus: "matched", matchId: match.id } });
-          }
           matchedInvoices.add(bestMatch.invoice.invoiceNumber);
           matchCount++;
         }
       }
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < pendingUpdates.length; i += BATCH_SIZE) {
-        const batch = pendingUpdates.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(({ id, updates }) => storage.updateTransaction(id, updates)));
+      console.log(`[MATCH] Creating ${pendingMatches.length} matches in bulk...`);
+      const createdMatches = await storage.createMatchesBatch(
+        pendingMatches.map((pm) => pm.matchData)
+      );
+      const txUpdates = [];
+      for (let i = 0; i < createdMatches.length; i++) {
+        const match = createdMatches[i];
+        const pending = pendingMatches[i];
+        txUpdates.push({ id: pending.bankTxId, data: { matchStatus: "matched", matchId: match.id } });
+        for (const fuelId of pending.fuelItemIds) {
+          txUpdates.push({ id: fuelId, data: { matchStatus: "matched", matchId: match.id } });
+        }
       }
+      console.log(`[MATCH] Updating ${txUpdates.length} transactions in bulk...`);
+      await storage.updateTransactionsBatch(txUpdates);
       const matchableCount = matchableBankTransactions.length;
       const matchRate = matchableCount > 0 ? (matchCount / matchableCount * 100).toFixed(1) : "0";
+      await storage.updatePeriod(req.params.periodId, { status: "complete" });
       res.json({
         success: true,
         matchesCreated: matchCount,
@@ -3625,6 +4013,15 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to bulk flag transactions" });
     }
   });
+  app2.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
+    try {
+      const count = await storage.clearResolutionsByPeriod(req.params.periodId);
+      res.json({ success: true, count });
+    } catch (error) {
+      console.error("Error clearing resolutions:", error);
+      res.status(500).json({ error: "Failed to clear resolutions" });
+    }
+  });
   app2.post("/api/matches/bulk-confirm", isAuthenticated, async (req, res) => {
     try {
       const user = req.user;
@@ -3711,6 +4108,82 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error fetching summary:", error);
       res.status(500).json({ error: "Failed to fetch summary" });
+    }
+  });
+  app2.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.getPeriod(req.params.periodId);
+      if (!period) {
+        return res.status(404).json({ error: "Period not found" });
+      }
+      const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
+      const matchesData = await storage.getMatchesByPeriod(req.params.periodId);
+      const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
+      const matchMap = /* @__PURE__ */ new Map();
+      for (const m of matchesData) {
+        matchMap.set(m.bankTransactionId, m);
+        matchMap.set(m.fuelTransactionId, m);
+      }
+      const resolutionMap = new Map(resolutions.map((r) => [r.transactionId, r]));
+      const txMap = new Map(transactions2.map((t) => [t.id, t]));
+      const matchedRows = matchesData.map((m) => {
+        const bank = txMap.get(m.bankTransactionId);
+        const fuel = txMap.get(m.fuelTransactionId);
+        const bankAmt = bank ? parseFloat(bank.amount) : 0;
+        const fuelAmt = fuel ? parseFloat(fuel.amount) : 0;
+        return {
+          "Date": bank?.transactionDate || fuel?.transactionDate || "",
+          "Bank Amount": bankAmt,
+          "Fuel Amount": fuelAmt,
+          "Difference": Math.round((bankAmt - fuelAmt) * 100) / 100,
+          "Bank Description": bank?.description || "",
+          "Bank Source": bank?.sourceName || "",
+          "Fuel Description": fuel?.description || "",
+          "Confidence": m.confidence ? `${m.confidence}%` : "",
+          "Match Type": m.matchType || "auto"
+        };
+      });
+      const unmatchedBank = transactions2.filter((t) => t.sourceType === "bank" && t.matchStatus === "unmatched").map((t) => {
+        const resolution = resolutionMap.get(t.id);
+        return {
+          "Date": t.transactionDate,
+          "Amount": parseFloat(t.amount),
+          "Description": t.description || "",
+          "Source": t.sourceName || "",
+          "Status": resolution ? resolution.resolutionType : "unresolved",
+          "Resolution Notes": resolution?.notes || ""
+        };
+      });
+      const bankTxns = transactions2.filter((t) => t.sourceType === "bank");
+      const fuelTxns = transactions2.filter((t) => t.sourceType === "fuel");
+      const matchable = bankTxns.filter((t) => t.matchStatus !== "unmatchable");
+      const matched = bankTxns.filter((t) => t.matchStatus === "matched");
+      const summaryRows = [
+        { "Metric": "Period", "Value": period.name },
+        { "Metric": "Period Dates", "Value": `${period.startDate} to ${period.endDate}` },
+        { "Metric": "Total Fuel Transactions", "Value": fuelTxns.length },
+        { "Metric": "Total Bank Transactions", "Value": bankTxns.length },
+        { "Metric": "In-Range Bank Transactions", "Value": matchable.length },
+        { "Metric": "Matched", "Value": matched.length },
+        { "Metric": "Match Rate", "Value": matchable.length > 0 ? `${Math.round(matched.length / matchable.length * 100)}%` : "N/A" },
+        { "Metric": "Unmatched Bank", "Value": unmatchedBank.length },
+        { "Metric": "Outside Date Range", "Value": bankTxns.filter((t) => t.matchStatus === "unmatchable").length }
+      ];
+      const XLSX3 = await import("xlsx");
+      const wb = XLSX3.utils.book_new();
+      const wsSummary = XLSX3.utils.json_to_sheet(summaryRows);
+      XLSX3.utils.book_append_sheet(wb, wsSummary, "Summary");
+      const wsMatched = XLSX3.utils.json_to_sheet(matchedRows);
+      XLSX3.utils.book_append_sheet(wb, wsMatched, "Matched");
+      const wsUnmatched = XLSX3.utils.json_to_sheet(unmatchedBank);
+      XLSX3.utils.book_append_sheet(wb, wsUnmatched, "Unmatched Bank");
+      const buffer = XLSX3.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="Reconciliation_${period.name.replace(/\s+/g, "_")}.xlsx"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error exporting reconciliation:", error);
+      res.status(500).json({ error: "Failed to export reconciliation" });
     }
   });
   app2.get("/api/periods/:periodId/export-flagged", isAuthenticated, async (req, res) => {

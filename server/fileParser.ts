@@ -36,19 +36,21 @@ export const SOURCE_PRESETS: SourcePreset[] = [
              normalized.includes('pan');
     },
     mappings: {
+      'Transaction date': 'date',
       'Transaction Date': 'date',
-      'Time': 'time',
       'Amount': 'amount',
       'Terminal ID': 'reference',
+      'Transaction type': 'description',
       'Transaction Type': 'description',
       'PAN': 'cardNumber',
       'Source': 'ignore',
     },
     columnLabels: {
-      'Transaction Date': 'Transaction Date (e.g., "27 Nov")',
-      'Time': 'Transaction Time',
-      'Amount': 'Transaction Amount',
+      'Transaction date': 'Date & Time (e.g., "28 Feb 23:38:59")',
+      'Transaction Date': 'Date & Time (e.g., "28 Feb 23:38:59")',
+      'Amount': 'Transaction Amount (R currency)',
       'Terminal ID': 'Terminal Reference ID',
+      'Transaction type': 'Transaction Type (Purchase, etc.)',
       'Transaction Type': 'Transaction Type (Purchase, etc.)',
       'PAN': 'Card Number (masked)',
       'Source': 'Source System',
@@ -60,16 +62,20 @@ export const SOURCE_PRESETS: SourcePreset[] = [
     category: 'bank',
     detectPattern: (headers) => {
       const normalized = headers.map(h => h.toLowerCase().trim());
-      return normalized.includes('transaction amount') && 
-             normalized.includes('short reference') &&
-             normalized.includes('merchant name');
+      const hasAmount = normalized.some(h => h.includes('transaction amount') || h === 'amount');
+      const hasReference = normalized.some(h => h.includes('short reference') || h === 'uti short reference');
+      const hasMerchant = normalized.some(h => h.includes('merchant'));
+      return hasAmount && hasReference && hasMerchant;
     },
     mappings: {
       'Date': 'date',
       'Time': 'time',
       'Transaction Amount': 'amount',
+      'Amount': 'amount',
       'Short Reference': 'reference',
+      'UTI Short Reference': 'reference',
       'Merchant Name': 'description',
+      'MerchantName': 'description',
       'Receipt No': 'ignore',
       'Terminal ID': 'ignore',
       'Card Number': 'cardNumber',
@@ -77,13 +83,22 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Card Type': 'ignore',
       'Payment Method': 'paymentType',
       'Invoice No': 'ignore',
+      'MID': 'ignore',
+      'Batch': 'ignore',
+      'RRN': 'ignore',
+      'Invoice No': 'ignore',
+      'Sequence No': 'ignore',
+      'STAN': 'ignore',
     },
     columnLabels: {
       'Date': 'Transaction Date (YYYY/MM/DD)',
       'Time': 'Transaction Time',
       'Transaction Amount': 'Amount (R currency format)',
+      'Amount': 'Amount (R currency format)',
       'Short Reference': 'Short Reference Code',
+      'UTI Short Reference': 'Short Reference Code',
       'Merchant Name': 'Merchant/Store Name',
+      'MerchantName': 'Merchant/Store Name',
       'Receipt No': 'Receipt Number',
       'Terminal ID': 'Terminal ID',
       'Card Number': 'Masked Card Number',
@@ -129,6 +144,133 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Card Number': 'Masked Card Number',
       'Card No': 'Masked Card Number',
       'CardNo': 'Masked Card Number',
+    },
+  },
+  {
+    name: 'Standard Bank Digital',
+    description: 'Standard Bank / TotalEnergies merchant export',
+    category: 'bank',
+    detectPattern: (headers) => {
+      const normalized = headers.map(h => h.toLowerCase().trim().replace(/\s+/g, ' '));
+      return normalized.includes('transaction amount') &&
+             normalized.includes('transaction date') &&
+             normalized.includes('batch id') &&
+             normalized.includes('card number');
+    },
+    mappings: {
+      'Transaction  Date': 'date',
+      'Transaction  Time': 'time',
+      'Transaction  Amount': 'amount',
+      'Reference  Number': 'reference',
+      'Transaction  Type': 'description',
+      'Card  Number': 'cardNumber',
+      // Ignore the rest
+      'Batch  ID': 'ignore',
+      'Card  Type': 'ignore',
+      'Merchant  Number': 'ignore',
+      'Reject  Code': 'ignore',
+      'Settlement  Date': 'ignore',
+      'Terminal  ID': 'ignore',
+      'Authorisation  Code': 'ignore',
+      'Batch  Sequence  Number': 'ignore',
+      'Cashback  Amount': 'ignore',
+      'Cashier  Number': 'ignore',
+      'GUID': 'ignore',
+      'Interchange  Rate': 'ignore',
+      'Item  Rate': 'ignore',
+      'Origin  ID': 'ignore',
+      'POS Entry  Mode': 'ignore',
+      'Record  Type': 'ignore',
+      'RRN': 'ignore',
+      'STAN': 'ignore',
+    },
+    columnLabels: {
+      'Transaction  Date': 'Transaction Date (DD/MM/YYYY)',
+      'Transaction  Time': 'Transaction Time',
+      'Transaction  Amount': 'Transaction Amount',
+      'Reference  Number': 'Reference Number',
+      'Transaction  Type': 'Transaction Type',
+      'Card  Number': 'Card Number (masked)',
+    },
+  },
+  {
+    name: 'Sale Master',
+    description: 'Sale Master fuel POS export (semicolon-delimited)',
+    category: 'fuel',
+    detectPattern: (headers) => {
+      const normalized = headers.map(h => h.toLowerCase().trim());
+      return normalized.includes('transdatetime') &&
+             normalized.includes('saletotal') &&
+             normalized.includes('invoicenumber');
+    },
+    mappings: {
+      'transdatetime': 'date',
+      'TransTime': 'time',
+      'SaleTotal': 'amount',
+      'InvoiceNumber': 'reference',
+      'Description': 'description',
+      'PayType': 'paymentType',
+      'accnum': 'cardNumber',
+      // Ignore the rest
+      'AutoInPumpDisplayNumber': 'ignore',
+      'branch': 'ignore',
+      'TransDate': 'ignore',
+      'unitname': 'ignore',
+      'shiftnumber': 'ignore',
+      'pump': 'ignore',
+      'hose': 'ignore',
+      'PluCode': 'ignore',
+      'allgroups': 'ignore',
+      'subgroups': 'ignore',
+      'AttendantKey': 'ignore',
+      'AttendantMiniPOSKey': 'ignore',
+      'Attendant': 'ignore',
+      'Cashier': 'ignore',
+      'UnitCost': 'ignore',
+      'CostPrice': 'ignore',
+      'UnitVAT': 'ignore',
+      'UnitTotalCurr': 'ignore',
+      'VAT': 'ignore',
+      'TotalCurr': 'ignore',
+      'Selling': 'ignore',
+      'Quantity': 'ignore',
+      'WANPLU': 'ignore',
+      'MiniPOSCode': 'ignore',
+      'MiniPOSLineItemNumber': 'ignore',
+      'FuelSale': 'ignore',
+      'SaleType': 'ignore',
+      'Standalone': 'ignore',
+      'Debtor': 'ignore',
+      'accname': 'ignore',
+      'RegNum': 'ignore',
+      'OdoMeter': 'ignore',
+      'OrderNum': 'ignore',
+      'paytypedescription': 'ignore',
+      'AccountCode': 'ignore',
+      'MemoNumber': 'ignore',
+      'ManagerApproval': 'ignore',
+      'Updated': 'ignore',
+      'ExternalAccount': 'ignore',
+      'UniqueID': 'ignore',
+      'DriverName': 'ignore',
+      'PostCount': 'ignore',
+      'DayEndshiftnumber': 'ignore',
+      'RequestNum': 'ignore',
+      'FleetNum': 'ignore',
+      'vatnumber': 'ignore',
+      'TotaliserLiter': 'ignore',
+      'PreAuthNumber': 'ignore',
+      'salelineuniqueid': 'ignore',
+      'fuelsalekey': 'ignore',
+    },
+    columnLabels: {
+      'transdatetime': 'Transaction Date & Time',
+      'TransTime': 'Transaction Time',
+      'SaleTotal': 'Sale Total Amount',
+      'InvoiceNumber': 'Invoice Number',
+      'Description': 'Product Description (fuel type)',
+      'PayType': 'Payment Type (Card/Cash)',
+      'accnum': 'Account/Card Number',
     },
   },
 ];
@@ -192,6 +334,27 @@ export class DataNormalizer {
                        cleaned.startsWith('-') ||
                        cleaned.toLowerCase().includes('cr');
     cleaned = cleaned.replace(/[^0-9.]/g, '');
+    return isNegative ? `-${cleaned}` : cleaned;
+  }
+
+  // Normalize FNB amount: "R100,00" → "100.00" (comma is decimal separator in SA format)
+  static normalizeFNBAmount(value: string): string {
+    if (!value) return '0';
+    let cleaned = String(value).trim();
+    // Remove "R" prefix and spaces
+    cleaned = cleaned.replace(/^R\s*/i, '');
+    // Handle negative
+    const isNegative = cleaned.startsWith('-') || (cleaned.startsWith('(') && cleaned.endsWith(')'));
+    cleaned = cleaned.replace(/[()]/g, '');
+    // Remove spaces (thousands separator in some SA formats: "1 000,00")
+    cleaned = cleaned.replace(/\s/g, '');
+    // Replace comma with period (comma is decimal separator)
+    // Only if there's exactly one comma and it's followed by 1-2 digits at the end
+    if (/,\d{1,2}$/.test(cleaned) && !cleaned.includes('.')) {
+      cleaned = cleaned.replace(',', '.');
+    }
+    cleaned = cleaned.replace(/[^0-9.]/g, '');
+    if (!cleaned) return '0';
     return isNegative ? `-${cleaned}` : cleaned;
   }
 
@@ -279,9 +442,14 @@ export class DataNormalizer {
   }
 
   // General amount normalization
-  static normalizeAmount(value: string, sourceType?: string): string {
+  static normalizeAmount(value: string, sourceType?: string, presetName?: string): string {
     if (!value) return '0';
-    
+
+    // FNB uses comma as decimal separator: "R100,00"
+    if (presetName === 'FNB Merchant' || (String(value).match(/^R\s*[\d\s]*,\d{2}$/) && !String(value).includes('.'))) {
+      return this.normalizeFNBAmount(value);
+    }
+
     // For bank sources (ABSA, etc.), use special handling for R currency
     if (sourceType && sourceType.startsWith('bank') && String(value).includes('R')) {
       return this.normalizeABSAAmount(value);
@@ -341,21 +509,153 @@ export class DataNormalizer {
 export class FileParser {
   parseCSV(buffer: Buffer): ParsedFileData {
     const text = buffer.toString('utf-8');
-    const result = Papa.parse(text, {
+
+    // Auto-detect delimiter: check tabs, semicolons, commas in the first line
+    const firstLine = text.split('\n')[0] || '';
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    // Tabs take priority (TSV files like FNB .txt exports), then semicolons, then commas
+    let delimiter = tabCount > semicolonCount && tabCount > commaCount ? '\t'
+                    : semicolonCount > commaCount ? ';' : ',';
+
+    let result = Papa.parse(text, {
       header: true,
       skipEmptyLines: true,
       dynamicTyping: false,
+      delimiter,
     });
 
-    if (result.errors.length > 0) {
-      throw new Error(`CSV parsing error: ${result.errors[0].message}`);
+    let headers = result.meta.fields || [];
+
+    // Fallback: if only 1 column detected, try tab delimiter
+    if (headers.length <= 1 && delimiter !== '\t') {
+      const tabResult = Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+        delimiter: '\t',
+      });
+      const tabHeaders = tabResult.meta.fields || [];
+      if (tabHeaders.length > 1) {
+        result = tabResult;
+        headers = tabHeaders;
+        delimiter = '\t';
+      }
     }
 
-    const headers = result.meta.fields || [];
+    // Fallback: if still 1 column, try fixed-width/whitespace parsing (e.g., FNB .txt exports)
+    if (headers.length <= 1) {
+      console.log(`[PARSER] Only ${headers.length} column(s) detected with delimiter "${delimiter}", trying fixed-width parser`);
+      const parsed = this.parseFixedWidth(text);
+      if (parsed && parsed.headers.length > 1) {
+        console.log(`[PARSER] Fixed-width parser found ${parsed.headers.length} columns: ${parsed.headers.join(', ')}`);
+        return parsed;
+      }
+      console.log(`[PARSER] Fixed-width parser also failed`);
+    }
+
+    // Filter out non-critical errors (field count mismatches are common in real-world CSVs)
+    const criticalErrors = result.errors.filter(
+      (e) => e.type !== 'FieldMismatch'
+    );
+    if (criticalErrors.length > 0) {
+      throw new Error(`CSV parsing error: ${criticalErrors[0].message}`);
+    }
+
+    headers = result.meta.fields || [];
     const rows = result.data as Record<string, any>[];
 
     return {
       headers,
+      rows,
+      rowCount: rows.length,
+    };
+  }
+
+  // Parse fixed-width or space-delimited text files (e.g., FNB .txt exports)
+  // Uses known header patterns to identify column boundaries
+  parseFixedWidth(text: string): ParsedFileData | null {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length < 2) return null;
+
+    const headerLine = lines[0];
+    console.log(`[PARSER] Fixed-width: header line = "${headerLine.substring(0, 120)}..."`);
+
+    // Strategy 1: try splitting header by 2+ spaces
+    let headerParts = headerLine.split(/\s{2,}/).map(h => h.trim()).filter(Boolean);
+    let columnStarts: number[] = [];
+
+    if (headerParts.length >= 2) {
+      // Find header positions
+      let searchFrom = 0;
+      for (const part of headerParts) {
+        const idx = headerLine.indexOf(part, searchFrom);
+        columnStarts.push(idx);
+        searchFrom = idx + part.length;
+      }
+    }
+
+    // Strategy 2: match known multi-word header names in the header line
+    // This handles files where columns are separated by single spaces
+    if (headerParts.length < 2) {
+      // Known header patterns (order matters — longer/multi-word first)
+      const knownHeaders = [
+        'Transaction date', 'Transaction Date', 'Transaction time', 'Transaction Time',
+        'Transaction type', 'Transaction Type', 'Transaction amount', 'Transaction Amount',
+        'Terminal ID', 'Card Number', 'Card number', 'Reference Number', 'Reference number',
+        'PAN', 'Source', 'Amount', 'Date', 'Time', 'Description', 'Type',
+      ];
+
+      // Find which known headers appear in the header line, in order
+      const found: { name: string; start: number }[] = [];
+      const headerLower = headerLine;
+
+      for (const kh of knownHeaders) {
+        let searchPos = 0;
+        while (true) {
+          const idx = headerLower.indexOf(kh, searchPos);
+          if (idx === -1) break;
+          // Check it's not already part of a longer match
+          const alreadyMatched = found.some(f =>
+            idx >= f.start && idx < f.start + f.name.length
+          );
+          if (!alreadyMatched) {
+            found.push({ name: kh, start: idx });
+          }
+          searchPos = idx + 1;
+        }
+      }
+
+      if (found.length < 2) return null;
+
+      // Sort by position
+      found.sort((a, b) => a.start - b.start);
+      headerParts = found.map(f => f.name);
+      columnStarts = found.map(f => f.start);
+
+      console.log(`[PARSER] Fixed-width: matched ${found.length} known headers: ${headerParts.join(', ')}`);
+    }
+
+    if (headerParts.length < 2 || columnStarts.length < 2) return null;
+
+    // Parse data rows using column positions
+    const rows: Record<string, any>[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+
+      const row: Record<string, any> = {};
+      for (let c = 0; c < headerParts.length; c++) {
+        const start = columnStarts[c];
+        const end = c < headerParts.length - 1 ? columnStarts[c + 1] : line.length;
+        row[headerParts[c]] = line.substring(start, end).trim();
+      }
+      rows.push(row);
+    }
+
+    return {
+      headers: headerParts,
       rows,
       rowCount: rows.length,
     };
@@ -379,7 +679,24 @@ export class FileParser {
       throw new Error('Excel file is empty');
     }
 
-    const headers = data[0].map(h => String(h).trim());
+    let headers = data[0].map(h => String(h).trim());
+
+    // Detect semicolon-delimited data packed into a single Excel column
+    // This happens when a CSV-like file is saved as .xlsx without proper column separation
+    if (headers.length === 1 && headers[0].includes(';')) {
+      headers = headers[0].split(';').map(h => h.trim());
+      const rows = data.slice(1).map(row => {
+        const cellValue = String(row[0] || '');
+        const values = cellValue.split(';');
+        const obj: Record<string, any> = {};
+        headers.forEach((header, index) => {
+          obj[header] = values[index] !== undefined ? values[index].trim() : '';
+        });
+        return obj;
+      });
+      return { headers, rows, rowCount: rows.length };
+    }
+
     const rows = data.slice(1).map(row => {
       const obj: Record<string, any> = {};
       headers.forEach((header, index) => {
@@ -650,7 +967,7 @@ export class FileParser {
 
   // Generic column detection based on column name patterns
   private detectColumnGeneric(header: string): ColumnMapping {
-    const normalized = header.toLowerCase().trim();
+    const normalized = header.toLowerCase().trim().replace(/\s+/g, ' ');
     let suggestedMapping: ColumnMapping['suggestedMapping'] = 'ignore';
     let confidence = 0;
 
@@ -793,15 +1110,46 @@ export class FileParser {
           
           // Apply source-specific date normalization
           if (preset?.name === 'FNB Merchant') {
+            // FNB has combined date+time: "28 Feb 23:38:59"
             const normalizedDate = DataNormalizer.normalizeFNBDate(rawDate);
             if (normalizedDate) {
               transactionDate = normalizedDate;
               processedFields.add('date');
             }
+            // Extract time from the combined field
+            if (!transactionTime) {
+              const timeMatch = rawDate.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
+              if (timeMatch) {
+                transactionTime = timeMatch[1];
+              }
+            }
           } else if (preset?.name === 'ABSA Merchant') {
             const normalizedDate = DataNormalizer.normalizeABSADate(rawDate);
             if (normalizedDate) {
               transactionDate = normalizedDate;
+              processedFields.add('date');
+            }
+          } else if (preset?.name === 'Standard Bank Digital') {
+            // DD/MM/YYYY → YYYY-MM-DD
+            const parts = rawDate.split('/');
+            if (parts.length === 3) {
+              transactionDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+              processedFields.add('date');
+            } else {
+              transactionDate = rawDate;
+              processedFields.add('date');
+            }
+          } else if (preset?.name === 'Sale Master') {
+            // "2026-02-01 00:03" → extract date and time
+            const spaceIdx = rawDate.indexOf(' ');
+            if (spaceIdx > 0) {
+              transactionDate = rawDate.substring(0, spaceIdx);
+              processedFields.add('date');
+              if (!transactionTime) {
+                transactionTime = rawDate.substring(spaceIdx + 1).trim();
+              }
+            } else {
+              transactionDate = rawDate;
               processedFields.add('date');
             }
           } else if (preset?.name === 'Fuel Master') {
@@ -840,7 +1188,7 @@ export class FileParser {
           }
           break;
         case 'amount':
-          const amtVal = DataNormalizer.normalizeAmount(String(value), sourceType);
+          const amtVal = DataNormalizer.normalizeAmount(String(value), sourceType, preset?.name);
           if (amtVal) {
             amount = amtVal;
             processedFields.add('amount');

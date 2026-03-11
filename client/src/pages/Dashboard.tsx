@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield, Search } from "lucide-react";
+import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield, Search, Copy } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import PeriodCard from "@/components/PeriodCard";
@@ -66,6 +66,7 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", description: "", startDate: "", endDate: "" });
+  const [templateSourceId, setTemplateSourceId] = useState<string | null>(null);
 
   const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
     queryKey: ["/api/periods"],
@@ -82,15 +83,31 @@ export default function Dashboard() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: typeof createForm) => {
-      const response = await apiRequest("POST", "/api/periods", data);
-      return await response.json() as ReconciliationPeriod;
+    mutationFn: async (data: typeof createForm & { sourceId?: string | null }) => {
+      const { sourceId, ...periodData } = data;
+      const response = await apiRequest("POST", "/api/periods", periodData);
+      const period = await response.json() as ReconciliationPeriod;
+      // Copy matching rules from source period if creating from template
+      if (sourceId) {
+        try {
+          const rulesRes = await fetch(`/api/periods/${sourceId}/matching-rules`, { credentials: "include" });
+          if (rulesRes.ok) {
+            const rules = await rulesRes.json();
+            await apiRequest("POST", `/api/periods/${period.id}/matching-rules`, rules);
+          }
+        } catch { /* non-critical — period still created */ }
+      }
+      return period;
     },
     onSuccess: (period) => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
       setShowCreateDialog(false);
       setCreateForm({ name: "", description: "", startDate: "", endDate: "" });
-      toast({ title: "Period created", description: `${period.name} has been created successfully.` });
+      setTemplateSourceId(null);
+      const msg = templateSourceId
+        ? `${period.name} created with matching rules from previous period.`
+        : `${period.name} has been created successfully.`;
+      toast({ title: "Period created", description: msg });
       setLocation(`/flow/${period.id}`);
     },
     onError: (error: Error) => {
@@ -120,6 +137,17 @@ export default function Dashboard() {
   const inProgressCount = displayPeriods.filter(p => p.status === "in_progress").length;
   const draftCount = displayPeriods.filter(p => p.status === "draft").length;
 
+  const handleNewFromPrevious = (period: DisplayPeriod) => {
+    setTemplateSourceId(period.id);
+    setCreateForm({
+      name: "",
+      description: `Based on matching rules from: ${period.name}`,
+      startDate: "",
+      endDate: "",
+    });
+    setShowCreateDialog(true);
+  };
+
   const handleEdit = (id: string) => {
     setLocation(`/flow/${id}?mode=edit`);
   };
@@ -145,7 +173,7 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <Button data-testid="button-create-period" onClick={() => setShowCreateDialog(true)}>
+              <Button data-testid="button-create-period" onClick={() => { setTemplateSourceId(null); setCreateForm({ name: "", description: "", startDate: "", endDate: "" }); setShowCreateDialog(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Reconciliation
               </Button>
@@ -322,6 +350,10 @@ export default function Dashboard() {
                                 <FileBarChart className="h-4 w-4 mr-2" />
                                 Export Report
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleNewFromPrevious(period)} data-testid={`button-template-${period.id}`}>
+                                <Copy className="h-4 w-4 mr-2" />
+                                New from This Period
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
@@ -367,18 +399,20 @@ export default function Dashboard() {
       </AlertDialog>
 
       {/* Create Period Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog open={showCreateDialog} onOpenChange={(open) => { setShowCreateDialog(open); if (!open) setTemplateSourceId(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>New Reconciliation Period</DialogTitle>
+            <DialogTitle>{templateSourceId ? "New Period from Template" : "New Reconciliation Period"}</DialogTitle>
             <DialogDescription>
-              Define the period details for your reconciliation
+              {templateSourceId
+                ? "Matching rules will be copied from the previous period"
+                : "Define the period details for your reconciliation"}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => {
             e.preventDefault();
             if (createDateError) return;
-            createMutation.mutate(createForm);
+            createMutation.mutate({ ...createForm, sourceId: templateSourceId });
           }} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="create-name">Period Name *</Label>

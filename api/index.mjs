@@ -2891,36 +2891,53 @@ async function setupAuth(app2) {
   app2.use(getSession());
   app2.use(passport.initialize());
   app2.use(passport.session());
-  const config = await getOidcConfig();
-  const callbackUrl = process.env.AUTH_CALLBACK_URL || "http://localhost:5000/api/callback";
-  const verify = async (tokens, verified) => {
-    const user = {};
-    updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
-    verified(null, user);
-  };
-  const strategy = new Strategy(
-    {
-      name: "google",
-      config,
-      scope: "openid email profile",
-      callbackURL: callbackUrl
-    },
-    verify
-  );
-  passport.use(strategy);
   passport.serializeUser((user, cb) => cb(null, user));
   passport.deserializeUser((user, cb) => cb(null, user));
-  app2.get("/api/login", (req, res, next) => {
-    passport.authenticate("google", {
-      prompt: "select_account"
-    })(req, res, next);
+  let strategyReady = false;
+  async function ensureStrategy() {
+    if (strategyReady) return;
+    const config = await getOidcConfig();
+    const callbackUrl = process.env.AUTH_CALLBACK_URL || "http://localhost:5000/api/callback";
+    const verify = async (tokens, verified) => {
+      const user = {};
+      updateUserSession(user, tokens);
+      await upsertUser(tokens.claims());
+      verified(null, user);
+    };
+    const strategy = new Strategy(
+      {
+        name: "google",
+        config,
+        scope: "openid email profile",
+        callbackURL: callbackUrl
+      },
+      verify
+    );
+    passport.use(strategy);
+    strategyReady = true;
+  }
+  app2.get("/api/login", async (req, res, next) => {
+    try {
+      await ensureStrategy();
+      passport.authenticate("google", {
+        prompt: "select_account"
+      })(req, res, next);
+    } catch (err) {
+      console.error("Login init error:", err);
+      res.status(500).json({ error: "Authentication service unavailable, please retry" });
+    }
   });
-  app2.get("/api/callback", (req, res, next) => {
-    passport.authenticate("google", {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login"
-    })(req, res, next);
+  app2.get("/api/callback", async (req, res, next) => {
+    try {
+      await ensureStrategy();
+      passport.authenticate("google", {
+        successReturnToOrRedirect: "/",
+        failureRedirect: "/api/login"
+      })(req, res, next);
+    } catch (err) {
+      console.error("Callback init error:", err);
+      res.redirect("/api/login");
+    }
   });
   app2.get("/api/logout", (req, res) => {
     req.logout(() => {

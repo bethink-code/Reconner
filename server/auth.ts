@@ -94,46 +94,63 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const config = await getOidcConfig();
-
-  const callbackUrl =
-    process.env.AUTH_CALLBACK_URL || "http://localhost:5000/api/callback";
-
-  const verify: VerifyFunction = async (
-    tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
-    verified: passport.AuthenticateCallback
-  ) => {
-    const user = {} as SessionUser;
-    updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
-    verified(null, user);
-  };
-
-  const strategy = new Strategy(
-    {
-      name: "google",
-      config,
-      scope: "openid email profile",
-      callbackURL: callbackUrl,
-    },
-    verify,
-  );
-  passport.use(strategy);
-
   passport.serializeUser((user: Express.User, cb) => cb(null, user));
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
-  app.get("/api/login", (req, res, next) => {
-    passport.authenticate("google", {
-      prompt: "select_account",
-    })(req, res, next);
+  // Lazy strategy setup: resolve OIDC config on first auth request (avoids cold-start timeout)
+  let strategyReady = false;
+  async function ensureStrategy() {
+    if (strategyReady) return;
+    const config = await getOidcConfig();
+    const callbackUrl =
+      process.env.AUTH_CALLBACK_URL || "http://localhost:5000/api/callback";
+
+    const verify: VerifyFunction = async (
+      tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
+      verified: passport.AuthenticateCallback
+    ) => {
+      const user = {} as SessionUser;
+      updateUserSession(user, tokens);
+      await upsertUser(tokens.claims());
+      verified(null, user);
+    };
+
+    const strategy = new Strategy(
+      {
+        name: "google",
+        config,
+        scope: "openid email profile",
+        callbackURL: callbackUrl,
+      },
+      verify,
+    );
+    passport.use(strategy);
+    strategyReady = true;
+  }
+
+  app.get("/api/login", async (req, res, next) => {
+    try {
+      await ensureStrategy();
+      passport.authenticate("google", {
+        prompt: "select_account",
+      })(req, res, next);
+    } catch (err) {
+      console.error("Login init error:", err);
+      res.status(500).json({ error: "Authentication service unavailable, please retry" });
+    }
   });
 
-  app.get("/api/callback", (req, res, next) => {
-    passport.authenticate("google", {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
-    })(req, res, next);
+  app.get("/api/callback", async (req, res, next) => {
+    try {
+      await ensureStrategy();
+      passport.authenticate("google", {
+        successReturnToOrRedirect: "/",
+        failureRedirect: "/api/login",
+      })(req, res, next);
+    } catch (err) {
+      console.error("Callback init error:", err);
+      res.redirect("/api/login");
+    }
   });
 
   app.get("/api/logout", (req, res) => {

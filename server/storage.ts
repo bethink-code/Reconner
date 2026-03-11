@@ -132,7 +132,7 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   setUserAdmin(id: string, isAdmin: boolean): Promise<User | undefined>;
   
-  getPeriods(): Promise<ReconciliationPeriod[]>;
+  getPeriods(userId?: string): Promise<ReconciliationPeriod[]>;
   getPeriod(id: string): Promise<ReconciliationPeriod | undefined>;
   createPeriod(period: InsertReconciliationPeriod): Promise<ReconciliationPeriod>;
   updatePeriod(id: string, data: Partial<InsertReconciliationPeriod>): Promise<ReconciliationPeriod | undefined>;
@@ -225,7 +225,12 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async getPeriods(): Promise<ReconciliationPeriod[]> {
+  async getPeriods(userId?: string): Promise<ReconciliationPeriod[]> {
+    if (userId) {
+      return await db.select().from(reconciliationPeriods)
+        .where(eq(reconciliationPeriods.userId, userId))
+        .orderBy(desc(reconciliationPeriods.createdAt));
+    }
     return await db.select().from(reconciliationPeriods).orderBy(desc(reconciliationPeriods.createdAt));
   }
 

@@ -106,9 +106,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/periods", isAuthenticated, async (req, res) => {
+  app.get("/api/periods", isAuthenticated, async (req: any, res) => {
     try {
-      const periods = await storage.getPeriods();
+      const userId = req.user?.claims?.sub;
+      const periods = await storage.getPeriods(userId);
       res.json(periods);
     } catch (error) {
       console.error("Error fetching periods:", error);
@@ -116,11 +117,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:id", isAuthenticated, async (req: any, res) => {
     try {
       const period = await storage.getPeriod(req.params.id);
       if (!period) {
         return res.status(404).json({ error: "Period not found" });
+      }
+      // Ownership check: users can only access their own periods
+      const userId = req.user?.claims?.sub;
+      if (period.userId && period.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
       }
       res.json(period);
     } catch (error) {
@@ -129,10 +135,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/periods", isAuthenticated, async (req, res) => {
+  app.post("/api/periods", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user?.claims?.sub;
       const validated = insertReconciliationPeriodSchema.parse(req.body);
-      const period = await storage.createPeriod(validated);
+      const period = await storage.createPeriod({ ...validated, userId });
       res.json(period);
     } catch (error) {
       console.error("Error creating period:", error);

@@ -258,7 +258,10 @@ var DatabaseStorage = class {
     const [updated] = await db.update(users).set({ isAdmin, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, id)).returning();
     return updated || void 0;
   }
-  async getPeriods() {
+  async getPeriods(userId) {
+    if (userId) {
+      return await db.select().from(reconciliationPeriods).where(eq(reconciliationPeriods.userId, userId)).orderBy(desc(reconciliationPeriods.createdAt));
+    }
     return await db.select().from(reconciliationPeriods).orderBy(desc(reconciliationPeriods.createdAt));
   }
   async getPeriod(id) {
@@ -3025,7 +3028,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods", isAuthenticated, async (req, res) => {
     try {
-      const periods = await storage.getPeriods();
+      const userId = req.user?.claims?.sub;
+      const periods = await storage.getPeriods(userId);
       res.json(periods);
     } catch (error) {
       console.error("Error fetching periods:", error);
@@ -3038,6 +3042,10 @@ async function registerRoutes(app2) {
       if (!period) {
         return res.status(404).json({ error: "Period not found" });
       }
+      const userId = req.user?.claims?.sub;
+      if (period.userId && period.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       res.json(period);
     } catch (error) {
       console.error("Error fetching period:", error);
@@ -3046,8 +3054,9 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/periods", isAuthenticated, async (req, res) => {
     try {
+      const userId = req.user?.claims?.sub;
       const validated = insertReconciliationPeriodSchema.parse(req.body);
-      const period = await storage.createPeriod(validated);
+      const period = await storage.createPeriod({ ...validated, userId });
       res.json(period);
     } catch (error) {
       console.error("Error creating period:", error);

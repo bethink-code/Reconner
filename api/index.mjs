@@ -401,7 +401,10 @@ var DatabaseStorage = class {
   }
   async resetMatchesByPeriod(periodId) {
     await db.delete(matches).where(eq(matches.periodId, periodId));
-    await db.update(transactions).set({ matchStatus: "unmatched", matchId: null }).where(eq(transactions.periodId, periodId));
+    await db.update(transactions).set({ matchStatus: "unmatched", matchId: null }).where(and(
+      eq(transactions.periodId, periodId),
+      sql2`match_status != 'excluded'`
+    ));
   }
   async getPeriodSummary(periodId) {
     const result = await pool.query(`
@@ -430,6 +433,8 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable' THEN 1 END) as unmatchable_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable' THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded' THEN 1 END) as excluded_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded' THEN amount::numeric ELSE 0 END), 0) as excluded_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN 1 END) as resolved_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
           
@@ -519,6 +524,8 @@ var DatabaseStorage = class {
       unmatchedCardAmount: parseFloat(row.unmatched_card_amount || "0"),
       unmatchableBankTransactions: parseInt(row.unmatchable_bank_transactions || "0"),
       unmatchableBankAmount: parseFloat(row.unmatchable_bank_amount || "0"),
+      excludedBankTransactions: parseInt(row.excluded_bank_transactions || "0"),
+      excludedBankAmount: parseFloat(row.excluded_bank_amount || "0"),
       resolvedBankTransactions: parseInt(row.resolved_bank_transactions || "0"),
       resolvedBankAmount: parseFloat(row.resolved_bank_amount || "0"),
       fuelDateRange: row.fuel_date_min && row.fuel_date_max ? {
@@ -541,7 +548,7 @@ var DatabaseStorage = class {
         MIN(t.transaction_date) as min_date,
         MAX(t.transaction_date) as max_date,
         COUNT(*) as tx_count,
-        COUNT(*) FILTER (WHERE t.match_status != 'unmatchable') as in_range_count
+        COUNT(*) FILTER (WHERE t.match_status NOT IN ('unmatchable', 'excluded')) as in_range_count
       FROM transactions t
       LEFT JOIN uploaded_files f ON t.file_id = f.id
       WHERE t.period_id = $1 AND t.source_type LIKE 'bank%'
@@ -581,6 +588,8 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
           COUNT(CASE WHEN match_status = 'unmatched' THEN 1 END) as unmatched_bank,
           COALESCE(SUM(CASE WHEN match_status = 'unmatched' THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
+          COUNT(CASE WHEN match_status = 'excluded' THEN 1 END) as excluded_bank,
+          COALESCE(SUM(CASE WHEN match_status = 'excluded' THEN amount::numeric ELSE 0 END), 0) as excluded_bank_amount,
           MIN(transaction_date) as bank_earliest,
           MAX(transaction_date) as bank_latest
         FROM transactions
@@ -712,6 +721,8 @@ var DatabaseStorage = class {
     const matchedBankAmount = parseFloat(row.matched_bank_amount || "0");
     const unmatchedBankOnly = parseInt(row.unmatched_bank || "0");
     const unmatchedBankOnlyAmount = parseFloat(row.unmatched_bank_amount || "0");
+    const excludedBankTransactions = parseInt(row.excluded_bank || "0");
+    const excludedBankAmount = parseFloat(row.excluded_bank_amount || "0");
     const matchedCardTransactions = parseInt(row.matched_card_transactions || "0");
     const matchedCardAmount = parseFloat(row.matched_card_amount || "0");
     const unmatchedCardCount = parseInt(row.unmatched_card_count || "0");
@@ -861,7 +872,8 @@ var DatabaseStorage = class {
           transactions: Math.max(0, pendingVerificationTransactions),
           percentageOfCardSales: cardAmount > 0 ? Math.round(Math.max(0, pendingVerificationAmount) / cardAmount * 1e3) / 10 : 0
         },
-        unmatchedIssues: { count: unmatchedBankOnly, amount: unmatchedBankOnlyAmount }
+        unmatchedIssues: { count: unmatchedBankOnly, amount: unmatchedBankOnlyAmount },
+        excludedTransactions: { count: excludedBankTransactions, amount: excludedBankAmount }
       },
       matchingResults: {
         performanceRating,
@@ -1400,6 +1412,104 @@ var DataNormalizer = class {
     return "";
   }
 };
+function detectBankTransactionStatus(rawRow, presetName) {
+  if (presetName === "FNB Merchant") {
+    const status = String(rawRow["Status"] || "").toLowerCase().trim();
+    if (status === "approved") return "approved";
+    if (status === "declined") return "declined";
+    if (status === "reversed") return "reversed";
+    const txType = String(rawRow["Transaction type"] || rawRow["Transaction Type"] || "").toLowerCase();
+    if (txType.includes("revers")) return "reversed";
+    return "unknown";
+  }
+  if (presetName === "ABSA Merchant") {
+    const status = String(rawRow["Status"] || "").toLowerCase().trim();
+    if (status === "success") return "approved";
+    if (status === "declined") return "declined";
+    if (status === "cancelled") return "cancelled";
+    const msgType = String(rawRow["Message Type"] || "").trim();
+    if (msgType === "0420") return "reversed";
+    return "unknown";
+  }
+  if (presetName === "Standard Bank Digital") {
+    const rejectCode = String(rawRow["Reject  Code"] || "").trim();
+    if (rejectCode && rejectCode !== "0" && rejectCode !== "00") return "declined";
+    const txType = String(rawRow["Transaction  Type"] || "").toLowerCase();
+    if (txType.includes("revers") || txType.includes("refund")) return "reversed";
+    return "approved";
+  }
+  const allValues = Object.values(rawRow).map((v) => String(v || "").toLowerCase());
+  for (const val of allValues) {
+    if (val === "reversed" || val.includes("reversal")) return "reversed";
+    if (val === "declined" || val === "rejected") return "declined";
+    if (val === "cancelled" || val === "canceled") return "cancelled";
+  }
+  return "unknown";
+}
+function detectAndExcludeReversals(transactions2, presetName) {
+  const stats = {
+    declined: 0,
+    reversed: 0,
+    cancelled: 0,
+    pairedApprovals: 0,
+    totalExcluded: 0
+  };
+  const statuses = transactions2.map(
+    (tx) => detectBankTransactionStatus(tx.rawData || {}, presetName)
+  );
+  for (let i = 0; i < transactions2.length; i++) {
+    const status = statuses[i];
+    if (status === "declined") {
+      transactions2[i].matchStatus = "excluded";
+      transactions2[i].description = (transactions2[i].description || "") + " [Excluded: Declined]";
+      stats.declined++;
+      stats.totalExcluded++;
+    } else if (status === "cancelled") {
+      transactions2[i].matchStatus = "excluded";
+      transactions2[i].description = (transactions2[i].description || "") + " [Excluded: Cancelled]";
+      stats.cancelled++;
+      stats.totalExcluded++;
+    }
+  }
+  const approvedByKey = /* @__PURE__ */ new Map();
+  for (let i = 0; i < transactions2.length; i++) {
+    if (statuses[i] !== "approved" && statuses[i] !== "unknown") continue;
+    if (transactions2[i].matchStatus === "excluded") continue;
+    const amount = Math.abs(parseFloat(transactions2[i].amount || "0")).toFixed(2);
+    const card = (transactions2[i].cardNumber || "").trim();
+    const date = (transactions2[i].transactionDate || "").substring(0, 10);
+    const key = `${date}_${amount}_${card}`;
+    if (!approvedByKey.has(key)) approvedByKey.set(key, []);
+    approvedByKey.get(key).push(i);
+  }
+  const consumedApprovals = /* @__PURE__ */ new Set();
+  for (let i = 0; i < transactions2.length; i++) {
+    if (statuses[i] !== "reversed") continue;
+    const tx = transactions2[i];
+    const amount = Math.abs(parseFloat(tx.amount || "0")).toFixed(2);
+    const card = (tx.cardNumber || "").trim();
+    const date = (tx.transactionDate || "").substring(0, 10);
+    const key = `${date}_${amount}_${card}`;
+    tx.matchStatus = "excluded";
+    tx.description = (tx.description || "") + " [Excluded: Reversed]";
+    stats.reversed++;
+    stats.totalExcluded++;
+    const candidates = approvedByKey.get(key) || [];
+    const keyNoCard = `${date}_${amount}_`;
+    const candidatesNoCard = card ? [] : approvedByKey.get(keyNoCard) || [];
+    const allCandidates = [...candidates, ...candidatesNoCard];
+    for (const idx of allCandidates) {
+      if (consumedApprovals.has(idx)) continue;
+      consumedApprovals.add(idx);
+      transactions2[idx].matchStatus = "excluded";
+      transactions2[idx].description = (transactions2[idx].description || "") + " [Excluded: Paired with reversal]";
+      stats.pairedApprovals++;
+      stats.totalExcluded++;
+      break;
+    }
+  }
+  return stats;
+}
 var FileParser = class {
   parseCSV(buffer) {
     const text2 = buffer.toString("utf-8");
@@ -3504,6 +3614,15 @@ async function registerRoutes(app2) {
           matchId: null
         });
       }
+      let reversalStats = null;
+      if (file.sourceType.startsWith("bank")) {
+        const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
+        const presetName = detectedPreset?.name || null;
+        reversalStats = detectAndExcludeReversals(validTransactions, presetName);
+        if (reversalStats.totalExcluded > 0) {
+          console.log(`[PROCESS] Reversal detection: ${reversalStats.totalExcluded} excluded (${reversalStats.declined} declined, ${reversalStats.reversed} reversed, ${reversalStats.cancelled} cancelled, ${reversalStats.pairedApprovals} paired approvals)`);
+        }
+      }
       console.log(`[PROCESS] Creating ${validTransactions.length} transactions for file ${file.id}, period ${file.periodId}`);
       const created = await storage.createTransactions(validTransactions);
       console.log(`[PROCESS] Created ${created.length} transactions in database`);
@@ -3519,7 +3638,8 @@ async function registerRoutes(app2) {
         success: true,
         transactionsCreated: created.length,
         totalRows: parsed.rowCount,
-        skipStats
+        skipStats,
+        reversalStats
       });
     } catch (error) {
       console.error("Error processing file:", error);

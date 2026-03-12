@@ -506,6 +506,158 @@ export class DataNormalizer {
   }
 }
 
+// Bank transaction status detection from raw row data
+export type BankTxStatus = 'approved' | 'declined' | 'reversed' | 'cancelled' | 'unknown';
+
+export function detectBankTransactionStatus(
+  rawRow: Record<string, any>,
+  presetName: string | null,
+): BankTxStatus {
+  // FNB: has "Status" column with Approved/Declined/Reversed
+  if (presetName === 'FNB Merchant') {
+    const status = String(rawRow['Status'] || '').toLowerCase().trim();
+    if (status === 'approved') return 'approved';
+    if (status === 'declined') return 'declined';
+    if (status === 'reversed') return 'reversed';
+    // Fallback: check Transaction type
+    const txType = String(rawRow['Transaction type'] || rawRow['Transaction Type'] || '').toLowerCase();
+    if (txType.includes('revers')) return 'reversed';
+    return 'unknown';
+  }
+
+  // ABSA: has "Status" column with Success/Declined/Cancelled
+  if (presetName === 'ABSA Merchant') {
+    const status = String(rawRow['Status'] || '').toLowerCase().trim();
+    if (status === 'success') return 'approved';
+    if (status === 'declined') return 'declined';
+    if (status === 'cancelled') return 'cancelled';
+    // Check Message Type for reversals (0420 = reversal)
+    const msgType = String(rawRow['Message Type'] || '').trim();
+    if (msgType === '0420') return 'reversed';
+    return 'unknown';
+  }
+
+  // Standard Bank: check Transaction Type and Reject Code
+  if (presetName === 'Standard Bank Digital') {
+    const rejectCode = String(rawRow['Reject  Code'] || '').trim();
+    if (rejectCode && rejectCode !== '0' && rejectCode !== '00') return 'declined';
+    const txType = String(rawRow['Transaction  Type'] || '').toLowerCase();
+    if (txType.includes('revers') || txType.includes('refund')) return 'reversed';
+    return 'approved';
+  }
+
+  // Generic fallback: scan all values for keywords
+  const allValues = Object.values(rawRow).map(v => String(v || '').toLowerCase());
+  for (const val of allValues) {
+    if (val === 'reversed' || val.includes('reversal')) return 'reversed';
+    if (val === 'declined' || val === 'rejected') return 'declined';
+    if (val === 'cancelled' || val === 'canceled') return 'cancelled';
+  }
+  return 'unknown';
+}
+
+export interface ReversalDetectionStats {
+  declined: number;
+  reversed: number;
+  cancelled: number;
+  pairedApprovals: number;
+  totalExcluded: number;
+}
+
+/**
+ * Detect reversed/declined/cancelled bank transactions and mark them as excluded.
+ * For reversals, also find and exclude the matching original approval.
+ * Mutates the transactions array in place (sets matchStatus and appends to description).
+ */
+export function detectAndExcludeReversals(
+  transactions: any[],
+  presetName: string | null,
+): ReversalDetectionStats {
+  const stats: ReversalDetectionStats = {
+    declined: 0,
+    reversed: 0,
+    cancelled: 0,
+    pairedApprovals: 0,
+    totalExcluded: 0,
+  };
+
+  // First pass: detect status for each transaction
+  const statuses: BankTxStatus[] = transactions.map(tx =>
+    detectBankTransactionStatus(tx.rawData || {}, presetName)
+  );
+
+  // Mark declined and cancelled immediately
+  for (let i = 0; i < transactions.length; i++) {
+    const status = statuses[i];
+    if (status === 'declined') {
+      transactions[i].matchStatus = 'excluded';
+      transactions[i].description = (transactions[i].description || '') + ' [Excluded: Declined]';
+      stats.declined++;
+      stats.totalExcluded++;
+    } else if (status === 'cancelled') {
+      transactions[i].matchStatus = 'excluded';
+      transactions[i].description = (transactions[i].description || '') + ' [Excluded: Cancelled]';
+      stats.cancelled++;
+      stats.totalExcluded++;
+    }
+  }
+
+  // Second pass: pair reversals with their matching approvals
+  // Build index of approved transactions by amount+card+date
+  const approvedByKey = new Map<string, number[]>();
+  for (let i = 0; i < transactions.length; i++) {
+    if (statuses[i] !== 'approved' && statuses[i] !== 'unknown') continue;
+    if (transactions[i].matchStatus === 'excluded') continue;
+
+    const amount = Math.abs(parseFloat(transactions[i].amount || '0')).toFixed(2);
+    const card = (transactions[i].cardNumber || '').trim();
+    const date = (transactions[i].transactionDate || '').substring(0, 10);
+    const key = `${date}_${amount}_${card}`;
+
+    if (!approvedByKey.has(key)) approvedByKey.set(key, []);
+    approvedByKey.get(key)!.push(i);
+  }
+
+  // Track which approvals have been consumed by a reversal
+  const consumedApprovals = new Set<number>();
+
+  for (let i = 0; i < transactions.length; i++) {
+    if (statuses[i] !== 'reversed') continue;
+
+    const tx = transactions[i];
+    const amount = Math.abs(parseFloat(tx.amount || '0')).toFixed(2);
+    const card = (tx.cardNumber || '').trim();
+    const date = (tx.transactionDate || '').substring(0, 10);
+    const key = `${date}_${amount}_${card}`;
+
+    // Mark the reversal as excluded
+    tx.matchStatus = 'excluded';
+    tx.description = (tx.description || '') + ' [Excluded: Reversed]';
+    stats.reversed++;
+    stats.totalExcluded++;
+
+    // Find and consume a matching approval
+    const candidates = approvedByKey.get(key) || [];
+    // Also try without card number if no match (some reversals may not have card)
+    const keyNoCard = `${date}_${amount}_`;
+    const candidatesNoCard = card ? [] : (approvedByKey.get(keyNoCard) || []);
+    const allCandidates = [...candidates, ...candidatesNoCard];
+
+    for (const idx of allCandidates) {
+      if (consumedApprovals.has(idx)) continue;
+      // Found a matching approval — exclude it too
+      consumedApprovals.add(idx);
+      transactions[idx].matchStatus = 'excluded';
+      transactions[idx].description = (transactions[idx].description || '') + ' [Excluded: Paired with reversal]';
+      stats.pairedApprovals++;
+      stats.totalExcluded++;
+      break; // Only consume one approval per reversal
+    }
+  }
+
+  return stats;
+}
+
 export class FileParser {
   parseCSV(buffer: Buffer): ParsedFileData {
     const text = buffer.toString('utf-8');

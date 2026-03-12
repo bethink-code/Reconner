@@ -55,6 +55,8 @@ export interface PeriodSummary {
   unmatchedCardAmount: number;
   unmatchableBankTransactions: number;
   unmatchableBankAmount: number;
+  excludedBankTransactions: number;
+  excludedBankAmount: number;
   resolvedBankTransactions: number;
   resolvedBankAmount: number;
   fuelDateRange?: { min: string; max: string };
@@ -99,6 +101,7 @@ export interface VerificationSummary {
     bankHasMore: boolean;
     pendingVerification: { amount: number; transactions: number; percentageOfCardSales: number };
     unmatchedIssues: { count: number; amount: number };
+    excludedTransactions: { count: number; amount: number };
   };
   matchingResults: {
     performanceRating: number;
@@ -458,10 +461,13 @@ export class DatabaseStorage implements IStorage {
   async resetMatchesByPeriod(periodId: string): Promise<void> {
     // Delete all matches for this period
     await db.delete(matches).where(eq(matches.periodId, periodId));
-    // Reset all transactions in this period back to unmatched
+    // Reset transactions back to unmatched, but preserve 'excluded' (reversal/declined detection from processing)
     await db.update(transactions)
       .set({ matchStatus: 'unmatched', matchId: null })
-      .where(eq(transactions.periodId, periodId));
+      .where(and(
+        eq(transactions.periodId, periodId),
+        sql`match_status != 'excluded'`
+      ));
   }
 
   async getPeriodSummary(periodId: string): Promise<PeriodSummary> {
@@ -491,6 +497,8 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable' THEN 1 END) as unmatchable_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable' THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded' THEN 1 END) as excluded_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded' THEN amount::numeric ELSE 0 END), 0) as excluded_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN 1 END) as resolved_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
           
@@ -592,6 +600,8 @@ export class DatabaseStorage implements IStorage {
       unmatchedCardAmount: parseFloat(row.unmatched_card_amount || '0'),
       unmatchableBankTransactions: parseInt(row.unmatchable_bank_transactions || '0'),
       unmatchableBankAmount: parseFloat(row.unmatchable_bank_amount || '0'),
+      excludedBankTransactions: parseInt(row.excluded_bank_transactions || '0'),
+      excludedBankAmount: parseFloat(row.excluded_bank_amount || '0'),
       resolvedBankTransactions: parseInt(row.resolved_bank_transactions || '0'),
       resolvedBankAmount: parseFloat(row.resolved_bank_amount || '0'),
       fuelDateRange: row.fuel_date_min && row.fuel_date_max ? {
@@ -624,7 +634,7 @@ export class DatabaseStorage implements IStorage {
         MIN(t.transaction_date) as min_date,
         MAX(t.transaction_date) as max_date,
         COUNT(*) as tx_count,
-        COUNT(*) FILTER (WHERE t.match_status != 'unmatchable') as in_range_count
+        COUNT(*) FILTER (WHERE t.match_status NOT IN ('unmatchable', 'excluded')) as in_range_count
       FROM transactions t
       LEFT JOIN uploaded_files f ON t.file_id = f.id
       WHERE t.period_id = $1 AND t.source_type LIKE 'bank%'
@@ -667,6 +677,8 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
           COUNT(CASE WHEN match_status = 'unmatched' THEN 1 END) as unmatched_bank,
           COALESCE(SUM(CASE WHEN match_status = 'unmatched' THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
+          COUNT(CASE WHEN match_status = 'excluded' THEN 1 END) as excluded_bank,
+          COALESCE(SUM(CASE WHEN match_status = 'excluded' THEN amount::numeric ELSE 0 END), 0) as excluded_bank_amount,
           MIN(transaction_date) as bank_earliest,
           MAX(transaction_date) as bank_latest
         FROM transactions
@@ -804,6 +816,8 @@ export class DatabaseStorage implements IStorage {
     const matchedBankAmount = parseFloat(row.matched_bank_amount || '0');
     const unmatchedBankOnly = parseInt(row.unmatched_bank || '0');
     const unmatchedBankOnlyAmount = parseFloat(row.unmatched_bank_amount || '0');
+    const excludedBankTransactions = parseInt(row.excluded_bank || '0');
+    const excludedBankAmount = parseFloat(row.excluded_bank_amount || '0');
     
     const matchedCardTransactions = parseInt(row.matched_card_transactions || '0');
     const matchedCardAmount = parseFloat(row.matched_card_amount || '0');
@@ -974,7 +988,8 @@ export class DatabaseStorage implements IStorage {
           transactions: Math.max(0, pendingVerificationTransactions),
           percentageOfCardSales: cardAmount > 0 ? Math.round((Math.max(0, pendingVerificationAmount) / cardAmount) * 1000) / 10 : 0
         },
-        unmatchedIssues: { count: unmatchedBankOnly, amount: unmatchedBankOnlyAmount }
+        unmatchedIssues: { count: unmatchedBankOnly, amount: unmatchedBankOnlyAmount },
+        excludedTransactions: { count: excludedBankTransactions, amount: excludedBankAmount }
       },
       matchingResults: {
         performanceRating,

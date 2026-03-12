@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { createHash } from "crypto";
 import multer from "multer";
 import { storage } from "./storage";
-import { fileParser, DataNormalizer, SOURCE_PRESETS } from "./fileParser";
+import { fileParser, DataNormalizer, SOURCE_PRESETS, detectAndExcludeReversals } from "./fileParser";
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
 import { reportGenerator } from "./reportGenerator";
@@ -683,8 +683,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // For bank files, detect and exclude reversed/declined/cancelled transactions
+      let reversalStats = null;
+      if (file.sourceType.startsWith('bank')) {
+        const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
+        const presetName = detectedPreset?.name || null;
+        reversalStats = detectAndExcludeReversals(validTransactions, presetName);
+        if (reversalStats.totalExcluded > 0) {
+          console.log(`[PROCESS] Reversal detection: ${reversalStats.totalExcluded} excluded (${reversalStats.declined} declined, ${reversalStats.reversed} reversed, ${reversalStats.cancelled} cancelled, ${reversalStats.pairedApprovals} paired approvals)`);
+        }
+      }
+
       console.log(`[PROCESS] Creating ${validTransactions.length} transactions for file ${file.id}, period ${file.periodId}`);
-      
+
       const created = await storage.createTransactions(validTransactions);
       
       console.log(`[PROCESS] Created ${created.length} transactions in database`);
@@ -705,6 +716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transactionsCreated: created.length,
         totalRows: parsed.rowCount,
         skipStats: skipStats,
+        reversalStats: reversalStats,
       });
     } catch (error) {
       console.error("Error processing file:", error);

@@ -115,6 +115,10 @@ var transactions = pgTable("transactions", {
   // 'card', 'cash', 'credit_card', etc.
   isCardTransaction: text("is_card_transaction").default("unknown"),
   // 'yes', 'no', 'unknown' - for filtering reconciliation
+  attendant: text("attendant"),
+  // Pump attendant / cashier name
+  pump: text("pump"),
+  // Pump number
   matchStatus: text("match_status").notNull().default("unmatched"),
   matchId: varchar("match_id"),
   createdAt: timestamp("created_at").defaultNow()
@@ -1187,15 +1191,17 @@ var SOURCE_PRESETS = [
       "TransDate": "ignore",
       "unitname": "ignore",
       "shiftnumber": "ignore",
-      "pump": "ignore",
+      "pump": "pump",
       "hose": "ignore",
       "PluCode": "ignore",
       "allgroups": "ignore",
       "subgroups": "ignore",
       "AttendantKey": "ignore",
+      // internal key, not useful
       "AttendantMiniPOSKey": "ignore",
-      "Attendant": "ignore",
+      "Attendant": "attendant",
       "Cashier": "ignore",
+      // fallback for attendant — use Attendant column
       "UnitCost": "ignore",
       "CostPrice": "ignore",
       "UnitVAT": "ignore",
@@ -1416,31 +1422,87 @@ var DataNormalizer = class {
     return "";
   }
 };
+function findColumnValue(rawRow, candidates) {
+  for (const col of candidates) {
+    if (rawRow[col] != null && String(rawRow[col]).trim()) {
+      return String(rawRow[col]).toLowerCase().trim();
+    }
+  }
+  const lowerCandidates = candidates.map((c) => c.toLowerCase());
+  for (const [key, value] of Object.entries(rawRow)) {
+    if (lowerCandidates.includes(key.toLowerCase().trim()) && value != null && String(value).trim()) {
+      return String(value).toLowerCase().trim();
+    }
+  }
+  return "";
+}
+function findColumnRawValue(rawRow, candidates) {
+  for (const col of candidates) {
+    if (rawRow[col] != null && String(rawRow[col]).trim()) {
+      return String(rawRow[col]).trim();
+    }
+  }
+  const lowerCandidates = candidates.map((c) => c.toLowerCase());
+  for (const [key, value] of Object.entries(rawRow)) {
+    if (lowerCandidates.includes(key.toLowerCase().trim()) && value != null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return "";
+}
 function detectBankTransactionStatus(rawRow, presetName) {
+  const statusVal = findColumnValue(rawRow, [
+    "Status",
+    "Transaction Status",
+    "Trans Status",
+    "Result",
+    "Response"
+  ]);
+  const txTypeVal = findColumnValue(rawRow, [
+    "Transaction type",
+    "Transaction Type",
+    "Trans Type",
+    "Type",
+    "Transaction  Type"
+    // Standard Bank double-space variant
+  ]);
   if (presetName === "FNB Merchant") {
-    const status = String(rawRow["Status"] || "").toLowerCase().trim();
-    if (status === "approved") return "approved";
-    if (status === "declined") return "declined";
-    if (status === "reversed") return "reversed";
-    const txType = String(rawRow["Transaction type"] || rawRow["Transaction Type"] || "").toLowerCase();
-    if (txType.includes("revers")) return "reversed";
+    if (statusVal === "approved") return "approved";
+    if (statusVal === "declined") return "declined";
+    if (statusVal === "reversed") return "reversed";
+    if (txTypeVal.includes("revers") || txTypeVal.includes("refund")) return "reversed";
+    const source = findColumnValue(rawRow, ["Source"]);
+    if (source.includes("revers") || source.includes("refund")) return "reversed";
+    const rawAmount = String(rawRow["Amount"] || "").toLowerCase();
+    if (rawAmount.includes("clined") || rawAmount.includes("decline")) return "declined";
+    if (rawAmount.includes("versed") || rawAmount.includes("reversal") || rawAmount.includes("reverse")) return "reversed";
+    if (rawAmount.includes("cancel")) return "cancelled";
+    if (rawAmount.includes("proved") || rawAmount.includes("approv")) return "approved";
     return "unknown";
   }
   if (presetName === "ABSA Merchant") {
-    const status = String(rawRow["Status"] || "").toLowerCase().trim();
-    if (status === "success") return "approved";
-    if (status === "declined") return "declined";
-    if (status === "cancelled") return "cancelled";
-    const msgType = String(rawRow["Message Type"] || "").trim();
+    if (statusVal === "success") return "approved";
+    if (statusVal === "declined") return "declined";
+    if (statusVal === "cancelled" || statusVal === "canceled") return "cancelled";
+    const msgType = findColumnRawValue(rawRow, ["Message Type", "MessageType", "Msg Type"]);
     if (msgType === "0420") return "reversed";
+    if (txTypeVal.includes("revers") || txTypeVal.includes("refund")) return "reversed";
     return "unknown";
   }
   if (presetName === "Standard Bank Digital") {
-    const rejectCode = String(rawRow["Reject  Code"] || "").trim();
+    const rejectCode = findColumnRawValue(rawRow, ["Reject  Code", "Reject Code", "RejectCode"]);
     if (rejectCode && rejectCode !== "0" && rejectCode !== "00") return "declined";
-    const txType = String(rawRow["Transaction  Type"] || "").toLowerCase();
-    if (txType.includes("revers") || txType.includes("refund")) return "reversed";
+    if (txTypeVal.includes("revers") || txTypeVal.includes("refund")) return "reversed";
     return "approved";
+  }
+  if (statusVal) {
+    if (statusVal === "approved" || statusVal === "success") return "approved";
+    if (statusVal === "declined" || statusVal === "rejected") return "declined";
+    if (statusVal === "reversed" || statusVal.includes("reversal")) return "reversed";
+    if (statusVal === "cancelled" || statusVal === "canceled") return "cancelled";
+  }
+  if (txTypeVal) {
+    if (txTypeVal.includes("revers") || txTypeVal.includes("refund")) return "reversed";
   }
   const allValues = Object.values(rawRow).map((v) => String(v || "").toLowerCase());
   for (const val of allValues) {
@@ -1507,6 +1569,43 @@ function detectAndExcludeReversals(transactions2, presetName) {
       consumedApprovals.add(idx);
       transactions2[idx].matchStatus = "excluded";
       transactions2[idx].description = (transactions2[idx].description || "") + " [Excluded: Paired with reversal]";
+      stats.pairedApprovals++;
+      stats.totalExcluded++;
+      break;
+    }
+  }
+  const remainingByKey = /* @__PURE__ */ new Map();
+  for (let i = 0; i < transactions2.length; i++) {
+    if (transactions2[i].matchStatus === "excluded") continue;
+    const rawAmount = parseFloat(transactions2[i].amount || "0");
+    if (rawAmount >= 0) {
+      const absAmount = rawAmount.toFixed(2);
+      const card = (transactions2[i].cardNumber || "").trim();
+      const date = (transactions2[i].transactionDate || "").substring(0, 10);
+      const key = `${date}_${absAmount}_${card}`;
+      if (!remainingByKey.has(key)) remainingByKey.set(key, []);
+      remainingByKey.get(key).push(i);
+    }
+  }
+  const consumedPositives = /* @__PURE__ */ new Set();
+  for (let i = 0; i < transactions2.length; i++) {
+    if (transactions2[i].matchStatus === "excluded") continue;
+    const rawAmount = parseFloat(transactions2[i].amount || "0");
+    if (rawAmount >= 0) continue;
+    const absAmount = Math.abs(rawAmount).toFixed(2);
+    const card = (transactions2[i].cardNumber || "").trim();
+    const date = (transactions2[i].transactionDate || "").substring(0, 10);
+    const key = `${date}_${absAmount}_${card}`;
+    transactions2[i].matchStatus = "excluded";
+    transactions2[i].description = (transactions2[i].description || "") + " [Excluded: Negative amount reversal]";
+    stats.reversed++;
+    stats.totalExcluded++;
+    const positives = remainingByKey.get(key) || [];
+    for (const idx of positives) {
+      if (consumedPositives.has(idx) || transactions2[idx].matchStatus === "excluded") continue;
+      consumedPositives.add(idx);
+      transactions2[idx].matchStatus = "excluded";
+      transactions2[idx].description = (transactions2[idx].description || "") + " [Excluded: Paired with negative reversal]";
       stats.pairedApprovals++;
       stats.totalExcluded++;
       break;
@@ -1836,10 +1935,10 @@ var FileParser = class {
   autoDetectColumns(headers) {
     const mappings = [];
     const usedFields = /* @__PURE__ */ new Set();
-    const detectedPreset = this.detectSourcePreset(headers);
-    if (detectedPreset) {
+    const detectedPreset2 = this.detectSourcePreset(headers);
+    if (detectedPreset2) {
       for (const header of headers) {
-        const presetMapping = detectedPreset.mappings[header];
+        const presetMapping = detectedPreset2.mappings[header];
         if (presetMapping && presetMapping !== "ignore") {
           if (usedFields.has(presetMapping)) {
             mappings.push({
@@ -1952,6 +2051,8 @@ var FileParser = class {
     let cardNumber = "";
     let paymentType = "";
     let isCardTransaction = "unknown";
+    let attendant = "";
+    let pump = "";
     const preset = this.detectSourcePreset(headers);
     const processedFields = /* @__PURE__ */ new Set();
     for (const [column, mapping] of Object.entries(columnMapping)) {
@@ -2076,6 +2177,20 @@ var FileParser = class {
             }
           }
           break;
+        case "attendant":
+          const attVal = String(value).trim();
+          if (attVal) {
+            attendant = attVal;
+            processedFields.add("attendant");
+          }
+          break;
+        case "pump":
+          const pumpVal = String(value).trim();
+          if (pumpVal) {
+            pump = pumpVal;
+            processedFields.add("pump");
+          }
+          break;
       }
     }
     if (sourceType && sourceType.startsWith("bank")) {
@@ -2089,7 +2204,9 @@ var FileParser = class {
       description,
       cardNumber,
       paymentType,
-      isCardTransaction
+      isCardTransaction,
+      attendant,
+      pump
     };
   }
   /**
@@ -2181,8 +2298,8 @@ var DataQualityValidator = class {
     const issues = [];
     const rowsToRemove = [];
     const columnAnalysis = this.analyzeColumns(parsedData);
-    const detectedPreset = this.detectPreset(parsedData.headers);
-    const shiftResult = this.detectColumnShift(parsedData, columnAnalysis, detectedPreset);
+    const detectedPreset2 = this.detectPreset(parsedData.headers);
+    const shiftResult = this.detectColumnShift(parsedData, columnAnalysis, detectedPreset2);
     if (shiftResult.detected) {
       issues.push({
         type: "COLUMN_SHIFT",
@@ -2226,7 +2343,7 @@ var DataQualityValidator = class {
         suggestedFix: "These columns can be ignored during mapping."
       });
     }
-    const typeMismatches = this.detectTypeMismatches(parsedData, columnAnalysis, detectedPreset);
+    const typeMismatches = this.detectTypeMismatches(parsedData, columnAnalysis, detectedPreset2);
     for (const mismatch of typeMismatches) {
       issues.push({
         type: "DATA_TYPE_MISMATCH",
@@ -2241,7 +2358,7 @@ var DataQualityValidator = class {
     if (missingData.issues.length > 0) {
       issues.push(...missingData.issues);
     }
-    const suggestedMapping = this.generateSuggestedMapping(parsedData, columnAnalysis, detectedPreset);
+    const suggestedMapping = this.generateSuggestedMapping(parsedData, columnAnalysis, detectedPreset2);
     const uniqueRowsToRemove = Array.from(new Set(rowsToRemove)).sort((a, b) => a - b);
     const problematicRows = uniqueRowsToRemove.length;
     const cleanRows = parsedData.rowCount - problematicRows;
@@ -2261,7 +2378,7 @@ var DataQualityValidator = class {
         actualDataType: shiftResult.details.mappingIssues ? JSON.stringify(Object.keys(shiftResult.details.mappingIssues)) : "",
         examples: shiftResult.details.problems?.slice(0, 3) ?? []
       } : void 0,
-      detectedPreset: detectedPreset?.name
+      detectedPreset: detectedPreset2?.name
     };
   }
   /**
@@ -2438,7 +2555,7 @@ var DataQualityValidator = class {
     const hasDateColumn = columnAnalysis.some(
       (c) => c.inferredType === "date" || c.inferredType === "datetime"
     );
-    if (!hasDateColumn) {
+    if (!hasDateColumn && !detectedPreset) {
       issues.push({
         type: "MISSING_REQUIRED_DATA",
         severity: "CRITICAL",
@@ -2451,7 +2568,7 @@ var DataQualityValidator = class {
       });
     }
     const hasAmountColumn = columnAnalysis.some((c) => c.inferredType === "amount");
-    if (!hasAmountColumn) {
+    if (!hasAmountColumn && !detectedPreset) {
       issues.push({
         type: "MISSING_REQUIRED_DATA",
         severity: "CRITICAL",
@@ -2645,349 +2762,6 @@ var ObjectStorageService = class {
 };
 var objectStorageService = new ObjectStorageService();
 
-// server/reportGenerator.ts
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import * as XLSX2 from "xlsx";
-var ReportGenerator = class {
-  parseAmount(amount) {
-    const parsed = parseFloat(amount);
-    return isNaN(parsed) ? 0 : parsed;
-  }
-  calculateSummary(data) {
-    const fuelTransactions = data.transactions.filter((t) => t.sourceType === "fuel");
-    const bankTransactions = data.transactions.filter((t) => t.sourceType && t.sourceType.startsWith("bank"));
-    const matchedTransactions = data.transactions.filter((t) => t.matchStatus === "matched");
-    const unmatchableBankTransactions = bankTransactions.filter((t) => t.matchStatus === "unmatchable");
-    const matchableBankTransactions = bankTransactions.filter(
-      (t) => t.matchStatus === "matched" || t.matchStatus === "unmatched" || t.matchStatus === "partial" || !t.matchStatus
-      // null/undefined = pending, still matchable
-    );
-    const cardFuelTransactions = fuelTransactions.filter((t) => t.isCardTransaction === "yes");
-    const cashFuelTransactions = fuelTransactions.filter((t) => t.isCardTransaction === "no");
-    const unknownFuelTransactions = fuelTransactions.filter((t) => t.isCardTransaction === "unknown");
-    const totalFuelAmount = fuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const totalBankAmount = bankTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const matchableBankAmount = matchableBankTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const unmatchableBankAmount = unmatchableBankTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const cardFuelAmount = cardFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const cashFuelAmount = cashFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const unknownFuelAmount = unknownFuelTransactions.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const matchedBankTransactions = matchableBankTransactions.filter((t) => t.matchStatus === "matched");
-    const bankMatchRate = matchableBankTransactions.length > 0 ? matchedBankTransactions.length / matchableBankTransactions.length * 100 : 0;
-    const matchedCardFuel = cardFuelTransactions.filter((t) => t.matchStatus === "matched");
-    const cardMatchRate = cardFuelTransactions.length > 0 ? matchedCardFuel.length / cardFuelTransactions.length * 100 : 0;
-    const matchedPairs = data.matches.length;
-    const txMap = new Map(data.transactions.map((t) => [t.id, t]));
-    let matchesSameDay = 0;
-    let matches1Day = 0;
-    let matches2Day = 0;
-    let matches3Day = 0;
-    for (const match of data.matches) {
-      const fuelTx = txMap.get(match.fuelTransactionId);
-      const bankTx = txMap.get(match.bankTransactionId);
-      if (fuelTx && bankTx && fuelTx.transactionDate && bankTx.transactionDate) {
-        const fuelDate = new Date(fuelTx.transactionDate);
-        const bankDate = new Date(bankTx.transactionDate);
-        const diffDays = Math.abs(Math.round((bankDate.getTime() - fuelDate.getTime()) / (1e3 * 60 * 60 * 24)));
-        if (diffDays === 0) matchesSameDay++;
-        else if (diffDays === 1) matches1Day++;
-        else if (diffDays === 2) matches2Day++;
-        else matches3Day++;
-      }
-    }
-    const unmatchedBank = matchableBankTransactions.filter(
-      (t) => t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
-    );
-    const unmatchedCard = cardFuelTransactions.filter(
-      (t) => t.matchStatus !== "matched" && this.parseAmount(t.amount) > 0
-    );
-    const unmatchedBankAmountCalc = unmatchedBank.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const unmatchedCardAmount = unmatchedCard.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-    const unmatchableTransactions = data.transactions.filter((t) => t.matchStatus === "unmatchable");
-    const trulyUnmatched = data.transactions.length - matchedTransactions.length - unmatchableTransactions.length;
-    return {
-      totalTransactions: data.transactions.length,
-      fuelTransactions: fuelTransactions.length,
-      bankTransactions: bankTransactions.length,
-      bankTransactionsMatchable: matchableBankTransactions.length,
-      bankTransactionsUnmatchable: unmatchableBankTransactions.length,
-      matchedTransactions: matchedTransactions.length,
-      matchedPairs,
-      // Unique reconciled pairs (more meaningful for reports)
-      unmatchedTransactions: trulyUnmatched,
-      // Excludes unmatchable (those shouldn't count as failures)
-      matchRate: data.transactions.length - unmatchableTransactions.length > 0 ? matchedTransactions.length / (data.transactions.length - unmatchableTransactions.length) * 100 : 0,
-      totalFuelAmount,
-      totalBankAmount,
-      matchableBankAmount,
-      unmatchableBankAmount,
-      discrepancy: Math.abs(cardFuelAmount - matchableBankAmount),
-      // Compare card fuel to matchable bank
-      cardFuelTransactions: cardFuelTransactions.length,
-      cashFuelTransactions: cashFuelTransactions.length,
-      unknownFuelTransactions: unknownFuelTransactions.length,
-      cardFuelAmount,
-      cashFuelAmount,
-      unknownFuelAmount,
-      bankMatchRate,
-      cardMatchRate,
-      matchesSameDay,
-      matches1Day,
-      matches2Day,
-      matches3Day,
-      unmatchedBankTransactions: unmatchedBank.length,
-      unmatchedBankAmount: unmatchedBankAmountCalc,
-      unmatchedCardTransactions: unmatchedCard.length,
-      unmatchedCardAmount
-    };
-  }
-  generatePDF(data) {
-    const doc = new jsPDF();
-    const summary = this.calculateSummary(data);
-    doc.setFontSize(18);
-    doc.text("Reconciliation Report", 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Period: ${data.period.name}`, 14, 30);
-    doc.text(`${data.period.startDate} to ${data.period.endDate}`, 14, 37);
-    doc.setFontSize(14);
-    doc.text("Summary", 14, 50);
-    const summaryData = [
-      ["Total Transactions", summary.totalTransactions.toString()],
-      ["Fuel Transactions (Total)", summary.fuelTransactions.toString()],
-      ["  - Card Transactions", summary.cardFuelTransactions.toString()],
-      ["  - Cash Transactions", summary.cashFuelTransactions.toString()],
-      ["  - Unknown Type", summary.unknownFuelTransactions.toString()],
-      ["Bank Transactions (Total)", summary.bankTransactions.toString()],
-      ["  - Matchable (within date range)", summary.bankTransactionsMatchable.toString()],
-      ["  - Unmatchable (outside date range)", `${summary.bankTransactionsUnmatchable} (R ${summary.unmatchableBankAmount.toFixed(2)})`],
-      ["Matched Pairs", summary.matchedPairs.toString()],
-      ["  - Same Day", summary.matchesSameDay.toString()],
-      ["  - 1 Day Later", summary.matches1Day.toString()],
-      ["  - 2 Days Later", summary.matches2Day.toString()],
-      ["  - 3 Days Later", summary.matches3Day.toString()],
-      ["Bank Match Rate (of matchable)", `${summary.bankMatchRate.toFixed(2)}%`],
-      ["Card Match Rate (Fuel Side)", `${summary.cardMatchRate.toFixed(2)}%`],
-      ["Unmatched Bank Transactions", `${summary.unmatchedBankTransactions} (R ${summary.unmatchedBankAmount.toFixed(2)})`],
-      ["Unmatched Card Transactions", `${summary.unmatchedCardTransactions} (R ${summary.unmatchedCardAmount.toFixed(2)})`],
-      ["Card Fuel Amount", `R ${summary.cardFuelAmount.toFixed(2)}`],
-      ["Cash Fuel Amount", `R ${summary.cashFuelAmount.toFixed(2)}`],
-      ["Unknown Fuel Amount", `R ${summary.unknownFuelAmount.toFixed(2)}`],
-      ["Total Bank Amount", `R ${summary.totalBankAmount.toFixed(2)}`],
-      ["Matchable Bank Amount", `R ${summary.matchableBankAmount.toFixed(2)}`],
-      ["Discrepancy (Card vs Matchable Bank)", `R ${summary.discrepancy.toFixed(2)}`]
-    ];
-    autoTable(doc, {
-      startY: 55,
-      head: [["Metric", "Value"]],
-      body: summaryData,
-      theme: "striped",
-      headStyles: { fillColor: [66, 66, 66] }
-    });
-    const unmatchedTransactions = data.transactions.filter(
-      (t) => t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
-    );
-    if (unmatchedTransactions.length > 0) {
-      const finalY = doc.lastAutoTable.finalY || 140;
-      doc.setFontSize(14);
-      doc.text("Unmatched Transactions", 14, finalY + 15);
-      const unmatchedData = unmatchedTransactions.map((t) => [
-        t.transactionDate,
-        t.sourceType,
-        t.paymentType || "-",
-        `R ${this.parseAmount(t.amount).toFixed(2)}`,
-        t.referenceNumber || "-",
-        t.description || "-"
-      ]);
-      autoTable(doc, {
-        startY: finalY + 20,
-        head: [["Date", "Source", "Payment Type", "Amount", "Reference", "Description"]],
-        body: unmatchedData,
-        theme: "grid",
-        headStyles: { fillColor: [66, 66, 66] },
-        styles: { fontSize: 8 }
-      });
-    }
-    const missingFuelRecords = data.transactions.filter(
-      (t) => t.sourceType?.startsWith("bank") && t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
-    );
-    if (missingFuelRecords.length > 0) {
-      const prevY = doc.lastAutoTable?.finalY || 140;
-      if (prevY > 250) doc.addPage();
-      const startY = prevY > 250 ? 20 : prevY + 15;
-      doc.setFontSize(14);
-      doc.text("Missing Fuel Records (Bank tx with no fuel match)", 14, startY);
-      const missingData = missingFuelRecords.sort((a, b) => (a.transactionDate || "").localeCompare(b.transactionDate || "")).map((t) => [
-        t.transactionDate,
-        t.sourceName || t.sourceType,
-        `R ${this.parseAmount(t.amount).toFixed(2)}`,
-        t.cardNumber || "-",
-        t.referenceNumber || "-",
-        t.description || "-"
-      ]);
-      autoTable(doc, {
-        startY: startY + 5,
-        head: [["Date", "Bank", "Amount", "Card", "Reference", "Description"]],
-        body: missingData,
-        theme: "grid",
-        headStyles: { fillColor: [66, 66, 66] },
-        styles: { fontSize: 8 }
-      });
-    }
-    return Buffer.from(doc.output("arraybuffer"));
-  }
-  generateExcel(data) {
-    const wb = XLSX2.utils.book_new();
-    const summary = this.calculateSummary(data);
-    const summaryData = [
-      ["Reconciliation Report"],
-      [`Period: ${data.period.name}`],
-      [`${data.period.startDate} to ${data.period.endDate}`],
-      [],
-      ["Summary"],
-      ["Metric", "Value"],
-      ["Total Transactions", summary.totalTransactions],
-      ["Fuel Transactions (Total)", summary.fuelTransactions],
-      ["  - Card Transactions", summary.cardFuelTransactions],
-      ["  - Cash Transactions", summary.cashFuelTransactions],
-      ["Bank Transactions (Total)", summary.bankTransactions],
-      ["  - Matchable (within date range)", summary.bankTransactionsMatchable],
-      ["  - Unmatchable (outside date range)", summary.bankTransactionsUnmatchable],
-      ["Matched Pairs", summary.matchedPairs],
-      ["Matched Transactions", summary.matchedTransactions],
-      ["Bank Match Rate (of matchable)", `${summary.bankMatchRate.toFixed(2)}%`],
-      ["Card Match Rate", `${summary.cardMatchRate.toFixed(2)}%`],
-      ["Card Fuel Amount", summary.cardFuelAmount],
-      ["Cash Fuel Amount", summary.cashFuelAmount],
-      ["Total Bank Amount", summary.totalBankAmount],
-      ["Matchable Bank Amount", summary.matchableBankAmount],
-      ["Unmatchable Bank Amount", summary.unmatchableBankAmount],
-      ["Discrepancy (Card vs Matchable Bank)", summary.discrepancy]
-    ];
-    const wsSummary = XLSX2.utils.aoa_to_sheet(summaryData);
-    XLSX2.utils.book_append_sheet(wb, wsSummary, "Summary");
-    const allTransactionsData = [
-      ["Date", "Source", "Payment Type", "Amount", "Reference", "Description", "Match Status"]
-    ];
-    data.transactions.forEach((t) => {
-      allTransactionsData.push([
-        t.transactionDate,
-        t.sourceType,
-        t.paymentType || "",
-        this.parseAmount(t.amount),
-        t.referenceNumber || "",
-        t.description || "",
-        t.matchStatus
-      ]);
-    });
-    const wsAllTransactions = XLSX2.utils.aoa_to_sheet(allTransactionsData);
-    XLSX2.utils.book_append_sheet(wb, wsAllTransactions, "All Transactions");
-    const unmatchedTransactions = data.transactions.filter(
-      (t) => t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
-    );
-    if (unmatchedTransactions.length > 0) {
-      const unmatchedData = [
-        ["Date", "Source", "Payment Type", "Amount", "Reference", "Description"]
-      ];
-      unmatchedTransactions.forEach((t) => {
-        unmatchedData.push([
-          t.transactionDate,
-          t.sourceType,
-          t.paymentType || "",
-          this.parseAmount(t.amount),
-          t.referenceNumber || "",
-          t.description || ""
-        ]);
-      });
-      const wsUnmatched = XLSX2.utils.aoa_to_sheet(unmatchedData);
-      XLSX2.utils.book_append_sheet(wb, wsUnmatched, "Unmatched");
-    }
-    const missingFuelRecords = data.transactions.filter(
-      (t) => t.sourceType?.startsWith("bank") && t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
-    );
-    if (missingFuelRecords.length > 0) {
-      const missingFuelData = [
-        ["Date", "Bank", "Amount", "Card Number", "Reference", "Description"]
-      ];
-      const totalMissing = missingFuelRecords.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
-      missingFuelRecords.sort((a, b) => (a.transactionDate || "").localeCompare(b.transactionDate || "")).forEach((t) => {
-        missingFuelData.push([
-          t.transactionDate,
-          t.sourceName || t.sourceType,
-          this.parseAmount(t.amount),
-          t.cardNumber || "",
-          t.referenceNumber || "",
-          t.description || ""
-        ]);
-      });
-      missingFuelData.push([]);
-      missingFuelData.push(["Total", "", totalMissing, "", "", `${missingFuelRecords.length} transactions`]);
-      const wsMissing = XLSX2.utils.aoa_to_sheet(missingFuelData);
-      XLSX2.utils.book_append_sheet(wb, wsMissing, "Missing Fuel Records");
-    }
-    return XLSX2.write(wb, { type: "buffer", bookType: "xlsx" });
-  }
-  generateCSV(data) {
-    const summary = this.calculateSummary(data);
-    const lines = [];
-    lines.push("Reconciliation Report");
-    lines.push(`Period: ${data.period.name}`);
-    lines.push(`${data.period.startDate} to ${data.period.endDate}`, "");
-    lines.push("Summary");
-    lines.push("Metric,Value");
-    lines.push(`Total Transactions,${summary.totalTransactions}`);
-    lines.push(`Fuel Transactions (Total),${summary.fuelTransactions}`);
-    lines.push(`  - Card Transactions,${summary.cardFuelTransactions}`);
-    lines.push(`  - Cash Transactions,${summary.cashFuelTransactions}`);
-    lines.push(`Bank Transactions (Total),${summary.bankTransactions}`);
-    lines.push(`  - Matchable (within date range),${summary.bankTransactionsMatchable}`);
-    lines.push(`  - Unmatchable (outside date range),${summary.bankTransactionsUnmatchable}`);
-    lines.push(`Matched Pairs,${summary.matchedPairs}`);
-    lines.push(`Matched Transactions,${summary.matchedTransactions}`);
-    lines.push(`Bank Match Rate (of matchable),${summary.bankMatchRate.toFixed(2)}%`);
-    lines.push(`Card Match Rate,${summary.cardMatchRate.toFixed(2)}%`);
-    lines.push(`Card Fuel Amount,${summary.cardFuelAmount.toFixed(2)}`);
-    lines.push(`Cash Fuel Amount,${summary.cashFuelAmount.toFixed(2)}`);
-    lines.push(`Total Bank Amount,${summary.totalBankAmount.toFixed(2)}`);
-    lines.push(`Matchable Bank Amount,${summary.matchableBankAmount.toFixed(2)}`);
-    lines.push(`Unmatchable Bank Amount,${summary.unmatchableBankAmount.toFixed(2)}`);
-    lines.push(`Discrepancy (Card vs Matchable Bank),${summary.discrepancy.toFixed(2)}`, "");
-    lines.push("All Transactions");
-    lines.push("Date,Source,Payment Type,Amount,Reference,Description,Match Status");
-    for (const t of data.transactions) {
-      lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""},${t.matchStatus}`);
-    }
-    const unmatchedTransactions = data.transactions.filter((t) => t.matchStatus === "unmatched");
-    if (unmatchedTransactions.length > 0) {
-      lines.push("", "Unmatched Transactions (within date range)");
-      lines.push("Date,Source,Payment Type,Amount,Reference,Description");
-      for (const t of unmatchedTransactions) {
-        lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""}`);
-      }
-    }
-    const unmatchableTransactions = data.transactions.filter((t) => t.matchStatus === "unmatchable");
-    if (unmatchableTransactions.length > 0) {
-      lines.push("", "Unmatchable Transactions (outside fuel date range)");
-      lines.push("Date,Source,Payment Type,Amount,Reference,Description");
-      for (const t of unmatchableTransactions) {
-        lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""}`);
-      }
-    }
-    const missingFuelRecords = data.transactions.filter(
-      (t) => t.sourceType?.startsWith("bank") && t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
-    );
-    if (missingFuelRecords.length > 0) {
-      lines.push("", "Missing Fuel Records (Bank transactions with no fuel match)");
-      lines.push("Date,Bank,Amount,Card Number,Reference,Description");
-      for (const t of missingFuelRecords) {
-        lines.push(`${t.transactionDate},${t.sourceName || t.sourceType},${this.parseAmount(t.amount).toFixed(2)},${t.cardNumber || ""},${t.referenceNumber || ""},${t.description || ""}`);
-      }
-    }
-    return lines.join("\n");
-  }
-};
-var reportGenerator = new ReportGenerator();
-
 // server/auth.ts
 import * as client from "openid-client";
 import { Strategy } from "openid-client/passport";
@@ -3155,7 +2929,7 @@ var upload = multer({
     fileSize: 50 * 1024 * 1024
   }
 });
-var columnMappingSchema = z2.record(z2.enum(["date", "amount", "reference", "description", "time", "paymentType", "cardNumber", "ignore"]));
+var columnMappingSchema = z2.record(z2.enum(["date", "amount", "reference", "description", "time", "paymentType", "cardNumber", "attendant", "pump", "ignore"]));
 async function registerRoutes(app2) {
   await setupAuth(app2);
   app2.get("/api/auth/user", isAuthenticated, async (req, res) => {
@@ -3355,17 +3129,17 @@ async function registerRoutes(app2) {
       const fileType = isCSV ? "csv" : isExcel ? "xlsx" : "pdf";
       const parsed = await fileParser.parse(req.file.buffer, fileType);
       const columnMappings = fileParser.autoDetectColumns(parsed.headers);
-      const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
+      const detectedPreset2 = fileParser.detectSourcePreset(parsed.headers);
       const normalizeSourceType = (st) => st.replace(/\d+$/, "");
-      if (detectedPreset && detectedPreset.category !== normalizeSourceType(sourceType)) {
-        const detectedCategory = detectedPreset.category;
+      if (detectedPreset2 && detectedPreset2.category !== normalizeSourceType(sourceType)) {
+        const detectedCategory = detectedPreset2.category;
         const expectedCategory = normalizeSourceType(sourceType);
-        console.warn(`Source type mismatch: expected ${expectedCategory}, detected ${detectedCategory} (${detectedPreset.name})`);
+        console.warn(`Source type mismatch: expected ${expectedCategory}, detected ${detectedCategory} (${detectedPreset2.name})`);
         return res.status(400).json({
           error: `This looks like a ${detectedCategory === "bank" ? "bank statement" : "fuel system export"}, but you're uploading it as ${expectedCategory === "bank" ? "bank data" : "fuel data"}. Please check you're on the right step.`,
           detectedType: detectedCategory,
           expectedType: expectedCategory,
-          detectedPreset: detectedPreset.name
+          detectedPreset: detectedPreset2.name
         });
       }
       const suggestedMappingsObject = {};
@@ -3486,7 +3260,7 @@ async function registerRoutes(app2) {
       for (const mapping of suggestedMappingsArray) {
         suggestedMappings[mapping.detectedColumn] = mapping.suggestedMapping;
       }
-      const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
+      const detectedPreset2 = fileParser.detectSourcePreset(parsed.headers);
       const columnLabels = {};
       for (const header of parsed.headers) {
         columnLabels[header] = fileParser.getColumnLabel(header, parsed.headers);
@@ -3559,9 +3333,9 @@ async function registerRoutes(app2) {
         totalRows: parsed.rowCount,
         suggestedMappings,
         currentMapping: file.columnMapping,
-        detectedPreset: detectedPreset ? {
-          name: detectedPreset.name,
-          description: detectedPreset.description
+        detectedPreset: detectedPreset2 ? {
+          name: detectedPreset2.name,
+          description: detectedPreset2.description
         } : null,
         columnLabels,
         normalizedPreview,
@@ -3611,8 +3385,8 @@ async function registerRoutes(app2) {
       });
       res.json({ success: true });
     } catch (error) {
-      console.error("Error saving column mapping:", error);
-      res.status(400).json({ error: "Invalid column mapping data" });
+      console.error("Error saving column mapping:", error?.message || String(error));
+      res.status(400).json({ error: error?.message || "Invalid column mapping data" });
     }
   });
   app2.post("/api/periods/:periodId/files/:fileId/process", isAuthenticated, async (req, res) => {
@@ -3674,14 +3448,16 @@ async function registerRoutes(app2) {
           cardNumber: extracted.cardNumber || null,
           paymentType: extracted.paymentType || null,
           isCardTransaction: extracted.isCardTransaction,
+          attendant: extracted.attendant || null,
+          pump: extracted.pump || null,
           matchStatus: "unmatched",
           matchId: null
         });
       }
       let reversalStats = null;
       if (file.sourceType.startsWith("bank")) {
-        const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
-        const presetName = detectedPreset?.name || null;
+        const detectedPreset2 = fileParser.detectSourcePreset(parsed.headers);
+        const presetName = detectedPreset2?.name || null;
         reversalStats = detectAndExcludeReversals(validTransactions, presetName);
         if (reversalStats.totalExcluded > 0) {
           console.log(`[PROCESS] Reversal detection: ${reversalStats.totalExcluded} excluded (${reversalStats.declined} declined, ${reversalStats.reversed} reversed, ${reversalStats.cancelled} cancelled, ${reversalStats.pairedApprovals} paired approvals)`);
@@ -4271,39 +4047,6 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to bulk confirm matches" });
     }
   });
-  app2.get("/api/periods/:periodId/report/:format", isAuthenticated, async (req, res) => {
-    try {
-      const { periodId, format } = req.params;
-      const period = await storage.getPeriod(periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
-      const transactions2 = await storage.getTransactionsByPeriod(periodId);
-      const matches2 = await storage.getMatchesByPeriod(periodId);
-      const reportData = { period, transactions: transactions2, matches: matches2 };
-      if (format === "pdf") {
-        const buffer = reportGenerator.generatePDF(reportData);
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="reconciliation-${period.name}.pdf"`);
-        res.send(buffer);
-      } else if (format === "excel") {
-        const buffer = reportGenerator.generateExcel(reportData);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", `attachment; filename="reconciliation-${period.name}.xlsx"`);
-        res.send(buffer);
-      } else if (format === "csv") {
-        const csv = reportGenerator.generateCSV(reportData);
-        res.setHeader("Content-Type", "text/csv");
-        res.setHeader("Content-Disposition", `attachment; filename="reconciliation-${period.name}.csv"`);
-        res.send(csv);
-      } else {
-        res.status(400).json({ error: "Invalid format. Use pdf, excel, or csv" });
-      }
-    } catch (error) {
-      console.error("Error generating report:", error);
-      res.status(500).json({ error: "Failed to generate report" });
-    }
-  });
   app2.get("/api/periods/:periodId/summary", isAuthenticated, async (req, res) => {
     try {
       const period = await storage.getPeriod(req.params.periodId);
@@ -4333,6 +4076,37 @@ async function registerRoutes(app2) {
       }
       const resolutionMap = new Map(resolutions.map((r) => [r.transactionId, r]));
       const txMap = new Map(transactions2.map((t) => [t.id, t]));
+      const bankTxns = transactions2.filter((t) => t.sourceType?.startsWith("bank"));
+      const fuelTxns = transactions2.filter((t) => t.sourceType === "fuel");
+      const matchedBank = bankTxns.filter((t) => t.matchStatus === "matched");
+      const unmatchedBank = bankTxns.filter((t) => t.matchStatus === "unmatched" && parseFloat(t.amount) > 0);
+      const excludedBank = bankTxns.filter((t) => t.matchStatus === "excluded");
+      const outsideRange = bankTxns.filter((t) => t.matchStatus === "unmatchable");
+      const matchableBank = bankTxns.filter((t) => t.matchStatus === "matched" || t.matchStatus === "unmatched");
+      const XLSX2 = await import("xlsx");
+      const wb = XLSX2.utils.book_new();
+      const summaryRows = [
+        { "Metric": "Period", "Value": period.name },
+        { "Metric": "Period Dates", "Value": `${period.startDate} to ${period.endDate}` },
+        { "Metric": "", "Value": "" },
+        { "Metric": "Fuel Transactions", "Value": fuelTxns.length },
+        { "Metric": "  Card", "Value": fuelTxns.filter((t) => t.isCardTransaction === "yes").length },
+        { "Metric": "  Cash", "Value": fuelTxns.filter((t) => t.isCardTransaction === "no").length },
+        { "Metric": "", "Value": "" },
+        { "Metric": "Bank Transactions (Total)", "Value": bankTxns.length },
+        { "Metric": "  Matchable", "Value": matchableBank.length },
+        { "Metric": "  Outside Date Range", "Value": outsideRange.length },
+        { "Metric": "  Excluded (reversed/declined)", "Value": excludedBank.length },
+        { "Metric": "", "Value": "" },
+        { "Metric": "Matched", "Value": matchedBank.length },
+        { "Metric": "Match Rate", "Value": matchableBank.length > 0 ? `${Math.round(matchedBank.length / matchableBank.length * 100)}%` : "N/A" },
+        { "Metric": "Unmatched Bank", "Value": unmatchedBank.length },
+        { "Metric": "", "Value": "" },
+        { "Metric": "Matched Bank Amount", "Value": matchedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
+        { "Metric": "Unmatched Bank Amount", "Value": unmatchedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
+        { "Metric": "Excluded Bank Amount", "Value": excludedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) }
+      ];
+      XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(summaryRows), "Summary");
       const matchedRows = matchesData.map((m) => {
         const bank = txMap.get(m.bankTransactionId);
         const fuel = txMap.get(m.fuelTransactionId);
@@ -4343,48 +4117,92 @@ async function registerRoutes(app2) {
           "Bank Amount": bankAmt,
           "Fuel Amount": fuelAmt,
           "Difference": Math.round((bankAmt - fuelAmt) * 100) / 100,
-          "Bank Description": bank?.description || "",
           "Bank Source": bank?.sourceName || "",
+          "Bank Description": bank?.description || "",
           "Fuel Description": fuel?.description || "",
-          "Confidence": m.confidence ? `${m.confidence}%` : "",
+          "Card Number": bank?.cardNumber || "",
+          "Attendant": fuel?.attendant || "",
+          "Pump": fuel?.pump || "",
+          "Confidence": m.matchConfidence ? `${m.matchConfidence}%` : "",
           "Match Type": m.matchType || "auto"
         };
       });
-      const unmatchedBank = transactions2.filter((t) => t.sourceType === "bank" && t.matchStatus === "unmatched").map((t) => {
+      XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(matchedRows), "Matched");
+      const unmatchedRows = unmatchedBank.map((t) => {
         const resolution = resolutionMap.get(t.id);
         return {
           "Date": t.transactionDate,
+          "Time": t.transactionTime || "",
           "Amount": parseFloat(t.amount),
+          "Bank": t.sourceName || t.sourceType,
+          "Card Number": t.cardNumber || "",
           "Description": t.description || "",
-          "Source": t.sourceName || "",
-          "Status": resolution ? resolution.resolutionType : "unresolved",
-          "Resolution Notes": resolution?.notes || ""
+          "Resolution": resolution ? resolution.resolutionType : "unresolved",
+          "Notes": resolution?.notes || ""
         };
       });
-      const bankTxns = transactions2.filter((t) => t.sourceType === "bank");
-      const fuelTxns = transactions2.filter((t) => t.sourceType === "fuel");
-      const matchable = bankTxns.filter((t) => t.matchStatus !== "unmatchable");
-      const matched = bankTxns.filter((t) => t.matchStatus === "matched");
-      const summaryRows = [
-        { "Metric": "Period", "Value": period.name },
-        { "Metric": "Period Dates", "Value": `${period.startDate} to ${period.endDate}` },
-        { "Metric": "Total Fuel Transactions", "Value": fuelTxns.length },
-        { "Metric": "Total Bank Transactions", "Value": bankTxns.length },
-        { "Metric": "In-Range Bank Transactions", "Value": matchable.length },
-        { "Metric": "Matched", "Value": matched.length },
-        { "Metric": "Match Rate", "Value": matchable.length > 0 ? `${Math.round(matched.length / matchable.length * 100)}%` : "N/A" },
-        { "Metric": "Unmatched Bank", "Value": unmatchedBank.length },
-        { "Metric": "Outside Date Range", "Value": bankTxns.filter((t) => t.matchStatus === "unmatchable").length }
-      ];
-      const XLSX3 = await import("xlsx");
-      const wb = XLSX3.utils.book_new();
-      const wsSummary = XLSX3.utils.json_to_sheet(summaryRows);
-      XLSX3.utils.book_append_sheet(wb, wsSummary, "Summary");
-      const wsMatched = XLSX3.utils.json_to_sheet(matchedRows);
-      XLSX3.utils.book_append_sheet(wb, wsMatched, "Matched");
-      const wsUnmatched = XLSX3.utils.json_to_sheet(unmatchedBank);
-      XLSX3.utils.book_append_sheet(wb, wsUnmatched, "Unmatched Bank");
-      const buffer = XLSX3.write(wb, { type: "buffer", bookType: "xlsx" });
+      XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(unmatchedRows), "Unmatched");
+      if (excludedBank.length > 0) {
+        const excludedRows = excludedBank.map((t) => {
+          const reason = t.description?.match(/\[Excluded: (.+?)\]/)?.[1] || "Excluded";
+          const cleanDesc = t.description?.replace(/\s*\[Excluded:.*?\]/g, "").trim() || "";
+          return {
+            "Date": t.transactionDate,
+            "Time": t.transactionTime || "",
+            "Amount": parseFloat(t.amount),
+            "Bank": t.sourceName || t.sourceType,
+            "Card Number": t.cardNumber || "",
+            "Description": cleanDesc,
+            "Reason": reason
+          };
+        });
+        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(excludedRows), "Excluded");
+      }
+      if (outsideRange.length > 0) {
+        const outsideRows = outsideRange.map((t) => ({
+          "Date": t.transactionDate,
+          "Time": t.transactionTime || "",
+          "Amount": parseFloat(t.amount),
+          "Bank": t.sourceName || t.sourceType,
+          "Card Number": t.cardNumber || "",
+          "Description": t.description || ""
+        }));
+        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(outsideRows), "Outside Date Range");
+      }
+      const fuelRows = fuelTxns.map((t) => {
+        const match = matchMap.get(t.id);
+        const bankTx = match ? txMap.get(match.bankTransactionId) : null;
+        return {
+          "Date": t.transactionDate,
+          "Time": t.transactionTime || "",
+          "Amount": parseFloat(t.amount),
+          "Payment Type": t.paymentType || "",
+          "Card Number": t.cardNumber || "",
+          "Attendant": t.attendant || "",
+          "Pump": t.pump || "",
+          "Description": t.description || "",
+          "Matched": match ? "Yes" : "No",
+          "Bank Match Amount": bankTx ? parseFloat(bankTx.amount) : "",
+          "Bank Source": bankTx?.sourceName || ""
+        };
+      });
+      XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(fuelRows), "Fuel Transactions");
+      const allRows = transactions2.map((t) => ({
+        "Date": t.transactionDate,
+        "Time": t.transactionTime || "",
+        "Source": t.sourceType,
+        "Source Name": t.sourceName || "",
+        "Amount": parseFloat(t.amount),
+        "Card Number": t.cardNumber || "",
+        "Payment Type": t.paymentType || "",
+        "Reference": t.referenceNumber || "",
+        "Description": t.description || "",
+        "Attendant": t.attendant || "",
+        "Pump": t.pump || "",
+        "Status": t.matchStatus
+      }));
+      XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(allRows), "All Transactions");
+      const buffer = XLSX2.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="Reconciliation_${period.name.replace(/\s+/g, "_")}.xlsx"`);
       res.send(buffer);
@@ -4418,11 +4236,11 @@ async function registerRoutes(app2) {
           "Notes": r.notes || ""
         };
       });
-      const XLSX3 = await import("xlsx");
-      const ws2 = XLSX3.utils.json_to_sheet(flaggedData);
-      const wb = XLSX3.utils.book_new();
-      XLSX3.utils.book_append_sheet(wb, ws2, "Flagged Transactions");
-      const buffer = XLSX3.write(wb, { type: "buffer", bookType: "xlsx" });
+      const XLSX2 = await import("xlsx");
+      const ws2 = XLSX2.utils.json_to_sheet(flaggedData);
+      const wb = XLSX2.utils.book_new();
+      XLSX2.utils.book_append_sheet(wb, ws2, "Flagged Transactions");
+      const buffer = XLSX2.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="Flagged_Transactions_${period.name.replace(/\s+/g, "_")}.xlsx"`);
       res.send(buffer);

@@ -452,7 +452,7 @@ export class DataQualityValidator {
     const hasDateColumn = columnAnalysis.some(c => 
       c.inferredType === 'date' || c.inferredType === 'datetime'
     );
-    if (!hasDateColumn) {
+    if (!hasDateColumn && !detectedPreset) {
       issues.push({
         type: 'MISSING_REQUIRED_DATA',
         severity: 'CRITICAL',
@@ -465,14 +465,14 @@ export class DataQualityValidator {
       });
     }
 
-    // Check for amount column
+    // Check for amount column (skip when a preset handles the mapping)
     const hasAmountColumn = columnAnalysis.some(c => c.inferredType === 'amount');
-    if (!hasAmountColumn) {
+    if (!hasAmountColumn && !detectedPreset) {
       issues.push({
         type: 'MISSING_REQUIRED_DATA',
         severity: 'CRITICAL',
         message: 'No amount column detected in the file',
-        details: { 
+        details: {
           requiredField: 'amount',
           hint: 'Check if amounts include currency symbols or unusual formatting'
         },

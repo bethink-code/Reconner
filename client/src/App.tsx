@@ -8,7 +8,6 @@ import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
-import ReportView from "@/pages/ReportView";
 import Admin from "@/pages/Admin";
 import ReconciliationFlow from "@/pages/ReconciliationFlow";
 import InvestigateTransactions from "@/pages/InvestigateTransactions";
@@ -67,8 +66,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/flow/:periodId" component={ReconciliationFlow} />
       <Route path="/investigate" component={InvestigateTransactions} />
-      <Route path="/report" component={ReportView} />
-      <Route path="/admin" component={Admin} />
+<Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

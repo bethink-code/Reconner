@@ -138,25 +138,50 @@ export default function Dashboard() {
 
   const handleNewFromPrevious = (period: DisplayPeriod) => {
     setTemplateSourceId(period.id);
+
+    // Compute next period dates and name from the source period
+    const source = periods.find(p => p.id === period.id);
+    let nextName = "";
+    let nextStart = "";
+    let nextEnd = "";
+
+    if (source?.startDate && source?.endDate) {
+      const start = new Date(source.startDate + "T00:00:00");
+      const end = new Date(source.endDate + "T00:00:00");
+      const durationMs = end.getTime() - start.getTime();
+
+      // Next period starts the day after the previous ends
+      const newStart = new Date(end.getTime() + 86400000);
+      const newEnd = new Date(newStart.getTime() + durationMs);
+
+      nextStart = newStart.toISOString().split("T")[0];
+      nextEnd = newEnd.toISOString().split("T")[0];
+
+      // Generate name: use month format like "April 2026" if roughly monthly
+      const monthNames = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
+      nextName = `${monthNames[newStart.getMonth()]} ${newStart.getFullYear()}`;
+    }
+
     setCreateForm({
-      name: "",
+      name: nextName,
       description: `Based on matching rules from: ${period.name}`,
-      startDate: "",
-      endDate: "",
+      startDate: nextStart,
+      endDate: nextEnd,
     });
     setShowCreateDialog(true);
   };
 
   const handleEdit = (id: string) => {
-    setLocation(`/flow/${id}?mode=edit`);
+    setLocation(`/flow/${id}?step=fuel`);
   };
 
   const handleView = (id: string) => {
-    setLocation(`/flow/${id}?mode=view`);
+    setLocation(`/flow/${id}`);
   };
 
   const handleViewReport = (id: string) => {
-    setLocation(`/report?periodId=${id}`);
+    window.open(`/api/periods/${id}/export`, '_blank');
   };
 
   return (
@@ -345,7 +370,7 @@ export default function Dashboard() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => handleViewReport(period.id)} data-testid={`button-report-${period.id}`}>
                                 <FileBarChart className="h-4 w-4 mr-2" />
-                                Export Report
+                                Download Excel
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleNewFromPrevious(period)} data-testid={`button-template-${period.id}`}>
                                 <Copy className="h-4 w-4 mr-2" />

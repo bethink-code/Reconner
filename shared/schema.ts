@@ -96,6 +96,8 @@ export const transactions = pgTable("transactions", {
   cardNumber: text("card_number"), // Masked card number like ****1234 for matching
   paymentType: text("payment_type"), // 'card', 'cash', 'credit_card', etc.
   isCardTransaction: text("is_card_transaction").default("unknown"), // 'yes', 'no', 'unknown' - for filtering reconciliation
+  attendant: text("attendant"), // Pump attendant / cashier name
+  pump: text("pump"), // Pump number
   matchStatus: text("match_status").notNull().default("unmatched"),
   matchId: varchar("match_id"),
   createdAt: timestamp("created_at").defaultNow(),

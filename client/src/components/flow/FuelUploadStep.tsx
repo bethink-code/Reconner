@@ -241,6 +241,9 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
     { value: "reference", label: "Reference" },
     { value: "description", label: "Description" },
     { value: "cardNumber", label: "Card Number" },
+    { value: "paymentType", label: "Payment Type" },
+    { value: "attendant", label: "Attendant" },
+    { value: "pump", label: "Pump" },
     { value: "ignore", label: "Ignore" },
   ];
 

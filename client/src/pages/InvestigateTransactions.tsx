@@ -157,6 +157,23 @@ export default function InvestigateTransactions() {
     enabled: !!periodId,
   });
 
+  // Fetch excluded bank transactions (reversed, declined, cancelled) for audit visibility
+  const { data: excludedData } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/periods", periodId, "transactions", "excluded", "bank"],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "200",
+        matchStatus: "excluded",
+        sourceType: "bank",
+      });
+      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch excluded transactions");
+      return response.json();
+    },
+    enabled: !!periodId,
+  });
+
   // Fetch resolutions to filter out already resolved
   const { data: resolutions } = useQuery<TransactionResolution[]>({
     queryKey: ["/api/periods", periodId, "resolutions"],
@@ -885,10 +902,10 @@ export default function InvestigateTransactions() {
                     <div className="flex gap-2 flex-wrap justify-center">
                       <Button 
                         variant="outline"
-                        onClick={() => setLocation(`/report?periodId=${periodId}&filter=flagged`)}
+                        onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, '_blank')}
                         data-testid="button-export-flagged"
                       >
-                        Export for Review
+                        Export Flagged
                       </Button>
                       <Link href={`/flow/${periodId}?mode=view`}>
                         <Button variant="outline" data-testid="button-back-results">Back to Results</Button>
@@ -1253,6 +1270,13 @@ export default function InvestigateTransactions() {
                                                 <span> · Inv: {item.bestMatch.transaction.referenceNumber}</span>
                                               )}
                                             </p>
+                                            {(item.bestMatch.transaction.attendant || item.bestMatch.transaction.pump) && (
+                                              <p className="text-xs text-muted-foreground">
+                                                {item.bestMatch.transaction.attendant && <span>Attendant: <span className="font-medium text-foreground">{item.bestMatch.transaction.attendant}</span></span>}
+                                                {item.bestMatch.transaction.attendant && item.bestMatch.transaction.pump && <span> · </span>}
+                                                {item.bestMatch.transaction.pump && <span>Pump: <span className="font-medium text-foreground">{item.bestMatch.transaction.pump}</span></span>}
+                                              </p>
+                                            )}
                                           </div>
                                           <div className="flex items-center gap-2">
                                             <Badge variant={item.bestMatch.confidence >= 80 ? "default" : "secondary"}>
@@ -1290,6 +1314,8 @@ export default function InvestigateTransactions() {
                                               <span>
                                                 {formatCurrency(match.transaction.amount)} ({Math.round(match.confidence)}%)
                                                 — {formatCurrency(match.amountDiff)} difference
+                                                {match.transaction.attendant && <span className="text-muted-foreground"> · {match.transaction.attendant}</span>}
+                                                {match.transaction.pump && <span className="text-muted-foreground"> · Pump {match.transaction.pump}</span>}
                                               </span>
                                               <Button
                                                 size="sm"
@@ -1481,6 +1507,70 @@ export default function InvestigateTransactions() {
                   </Collapsible>
                 );
               })}
+
+              {/* Excluded Transactions — audit trail for reversed/declined/cancelled */}
+              {excludedData && excludedData.transactions.length > 0 && (
+                <Collapsible
+                  open={expandedCategories['excluded'] || false}
+                  onOpenChange={(open) => setExpandedCategories(prev => ({ ...prev, excluded: open }))}
+                >
+                  <Card className="opacity-75">
+                    <CollapsibleTrigger asChild>
+                      <CardHeader className="cursor-pointer hover-elevate py-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
+                              <XCircle className="h-4 w-4 text-slate-500" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-base flex items-center gap-2">
+                                Excluded Transactions
+                                <Badge variant="secondary">{excludedData.transactions.length}</Badge>
+                              </CardTitle>
+                              <CardDescription className="text-xs">Reversed, declined, or cancelled — excluded from matching</CardDescription>
+                            </div>
+                          </div>
+                          <ChevronRight className={cn("h-4 w-4 transition-transform", expandedCategories['excluded'] && "rotate-90")} />
+                        </div>
+                      </CardHeader>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <CardContent className="pt-0 space-y-2">
+                        {excludedData.transactions.map((txn) => {
+                          const reason = txn.description?.match(/\[Excluded: (.+?)\]/)?.[1] || 'Excluded';
+                          const cleanDescription = txn.description?.replace(/\s*\[Excluded:.*?\]/g, '').trim();
+                          return (
+                            <div key={txn.id} className="flex items-center justify-between text-sm p-3 border rounded bg-muted/30">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono font-medium">
+                                    {formatCurrency(parseFloat(txn.amount))}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {formatDate(txn.transactionDate)}
+                                  </span>
+                                  {txn.transactionTime && (
+                                    <span className="text-xs text-muted-foreground">{txn.transactionTime}</span>
+                                  )}
+                                  <span className="text-xs text-muted-foreground">
+                                    {txn.sourceName || txn.sourceType}
+                                  </span>
+                                </div>
+                                {cleanDescription && (
+                                  <p className="text-xs text-muted-foreground truncate">{cleanDescription}</p>
+                                )}
+                              </div>
+                              <Badge variant="outline" className="ml-2 shrink-0 text-xs">
+                                {reason}
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              )}
             </>
           )}
               </>

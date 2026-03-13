@@ -217,15 +217,15 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'TransDate': 'ignore',
       'unitname': 'ignore',
       'shiftnumber': 'ignore',
-      'pump': 'ignore',
+      'pump': 'pump',
       'hose': 'ignore',
       'PluCode': 'ignore',
       'allgroups': 'ignore',
       'subgroups': 'ignore',
-      'AttendantKey': 'ignore',
+      'AttendantKey': 'ignore',  // internal key, not useful
       'AttendantMiniPOSKey': 'ignore',
-      'Attendant': 'ignore',
-      'Cashier': 'ignore',
+      'Attendant': 'attendant',
+      'Cashier': 'ignore',  // fallback for attendant — use Attendant column
       'UnitCost': 'ignore',
       'CostPrice': 'ignore',
       'UnitVAT': 'ignore',
@@ -509,44 +509,108 @@ export class DataNormalizer {
 // Bank transaction status detection from raw row data
 export type BankTxStatus = 'approved' | 'declined' | 'reversed' | 'cancelled' | 'unknown';
 
+/**
+ * Find a column value case-insensitively from raw row data.
+ * Tries exact matches first, then case-insensitive scan of all keys.
+ */
+function findColumnValue(rawRow: Record<string, any>, candidates: string[]): string {
+  // Try exact matches first
+  for (const col of candidates) {
+    if (rawRow[col] != null && String(rawRow[col]).trim()) {
+      return String(rawRow[col]).toLowerCase().trim();
+    }
+  }
+  // Case-insensitive scan of all keys
+  const lowerCandidates = candidates.map(c => c.toLowerCase());
+  for (const [key, value] of Object.entries(rawRow)) {
+    if (lowerCandidates.includes(key.toLowerCase().trim()) && value != null && String(value).trim()) {
+      return String(value).toLowerCase().trim();
+    }
+  }
+  return '';
+}
+
+/**
+ * Find a column raw value (not lowercased) for things like message type codes.
+ */
+function findColumnRawValue(rawRow: Record<string, any>, candidates: string[]): string {
+  for (const col of candidates) {
+    if (rawRow[col] != null && String(rawRow[col]).trim()) {
+      return String(rawRow[col]).trim();
+    }
+  }
+  const lowerCandidates = candidates.map(c => c.toLowerCase());
+  for (const [key, value] of Object.entries(rawRow)) {
+    if (lowerCandidates.includes(key.toLowerCase().trim()) && value != null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return '';
+}
+
 export function detectBankTransactionStatus(
   rawRow: Record<string, any>,
   presetName: string | null,
 ): BankTxStatus {
-  // FNB: has "Status" column with Approved/Declined/Reversed
+  // Common status column names across all banks
+  const statusVal = findColumnValue(rawRow, [
+    'Status', 'Transaction Status', 'Trans Status', 'Result', 'Response',
+  ]);
+  const txTypeVal = findColumnValue(rawRow, [
+    'Transaction type', 'Transaction Type', 'Trans Type', 'Type',
+    'Transaction  Type', // Standard Bank double-space variant
+  ]);
+
+  // FNB: Status = Approved/Declined/Reversed
   if (presetName === 'FNB Merchant') {
-    const status = String(rawRow['Status'] || '').toLowerCase().trim();
-    if (status === 'approved') return 'approved';
-    if (status === 'declined') return 'declined';
-    if (status === 'reversed') return 'reversed';
-    // Fallback: check Transaction type
-    const txType = String(rawRow['Transaction type'] || rawRow['Transaction Type'] || '').toLowerCase();
-    if (txType.includes('revers')) return 'reversed';
+    if (statusVal === 'approved') return 'approved';
+    if (statusVal === 'declined') return 'declined';
+    if (statusVal === 'reversed') return 'reversed';
+    if (txTypeVal.includes('revers') || txTypeVal.includes('refund')) return 'reversed';
+    const source = findColumnValue(rawRow, ['Source']);
+    if (source.includes('revers') || source.includes('refund')) return 'reversed';
+    // FNB fixed-width parsing quirk: status text bleeds into the Amount column
+    // e.g. raw Amount = "proved R100,00" (from "Approved R100,00")
+    //      raw Amount = "clined R200,00" (from "Declined R200,00")
+    const rawAmount = String(rawRow['Amount'] || '').toLowerCase();
+    if (rawAmount.includes('clined') || rawAmount.includes('decline')) return 'declined';
+    if (rawAmount.includes('versed') || rawAmount.includes('reversal') || rawAmount.includes('reverse')) return 'reversed';
+    if (rawAmount.includes('cancel')) return 'cancelled';
+    if (rawAmount.includes('proved') || rawAmount.includes('approv')) return 'approved';
     return 'unknown';
   }
 
-  // ABSA: has "Status" column with Success/Declined/Cancelled
+  // ABSA: Status = Success/Declined/Cancelled, Message Type 0420 = reversal
   if (presetName === 'ABSA Merchant') {
-    const status = String(rawRow['Status'] || '').toLowerCase().trim();
-    if (status === 'success') return 'approved';
-    if (status === 'declined') return 'declined';
-    if (status === 'cancelled') return 'cancelled';
-    // Check Message Type for reversals (0420 = reversal)
-    const msgType = String(rawRow['Message Type'] || '').trim();
+    if (statusVal === 'success') return 'approved';
+    if (statusVal === 'declined') return 'declined';
+    if (statusVal === 'cancelled' || statusVal === 'canceled') return 'cancelled';
+    const msgType = findColumnRawValue(rawRow, ['Message Type', 'MessageType', 'Msg Type']);
     if (msgType === '0420') return 'reversed';
+    if (txTypeVal.includes('revers') || txTypeVal.includes('refund')) return 'reversed';
     return 'unknown';
   }
 
-  // Standard Bank: check Transaction Type and Reject Code
+  // Standard Bank: Reject Code != 0 = declined
   if (presetName === 'Standard Bank Digital') {
-    const rejectCode = String(rawRow['Reject  Code'] || '').trim();
+    const rejectCode = findColumnRawValue(rawRow, ['Reject  Code', 'Reject Code', 'RejectCode']);
     if (rejectCode && rejectCode !== '0' && rejectCode !== '00') return 'declined';
-    const txType = String(rawRow['Transaction  Type'] || '').toLowerCase();
-    if (txType.includes('revers') || txType.includes('refund')) return 'reversed';
+    if (txTypeVal.includes('revers') || txTypeVal.includes('refund')) return 'reversed';
     return 'approved';
   }
 
-  // Generic fallback: scan all values for keywords
+  // Generic fallback for any bank: check status column, then transaction type, then scan all values
+  if (statusVal) {
+    if (statusVal === 'approved' || statusVal === 'success') return 'approved';
+    if (statusVal === 'declined' || statusVal === 'rejected') return 'declined';
+    if (statusVal === 'reversed' || statusVal.includes('reversal')) return 'reversed';
+    if (statusVal === 'cancelled' || statusVal === 'canceled') return 'cancelled';
+  }
+  if (txTypeVal) {
+    if (txTypeVal.includes('revers') || txTypeVal.includes('refund')) return 'reversed';
+  }
+
+  // Last resort: scan all values for keywords
   const allValues = Object.values(rawRow).map(v => String(v || '').toLowerCase());
   for (const val of allValues) {
     if (val === 'reversed' || val.includes('reversal')) return 'reversed';
@@ -652,6 +716,53 @@ export function detectAndExcludeReversals(
       stats.pairedApprovals++;
       stats.totalExcluded++;
       break; // Only consume one approval per reversal
+    }
+  }
+
+  // Third pass: detect implicit reversal pairs via negative amounts
+  // If a transaction has a negative amount and there's a matching positive amount on the same date,
+  // treat the pair as a reversal (even without explicit Status column)
+  const remainingByKey = new Map<string, number[]>();
+  for (let i = 0; i < transactions.length; i++) {
+    if (transactions[i].matchStatus === 'excluded') continue;
+    const rawAmount = parseFloat(transactions[i].amount || '0');
+    if (rawAmount >= 0) {
+      const absAmount = rawAmount.toFixed(2);
+      const card = (transactions[i].cardNumber || '').trim();
+      const date = (transactions[i].transactionDate || '').substring(0, 10);
+      const key = `${date}_${absAmount}_${card}`;
+      if (!remainingByKey.has(key)) remainingByKey.set(key, []);
+      remainingByKey.get(key)!.push(i);
+    }
+  }
+
+  const consumedPositives = new Set<number>();
+  for (let i = 0; i < transactions.length; i++) {
+    if (transactions[i].matchStatus === 'excluded') continue;
+    const rawAmount = parseFloat(transactions[i].amount || '0');
+    if (rawAmount >= 0) continue; // Only look at negatives
+
+    const absAmount = Math.abs(rawAmount).toFixed(2);
+    const card = (transactions[i].cardNumber || '').trim();
+    const date = (transactions[i].transactionDate || '').substring(0, 10);
+    const key = `${date}_${absAmount}_${card}`;
+
+    // Mark the negative as a reversal
+    transactions[i].matchStatus = 'excluded';
+    transactions[i].description = (transactions[i].description || '') + ' [Excluded: Negative amount reversal]';
+    stats.reversed++;
+    stats.totalExcluded++;
+
+    // Find and consume a matching positive
+    const positives = remainingByKey.get(key) || [];
+    for (const idx of positives) {
+      if (consumedPositives.has(idx) || transactions[idx].matchStatus === 'excluded') continue;
+      consumedPositives.add(idx);
+      transactions[idx].matchStatus = 'excluded';
+      transactions[idx].description = (transactions[idx].description || '') + ' [Excluded: Paired with negative reversal]';
+      stats.pairedApprovals++;
+      stats.totalExcluded++;
+      break;
     }
   }
 
@@ -1228,6 +1339,8 @@ export class FileParser {
     cardNumber: string;
     paymentType: string;
     isCardTransaction: 'yes' | 'no' | 'unknown';
+    attendant: string;
+    pump: string;
   } {
     let transactionDate = '';
     let transactionTime = '';
@@ -1237,6 +1350,8 @@ export class FileParser {
     let cardNumber = '';
     let paymentType = '';
     let isCardTransaction: 'yes' | 'no' | 'unknown' = 'unknown';
+    let attendant = '';
+    let pump = '';
 
     // Detect preset for source-specific normalization
     const preset = this.detectSourcePreset(headers);
@@ -1380,6 +1495,20 @@ export class FileParser {
             }
           }
           break;
+        case 'attendant':
+          const attVal = String(value).trim();
+          if (attVal) {
+            attendant = attVal;
+            processedFields.add('attendant');
+          }
+          break;
+        case 'pump':
+          const pumpVal = String(value).trim();
+          if (pumpVal) {
+            pump = pumpVal;
+            processedFields.add('pump');
+          }
+          break;
       }
     }
 
@@ -1398,6 +1527,8 @@ export class FileParser {
       cardNumber,
       paymentType,
       isCardTransaction,
+      attendant,
+      pump,
     };
   }
 
@@ -1415,6 +1546,8 @@ export class FileParser {
       cardNumber: string;
       paymentType: string;
       isCardTransaction: 'yes' | 'no' | 'unknown';
+      attendant: string;
+      pump: string;
     },
     rawRow: Record<string, any>,
     columnMapping: Record<string, string>

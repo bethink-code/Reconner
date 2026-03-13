@@ -127,16 +127,29 @@ export default function ReconciliationFlow() {
   useEffect(() => {
     if (!filesLoading && !hasInitialized.current) {
       hasInitialized.current = true;
-      
+
+      // Check URL for explicit step override (e.g. ?step=fuel for "Edit Data")
+      const urlParams = new URLSearchParams(window.location.search);
+      const requestedStep = urlParams.get("step") as ReconciliationStep | null;
+
       if (fuelFile && bankFiles.length > 0) {
-        // Both data sources uploaded — jump to results (matching already done)
+        // Both data sources uploaded
         setCompletedSteps(["fuel", "bank", "configure"]);
-        setCurrentStep("results");
+        if (requestedStep === "fuel" || requestedStep === "bank" || requestedStep === "configure") {
+          setCurrentStep(requestedStep);
+          if (requestedStep === "bank") setBankSubStep("status");
+        } else {
+          setCurrentStep("results");
+        }
       } else if (fuelFile) {
         // Fuel uploaded, need bank data
         setCompletedSteps(["fuel"]);
-        setCurrentStep("bank");
-        setBankSubStep("status");
+        if (requestedStep === "fuel") {
+          setCurrentStep("fuel");
+        } else {
+          setCurrentStep("bank");
+          setBankSubStep("status");
+        }
       } else {
         // Fresh start
         setCurrentStep("fuel");

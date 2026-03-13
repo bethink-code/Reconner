@@ -233,6 +233,7 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
     { value: "reference", label: "Reference" },
     { value: "description", label: "Description" },
     { value: "cardNumber", label: "Card Number" },
+    { value: "paymentType", label: "Payment Type" },
     { value: "ignore", label: "Ignore" },
   ];
 

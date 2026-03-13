@@ -387,57 +387,24 @@ function SummaryCard({ report }: { report: DataQualityReport }) {
   );
 }
 
-function ColumnMappingTip({ report, onUseSuggestedMapping }: { 
-  report: DataQualityReport; 
+function ColumnMappingTip({ report, onUseSuggestedMapping }: {
+  report: DataQualityReport;
   onUseSuggestedMapping?: (mapping: Record<string, string>) => void;
 }) {
-  const hasColumnShift = report.columnShiftDetected || 
+  const hasColumnShift = report.columnShiftDetected ||
     report.issues.some(i => i.type.toUpperCase().includes('COLUMN_SHIFT'));
-  
-  if (!hasColumnShift) return null;
 
-  const suggestedMapping = report.suggestedMapping || report.suggestedColumnMapping || {};
+  if (!hasColumnShift) return null;
 
   return (
     <Alert className="mb-4 border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950" data-testid="alert-column-tip">
       <TableProperties className="h-4 w-4 text-blue-600 dark:text-blue-400" />
       <AlertTitle className="text-blue-800 dark:text-blue-200">Tip for Column Mapping</AlertTitle>
       <AlertDescription className="text-blue-700 dark:text-blue-300">
-        <p className="mb-2">
-          Some column headers in this file don't match their actual content. 
-          When you map columns in the next step:
-        </p>
-        <ul className="list-disc list-inside space-y-1 mb-3 text-sm">
+        <ul className="list-disc list-inside space-y-1 text-sm">
           <li><strong>Look at the sample data</strong> shown for each column, not just the header name</li>
-          <li><strong>Use the suggested mappings</strong> - we've analyzed the actual data to recommend the right columns</li>
+          <li><strong>Use the suggested mappings</strong> — we've analyzed the actual data to recommend the right columns</li>
         </ul>
-        
-        {Object.keys(suggestedMapping).length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">
-              Suggested mappings based on data analysis:
-            </p>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {Object.entries(suggestedMapping).slice(0, 5).map(([field, column]) => (
-                <Badge key={field} variant="outline" className="text-xs border-blue-300 dark:border-blue-700">
-                  {field} → "{column}"
-                </Badge>
-              ))}
-            </div>
-            {onUseSuggestedMapping && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onUseSuggestedMapping(suggestedMapping)}
-                className="border-blue-400 text-blue-700 hover:bg-blue-100 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900"
-                data-testid="button-use-suggested-mapping"
-              >
-                <Sparkles className="h-4 w-4 mr-1" />
-                Apply Suggested Mapping
-              </Button>
-            )}
-          </div>
-        )}
       </AlertDescription>
     </Alert>
   );

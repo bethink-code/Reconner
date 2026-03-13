@@ -6,7 +6,6 @@ import { storage } from "./storage";
 import { fileParser, DataNormalizer, SOURCE_PRESETS, detectAndExcludeReversals } from "./fileParser";
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
-import { reportGenerator } from "./reportGenerator";
 import { setupAuth, isAuthenticated } from "./auth";
 import { 
   insertReconciliationPeriodSchema,
@@ -30,7 +29,7 @@ const upload = multer({
 });
 
 // Expanded column mapping schema to include time and payment type
-const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'cardNumber', 'ignore']));
+const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'cardNumber', 'attendant', 'pump', 'ignore']));
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -598,9 +597,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       res.json({ success: true });
-    } catch (error) {
-      console.error("Error saving column mapping:", error);
-      res.status(400).json({ error: "Invalid column mapping data" });
+    } catch (error: any) {
+      console.error("Error saving column mapping:", error?.message || String(error));
+      res.status(400).json({ error: error?.message || "Invalid column mapping data" });
     }
   });
 
@@ -679,6 +678,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cardNumber: extracted.cardNumber || null,
           paymentType: extracted.paymentType || null,
           isCardTransaction: extracted.isCardTransaction,
+          attendant: extracted.attendant || null,
+          pump: extracted.pump || null,
           matchStatus: 'unmatched' as const,
           matchId: null,
         });
@@ -1504,43 +1505,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/report/:format", isAuthenticated, async (req, res) => {
-    try {
-      const { periodId, format } = req.params;
-      
-      const period = await storage.getPeriod(periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
-
-      const transactions = await storage.getTransactionsByPeriod(periodId);
-      const matches = await storage.getMatchesByPeriod(periodId);
-
-      const reportData = { period, transactions, matches };
-
-      if (format === 'pdf') {
-        const buffer = reportGenerator.generatePDF(reportData);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="reconciliation-${period.name}.pdf"`);
-        res.send(buffer);
-      } else if (format === 'excel') {
-        const buffer = reportGenerator.generateExcel(reportData);
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="reconciliation-${period.name}.xlsx"`);
-        res.send(buffer);
-      } else if (format === 'csv') {
-        const csv = reportGenerator.generateCSV(reportData);
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="reconciliation-${period.name}.csv"`);
-        res.send(csv);
-      } else {
-        res.status(400).json({ error: "Invalid format. Use pdf, excel, or csv" });
-      }
-    } catch (error) {
-      console.error("Error generating report:", error);
-      res.status(500).json({ error: "Failed to generate report" });
-    }
-  });
 
   app.get("/api/periods/:periodId/summary", isAuthenticated, async (req, res) => {
     try {
@@ -1558,7 +1522,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Export flagged transactions only - for manager/accountant review
   // Export full reconciliation report as Excel
   app.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
     try {
@@ -1580,7 +1543,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const resolutionMap = new Map(resolutions.map(r => [r.transactionId, r]));
       const txMap = new Map(transactions.map(t => [t.id, t]));
 
-      // Sheet 1: Matched pairs
+      const bankTxns = transactions.filter(t => t.sourceType?.startsWith('bank'));
+      const fuelTxns = transactions.filter(t => t.sourceType === 'fuel');
+      const matchedBank = bankTxns.filter(t => t.matchStatus === 'matched');
+      const unmatchedBank = bankTxns.filter(t => t.matchStatus === 'unmatched' && parseFloat(t.amount) > 0);
+      const excludedBank = bankTxns.filter(t => t.matchStatus === 'excluded');
+      const outsideRange = bankTxns.filter(t => t.matchStatus === 'unmatchable');
+      const matchableBank = bankTxns.filter(t => t.matchStatus === 'matched' || t.matchStatus === 'unmatched');
+
+      const XLSX = await import('xlsx');
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Summary
+      const summaryRows = [
+        { 'Metric': 'Period', 'Value': period.name },
+        { 'Metric': 'Period Dates', 'Value': `${period.startDate} to ${period.endDate}` },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Fuel Transactions', 'Value': fuelTxns.length },
+        { 'Metric': '  Card', 'Value': fuelTxns.filter(t => t.isCardTransaction === 'yes').length },
+        { 'Metric': '  Cash', 'Value': fuelTxns.filter(t => t.isCardTransaction === 'no').length },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Bank Transactions (Total)', 'Value': bankTxns.length },
+        { 'Metric': '  Matchable', 'Value': matchableBank.length },
+        { 'Metric': '  Outside Date Range', 'Value': outsideRange.length },
+        { 'Metric': '  Excluded (reversed/declined)', 'Value': excludedBank.length },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Matched', 'Value': matchedBank.length },
+        { 'Metric': 'Match Rate', 'Value': matchableBank.length > 0 ? `${Math.round((matchedBank.length / matchableBank.length) * 100)}%` : 'N/A' },
+        { 'Metric': 'Unmatched Bank', 'Value': unmatchedBank.length },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Matched Bank Amount', 'Value': matchedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
+        { 'Metric': 'Unmatched Bank Amount', 'Value': unmatchedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
+        { 'Metric': 'Excluded Bank Amount', 'Value': excludedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
+
+      // Sheet 2: Matched pairs
       const matchedRows = matchesData.map(m => {
         const bank = txMap.get(m.bankTransactionId);
         const fuel = txMap.get(m.fuelTransactionId);
@@ -1591,57 +1589,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Bank Amount': bankAmt,
           'Fuel Amount': fuelAmt,
           'Difference': Math.round((bankAmt - fuelAmt) * 100) / 100,
-          'Bank Description': bank?.description || '',
           'Bank Source': bank?.sourceName || '',
+          'Bank Description': bank?.description || '',
           'Fuel Description': fuel?.description || '',
-          'Confidence': m.confidence ? `${m.confidence}%` : '',
+          'Card Number': bank?.cardNumber || '',
+          'Attendant': fuel?.attendant || '',
+          'Pump': fuel?.pump || '',
+          'Confidence': m.matchConfidence ? `${m.matchConfidence}%` : '',
           'Match Type': m.matchType || 'auto',
         };
       });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchedRows), 'Matched');
 
-      // Sheet 2: Unmatched bank transactions
-      const unmatchedBank = transactions
-        .filter(t => t.sourceType === 'bank' && t.matchStatus === 'unmatched')
-        .map(t => {
-          const resolution = resolutionMap.get(t.id);
+      // Sheet 3: Unmatched bank transactions
+      const unmatchedRows = unmatchedBank.map(t => {
+        const resolution = resolutionMap.get(t.id);
+        return {
+          'Date': t.transactionDate,
+          'Time': t.transactionTime || '',
+          'Amount': parseFloat(t.amount),
+          'Bank': t.sourceName || t.sourceType,
+          'Card Number': t.cardNumber || '',
+          'Description': t.description || '',
+          'Resolution': resolution ? resolution.resolutionType : 'unresolved',
+          'Notes': resolution?.notes || '',
+        };
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unmatchedRows), 'Unmatched');
+
+      // Sheet 4: Excluded (reversed/declined/cancelled)
+      if (excludedBank.length > 0) {
+        const excludedRows = excludedBank.map(t => {
+          const reason = t.description?.match(/\[Excluded: (.+?)\]/)?.[1] || 'Excluded';
+          const cleanDesc = t.description?.replace(/\s*\[Excluded:.*?\]/g, '').trim() || '';
           return {
             'Date': t.transactionDate,
+            'Time': t.transactionTime || '',
             'Amount': parseFloat(t.amount),
-            'Description': t.description || '',
-            'Source': t.sourceName || '',
-            'Status': resolution ? resolution.resolutionType : 'unresolved',
-            'Resolution Notes': resolution?.notes || '',
+            'Bank': t.sourceName || t.sourceType,
+            'Card Number': t.cardNumber || '',
+            'Description': cleanDesc,
+            'Reason': reason,
           };
         });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(excludedRows), 'Excluded');
+      }
 
-      // Sheet 3: Summary
-      const bankTxns = transactions.filter(t => t.sourceType === 'bank');
-      const fuelTxns = transactions.filter(t => t.sourceType === 'fuel');
-      const matchable = bankTxns.filter(t => t.matchStatus !== 'unmatchable');
-      const matched = bankTxns.filter(t => t.matchStatus === 'matched');
-      const summaryRows = [
-        { 'Metric': 'Period', 'Value': period.name },
-        { 'Metric': 'Period Dates', 'Value': `${period.startDate} to ${period.endDate}` },
-        { 'Metric': 'Total Fuel Transactions', 'Value': fuelTxns.length },
-        { 'Metric': 'Total Bank Transactions', 'Value': bankTxns.length },
-        { 'Metric': 'In-Range Bank Transactions', 'Value': matchable.length },
-        { 'Metric': 'Matched', 'Value': matched.length },
-        { 'Metric': 'Match Rate', 'Value': matchable.length > 0 ? `${Math.round((matched.length / matchable.length) * 100)}%` : 'N/A' },
-        { 'Metric': 'Unmatched Bank', 'Value': unmatchedBank.length },
-        { 'Metric': 'Outside Date Range', 'Value': bankTxns.filter(t => t.matchStatus === 'unmatchable').length },
-      ];
+      // Sheet 5: Outside Date Range
+      if (outsideRange.length > 0) {
+        const outsideRows = outsideRange.map(t => ({
+          'Date': t.transactionDate,
+          'Time': t.transactionTime || '',
+          'Amount': parseFloat(t.amount),
+          'Bank': t.sourceName || t.sourceType,
+          'Card Number': t.cardNumber || '',
+          'Description': t.description || '',
+        }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(outsideRows), 'Outside Date Range');
+      }
 
-      const XLSX = await import('xlsx');
-      const wb = XLSX.utils.book_new();
+      // Sheet 6: Fuel Transactions (with attendant/pump detail)
+      const fuelRows = fuelTxns.map(t => {
+        const match = matchMap.get(t.id);
+        const bankTx = match ? txMap.get(match.bankTransactionId) : null;
+        return {
+          'Date': t.transactionDate,
+          'Time': t.transactionTime || '',
+          'Amount': parseFloat(t.amount),
+          'Payment Type': t.paymentType || '',
+          'Card Number': t.cardNumber || '',
+          'Attendant': t.attendant || '',
+          'Pump': t.pump || '',
+          'Description': t.description || '',
+          'Matched': match ? 'Yes' : 'No',
+          'Bank Match Amount': bankTx ? parseFloat(bankTx.amount) : '',
+          'Bank Source': bankTx?.sourceName || '',
+        };
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fuelRows), 'Fuel Transactions');
 
-      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-
-      const wsMatched = XLSX.utils.json_to_sheet(matchedRows);
-      XLSX.utils.book_append_sheet(wb, wsMatched, 'Matched');
-
-      const wsUnmatched = XLSX.utils.json_to_sheet(unmatchedBank);
-      XLSX.utils.book_append_sheet(wb, wsUnmatched, 'Unmatched Bank');
+      // Sheet 7: All Transactions
+      const allRows = transactions.map(t => ({
+        'Date': t.transactionDate,
+        'Time': t.transactionTime || '',
+        'Source': t.sourceType,
+        'Source Name': t.sourceName || '',
+        'Amount': parseFloat(t.amount),
+        'Card Number': t.cardNumber || '',
+        'Payment Type': t.paymentType || '',
+        'Reference': t.referenceNumber || '',
+        'Description': t.description || '',
+        'Attendant': t.attendant || '',
+        'Pump': t.pump || '',
+        'Status': t.matchStatus,
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRows), 'All Transactions');
 
       const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 

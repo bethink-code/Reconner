@@ -67,6 +67,7 @@ export default function ColumnMappingTable({ source, columns: initialColumns, on
                   <SelectItem value="cardNumber">Card Number</SelectItem>
                   <SelectItem value="paymentType">Payment Type</SelectItem>
                   <SelectItem value="attendant">Attendant</SelectItem>
+                  <SelectItem value="cashier">Cashier</SelectItem>
                   <SelectItem value="pump">Pump</SelectItem>
                   <SelectItem value="ignore">Ignore</SelectItem>
                 </SelectContent>

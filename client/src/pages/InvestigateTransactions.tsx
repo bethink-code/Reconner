@@ -711,6 +711,12 @@ export default function InvestigateTransactions() {
                               <span className="text-sm text-muted-foreground">
                                 {formatDate(transaction.transactionDate)}
                               </span>
+                              {transaction.transactionTime && (
+                                <span className="text-sm text-muted-foreground flex items-center gap-0.5">
+                                  <Clock className="h-3 w-3" />
+                                  {transaction.transactionTime}
+                                </span>
+                              )}
                             </div>
                             {transaction.description && (
                               <p className="text-sm text-muted-foreground mt-1 truncate">
@@ -1133,6 +1139,12 @@ export default function InvestigateTransactions() {
                                       <span className="text-sm text-muted-foreground">
                                         {formatDate(txn.transactionDate)}
                                       </span>
+                                      {txn.transactionTime && (
+                                        <span className="text-sm text-muted-foreground flex items-center gap-0.5">
+                                          <Clock className="h-3 w-3" />
+                                          {txn.transactionTime}
+                                        </span>
+                                      )}
                                     </div>
                                     {txn.description && (
                                       <p className="text-xs text-muted-foreground truncate mt-0.5">
@@ -1146,6 +1158,7 @@ export default function InvestigateTransactions() {
                                     <div className="flex items-center gap-2">
                                       <span className="text-xs text-muted-foreground">
                                         → {formatCurrency(item.bestMatch.transaction.amount)}
+                                        {item.bestMatch.transaction.transactionTime && ` @ ${item.bestMatch.transaction.transactionTime}`}
                                       </span>
                                       <Badge variant="default" className="text-xs">
                                         {Math.round(item.bestMatch.confidence)}%
@@ -1261,20 +1274,26 @@ export default function InvestigateTransactions() {
                                         </p>
                                         <div className="flex items-center justify-between">
                                           <div>
-                                            <p className="font-mono font-bold">
+                                            <p className="font-mono font-bold flex items-center gap-2">
                                               {formatCurrency(item.bestMatch.transaction.amount)}
+                                              {item.bestMatch.transaction.paymentType && (
+                                                <Badge variant="outline" className="text-xs font-normal">{item.bestMatch.transaction.paymentType}</Badge>
+                                              )}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                               Difference: {formatCurrency(item.bestMatch.amountDiff)} · {item.bestMatch.timeDiff}
+                                              {txn.transactionTime && item.bestMatch.transaction.transactionTime && (
+                                                <span className="ml-1">({txn.transactionTime} → {item.bestMatch.transaction.transactionTime})</span>
+                                              )}
                                               {item.bestMatch.transaction.referenceNumber && (
                                                 <span> · Inv: {item.bestMatch.transaction.referenceNumber}</span>
                                               )}
                                             </p>
-                                            {(item.bestMatch.transaction.attendant || item.bestMatch.transaction.pump) && (
+                                            {(item.bestMatch.transaction.attendant || item.bestMatch.transaction.cashier || item.bestMatch.transaction.pump) && (
                                               <p className="text-xs text-muted-foreground">
                                                 {item.bestMatch.transaction.attendant && <span>Attendant: <span className="font-medium text-foreground">{item.bestMatch.transaction.attendant}</span></span>}
-                                                {item.bestMatch.transaction.attendant && item.bestMatch.transaction.pump && <span> · </span>}
-                                                {item.bestMatch.transaction.pump && <span>Pump: <span className="font-medium text-foreground">{item.bestMatch.transaction.pump}</span></span>}
+                                                {item.bestMatch.transaction.cashier && <span>{item.bestMatch.transaction.attendant ? ' · ' : ''}Cashier: <span className="font-medium text-foreground">{item.bestMatch.transaction.cashier}</span></span>}
+                                                {item.bestMatch.transaction.pump && <span>{(item.bestMatch.transaction.attendant || item.bestMatch.transaction.cashier) ? ' · ' : ''}Pump: <span className="font-medium text-foreground">{item.bestMatch.transaction.pump}</span></span>}
                                               </p>
                                             )}
                                           </div>
@@ -1313,8 +1332,11 @@ export default function InvestigateTransactions() {
                                             >
                                               <span>
                                                 {formatCurrency(match.transaction.amount)} ({Math.round(match.confidence)}%)
-                                                — {formatCurrency(match.amountDiff)} difference
+                                                — {formatCurrency(match.amountDiff)} diff
+                                                {match.timeDiff && <span className="text-muted-foreground"> · {match.timeDiff}</span>}
+                                                {match.transaction.transactionTime && <span className="text-muted-foreground"> @ {match.transaction.transactionTime}</span>}
                                                 {match.transaction.attendant && <span className="text-muted-foreground"> · {match.transaction.attendant}</span>}
+                                                {match.transaction.cashier && <span className="text-muted-foreground"> · {match.transaction.cashier}</span>}
                                                 {match.transaction.pump && <span className="text-muted-foreground"> · Pump {match.transaction.pump}</span>}
                                               </span>
                                               <Button

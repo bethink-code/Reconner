@@ -29,7 +29,7 @@ const upload = multer({
 });
 
 // Expanded column mapping schema to include time and payment type
-const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'cardNumber', 'attendant', 'pump', 'ignore']));
+const columnMappingSchema = z.record(z.enum(['date', 'amount', 'reference', 'description', 'time', 'paymentType', 'cardNumber', 'attendant', 'cashier', 'pump', 'ignore']));
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -679,6 +679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           paymentType: extracted.paymentType || null,
           isCardTransaction: extracted.isCardTransaction,
           attendant: extracted.attendant || null,
+          cashier: extracted.cashier || null,
           pump: extracted.pump || null,
           matchStatus: 'unmatched' as const,
           matchId: null,
@@ -1560,7 +1561,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { 'Metric': 'Period Dates', 'Value': `${period.startDate} to ${period.endDate}` },
         { 'Metric': '', 'Value': '' },
         { 'Metric': 'Fuel Transactions', 'Value': fuelTxns.length },
-        { 'Metric': '  Card', 'Value': fuelTxns.filter(t => t.isCardTransaction === 'yes').length },
+        { 'Metric': '  Card', 'Value': fuelTxns.filter(t => t.isCardTransaction === 'yes' && !t.paymentType?.toLowerCase().includes('debtor')).length },
+        { 'Metric': '  Debtor/Account', 'Value': fuelTxns.filter(t => t.paymentType?.toLowerCase().includes('debtor') || t.paymentType?.toLowerCase().includes('account') || t.paymentType?.toLowerCase().includes('fleet')).length },
         { 'Metric': '  Cash', 'Value': fuelTxns.filter(t => t.isCardTransaction === 'no').length },
         { 'Metric': '', 'Value': '' },
         { 'Metric': 'Bank Transactions (Total)', 'Value': bankTxns.length },
@@ -1594,9 +1596,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Fuel Description': fuel?.description || '',
           'Card Number': bank?.cardNumber || '',
           'Attendant': fuel?.attendant || '',
+          'Cashier': fuel?.cashier || '',
           'Pump': fuel?.pump || '',
           'Confidence': m.matchConfidence ? `${m.matchConfidence}%` : '',
-          'Match Type': m.matchType || 'auto',
+          'Match Type': m.matchType === 'auto' ? 'Auto Matched' : m.matchType === 'auto_review' ? 'Suggestion Accepted' : m.matchType === 'manual' ? 'Manual Accepted' : m.matchType || 'Auto Matched',
         };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchedRows), 'Matched');
@@ -1612,6 +1615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Card Number': t.cardNumber || '',
           'Description': t.description || '',
           'Resolution': resolution ? resolution.resolutionType : 'unresolved',
+          'Reason': resolution?.reason || '',
           'Notes': resolution?.notes || '',
         };
       });
@@ -1659,6 +1663,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Payment Type': t.paymentType || '',
           'Card Number': t.cardNumber || '',
           'Attendant': t.attendant || '',
+          'Cashier': t.cashier || '',
           'Pump': t.pump || '',
           'Description': t.description || '',
           'Matched': match ? 'Yes' : 'No',
@@ -1668,7 +1673,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fuelRows), 'Fuel Transactions');
 
-      // Sheet 7: All Transactions
+      // Sheet 7: Unmatched Fuel (card transactions without a bank match)
+      const unmatchedFuel = fuelTxns.filter(t => t.isCardTransaction === 'yes' && t.matchStatus !== 'matched');
+      if (unmatchedFuel.length > 0) {
+        const unmatchedFuelRows = unmatchedFuel.map(t => ({
+          'Date': t.transactionDate,
+          'Time': t.transactionTime || '',
+          'Amount': parseFloat(t.amount),
+          'Payment Type': t.paymentType || '',
+          'Card Number': t.cardNumber || '',
+          'Reference': t.referenceNumber || '',
+          'Attendant': t.attendant || '',
+          'Cashier': t.cashier || '',
+          'Pump': t.pump || '',
+          'Description': t.description || '',
+        }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unmatchedFuelRows), 'Unmatched Fuel');
+      }
+
+      // Sheet 8: All Transactions
       const allRows = transactions.map(t => ({
         'Date': t.transactionDate,
         'Time': t.transactionTime || '',

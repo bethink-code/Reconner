@@ -116,7 +116,9 @@ var transactions = pgTable("transactions", {
   isCardTransaction: text("is_card_transaction").default("unknown"),
   // 'yes', 'no', 'unknown' - for filtering reconciliation
   attendant: text("attendant"),
-  // Pump attendant / cashier name
+  // Pump attendant name
+  cashier: text("cashier"),
+  // Cashier name (may differ from attendant)
   pump: text("pump"),
   // Pump number
   matchStatus: text("match_status").notNull().default("unmatched"),
@@ -1200,8 +1202,7 @@ var SOURCE_PRESETS = [
       // internal key, not useful
       "AttendantMiniPOSKey": "ignore",
       "Attendant": "attendant",
-      "Cashier": "ignore",
-      // fallback for attendant — use Attendant column
+      "Cashier": "cashier",
       "UnitCost": "ignore",
       "CostPrice": "ignore",
       "UnitVAT": "ignore",
@@ -1400,11 +1401,19 @@ var DataNormalizer = class {
     if (!rawAmount || rawAmount === "-") return "0";
     return isNegative && !rawAmount.startsWith("-") ? `-${rawAmount}` : rawAmount;
   }
-  // Check if a value looks like a card payment
+  // Check if a payment type processes through the card terminal (appears on bank statements)
+  // Card, Debit, Credit, Visa, Mastercard = obvious card payments
+  // Debtor/Account/Fleet = account sales that also process through the terminal
   static isCardPayment(value) {
     if (!value) return false;
     const lower = String(value).toLowerCase().trim();
-    return lower === "card" || lower.includes("credit") || lower.includes("debit") || lower.includes("visa") || lower.includes("mastercard") || lower.includes("card");
+    return lower === "card" || lower.includes("credit") || lower.includes("debit") || lower.includes("visa") || lower.includes("mastercard") || lower.includes("card") || lower.includes("debtor") || lower.includes("account") || lower.includes("fleet");
+  }
+  // Check if payment type is strictly cash (not processed through terminal)
+  static isCashPayment(value) {
+    if (!value) return false;
+    const lower = String(value).toLowerCase().trim();
+    return lower === "cash";
   }
   // Normalize card number to last 4 digits format for matching
   // Input can be: "****1234", "1234", "5412751234561234", "xxxx-xxxx-xxxx-1234"
@@ -2052,6 +2061,7 @@ var FileParser = class {
     let paymentType = "";
     let isCardTransaction = "unknown";
     let attendant = "";
+    let cashier = "";
     let pump = "";
     const preset = this.detectSourcePreset(headers);
     const processedFields = /* @__PURE__ */ new Set();
@@ -2184,6 +2194,13 @@ var FileParser = class {
             processedFields.add("attendant");
           }
           break;
+        case "cashier":
+          const cashVal = String(value).trim();
+          if (cashVal) {
+            cashier = cashVal;
+            processedFields.add("cashier");
+          }
+          break;
         case "pump":
           const pumpVal = String(value).trim();
           if (pumpVal) {
@@ -2206,6 +2223,7 @@ var FileParser = class {
       paymentType,
       isCardTransaction,
       attendant,
+      cashier,
       pump
     };
   }
@@ -2929,7 +2947,7 @@ var upload = multer({
     fileSize: 50 * 1024 * 1024
   }
 });
-var columnMappingSchema = z2.record(z2.enum(["date", "amount", "reference", "description", "time", "paymentType", "cardNumber", "attendant", "pump", "ignore"]));
+var columnMappingSchema = z2.record(z2.enum(["date", "amount", "reference", "description", "time", "paymentType", "cardNumber", "attendant", "cashier", "pump", "ignore"]));
 async function registerRoutes(app2) {
   await setupAuth(app2);
   app2.get("/api/auth/user", isAuthenticated, async (req, res) => {
@@ -3449,6 +3467,7 @@ async function registerRoutes(app2) {
           paymentType: extracted.paymentType || null,
           isCardTransaction: extracted.isCardTransaction,
           attendant: extracted.attendant || null,
+          cashier: extracted.cashier || null,
           pump: extracted.pump || null,
           matchStatus: "unmatched",
           matchId: null
@@ -4090,7 +4109,8 @@ async function registerRoutes(app2) {
         { "Metric": "Period Dates", "Value": `${period.startDate} to ${period.endDate}` },
         { "Metric": "", "Value": "" },
         { "Metric": "Fuel Transactions", "Value": fuelTxns.length },
-        { "Metric": "  Card", "Value": fuelTxns.filter((t) => t.isCardTransaction === "yes").length },
+        { "Metric": "  Card", "Value": fuelTxns.filter((t) => t.isCardTransaction === "yes" && !t.paymentType?.toLowerCase().includes("debtor")).length },
+        { "Metric": "  Debtor/Account", "Value": fuelTxns.filter((t) => t.paymentType?.toLowerCase().includes("debtor") || t.paymentType?.toLowerCase().includes("account") || t.paymentType?.toLowerCase().includes("fleet")).length },
         { "Metric": "  Cash", "Value": fuelTxns.filter((t) => t.isCardTransaction === "no").length },
         { "Metric": "", "Value": "" },
         { "Metric": "Bank Transactions (Total)", "Value": bankTxns.length },
@@ -4122,9 +4142,10 @@ async function registerRoutes(app2) {
           "Fuel Description": fuel?.description || "",
           "Card Number": bank?.cardNumber || "",
           "Attendant": fuel?.attendant || "",
+          "Cashier": fuel?.cashier || "",
           "Pump": fuel?.pump || "",
           "Confidence": m.matchConfidence ? `${m.matchConfidence}%` : "",
-          "Match Type": m.matchType || "auto"
+          "Match Type": m.matchType === "auto" ? "Auto Matched" : m.matchType === "auto_review" ? "Suggestion Accepted" : m.matchType === "manual" ? "Manual Accepted" : m.matchType || "Auto Matched"
         };
       });
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(matchedRows), "Matched");
@@ -4138,6 +4159,7 @@ async function registerRoutes(app2) {
           "Card Number": t.cardNumber || "",
           "Description": t.description || "",
           "Resolution": resolution ? resolution.resolutionType : "unresolved",
+          "Reason": resolution?.reason || "",
           "Notes": resolution?.notes || ""
         };
       });
@@ -4179,6 +4201,7 @@ async function registerRoutes(app2) {
           "Payment Type": t.paymentType || "",
           "Card Number": t.cardNumber || "",
           "Attendant": t.attendant || "",
+          "Cashier": t.cashier || "",
           "Pump": t.pump || "",
           "Description": t.description || "",
           "Matched": match ? "Yes" : "No",
@@ -4187,6 +4210,22 @@ async function registerRoutes(app2) {
         };
       });
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(fuelRows), "Fuel Transactions");
+      const unmatchedFuel = fuelTxns.filter((t) => t.isCardTransaction === "yes" && t.matchStatus !== "matched");
+      if (unmatchedFuel.length > 0) {
+        const unmatchedFuelRows = unmatchedFuel.map((t) => ({
+          "Date": t.transactionDate,
+          "Time": t.transactionTime || "",
+          "Amount": parseFloat(t.amount),
+          "Payment Type": t.paymentType || "",
+          "Card Number": t.cardNumber || "",
+          "Reference": t.referenceNumber || "",
+          "Attendant": t.attendant || "",
+          "Cashier": t.cashier || "",
+          "Pump": t.pump || "",
+          "Description": t.description || ""
+        }));
+        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(unmatchedFuelRows), "Unmatched Fuel");
+      }
       const allRows = transactions2.map((t) => ({
         "Date": t.transactionDate,
         "Time": t.transactionTime || "",

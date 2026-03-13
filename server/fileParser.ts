@@ -10,7 +10,7 @@ export interface ParsedFileData {
 
 export interface ColumnMapping {
   detectedColumn: string;
-  suggestedMapping: 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'ignore';
+  suggestedMapping: 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'attendant' | 'cashier' | 'pump' | 'ignore';
   confidence: number;
 }
 
@@ -20,7 +20,7 @@ export interface SourcePreset {
   description: string;
   category: 'bank' | 'fuel'; // Source category for validation
   detectPattern: (headers: string[]) => boolean;
-  mappings: Record<string, 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'ignore'>;
+  mappings: Record<string, 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'attendant' | 'cashier' | 'pump' | 'ignore'>;
   columnLabels: Record<string, string>; // Human-readable labels for cryptic column names
 }
 
@@ -225,7 +225,7 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'AttendantKey': 'ignore',  // internal key, not useful
       'AttendantMiniPOSKey': 'ignore',
       'Attendant': 'attendant',
-      'Cashier': 'ignore',  // fallback for attendant — use Attendant column
+      'Cashier': 'cashier',
       'UnitCost': 'ignore',
       'CostPrice': 'ignore',
       'UnitVAT': 'ignore',
@@ -470,16 +470,28 @@ export class DataNormalizer {
     return isNegative && !rawAmount.startsWith('-') ? `-${rawAmount}` : rawAmount;
   }
 
-  // Check if a value looks like a card payment
+  // Check if a payment type processes through the card terminal (appears on bank statements)
+  // Card, Debit, Credit, Visa, Mastercard = obvious card payments
+  // Debtor/Account/Fleet = account sales that also process through the terminal
   static isCardPayment(value: string): boolean {
     if (!value) return false;
     const lower = String(value).toLowerCase().trim();
-    return lower === 'card' || 
-           lower.includes('credit') || 
+    return lower === 'card' ||
+           lower.includes('credit') ||
            lower.includes('debit') ||
            lower.includes('visa') ||
            lower.includes('mastercard') ||
-           lower.includes('card');
+           lower.includes('card') ||
+           lower.includes('debtor') ||
+           lower.includes('account') ||
+           lower.includes('fleet');
+  }
+
+  // Check if payment type is strictly cash (not processed through terminal)
+  static isCashPayment(value: string): boolean {
+    if (!value) return false;
+    const lower = String(value).toLowerCase().trim();
+    return lower === 'cash';
   }
 
   // Normalize card number to last 4 digits format for matching
@@ -1340,6 +1352,7 @@ export class FileParser {
     paymentType: string;
     isCardTransaction: 'yes' | 'no' | 'unknown';
     attendant: string;
+    cashier: string;
     pump: string;
   } {
     let transactionDate = '';
@@ -1351,6 +1364,7 @@ export class FileParser {
     let paymentType = '';
     let isCardTransaction: 'yes' | 'no' | 'unknown' = 'unknown';
     let attendant = '';
+    let cashier = '';
     let pump = '';
 
     // Detect preset for source-specific normalization
@@ -1502,6 +1516,13 @@ export class FileParser {
             processedFields.add('attendant');
           }
           break;
+        case 'cashier':
+          const cashVal = String(value).trim();
+          if (cashVal) {
+            cashier = cashVal;
+            processedFields.add('cashier');
+          }
+          break;
         case 'pump':
           const pumpVal = String(value).trim();
           if (pumpVal) {
@@ -1528,6 +1549,7 @@ export class FileParser {
       paymentType,
       isCardTransaction,
       attendant,
+      cashier,
       pump,
     };
   }
@@ -1547,6 +1569,7 @@ export class FileParser {
       paymentType: string;
       isCardTransaction: 'yes' | 'no' | 'unknown';
       attendant: string;
+      cashier: string;
       pump: string;
     },
     rawRow: Record<string, any>,

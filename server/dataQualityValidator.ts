@@ -182,7 +182,7 @@ export class DataQualityValidator {
     }
 
     // Check for missing required data (amounts, dates)
-    const missingData = this.detectMissingRequiredData(parsedData, columnAnalysis, sourceType);
+    const missingData = this.detectMissingRequiredData(parsedData, columnAnalysis, sourceType, detectedPreset);
     if (missingData.issues.length > 0) {
       issues.push(...missingData.issues);
     }
@@ -444,7 +444,8 @@ export class DataQualityValidator {
   private detectMissingRequiredData(
     parsedData: ParsedFileData,
     columnAnalysis: ColumnAnalysis[],
-    sourceType: 'fuel' | 'bank'
+    sourceType: 'fuel' | 'bank',
+    detectedPreset?: { name: string; category: string; mappings: Record<string, string> } | null
   ): { issues: DataQualityIssue[] } {
     const issues: DataQualityIssue[] = [];
 

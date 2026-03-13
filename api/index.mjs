@@ -1935,10 +1935,10 @@ var FileParser = class {
   autoDetectColumns(headers) {
     const mappings = [];
     const usedFields = /* @__PURE__ */ new Set();
-    const detectedPreset2 = this.detectSourcePreset(headers);
-    if (detectedPreset2) {
+    const detectedPreset = this.detectSourcePreset(headers);
+    if (detectedPreset) {
       for (const header of headers) {
-        const presetMapping = detectedPreset2.mappings[header];
+        const presetMapping = detectedPreset.mappings[header];
         if (presetMapping && presetMapping !== "ignore") {
           if (usedFields.has(presetMapping)) {
             mappings.push({
@@ -2298,8 +2298,8 @@ var DataQualityValidator = class {
     const issues = [];
     const rowsToRemove = [];
     const columnAnalysis = this.analyzeColumns(parsedData);
-    const detectedPreset2 = this.detectPreset(parsedData.headers);
-    const shiftResult = this.detectColumnShift(parsedData, columnAnalysis, detectedPreset2);
+    const detectedPreset = this.detectPreset(parsedData.headers);
+    const shiftResult = this.detectColumnShift(parsedData, columnAnalysis, detectedPreset);
     if (shiftResult.detected) {
       issues.push({
         type: "COLUMN_SHIFT",
@@ -2343,7 +2343,7 @@ var DataQualityValidator = class {
         suggestedFix: "These columns can be ignored during mapping."
       });
     }
-    const typeMismatches = this.detectTypeMismatches(parsedData, columnAnalysis, detectedPreset2);
+    const typeMismatches = this.detectTypeMismatches(parsedData, columnAnalysis, detectedPreset);
     for (const mismatch of typeMismatches) {
       issues.push({
         type: "DATA_TYPE_MISMATCH",
@@ -2354,11 +2354,11 @@ var DataQualityValidator = class {
         suggestedFix: mismatch.suggestedFix
       });
     }
-    const missingData = this.detectMissingRequiredData(parsedData, columnAnalysis, sourceType);
+    const missingData = this.detectMissingRequiredData(parsedData, columnAnalysis, sourceType, detectedPreset);
     if (missingData.issues.length > 0) {
       issues.push(...missingData.issues);
     }
-    const suggestedMapping = this.generateSuggestedMapping(parsedData, columnAnalysis, detectedPreset2);
+    const suggestedMapping = this.generateSuggestedMapping(parsedData, columnAnalysis, detectedPreset);
     const uniqueRowsToRemove = Array.from(new Set(rowsToRemove)).sort((a, b) => a - b);
     const problematicRows = uniqueRowsToRemove.length;
     const cleanRows = parsedData.rowCount - problematicRows;
@@ -2378,7 +2378,7 @@ var DataQualityValidator = class {
         actualDataType: shiftResult.details.mappingIssues ? JSON.stringify(Object.keys(shiftResult.details.mappingIssues)) : "",
         examples: shiftResult.details.problems?.slice(0, 3) ?? []
       } : void 0,
-      detectedPreset: detectedPreset2?.name
+      detectedPreset: detectedPreset?.name
     };
   }
   /**
@@ -2550,7 +2550,7 @@ var DataQualityValidator = class {
   /**
    * Detect missing required data
    */
-  detectMissingRequiredData(parsedData, columnAnalysis, sourceType) {
+  detectMissingRequiredData(parsedData, columnAnalysis, sourceType, detectedPreset) {
     const issues = [];
     const hasDateColumn = columnAnalysis.some(
       (c) => c.inferredType === "date" || c.inferredType === "datetime"
@@ -3129,17 +3129,17 @@ async function registerRoutes(app2) {
       const fileType = isCSV ? "csv" : isExcel ? "xlsx" : "pdf";
       const parsed = await fileParser.parse(req.file.buffer, fileType);
       const columnMappings = fileParser.autoDetectColumns(parsed.headers);
-      const detectedPreset2 = fileParser.detectSourcePreset(parsed.headers);
+      const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
       const normalizeSourceType = (st) => st.replace(/\d+$/, "");
-      if (detectedPreset2 && detectedPreset2.category !== normalizeSourceType(sourceType)) {
-        const detectedCategory = detectedPreset2.category;
+      if (detectedPreset && detectedPreset.category !== normalizeSourceType(sourceType)) {
+        const detectedCategory = detectedPreset.category;
         const expectedCategory = normalizeSourceType(sourceType);
-        console.warn(`Source type mismatch: expected ${expectedCategory}, detected ${detectedCategory} (${detectedPreset2.name})`);
+        console.warn(`Source type mismatch: expected ${expectedCategory}, detected ${detectedCategory} (${detectedPreset.name})`);
         return res.status(400).json({
           error: `This looks like a ${detectedCategory === "bank" ? "bank statement" : "fuel system export"}, but you're uploading it as ${expectedCategory === "bank" ? "bank data" : "fuel data"}. Please check you're on the right step.`,
           detectedType: detectedCategory,
           expectedType: expectedCategory,
-          detectedPreset: detectedPreset2.name
+          detectedPreset: detectedPreset.name
         });
       }
       const suggestedMappingsObject = {};
@@ -3260,7 +3260,7 @@ async function registerRoutes(app2) {
       for (const mapping of suggestedMappingsArray) {
         suggestedMappings[mapping.detectedColumn] = mapping.suggestedMapping;
       }
-      const detectedPreset2 = fileParser.detectSourcePreset(parsed.headers);
+      const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
       const columnLabels = {};
       for (const header of parsed.headers) {
         columnLabels[header] = fileParser.getColumnLabel(header, parsed.headers);
@@ -3333,9 +3333,9 @@ async function registerRoutes(app2) {
         totalRows: parsed.rowCount,
         suggestedMappings,
         currentMapping: file.columnMapping,
-        detectedPreset: detectedPreset2 ? {
-          name: detectedPreset2.name,
-          description: detectedPreset2.description
+        detectedPreset: detectedPreset ? {
+          name: detectedPreset.name,
+          description: detectedPreset.description
         } : null,
         columnLabels,
         normalizedPreview,
@@ -3456,8 +3456,8 @@ async function registerRoutes(app2) {
       }
       let reversalStats = null;
       if (file.sourceType.startsWith("bank")) {
-        const detectedPreset2 = fileParser.detectSourcePreset(parsed.headers);
-        const presetName = detectedPreset2?.name || null;
+        const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
+        const presetName = detectedPreset?.name || null;
         reversalStats = detectAndExcludeReversals(validTransactions, presetName);
         if (reversalStats.totalExcluded > 0) {
           console.log(`[PROCESS] Reversal detection: ${reversalStats.totalExcluded} excluded (${reversalStats.declined} declined, ${reversalStats.reversed} reversed, ${reversalStats.cancelled} cancelled, ${reversalStats.pairedApprovals} paired approvals)`);

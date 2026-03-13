@@ -1588,6 +1588,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const fuelAmt = fuel ? parseFloat(fuel.amount) : 0;
         return {
           'Date': bank?.transactionDate || fuel?.transactionDate || '',
+          'Bank Time': bank?.transactionTime || '',
+          'Fuel Time': fuel?.transactionTime || '',
           'Bank Amount': bankAmt,
           'Fuel Amount': fuelAmt,
           'Difference': Math.round((bankAmt - fuelAmt) * 100) / 100,
@@ -1595,6 +1597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Bank Description': bank?.description || '',
           'Fuel Description': fuel?.description || '',
           'Card Number': bank?.cardNumber || '',
+          'Payment Type': fuel?.paymentType || '',
           'Attendant': fuel?.attendant || '',
           'Cashier': fuel?.cashier || '',
           'Pump': fuel?.pump || '',

@@ -108,7 +108,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/periods", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const rawSub = req.user?.claims?.sub;
+      const userId = rawSub != null ? String(rawSub) : undefined;
       const periods = await storage.getPeriods(userId);
       res.json(periods);
     } catch (error) {
@@ -696,24 +697,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[PROCESS] Creating ${validTransactions.length} transactions for file ${file.id}, period ${file.periodId}`);
 
-      const created = await storage.createTransactions(validTransactions);
-      
-      console.log(`[PROCESS] Created ${created.length} transactions in database`);
-      
+      const { count: createdCount } = await storage.createTransactions(validTransactions);
+
+      console.log(`[PROCESS] Created ${createdCount} transactions in database`);
+
       await storage.updateFile(file.id, {
         status: 'processed',
-        rowCount: created.length
+        rowCount: createdCount
       });
 
-      // Update period status to in_progress once files are being processed
-      const currentPeriod = await storage.getPeriod(file.periodId);
-      if (currentPeriod && currentPeriod.status === 'draft') {
-        await storage.updatePeriod(file.periodId, { status: 'in_progress' });
-      }
 
       res.json({
         success: true,
-        transactionsCreated: created.length,
+        transactionsCreated: createdCount,
         totalRows: parsed.rowCount,
         skipStats: skipStats,
         reversalStats: reversalStats,

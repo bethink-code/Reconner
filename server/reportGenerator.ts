@@ -253,6 +253,41 @@ export class ReportGenerator {
       });
     }
 
+    // Missing Fuel Records — bank transactions with no matching fuel sale
+    const missingFuelRecords = data.transactions.filter(t =>
+      t.sourceType?.startsWith('bank') &&
+      t.matchStatus === 'unmatched' &&
+      this.parseAmount(t.amount) > 0
+    );
+    if (missingFuelRecords.length > 0) {
+      const prevY = (doc as any).lastAutoTable?.finalY || 140;
+      if (prevY > 250) doc.addPage();
+      const startY = prevY > 250 ? 20 : prevY + 15;
+
+      doc.setFontSize(14);
+      doc.text('Missing Fuel Records (Bank tx with no fuel match)', 14, startY);
+
+      const missingData = missingFuelRecords
+        .sort((a, b) => (a.transactionDate || '').localeCompare(b.transactionDate || ''))
+        .map(t => [
+          t.transactionDate,
+          t.sourceName || t.sourceType,
+          `R ${this.parseAmount(t.amount).toFixed(2)}`,
+          t.cardNumber || '-',
+          t.referenceNumber || '-',
+          t.description || '-',
+        ]);
+
+      autoTable(doc, {
+        startY: startY + 5,
+        head: [['Date', 'Bank', 'Amount', 'Card', 'Reference', 'Description']],
+        body: missingData,
+        theme: 'grid',
+        headStyles: { fillColor: [66, 66, 66] },
+        styles: { fontSize: 8 },
+      });
+    }
+
     return Buffer.from(doc.output('arraybuffer'));
   }
 
@@ -332,6 +367,38 @@ export class ReportGenerator {
       XLSX.utils.book_append_sheet(wb, wsUnmatched, 'Unmatched');
     }
 
+    // Missing Fuel Records — bank transactions that have no matching fuel sale
+    const missingFuelRecords = data.transactions.filter(t =>
+      t.sourceType?.startsWith('bank') &&
+      t.matchStatus === 'unmatched' &&
+      this.parseAmount(t.amount) > 0
+    );
+    if (missingFuelRecords.length > 0) {
+      const missingFuelData: any[][] = [
+        ['Date', 'Bank', 'Amount', 'Card Number', 'Reference', 'Description']
+      ];
+      const totalMissing = missingFuelRecords.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+
+      missingFuelRecords
+        .sort((a, b) => (a.transactionDate || '').localeCompare(b.transactionDate || ''))
+        .forEach(t => {
+          missingFuelData.push([
+            t.transactionDate,
+            t.sourceName || t.sourceType,
+            this.parseAmount(t.amount),
+            t.cardNumber || '',
+            t.referenceNumber || '',
+            t.description || '',
+          ]);
+        });
+
+      missingFuelData.push([]);
+      missingFuelData.push(['Total', '', totalMissing, '', '', `${missingFuelRecords.length} transactions`]);
+
+      const wsMissing = XLSX.utils.aoa_to_sheet(missingFuelData);
+      XLSX.utils.book_append_sheet(wb, wsMissing, 'Missing Fuel Records');
+    }
+
     return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 
@@ -383,6 +450,19 @@ export class ReportGenerator {
       lines.push('Date,Source,Payment Type,Amount,Reference,Description');
       for (const t of unmatchableTransactions) {
         lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ''},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ''},${t.description || ''}`);
+      }
+    }
+
+    const missingFuelRecords = data.transactions.filter(t =>
+      t.sourceType?.startsWith('bank') &&
+      t.matchStatus === 'unmatched' &&
+      this.parseAmount(t.amount) > 0
+    );
+    if (missingFuelRecords.length > 0) {
+      lines.push('', 'Missing Fuel Records (Bank transactions with no fuel match)');
+      lines.push('Date,Bank,Amount,Card Number,Reference,Description');
+      for (const t of missingFuelRecords) {
+        lines.push(`${t.transactionDate},${t.sourceName || t.sourceType},${this.parseAmount(t.amount).toFixed(2)},${t.cardNumber || ''},${t.referenceNumber || ''},${t.description || ''}`);
       }
     }
 

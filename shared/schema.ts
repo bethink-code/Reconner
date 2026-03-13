@@ -36,7 +36,8 @@ export const reconciliationPeriods = pgTable("reconciliation_periods", {
   description: text("description"),
   startDate: text("start_date").notNull(),
   endDate: text("end_date").notNull(),
-  status: text("status").notNull().default("draft"),
+  status: text("status").notNull().default("in_progress"),
+  userId: varchar("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

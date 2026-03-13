@@ -62,7 +62,8 @@ var reconciliationPeriods = pgTable("reconciliation_periods", {
   description: text("description"),
   startDate: text("start_date").notNull(),
   endDate: text("end_date").notNull(),
-  status: text("status").notNull().default("draft"),
+  status: text("status").notNull().default("in_progress"),
+  userId: varchar("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 });
@@ -336,15 +337,15 @@ var DatabaseStorage = class {
     return newTransaction;
   }
   async createTransactions(transactionList) {
-    if (transactionList.length === 0) return [];
-    const BATCH_SIZE = 100;
-    const results = [];
+    if (transactionList.length === 0) return { count: 0 };
+    const BATCH_SIZE = 500;
+    let count = 0;
     for (let i = 0; i < transactionList.length; i += BATCH_SIZE) {
       const batch = transactionList.slice(i, i + BATCH_SIZE);
-      const inserted = await db.insert(transactions).values(batch).returning();
-      results.push(...inserted);
+      await db.insert(transactions).values(batch);
+      count += batch.length;
     }
-    return results;
+    return { count };
   }
   async updateTransaction(id, data) {
     const [updated] = await db.update(transactions).set(data).where(eq(transactions.id, id)).returning();
@@ -491,7 +492,10 @@ var DatabaseStorage = class {
     const cardFuelTransactions = parseInt(row.card_fuel_transactions || "0");
     const matchedBankTransactions = parseInt(row.matched_bank_transactions || "0");
     const matchedCardFuel = parseInt(row.matched_card_fuel || "0");
-    const bankMatchRate = bankTransactions > 0 ? matchedBankTransactions / bankTransactions * 100 : 0;
+    const unmatchableBankTx = parseInt(row.unmatchable_bank_transactions || "0");
+    const excludedBankTx = parseInt(row.excluded_bank_transactions || "0");
+    const matchableBankTx = bankTransactions - unmatchableBankTx - excludedBankTx;
+    const bankMatchRate = matchableBankTx > 0 ? matchedBankTransactions / matchableBankTx * 100 : 0;
     const cardMatchRate = cardFuelTransactions > 0 ? matchedCardFuel / cardFuelTransactions * 100 : 0;
     const cardFuelAmount = parseFloat(row.card_fuel_amount || "0");
     const totalBankAmount = parseFloat(row.total_bank_amount || "0");
@@ -2804,6 +2808,32 @@ var ReportGenerator = class {
         styles: { fontSize: 8 }
       });
     }
+    const missingFuelRecords = data.transactions.filter(
+      (t) => t.sourceType?.startsWith("bank") && t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
+    );
+    if (missingFuelRecords.length > 0) {
+      const prevY = doc.lastAutoTable?.finalY || 140;
+      if (prevY > 250) doc.addPage();
+      const startY = prevY > 250 ? 20 : prevY + 15;
+      doc.setFontSize(14);
+      doc.text("Missing Fuel Records (Bank tx with no fuel match)", 14, startY);
+      const missingData = missingFuelRecords.sort((a, b) => (a.transactionDate || "").localeCompare(b.transactionDate || "")).map((t) => [
+        t.transactionDate,
+        t.sourceName || t.sourceType,
+        `R ${this.parseAmount(t.amount).toFixed(2)}`,
+        t.cardNumber || "-",
+        t.referenceNumber || "-",
+        t.description || "-"
+      ]);
+      autoTable(doc, {
+        startY: startY + 5,
+        head: [["Date", "Bank", "Amount", "Card", "Reference", "Description"]],
+        body: missingData,
+        theme: "grid",
+        headStyles: { fillColor: [66, 66, 66] },
+        styles: { fontSize: 8 }
+      });
+    }
     return Buffer.from(doc.output("arraybuffer"));
   }
   generateExcel(data) {
@@ -2872,6 +2902,29 @@ var ReportGenerator = class {
       const wsUnmatched = XLSX2.utils.aoa_to_sheet(unmatchedData);
       XLSX2.utils.book_append_sheet(wb, wsUnmatched, "Unmatched");
     }
+    const missingFuelRecords = data.transactions.filter(
+      (t) => t.sourceType?.startsWith("bank") && t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
+    );
+    if (missingFuelRecords.length > 0) {
+      const missingFuelData = [
+        ["Date", "Bank", "Amount", "Card Number", "Reference", "Description"]
+      ];
+      const totalMissing = missingFuelRecords.reduce((sum, t) => sum + this.parseAmount(t.amount), 0);
+      missingFuelRecords.sort((a, b) => (a.transactionDate || "").localeCompare(b.transactionDate || "")).forEach((t) => {
+        missingFuelData.push([
+          t.transactionDate,
+          t.sourceName || t.sourceType,
+          this.parseAmount(t.amount),
+          t.cardNumber || "",
+          t.referenceNumber || "",
+          t.description || ""
+        ]);
+      });
+      missingFuelData.push([]);
+      missingFuelData.push(["Total", "", totalMissing, "", "", `${missingFuelRecords.length} transactions`]);
+      const wsMissing = XLSX2.utils.aoa_to_sheet(missingFuelData);
+      XLSX2.utils.book_append_sheet(wb, wsMissing, "Missing Fuel Records");
+    }
     return XLSX2.write(wb, { type: "buffer", bookType: "xlsx" });
   }
   generateCSV(data) {
@@ -2918,6 +2971,16 @@ var ReportGenerator = class {
       lines.push("Date,Source,Payment Type,Amount,Reference,Description");
       for (const t of unmatchableTransactions) {
         lines.push(`${t.transactionDate},${t.sourceType},${t.paymentType || ""},${this.parseAmount(t.amount).toFixed(2)},${t.referenceNumber || ""},${t.description || ""}`);
+      }
+    }
+    const missingFuelRecords = data.transactions.filter(
+      (t) => t.sourceType?.startsWith("bank") && t.matchStatus === "unmatched" && this.parseAmount(t.amount) > 0
+    );
+    if (missingFuelRecords.length > 0) {
+      lines.push("", "Missing Fuel Records (Bank transactions with no fuel match)");
+      lines.push("Date,Bank,Amount,Card Number,Reference,Description");
+      for (const t of missingFuelRecords) {
+        lines.push(`${t.transactionDate},${t.sourceName || t.sourceType},${this.parseAmount(t.amount).toFixed(2)},${t.cardNumber || ""},${t.referenceNumber || ""},${t.description || ""}`);
       }
     }
     return lines.join("\n");
@@ -3156,7 +3219,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods", isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const rawSub = req.user?.claims?.sub;
+      const userId = rawSub != null ? String(rawSub) : void 0;
       const periods = await storage.getPeriods(userId);
       res.json(periods);
     } catch (error) {
@@ -3624,19 +3688,15 @@ async function registerRoutes(app2) {
         }
       }
       console.log(`[PROCESS] Creating ${validTransactions.length} transactions for file ${file.id}, period ${file.periodId}`);
-      const created = await storage.createTransactions(validTransactions);
-      console.log(`[PROCESS] Created ${created.length} transactions in database`);
+      const { count: createdCount } = await storage.createTransactions(validTransactions);
+      console.log(`[PROCESS] Created ${createdCount} transactions in database`);
       await storage.updateFile(file.id, {
         status: "processed",
-        rowCount: created.length
+        rowCount: createdCount
       });
-      const currentPeriod = await storage.getPeriod(file.periodId);
-      if (currentPeriod && currentPeriod.status === "draft") {
-        await storage.updatePeriod(file.periodId, { status: "in_progress" });
-      }
       res.json({
         success: true,
-        transactionsCreated: created.length,
+        transactionsCreated: createdCount,
         totalRows: parsed.rowCount,
         skipStats,
         reversalStats

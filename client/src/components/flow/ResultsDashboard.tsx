@@ -151,9 +151,10 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
   const resolvedBank = summary.resolvedBankTransactions || 0;
   const verifiedBank = matchedBank + resolvedBank;
   const unmatchableBank = summary.unmatchableBankTransactions || 0;
+  const excludedBank = summary.excludedBankTransactions || 0;
   const unmatchedBank = summary.unmatchedBankTransactions;
-  // Only count in-range (matchable) bank transactions for the verified %
-  const matchableBankTotal = bankTotal - unmatchableBank;
+  // Only count in-range, non-excluded bank transactions for the verified %
+  const matchableBankTotal = bankTotal - unmatchableBank - excludedBank;
   const verifiedPercent = matchableBankTotal > 0 ? Math.round((verifiedBank / matchableBankTotal) * 100) : 0;
 
   // Resolution counts

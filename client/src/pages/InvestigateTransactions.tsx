@@ -51,7 +51,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import type { Transaction, TransactionResolution } from "@shared/schema";
+import type { Transaction, TransactionResolution, MatchingRulesConfig } from "@shared/schema";
 import { RESOLUTION_REASONS } from "@shared/schema";
 
 const LOW_VALUE_THRESHOLD = 50; // R50
@@ -178,6 +178,13 @@ export default function InvestigateTransactions() {
     },
     enabled: !!periodId && filterMode === 'flagged',
   });
+
+  // Fetch matching rules to know the configured date window
+  const { data: matchingRules } = useQuery<MatchingRulesConfig>({
+    queryKey: ["/api/periods", periodId, "matching-rules"],
+    enabled: !!periodId,
+  });
+  const dateWindowDays = matchingRules?.dateWindowDays ?? 3;
 
   const resolvedIds = useMemo(() => {
     return new Set(resolutions?.map(r => r.transactionId) || []);
@@ -1303,8 +1310,36 @@ export default function InvestigateTransactions() {
                                     )}
 
                                     {/* No confident matches — show nearest by amount */}
-                                    {item.potentialMatches.length === 0 && item.nearestByAmount.length > 0 && (
+                                    {item.potentialMatches.length === 0 && item.nearestByAmount.length > 0 && (() => {
+                                      const bankDate = new Date(txn.transactionDate);
+                                      const allOutsideWindow = item.nearestByAmount.every(m => {
+                                        const fuelDate = new Date(m.transaction.transactionDate);
+                                        const days = Math.abs((bankDate.getTime() - fuelDate.getTime()) / (1000 * 60 * 60 * 24));
+                                        return days > dateWindowDays;
+                                      });
+                                      return (
                                       <div>
+                                        {allOutsideWindow ? (
+                                          <div className="p-3 rounded bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs space-y-1.5">
+                                            <div className="flex items-center gap-2 font-medium text-sm">
+                                              <AlertTriangle className="h-4 w-4 shrink-0" />
+                                              No fuel records within matching window — likely missing from fuel system
+                                            </div>
+                                            <p className="ml-6 text-amber-600 dark:text-amber-500">
+                                              Auto-matching rules applied:
+                                            </p>
+                                            <div className="ml-6 flex flex-wrap gap-x-3 gap-y-0.5 text-amber-600 dark:text-amber-500">
+                                              <span>Date window: {dateWindowDays}d</span>
+                                              <span>Amount tolerance: R{matchingRules?.amountTolerance ?? 2}</span>
+                                              <span>Time window: {matchingRules?.timeWindowMinutes ?? 60}min</span>
+                                              <span>Min confidence: {matchingRules?.minimumConfidence ?? 70}%</span>
+                                              <span>Auto-match: {matchingRules?.autoMatchThreshold ?? 85}%</span>
+                                              {matchingRules?.requireCardMatch && <span>Card match required</span>}
+                                              {matchingRules?.groupByInvoice && <span>Grouped by invoice</span>}
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <>
                                         <p className="text-sm font-medium mb-2 flex items-center gap-2">
                                           <Search className="h-4 w-4 text-muted-foreground" />
                                           Nearest fuel transactions by amount
@@ -1347,8 +1382,11 @@ export default function InvestigateTransactions() {
                                             </div>
                                           ))}
                                         </div>
+                                          </>
+                                        )}
                                       </div>
-                                    )}
+                                      );
+                                    })()}
 
                                     {/* Truly no fuel transactions at all */}
                                     {item.potentialMatches.length === 0 && item.nearestByAmount.length === 0 && (

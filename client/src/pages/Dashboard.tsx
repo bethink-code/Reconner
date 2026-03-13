@@ -53,7 +53,7 @@ interface DisplayPeriod {
   id: string;
   name: string;
   dateRange: string;
-  status: "draft" | "in_progress" | "complete";
+  status: "in_progress" | "complete";
   lastModified: string;
 }
 
@@ -122,7 +122,7 @@ export default function Dashboard() {
     id: period.id,
     name: period.name,
     dateRange: `${period.startDate} to ${period.endDate}`,
-    status: period.status as "draft" | "in_progress" | "complete",
+    status: period.status as "in_progress" | "complete",
     lastModified: period.updatedAt ? new Date(period.updatedAt).toLocaleDateString() :
                    new Date(period.createdAt!).toLocaleDateString(),
   }));
@@ -135,7 +135,6 @@ export default function Dashboard() {
 
   const completedCount = displayPeriods.filter(p => p.status === "complete").length;
   const inProgressCount = displayPeriods.filter(p => p.status === "in_progress").length;
-  const draftCount = displayPeriods.filter(p => p.status === "draft").length;
 
   const handleNewFromPrevious = (period: DisplayPeriod) => {
     setTemplateSourceId(period.id);
@@ -232,7 +231,7 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <PeriodCard title="Total Periods" value={displayPeriods.length} icon="total" />
           <PeriodCard
             title="Completed"
@@ -241,7 +240,6 @@ export default function Dashboard() {
             subtitle={displayPeriods.length > 0 ? `${Math.round((completedCount / displayPeriods.length) * 100)}% of total` : undefined}
           />
           <PeriodCard title="In Progress" value={inProgressCount} icon="inProgress" />
-          <PeriodCard title="Draft" value={draftCount} icon="draft" />
         </div>
 
         {/* Periods Table */}
@@ -266,7 +264,6 @@ export default function Dashboard() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
                     <SelectItem value="in_progress">In Progress</SelectItem>
                     <SelectItem value="complete">Complete</SelectItem>
                   </SelectContent>

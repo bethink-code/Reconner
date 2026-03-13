@@ -24,10 +24,6 @@ export default function ReconciliationFlow() {
   const [match, params] = useRoute("/flow/:periodId");
   const { toast } = useToast();
   
-  // Get mode from URL query params
-  const urlParams = new URLSearchParams(window.location.search);
-  const mode = urlParams.get("mode") || "edit"; // "view" or "edit"
-  
   const [currentStep, setCurrentStep] = useState<ReconciliationStep>("fuel");
   const [completedSteps, setCompletedSteps] = useState<ReconciliationStep[]>([]);
   const [isAutoMatching, setIsAutoMatching] = useState(false);
@@ -132,44 +128,42 @@ export default function ReconciliationFlow() {
     if (!filesLoading && !hasInitialized.current) {
       hasInitialized.current = true;
       
-      if (mode === "view") {
-        // View mode: Go directly to results if matching was done
-        if (fuelFile && bankFiles.length > 0) {
-          // Mark all steps as completed to show results
-          setCompletedSteps(["fuel", "bank", "configure"]);
-          setCurrentStep("results");
-        } else {
-          // No data yet - redirect to edit mode
-          setCurrentStep("fuel");
-        }
+      if (fuelFile && bankFiles.length > 0) {
+        // Both data sources uploaded — jump to results (matching already done)
+        setCompletedSteps(["fuel", "bank", "configure"]);
+        setCurrentStep("results");
+      } else if (fuelFile) {
+        // Fuel uploaded, need bank data
+        setCompletedSteps(["fuel"]);
+        setCurrentStep("bank");
+        setBankSubStep("status");
       } else {
-        // Edit mode: Always start at step 1 for review
+        // Fresh start
         setCurrentStep("fuel");
       }
     }
-  }, [filesLoading, fuelFile, bankFiles.length, mode]);
+  }, [filesLoading, fuelFile, bankFiles.length]);
 
   // Keep completedSteps in sync with file state (does NOT change currentStep)
-  // In view mode, preserve "configure" step completion for results access
   useEffect(() => {
     if (files.length > 0) {
       const newCompleted: ReconciliationStep[] = [];
-      
+
       if (fuelFile) {
         newCompleted.push("fuel");
       }
       if (bankFiles.length > 0) {
         newCompleted.push("bank");
       }
-      
-      // In view mode with data, assume configure is complete to show results
-      if (mode === "view" && fuelFile && bankFiles.length > 0) {
+
+      // If both sources uploaded, configure is complete (matching was done)
+      if (fuelFile && bankFiles.length > 0) {
         newCompleted.push("configure");
       }
 
       setCompletedSteps(newCompleted);
     }
-  }, [files, fuelFile, bankFiles.length, mode]);
+  }, [files, fuelFile, bankFiles.length]);
 
   const handleStepClick = (step: ReconciliationStep) => {
     const fuelProcessed = !!fuelFile;

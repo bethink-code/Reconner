@@ -151,7 +151,7 @@ export interface IStorage {
   getTransactionsByFile(fileId: string): Promise<Transaction[]>;
   getTransaction(id: string): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
-  createTransactions(transactions: InsertTransaction[]): Promise<Transaction[]>;
+  createTransactions(transactions: InsertTransaction[]): Promise<{ count: number }>;
   updateTransaction(id: string, data: Partial<InsertTransaction>): Promise<Transaction | undefined>;
   deleteTransactionsByFile(fileId: string): Promise<void>;
   
@@ -364,21 +364,19 @@ export class DatabaseStorage implements IStorage {
     return newTransaction;
   }
 
-  async createTransactions(transactionList: InsertTransaction[]): Promise<Transaction[]> {
-    if (transactionList.length === 0) return [];
-    
-    // Batch inserts to avoid "Maximum call stack size exceeded" error
-    // when inserting many transactions at once
-    const BATCH_SIZE = 100;
-    const results: Transaction[] = [];
-    
+  async createTransactions(transactionList: InsertTransaction[]): Promise<{ count: number }> {
+    if (transactionList.length === 0) return { count: 0 };
+
+    const BATCH_SIZE = 500;
+    let count = 0;
+
     for (let i = 0; i < transactionList.length; i += BATCH_SIZE) {
       const batch = transactionList.slice(i, i + BATCH_SIZE);
-      const inserted = await db.insert(transactions).values(batch).returning();
-      results.push(...inserted);
+      await db.insert(transactions).values(batch);
+      count += batch.length;
     }
-    
-    return results;
+
+    return { count };
   }
 
   async updateTransaction(id: string, data: Partial<InsertTransaction>): Promise<Transaction | undefined> {
@@ -558,8 +556,11 @@ export class DatabaseStorage implements IStorage {
     const matchedBankTransactions = parseInt(row.matched_bank_transactions || '0');
     const matchedCardFuel = parseInt(row.matched_card_fuel || '0');
     
-    const bankMatchRate = bankTransactions > 0 
-      ? (matchedBankTransactions / bankTransactions) * 100 
+    const unmatchableBankTx = parseInt(row.unmatchable_bank_transactions || '0');
+    const excludedBankTx = parseInt(row.excluded_bank_transactions || '0');
+    const matchableBankTx = bankTransactions - unmatchableBankTx - excludedBankTx;
+    const bankMatchRate = matchableBankTx > 0
+      ? (matchedBankTransactions / matchableBankTx) * 100
       : 0;
     
     const cardMatchRate = cardFuelTransactions > 0 

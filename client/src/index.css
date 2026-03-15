@@ -1,210 +1,164 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600&family=Figtree:wght@300;400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE */
+/* LEKANA — LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
+  --opaque-button-border-intensity: -8;
 
-  /* Automatic computation of border around primary / danger buttons */
-  --opaque-button-border-intensity: -8; /* In terms of percentages */
-
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 210 5% 98%;
+  /* Page & surface */
+  --background: 50 8% 95%;       /* #F4F4F0 — warm off-white page bg */
+  --foreground: 47 100% 5%;      /* #1A1200 — dark brown-black */
+  --border: 45 6% 88%;           /* #E5E3DC — warm border */
+  --card: 0 0% 100%;             /* #FFFFFF — card fill */
+  --card-foreground: 47 100% 5%;
+  --card-border: 0 0% 100%;      /* transparent — bg separation replaces borders */
 
-  --foreground: 210 6% 12%;
+  /* Sidebar */
+  --sidebar: 50 8% 94%;
+  --sidebar-foreground: 47 100% 5%;
+  --sidebar-border: 45 6% 87%;
+  --sidebar-primary: 47 100% 5%;
+  --sidebar-primary-foreground: 30 30% 93%;
+  --sidebar-accent: 48 100% 48%;  /* Sunshine */
+  --sidebar-accent-foreground: 47 100% 5%;
+  --sidebar-ring: 48 100% 48%;
 
-  --border: 210 6% 88%;
+  /* Popover */
+  --popover: 0 0% 100%;
+  --popover-foreground: 47 100% 5%;
+  --popover-border: 45 6% 88%;
 
-  --card: 210 5% 96%;
+  /* Semantic */
+  --primary: 47 100% 5%;          /* #1A1200 — primary buttons are dark */
+  --primary-foreground: 30 30% 93%; /* #F5EDE6 — warm off-white on dark */
+  --secondary: 50 8% 90%;
+  --secondary-foreground: 47 100% 5%;
+  --muted: 50 8% 92%;
+  --muted-foreground: 47 6% 42%;
+  --accent: 48 100% 48%;          /* #F5C400 — Sunshine yellow */
+  --accent-foreground: 47 100% 5%;
+  --destructive: 0 72% 36%;       /* #B91C1C — alert red */
+  --destructive-foreground: 0 0% 100%;
 
-  --card-foreground: 210 6% 12%;
+  --input: 45 6% 88%;             /* #E5E3DC */
+  --ring: 48 100% 48%;            /* Sunshine for focus rings */
 
-  --card-border: 210 6% 90%;
+  /* Data viz palette */
+  --chart-1: 22 80% 51%;          /* #E8601C — Fuel (orange) */
+  --chart-2: 239 84% 67%;         /* #6366F1 — FNB (indigo) */
+  --chart-3: 330 81% 60%;         /* #EC4899 — ABSA (pink) */
+  --chart-4: 160 84% 39%;         /* #10B981 — Nedbank (emerald) */
+  --chart-5: 258 90% 66%;         /* #8B5CF6 — Std Bank (violet) */
 
-  --sidebar: 210 5% 94%;
+  /* Status (semantic) */
+  --status-verified: 142 76% 22%; /* #166534 */
+  --status-investigate: 32 90% 38%; /* #B45309 */
+  --status-alert: 0 72% 36%;      /* #B91C1C */
 
-  --sidebar-foreground: 210 6% 12%;
-
-  --sidebar-border: 210 6% 87%;
-
-  --sidebar-primary: 217 91% 35%;
-
-  --sidebar-primary-foreground: 217 91% 98%;
-
-  --sidebar-accent: 210 8% 88%;
-
-  --sidebar-accent-foreground: 210 6% 12%;
-
-  --sidebar-ring: 217 91% 60%;
-
-  --popover: 210 6% 92%;
-
-  --popover-foreground: 210 6% 12%;
-
-  --popover-border: 210 6% 85%;
-
-  --primary: 217 91% 35%;
-
-  --primary-foreground: 217 91% 98%;
-
-  --secondary: 210 8% 86%;
-
-  --secondary-foreground: 210 6% 12%;
-
-  --muted: 210 8% 90%;
-
-  --muted-foreground: 210 6% 35%;
-
-  --accent: 210 12% 89%;
-
-  --accent-foreground: 210 6% 12%;
-
-  --destructive: 0 84% 35%;
-
-  --destructive-foreground: 0 84% 98%;
-
-  --input: 210 6% 75%;
-  --ring: 217 91% 60%;
-  --chart-1: 217 91% 35%;
-  --chart-2: 142 76% 30%;
-  --chart-3: 271 81% 35%;
-  --chart-4: 27 87% 35%;
-  --chart-5: 187 71% 30%;
-
-  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Typography */
+  --font-sans: Figtree, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: Nunito, Figtree, sans-serif;
   --font-serif: Georgia, serif;
-  --font-mono: "JetBrains Mono", Menlo, Monaco, "Courier New", monospace;
-  --radius: .5rem; /* 8px */
-  --shadow-2xs: 0px 1px 2px 0px hsl(210 6% 12% / 0.03);
-  --shadow-xs: 0px 1px 2px 0px hsl(210 6% 12% / 0.05);
-  --shadow-sm: 0px 1px 3px 0px hsl(210 6% 12% / 0.08), 0px 1px 2px -1px hsl(210 6% 12% / 0.08);
-  --shadow: 0px 2px 4px 0px hsl(210 6% 12% / 0.07), 0px 1px 2px -1px hsl(210 6% 12% / 0.07);
-  --shadow-md: 0px 4px 6px -1px hsl(210 6% 12% / 0.08), 0px 2px 4px -2px hsl(210 6% 12% / 0.08);
-  --shadow-lg: 0px 10px 15px -3px hsl(210 6% 12% / 0.09), 0px 4px 6px -4px hsl(210 6% 12% / 0.09);
-  --shadow-xl: 0px 20px 25px -5px hsl(210 6% 12% / 0.10), 0px 8px 10px -6px hsl(210 6% 12% / 0.10);
-  --shadow-2xl: 0px 25px 50px -12px hsl(210 6% 12% / 0.12);
+  --font-mono: "SFMono-Regular", Menlo, Monaco, "Courier New", monospace;
+
+  --radius: .75rem; /* 12px per brief */
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
+  /* No shadows — bg colour separation only */
+  --shadow-2xs: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-2xl: none;
 
-  /* Fallback for older browsers */
+  /* Auto-computed borders */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --sidebar-accent-border: hsl(var(--sidebar-accent));
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --primary-border: hsl(var(--primary));
   --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --secondary-border: hsl(var(--secondary));
   --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --muted-border: hsl(var(--muted));
   --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --accent-border: hsl(var(--accent));
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* LEKANA — DARK MODE */
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
+  --opaque-button-border-intensity: 9;
 
-  --opaque-button-border-intensity: 9;  /* In terms of percentages */
-
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 210 5% 8%;
+  --background: 35 30% 6%;        /* Very dark warm brown */
+  --foreground: 40 12% 90%;       /* Warm off-white text */
+  --border: 35 12% 18%;
+  --card: 35 20% 10%;             /* Slightly lighter than bg */
+  --card-foreground: 40 12% 90%;
+  --card-border: 35 12% 16%;
 
-  --foreground: 210 5% 95%;
+  --sidebar: 35 18% 12%;
+  --sidebar-foreground: 40 12% 90%;
+  --sidebar-border: 35 12% 20%;
+  --sidebar-primary: 48 100% 48%; /* Sunshine — inverted for dark */
+  --sidebar-primary-foreground: 47 100% 5%;
+  --sidebar-accent: 35 15% 20%;
+  --sidebar-accent-foreground: 40 12% 90%;
+  --sidebar-ring: 48 100% 48%;
 
-  --border: 210 5% 18%;
+  --popover: 35 18% 14%;
+  --popover-foreground: 40 12% 90%;
+  --popover-border: 35 12% 22%;
 
-  --card: 210 5% 11%;
+  --primary: 48 100% 48%;         /* Sunshine — yellow buttons in dark */
+  --primary-foreground: 47 100% 5%; /* Dark text on yellow */
+  --secondary: 35 10% 20%;
+  --secondary-foreground: 40 12% 90%;
+  --muted: 35 10% 16%;
+  --muted-foreground: 40 8% 60%;
+  --accent: 48 100% 48%;          /* Sunshine — constant */
+  --accent-foreground: 47 100% 5%;
+  --destructive: 0 72% 45%;       /* Brighter red for dark bg */
+  --destructive-foreground: 0 0% 100%;
 
-  --card-foreground: 210 5% 95%;
+  --input: 35 10% 25%;
+  --ring: 48 100% 48%;
 
-  --card-border: 210 5% 20%;
+  /* Chart colors — brighter for dark bg */
+  --chart-1: 22 80% 60%;
+  --chart-2: 239 84% 75%;
+  --chart-3: 330 81% 70%;
+  --chart-4: 160 84% 55%;
+  --chart-5: 258 90% 75%;
 
-  --sidebar: 210 5% 14%;
-
-  --sidebar-foreground: 210 5% 95%;
-
-  --sidebar-border: 210 5% 23%;
-
-  --sidebar-primary: 217 91% 35%;
-
-  --sidebar-primary-foreground: 217 91% 98%;
-
-  --sidebar-accent: 210 8% 20%;
-
-  --sidebar-accent-foreground: 210 5% 95%;
-
-  --sidebar-ring: 217 91% 60%;
-
-  --popover: 210 6% 16%;
-
-  --popover-foreground: 210 5% 95%;
-
-  --popover-border: 210 5% 25%;
-
-  --primary: 217 91% 35%;
-
-  --primary-foreground: 217 91% 98%;
-
-  --secondary: 210 8% 22%;
-
-  --secondary-foreground: 210 5% 95%;
-
-  --muted: 210 8% 18%;
-
-  --muted-foreground: 210 5% 70%;
-
-  --accent: 210 12% 19%;
-
-  --accent-foreground: 210 5% 95%;
-
-  --destructive: 0 84% 35%;
-
-  --destructive-foreground: 0 84% 98%;
-
-  --input: 210 5% 32%;
-  --ring: 217 91% 60%;
-  --chart-1: 217 91% 65%;
-  --chart-2: 142 76% 65%;
-  --chart-3: 271 81% 70%;
-  --chart-4: 27 87% 65%;
-  --chart-5: 187 71% 65%;
-
-  --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.15);
-  --shadow-xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.20);
-  --shadow-sm: 0px 1px 3px 0px hsl(0 0% 0% / 0.25), 0px 1px 2px -1px hsl(0 0% 0% / 0.25);
-  --shadow: 0px 2px 4px 0px hsl(0 0% 0% / 0.22), 0px 1px 2px -1px hsl(0 0% 0% / 0.22);
-  --shadow-md: 0px 4px 6px -1px hsl(0 0% 0% / 0.25), 0px 2px 4px -2px hsl(0 0% 0% / 0.25);
-  --shadow-lg: 0px 10px 15px -3px hsl(0 0% 0% / 0.30), 0px 4px 6px -4px hsl(0 0% 0% / 0.30);
-  --shadow-xl: 0px 20px 25px -5px hsl(0 0% 0% / 0.35), 0px 8px 10px -6px hsl(0 0% 0% / 0.35);
-  --shadow-2xl: 0px 25px 50px -12px hsl(0 0% 0% / 0.40);
-
+  /* No shadows in dark mode either */
+  --shadow-2xs: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-2xl: none;
 }
 
 @layer base {

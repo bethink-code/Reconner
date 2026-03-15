@@ -301,7 +301,7 @@ export default function ReconciliationFlow() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center gap-4">
             <Link href="/">
               <Button variant="ghost" size="icon" data-testid="button-back-home">
@@ -310,7 +310,7 @@ export default function ReconciliationFlow() {
             </Link>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">Reconciliation</h1>
+                <h1 className="text-xl font-heading font-semibold">Reconciliation</h1>
                 <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                   Step {(['fuel', 'bank', 'configure', 'results'] as const).indexOf(currentStep) + 1} of 4
                 </span>
@@ -320,17 +320,19 @@ export default function ReconciliationFlow() {
               </p>
             </div>
           </div>
-          
-          <div className="mt-6 pb-2">
-            <ReconciliationStepper
-              currentStep={currentStep}
-              completedSteps={completedSteps}
-              stepEligibility={stepEligibility}
-              onStepClick={handleStepClick}
-            />
-          </div>
         </div>
       </header>
+
+      <div className="bg-[#F5C400] dark:bg-[#F5C400]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4">
+          <ReconciliationStepper
+            currentStep={currentStep}
+            completedSteps={completedSteps}
+            stepEligibility={stepEligibility}
+            onStepClick={handleStepClick}
+          />
+        </div>
+      </div>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         {isAutoMatching ? (
@@ -342,8 +344,8 @@ export default function ReconciliationFlow() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
-                <div className="h-full w-1/3 rounded-full bg-primary animate-indeterminate" />
+              <div className="relative h-2 w-full overflow-hidden rounded-full bg-[#E5E3DC] dark:bg-[#2A2218]">
+                <div className="h-full w-1/3 rounded-full bg-[#F5C400] animate-indeterminate" />
               </div>
               {txCounts && (
                 <div className="grid grid-cols-2 gap-4 text-center">

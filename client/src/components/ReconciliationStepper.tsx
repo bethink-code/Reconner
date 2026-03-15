@@ -1,4 +1,4 @@
-import { Check, Fuel, Building2, Settings, BarChart3 } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type ReconciliationStep = "fuel" | "bank" | "configure" | "results";
@@ -8,7 +8,6 @@ interface StepConfig {
   label: string;
   shortLabel: string;
   description: string;
-  icon: React.ElementType;
 }
 
 const STEPS: StepConfig[] = [
@@ -17,28 +16,24 @@ const STEPS: StepConfig[] = [
     label: "Upload Fuel Data",
     shortLabel: "Fuel",
     description: "Your source of truth",
-    icon: Fuel,
   },
   {
     id: "bank",
     label: "Upload Bank Data",
     shortLabel: "Bank",
     description: "Transactions to verify",
-    icon: Building2,
   },
   {
     id: "configure",
     label: "Configure Matching",
     shortLabel: "Match",
     description: "Set matching rules",
-    icon: Settings,
   },
   {
     id: "results",
     label: "Results",
     shortLabel: "Results",
     description: "Review matches",
-    icon: BarChart3,
   },
 ];
 
@@ -94,7 +89,6 @@ export function ReconciliationStepper({
           const isCurrent = step.id === currentStep;
           const isEligible = stepEligibility ? stepEligibility[step.id] : (isCompleted || index <= currentIndex);
           const isClickable = onStepClick && isEligible;
-          const Icon = step.icon;
 
           const statusLabel = isCompleted
             ? "completed"
@@ -124,26 +118,26 @@ export function ReconciliationStepper({
               >
                 <div
                   className={cn(
-                    "relative flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all",
-                    "group-focus-visible:ring-2 group-focus-visible:ring-primary group-focus-visible:ring-offset-2",
-                    isCompleted && "bg-primary border-primary text-primary-foreground",
-                    isCurrent && !isCompleted && "border-primary bg-primary/10 text-primary",
-                    !isCurrent && !isCompleted && "border-muted-foreground/30 text-muted-foreground/50"
+                    "relative flex items-center justify-center w-6 h-6 rounded-full transition-all",
+                    "group-focus-visible:ring-2 group-focus-visible:ring-[#1A1200] group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-[#F5C400]",
+                    isCompleted && "bg-[#1A1200] text-white",
+                    isCurrent && !isCompleted && "bg-[#1A1200]/15 text-[#1A1200]",
+                    !isCurrent && !isCompleted && "bg-[#1A1200]/10 text-[#1A1200]/50"
                   )}
                 >
                   {isCompleted ? (
-                    <Check className="h-5 w-5" />
+                    <Check className="h-3.5 w-3.5 stroke-[3]" />
                   ) : (
-                    <Icon className="h-5 w-5" />
+                    <span className="text-xs font-semibold">{index + 1}</span>
                   )}
                 </div>
                 <div className="text-center">
                   <p
                     className={cn(
-                      "text-xs sm:text-sm font-medium transition-colors leading-tight",
-                      isCurrent && "text-primary",
-                      isCompleted && "text-foreground",
-                      !isCurrent && !isCompleted && "text-muted-foreground"
+                      "text-xs sm:text-sm font-heading font-medium transition-colors leading-tight",
+                      isCurrent && "text-[#1A1200] font-semibold",
+                      isCompleted && "text-[#1A1200]",
+                      !isCurrent && !isCompleted && "text-[#1A1200]/60"
                     )}
                   >
                     <span className="hidden sm:inline">{step.label}</span>
@@ -152,7 +146,7 @@ export function ReconciliationStepper({
                   <p
                     className={cn(
                       "text-xs hidden sm:block",
-                      isCurrent ? "text-muted-foreground" : "text-muted-foreground/60"
+                      isCurrent ? "text-[#1A1200]/70" : "text-[#1A1200]/40"
                     )}
                   >
                     {step.description}
@@ -166,8 +160,8 @@ export function ReconciliationStepper({
                     className={cn(
                       "h-0.5 transition-colors",
                       index < currentIndex || completedSteps.includes(STEPS[index + 1].id)
-                        ? "bg-primary"
-                        : "bg-muted-foreground/20"
+                        ? "bg-[#1A1200]"
+                        : "bg-[#1A1200]/20"
                     )}
                   />
                 </div>

@@ -477,7 +477,7 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
           )}
 
           <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
-            <Lightbulb className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+            <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
               Download your merchant statement from your bank's online portal.
               Make sure it includes the date, amount, and reference for each transaction.

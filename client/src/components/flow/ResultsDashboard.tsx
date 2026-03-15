@@ -200,7 +200,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                 </div>
 
                 {/* Lens 2: Bank Verified */}
-                <div className="rounded-lg border bg-green-50/50 dark:bg-green-950/20 p-4">
+                <div className="rounded-lg border bg-[#DCFCE7]/50 dark:bg-emerald-950/20 p-4">
                   <div className="flex items-baseline gap-2 mb-1">
                     <span className="text-2xl font-bold">
                       {bankMatchPct}%
@@ -210,7 +210,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                     </span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-green-600 dark:text-green-400">
+                    <span className="text-3xl font-bold tracking-tight text-[#166534] dark:text-emerald-400">
                       {formatRand(verifiedAmount)}
                     </span>
                     <span className="text-sm text-muted-foreground">
@@ -219,12 +219,12 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-3">
                     <div
-                      className="h-full bg-green-500 transition-all duration-500 rounded-full"
+                      className="h-full bg-[#F5C400] transition-all duration-500 rounded-full"
                       style={{ width: `${bankMatchPct}%` }}
                     />
                   </div>
                   {unmatchedBankAmount > 0 && (
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-green-200 dark:border-green-900">
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#166534]/20 dark:border-emerald-900">
                       <p className="text-sm text-muted-foreground">
                         {formatRand(unmatchedBankAmount)} ({unmatchedBankPct}% of bank records) didn't match fuel data
                       </p>
@@ -472,7 +472,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
       max: summary.fuelDateRange.max,
       count: summary.cardFuelTransactions,
       hasGap: fuelHasGap,
-      color: 'bg-orange-500',
+      color: 'bg-[#E8601C]',
       type: 'fuel',
       onAdd: fuelHasGap ? onAddFuelData : undefined
     });
@@ -480,7 +480,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
 
   // Bank account rows
   const bankAccounts = summary.bankAccountRanges || [];
-  const bankColors = ['bg-blue-500', 'bg-purple-500', 'bg-teal-500', 'bg-indigo-500', 'bg-cyan-500'];
+  const bankColors = ['bg-[#6366F1]', 'bg-[#EC4899]', 'bg-[#10B981]', 'bg-[#8B5CF6]', 'bg-[#14B8A6]'];
   
   bankAccounts.forEach((account, index) => {
     const accountHasGap = checkGap(account.min, account.max);
@@ -505,7 +505,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
       max: summary.bankDateRange.max,
       count: summary.bankTransactions,
       hasGap: bankHasGap,
-      color: 'bg-blue-500',
+      color: 'bg-[#6366F1]',
       type: 'bank',
       onAdd: bankHasGap ? onAddBankData : undefined
     });
@@ -626,7 +626,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
                   <span className="font-semibold">{formatNumber(row.count)}</span>
                 ) : '—'}
                 {!isPeriod && row.hasGap && (
-                  <span className="block text-[10px] text-amber-600 dark:text-amber-400 font-medium leading-tight">Partial</span>
+                  <span className="block text-[10px] text-[#B45309] dark:text-amber-400 font-medium leading-tight">Partial</span>
                 )}
               </div>
             </div>

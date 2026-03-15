@@ -59,7 +59,7 @@ export function BankStatusScreen({
           className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
           data-testid={`status-bank-file-${file.id}`}
         >
-          <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+          <CheckCircle2 className="h-5 w-5 text-[#166534] dark:text-emerald-400 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="font-medium truncate">
               {file.bankName || file.sourceName || file.fileName}

@@ -368,14 +368,14 @@ export default function ReconciliationFlow() {
           <Card className="max-w-2xl mx-auto">
             <CardHeader className="text-center">
               <div className="mx-auto mb-4">
-                <CheckCircle2 className="h-12 w-12 text-green-500" />
+                <CheckCircle2 className="h-12 w-12 text-[#166534]" />
               </div>
               <CardTitle className="text-2xl">Matching Complete</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Hero: the answer to "how well did my period match?" */}
               <div className="text-center space-y-1">
-                <p className="text-5xl font-bold text-green-600 dark:text-green-400">{matchResult.matchRate}</p>
+                <p className="text-5xl font-heading font-bold text-[#1A1200] dark:text-[#F0EAE0]">{matchResult.matchRate}</p>
                 <p className="text-lg font-medium">of your {period?.name || "period"} bank transactions verified</p>
                 <p className="text-sm text-muted-foreground">
                   {matchResult.matchesCreated} of {matchResult.bankTransactionsMatchable} transactions automatically matched to fuel records
@@ -384,12 +384,12 @@ export default function ReconciliationFlow() {
 
               {/* Key stats */}
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-3">
-                  <p className="text-2xl font-semibold text-green-700 dark:text-green-400">{matchResult.matchesCreated}</p>
+                <div className="rounded-lg bg-[#DCFCE7] dark:bg-emerald-950/30 p-3">
+                  <p className="text-2xl font-semibold text-[#166534] dark:text-emerald-400">{matchResult.matchesCreated}</p>
                   <p className="text-xs text-muted-foreground">Verified</p>
                 </div>
-                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3">
-                  <p className="text-2xl font-semibold text-amber-700 dark:text-amber-400">{matchResult.bankTransactionsMatchable - matchResult.matchesCreated}</p>
+                <div className="rounded-lg bg-[#FEF9C3] dark:bg-amber-950/30 p-3">
+                  <p className="text-2xl font-semibold text-[#B45309] dark:text-amber-400">{matchResult.bankTransactionsMatchable - matchResult.matchesCreated}</p>
                   <p className="text-xs text-muted-foreground">To Investigate</p>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-3">

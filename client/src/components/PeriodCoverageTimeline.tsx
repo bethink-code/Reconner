@@ -31,11 +31,11 @@ interface PeriodCoverageTimelineProps {
 }
 
 const BANK_COLORS = [
-  { bar: "bg-blue-500", track: "bg-blue-100 dark:bg-blue-950" },
-  { bar: "bg-purple-500", track: "bg-purple-100 dark:bg-purple-950" },
-  { bar: "bg-teal-500", track: "bg-teal-100 dark:bg-teal-950" },
-  { bar: "bg-indigo-500", track: "bg-indigo-100 dark:bg-indigo-950" },
-  { bar: "bg-cyan-500", track: "bg-cyan-100 dark:bg-cyan-950" },
+  { bar: "bg-[#6366F1]", track: "bg-[#6366F1]/10 dark:bg-[#6366F1]/20" },    // FNB
+  { bar: "bg-[#EC4899]", track: "bg-[#EC4899]/10 dark:bg-[#EC4899]/20" },    // ABSA
+  { bar: "bg-[#10B981]", track: "bg-[#10B981]/10 dark:bg-[#10B981]/20" },    // Nedbank
+  { bar: "bg-[#8B5CF6]", track: "bg-[#8B5CF6]/10 dark:bg-[#8B5CF6]/20" },    // Std Bank
+  { bar: "bg-[#14B8A6]", track: "bg-[#14B8A6]/10 dark:bg-[#14B8A6]/20" },    // Additional
 ];
 
 export function PeriodCoverageTimeline({ 
@@ -102,12 +102,12 @@ export function PeriodCoverageTimeline({
             </CardTitle>
           </div>
           {hasAnyGaps ? (
-            <Badge variant="outline" className="text-amber-600 border-amber-300" data-testid="badge-gaps-detected">
+            <Badge variant="outline" className="text-[#B45309] border-[#B45309]/30" data-testid="badge-gaps-detected">
               <AlertTriangle className="h-3 w-3 mr-1" />
               Gaps detected
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-green-600 border-green-300" data-testid="badge-full-coverage">
+            <Badge variant="outline" className="text-[#166534] border-[#166534]/30" data-testid="badge-full-coverage">
               <Check className="h-3 w-3 mr-1" />
               Full coverage
             </Badge>
@@ -133,7 +133,7 @@ export function PeriodCoverageTimeline({
             icon={<Fuel className="h-3.5 w-3.5" />}
             label="Fuel System"
             dateRange={`${formatDate(fuelDateRange.min)} — ${formatDate(fuelDateRange.max)}`}
-            barColor={fuelHasStartGap || fuelHasEndGap ? "bg-amber-500" : "bg-green-500"}
+            barColor={fuelHasStartGap || fuelHasEndGap ? "bg-[#B45309]" : "bg-[#166534]"}
             trackColor="bg-orange-100 dark:bg-orange-950"
             startPercent={getPositionPercent(fuelStart!)}
             widthPercent={getPositionPercent(fuelEnd!) - getPositionPercent(fuelStart!)}
@@ -157,7 +157,7 @@ export function PeriodCoverageTimeline({
               icon={<Building2 className="h-3.5 w-3.5" />}
               label={account.displayName}
               dateRange={`${formatDate(account.min)} — ${formatDate(account.max)}`}
-              barColor={account.hasGap ? "bg-amber-500" : account.colors.bar}
+              barColor={account.hasGap ? "bg-[#B45309]" : account.colors.bar}
               trackColor={account.colors.track}
               startPercent={getPositionPercent(account.start)}
               widthPercent={getPositionPercent(account.end) - getPositionPercent(account.start)}
@@ -171,7 +171,7 @@ export function PeriodCoverageTimeline({
             icon={<Building2 className="h-3.5 w-3.5" />}
             label="Bank Data"
             isEmpty
-            trackColor="bg-blue-100 dark:bg-blue-950"
+            trackColor="bg-[#6366F1]/10 dark:bg-[#6366F1]/20"
           />
         )}
 
@@ -186,7 +186,7 @@ export function PeriodCoverageTimeline({
             )}
             
             {hasAnyGaps && onAddFuelData && (
-              <div className="flex items-center gap-2 text-amber-600 text-sm">
+              <div className="flex items-center gap-2 text-[#B45309] text-sm">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span className="flex-1">Data gaps may affect matching accuracy</span>
                 <Button 
@@ -270,7 +270,7 @@ function TimelineRow({
         )}
         {isEmpty && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <Badge variant="outline" className="text-red-600 text-xs h-5 px-1.5">
+            <Badge variant="outline" className="text-[#B91C1C] text-xs h-5 px-1.5">
               No data
             </Badge>
           </div>

@@ -99,10 +99,10 @@ export default function FileUploadZone({ label, accept = ".csv,.xlsx,.xls,.pdf",
     <div className="space-y-4">
       {/* Show existing file info */}
       {showExistingFile && (
-        <Card className="p-4 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20" data-testid={`existing-file-${existingFile.id}`}>
+        <Card className="p-4 border-[#166534]/20 dark:border-emerald-800 bg-[#DCFCE7]/50 dark:bg-emerald-950/20" data-testid={`existing-file-${existingFile.id}`}>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center flex-shrink-0">
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <div className="h-10 w-10 rounded-full bg-[#DCFCE7] dark:bg-emerald-950/30 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-[#166534] dark:text-emerald-400" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">

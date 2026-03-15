@@ -205,8 +205,8 @@ function IssueCard({
   const explanation = getIssueExplanation(issue, report);
 
   const actionBadge = {
-    none: { label: '✓ Auto-fixed', variant: 'default' as const, className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
-    review: { label: 'Review recommended', variant: 'outline' as const, className: 'border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-400' },
+    none: { label: '✓ Auto-fixed', variant: 'default' as const, className: 'bg-[#DCFCE7] text-[#166534] dark:bg-emerald-950/30 dark:text-emerald-400' },
+    review: { label: 'Review recommended', variant: 'outline' as const, className: 'border-[#B45309]/20 text-[#B45309] dark:border-amber-600 dark:text-amber-400' },
     required: { label: 'Action required', variant: 'destructive' as const, className: '' }
   }[explanation.userAction];
 
@@ -218,9 +218,9 @@ function IssueCard({
   }[explanation.color];
 
   const iconColor = {
-    success: 'text-green-600 dark:text-green-400',
-    info: 'text-blue-600 dark:text-blue-400',
-    warning: 'text-amber-600 dark:text-amber-400',
+    success: 'text-[#166534] dark:text-emerald-400',
+    info: 'text-[#1A1200] dark:text-[#F0EAE0]',
+    warning: 'text-[#B45309] dark:text-amber-400',
     error: 'text-red-600 dark:text-red-400'
   }[explanation.color];
 
@@ -273,7 +273,7 @@ function IssueCard({
             </div>
 
             <div className="flex items-start gap-2">
-              <Wrench className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <Wrench className="h-4 w-4 text-[#166534] dark:text-emerald-400 mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">What we'll do</p>
                 <p className="text-sm">{explanation.whatWeDo}</p>
@@ -281,9 +281,9 @@ function IssueCard({
             </div>
 
             {explanation.userAction !== 'none' && explanation.userActionText && (
-              <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+              <Alert className="border-[#E5E3DC] bg-[#FAFAF6] dark:border-[#2A2218] dark:bg-[#1A1200]/10">
+                <Info className="h-4 w-4 text-[#1A1200] dark:text-[#F0EAE0]" />
+                <AlertDescription className="text-[#1A1200] dark:text-[#F0EAE0] text-sm">
                   <strong>Your action:</strong> {explanation.userActionText}
                 </AlertDescription>
               </Alert>
@@ -332,17 +332,17 @@ function SummaryCard({ report }: { report: DataQualityReport }) {
     <div 
       className={`p-4 mb-4 rounded-lg border ${
         hasCritical 
-          ? 'bg-amber-50 border-amber-200 dark:bg-amber-950 dark:border-amber-800' 
-          : 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+          ? 'bg-[#FEF9C3] border-[#B45309]/20 dark:bg-amber-950/30 dark:border-amber-800'
+          : 'bg-[#DCFCE7] border-[#166534]/20 dark:bg-emerald-950/30 dark:border-emerald-800'
       }`}
       data-testid="card-summary"
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-start gap-3">
           {hasCritical ? (
-            <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
+            <AlertTriangle className="h-6 w-6 text-[#B45309] dark:text-amber-400 shrink-0" />
           ) : (
-            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 shrink-0" />
+            <CheckCircle2 className="h-6 w-6 text-[#166534] dark:text-emerald-400 shrink-0" />
           )}
           <div>
             <h3 className="text-lg font-semibold mb-1">
@@ -360,14 +360,14 @@ function SummaryCard({ report }: { report: DataQualityReport }) {
 
         <div className="flex gap-6">
           <div className="text-center">
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+            <p className="text-2xl font-bold text-[#166534] dark:text-emerald-400">
               {report.cleanRows.toLocaleString()}
             </p>
             <p className="text-xs text-muted-foreground">Clean rows</p>
           </div>
           {autoFixCount > 0 && (
             <div className="text-center">
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              <p className="text-2xl font-bold text-[#166534] dark:text-emerald-400">
                 {autoFixCount}
               </p>
               <p className="text-xs text-muted-foreground">Auto-fixed</p>
@@ -375,7 +375,7 @@ function SummaryCard({ report }: { report: DataQualityReport }) {
           )}
           {reviewCount > 0 && (
             <div className="text-center">
-              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+              <p className="text-2xl font-bold text-[#B45309] dark:text-amber-400">
                 {reviewCount}
               </p>
               <p className="text-xs text-muted-foreground">To review</p>
@@ -397,10 +397,10 @@ function ColumnMappingTip({ report, onUseSuggestedMapping }: {
   if (!hasColumnShift) return null;
 
   return (
-    <Alert className="mb-4 border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950" data-testid="alert-column-tip">
-      <TableProperties className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-      <AlertTitle className="text-blue-800 dark:text-blue-200">Tip for Column Mapping</AlertTitle>
-      <AlertDescription className="text-blue-700 dark:text-blue-300">
+    <Alert className="mb-4 border-[#E5E3DC] bg-[#FAFAF6] dark:border-[#2A2218] dark:bg-[#1A1200]/10" data-testid="alert-column-tip">
+      <TableProperties className="h-4 w-4 text-[#1A1200] dark:text-[#F0EAE0]" />
+      <AlertTitle className="text-[#1A1200] dark:text-[#F0EAE0]">Tip for Column Mapping</AlertTitle>
+      <AlertDescription className="text-[#1A1200] dark:text-[#F0EAE0]">
         <ul className="list-disc list-inside space-y-1 text-sm">
           <li><strong>Look at the sample data</strong> shown for each column, not just the header name</li>
           <li><strong>Use the suggested mappings</strong> — we've analyzed the actual data to recommend the right columns</li>
@@ -423,8 +423,8 @@ export function DataQualityWarnings({
   if (!report.hasIssues) {
     return (
       <div className="py-4 text-center" data-testid="quality-success">
-        <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-4">
-          <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+        <div className="mx-auto w-16 h-16 rounded-full bg-[#DCFCE7] dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+          <CheckCircle2 className="h-8 w-8 text-[#166534] dark:text-emerald-400" />
         </div>
         <h3 className="text-lg font-semibold mb-1">File looks great!</h3>
         <p className="text-muted-foreground mb-6">
@@ -470,13 +470,13 @@ export function DataQualityWarnings({
       <div className="text-center mb-6">
         <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
           hasCritical 
-            ? 'bg-amber-100 dark:bg-amber-900' 
-            : 'bg-green-100 dark:bg-green-900'
+            ? 'bg-[#FEF9C3] dark:bg-amber-950/30'
+            : 'bg-[#DCFCE7] dark:bg-emerald-950/30'
         }`}>
           {hasCritical ? (
-            <AlertTriangle className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+            <AlertTriangle className="h-8 w-8 text-[#B45309] dark:text-amber-400" />
           ) : (
-            <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+            <CheckCircle2 className="h-8 w-8 text-[#166534] dark:text-emerald-400" />
           )}
         </div>
         <h3 className="text-lg font-semibold mb-1">
@@ -515,7 +515,7 @@ export function DataQualityWarnings({
             {autoFixIssues.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                  <Sparkles className="h-4 w-4 text-green-600" />
+                  <Sparkles className="h-4 w-4 text-[#166534]" />
                   <span className="font-medium">Auto-fixed ({autoFixIssues.length})</span>
                 </div>
                 {autoFixIssues.map((issue, index) => (
@@ -532,7 +532,7 @@ export function DataQualityWarnings({
             {reviewIssues.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTriangle className="h-4 w-4 text-[#B45309]" />
                   <span className="font-medium">Review recommended ({reviewIssues.length})</span>
                 </div>
                 {reviewIssues.map((issue, index) => (

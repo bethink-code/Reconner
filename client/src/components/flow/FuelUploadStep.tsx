@@ -535,7 +535,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
         )}
 
         <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
-          <Lightbulb className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+          <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
           <p className="text-xs text-muted-foreground">
             Export your daily transaction report from your fuel management system.
             Make sure it includes the date, amount, and payment type for each sale.

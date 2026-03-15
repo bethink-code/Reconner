@@ -577,11 +577,11 @@ export default function InvestigateTransactions() {
   const getCategoryConfig = (category: CategorizedTransaction['category']) => {
     switch (category) {
       case 'quick_win':
-        return { icon: Zap, label: "Quick Wins", color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30", description: "High-confidence matches ready to confirm" };
+        return { icon: Zap, label: "Quick Wins", color: "text-[#166534]", bg: "bg-[#DCFCE7] dark:bg-emerald-950/30", description: "High-confidence matches ready to confirm" };
       case 'investigate':
-        return { icon: Search, label: "Investigate", color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30", description: "Lower confidence - review carefully" };
+        return { icon: Search, label: "Investigate", color: "text-[#B45309]", bg: "bg-[#FEF9C3] dark:bg-amber-950/30", description: "Lower confidence - review carefully" };
       case 'no_match':
-        return { icon: HelpCircle, label: "No Match Found", color: "text-red-600", bg: "bg-red-100 dark:bg-red-900/30", description: "Requires manual investigation" };
+        return { icon: HelpCircle, label: "No Match Found", color: "text-[#B91C1C]", bg: "bg-[#FEE2E2] dark:bg-red-950/30", description: "Requires manual investigation" };
       case 'low_value':
         return { icon: Coins, label: "Low Value", color: "text-slate-500", bg: "bg-slate-100 dark:bg-slate-800", description: `Under ${formatCurrency(LOW_VALUE_THRESHOLD)} - likely test transactions` };
     }
@@ -672,17 +672,17 @@ export default function InvestigateTransactions() {
             <>
               {/* Flagged Transactions List */}
               {flaggedTransactions.length === 0 ? (
-                <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
+                <Card className="bg-[#DCFCE7] dark:bg-emerald-950/30 border-[#166534]/20 dark:border-emerald-800">
                   <CardContent className="pt-6 pb-6">
                     <div className="flex flex-col items-center text-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
-                        <Check className="h-6 w-6 text-green-600" />
+                      <div className="w-12 h-12 rounded-full bg-[#DCFCE7] dark:bg-emerald-950/30 flex items-center justify-center">
+                        <Check className="h-6 w-6 text-[#166534]" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                        <h3 className="text-lg font-semibold text-[#166534] dark:text-emerald-300">
                           No Flagged Items
                         </h3>
-                        <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                        <p className="text-sm text-[#166534] dark:text-emerald-300 mt-1">
                           All flagged transactions have been resolved.
                         </p>
                       </div>
@@ -860,11 +860,11 @@ export default function InvestigateTransactions() {
               {totalUnresolved === 0 ? (
             resolutionCounts.flagged > 0 ? (
               // Items flagged - show summary with pending items
-              <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-review-complete">
+              <Card className="border-[#B45309]/20 dark:border-amber-800 bg-[#FEF9C3]/50 dark:bg-amber-950/20" data-testid="card-review-complete">
                 <CardContent className="pt-6 pb-6">
                   <div className="flex flex-col items-center text-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                      <AlertTriangle className="h-6 w-6 text-amber-600" />
+                    <div className="w-12 h-12 rounded-full bg-[#FEF9C3] dark:bg-amber-950/30 flex items-center justify-center">
+                      <AlertTriangle className="h-6 w-6 text-[#B45309]" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold">
@@ -879,23 +879,23 @@ export default function InvestigateTransactions() {
                     <div className="w-full max-w-sm text-left space-y-2 px-4">
                       {resolutionCounts.linked > 0 && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-green-600" />
+                          <Check className="h-4 w-4 text-[#166534]" />
                           <span>{resolutionCounts.linked} Linked to fuel records</span>
                         </div>
                       )}
                       {resolutionCounts.dismissed > 0 && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-green-600" />
+                          <Check className="h-4 w-4 text-[#166534]" />
                           <span>{resolutionCounts.dismissed} Dismissed (low value)</span>
                         </div>
                       )}
                       {resolutionCounts.reviewed > 0 && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-green-600" />
+                          <Check className="h-4 w-4 text-[#166534]" />
                           <span>{resolutionCounts.reviewed} Marked as reviewed</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
+                      <div className="flex items-center gap-2 text-sm font-medium text-[#B45309] dark:text-amber-400">
                         <AlertTriangle className="h-4 w-4" />
                         <span>{resolutionCounts.flagged} Flagged for follow-up</span>
                       </div>
@@ -922,22 +922,22 @@ export default function InvestigateTransactions() {
               </Card>
             ) : (
               // All items closed - show success
-              <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" data-testid="card-all-clear">
+              <Card className="bg-[#DCFCE7] dark:bg-emerald-950/30 border-[#166534]/20 dark:border-emerald-800" data-testid="card-all-clear">
                 <CardContent className="pt-6 pb-6">
                   <div className="flex flex-col items-center justify-center py-4 text-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
-                      <Check className="h-6 w-6 text-green-600" />
+                    <div className="w-12 h-12 rounded-full bg-[#DCFCE7] dark:bg-emerald-950/30 flex items-center justify-center">
+                      <Check className="h-6 w-6 text-[#166534]" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">All Clear!</h3>
-                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                      <h3 className="text-lg font-semibold text-[#166534] dark:text-emerald-300">All Clear!</h3>
+                      <p className="text-sm text-[#166534] dark:text-emerald-300 mt-1">
                         All transactions have been resolved.
                       </p>
                     </div>
-                    
+
                     {/* Summary breakdown */}
                     {resolutionCounts.total > 0 && (
-                      <div className="w-full max-w-sm text-left space-y-1.5 px-4 text-sm text-green-700 dark:text-green-300">
+                      <div className="w-full max-w-sm text-left space-y-1.5 px-4 text-sm text-[#166534] dark:text-emerald-300">
                         {resolutionCounts.linked > 0 && (
                           <div className="flex items-center gap-2">
                             <Check className="h-3.5 w-3.5" />
@@ -1198,11 +1198,11 @@ export default function InvestigateTransactions() {
                                   {/* Badge for no match — with insight hint */}
                                   {category === 'no_match' && (
                                     item.insights.some(i => i.type === 'possible_tip') ? (
-                                      <Badge variant="outline" className="text-xs text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                                      <Badge variant="outline" className="text-xs text-[#B45309] border-[#B45309]/30 dark:text-amber-400 dark:border-amber-700">
                                         Possible tip
                                       </Badge>
                                     ) : item.insights.some(i => i.type === 'duplicate_charge') ? (
-                                      <Badge variant="outline" className="text-xs text-red-700 border-red-300 dark:text-red-400 dark:border-red-700">
+                                      <Badge variant="outline" className="text-xs text-[#B91C1C] border-[#B91C1C]/30 dark:text-red-400 dark:border-red-700">
                                         Duplicate?
                                       </Badge>
                                     ) : (
@@ -1242,16 +1242,16 @@ export default function InvestigateTransactions() {
                                             key={i}
                                             className={cn(
                                               "p-3 rounded-lg border text-sm",
-                                              insight.type === 'possible_tip' && "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800",
-                                              insight.type === 'overfill' && "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
-                                              insight.type === 'duplicate_charge' && "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800",
+                                              insight.type === 'possible_tip' && "bg-[#FEF9C3] dark:bg-amber-950/30 border-[#B45309]/20 dark:border-amber-800",
+                                              insight.type === 'overfill' && "bg-[#F4F4F0] dark:bg-[#1A1200]/20 border-[#E5E3DC] dark:border-[#2A2218]",
+                                              insight.type === 'duplicate_charge' && "bg-[#FEE2E2] dark:bg-red-950/30 border-[#B91C1C]/20 dark:border-red-700",
                                               insight.type === 'no_fuel_record' && "bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700",
                                             )}
                                           >
                                             <div className="flex items-start gap-2">
-                                              {insight.type === 'possible_tip' && <Coins className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />}
-                                              {insight.type === 'overfill' && <Fuel className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
-                                              {insight.type === 'duplicate_charge' && <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />}
+                                              {insight.type === 'possible_tip' && <Coins className="h-4 w-4 text-[#B45309] shrink-0 mt-0.5" />}
+                                              {insight.type === 'overfill' && <Fuel className="h-4 w-4 text-[#E8601C] shrink-0 mt-0.5" />}
+                                              {insight.type === 'duplicate_charge' && <AlertTriangle className="h-4 w-4 text-[#B91C1C] shrink-0 mt-0.5" />}
                                               {insight.type === 'no_fuel_record' && <HelpCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />}
                                               <div>
                                                 <p className="font-medium">{insight.message}</p>
@@ -1269,7 +1269,7 @@ export default function InvestigateTransactions() {
                                     {item.bestMatch && (
                                       <div className="p-3 border rounded-lg bg-card">
                                         <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                          <CheckCircle2 className="h-4 w-4 text-[#166534]" />
                                           Best Match Found
                                         </p>
                                         <div className="flex items-center justify-between">
@@ -1368,15 +1368,15 @@ export default function InvestigateTransactions() {
                                       return (
                                       <div>
                                         {allOutsideWindow ? (
-                                          <div className="p-3 rounded bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs space-y-1.5">
+                                          <div className="p-3 rounded bg-[#FEF9C3] dark:bg-amber-950/30 text-[#B45309] dark:text-amber-400 text-xs space-y-1.5">
                                             <div className="flex items-center gap-2 font-medium text-sm">
                                               <AlertTriangle className="h-4 w-4 shrink-0" />
                                               No fuel records within matching window — likely missing from fuel system
                                             </div>
-                                            <p className="ml-6 text-amber-600 dark:text-amber-500">
+                                            <p className="ml-6 text-[#B45309] dark:text-amber-400">
                                               Auto-matching rules applied:
                                             </p>
-                                            <div className="ml-6 flex flex-wrap gap-x-3 gap-y-0.5 text-amber-600 dark:text-amber-500">
+                                            <div className="ml-6 flex flex-wrap gap-x-3 gap-y-0.5 text-[#B45309] dark:text-amber-400">
                                               <span>Date window: {dateWindowDays}d</span>
                                               <span>Amount tolerance: R{matchingRules?.amountTolerance ?? 2}</span>
                                               <span>Time window: {matchingRules?.timeWindowMinutes ?? 60}min</span>

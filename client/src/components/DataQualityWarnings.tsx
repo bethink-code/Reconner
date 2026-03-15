@@ -211,10 +211,10 @@ function IssueCard({
   }[explanation.userAction];
 
   const borderColor = {
-    success: 'border-l-green-500',
-    info: 'border-l-blue-500',
-    warning: 'border-l-amber-500',
-    error: 'border-l-red-500'
+    success: 'border-l-[#166534]',
+    info: 'border-l-[#1A1200]',
+    warning: 'border-l-[#B45309]',
+    error: 'border-l-[#B91C1C]'
   }[explanation.color];
 
   const iconColor = {

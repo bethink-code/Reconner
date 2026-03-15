@@ -1,4 +1,4 @@
-# Reconner — Project Guide
+# lekana — Project Guide
 
 ## Quick Start
 ```bash

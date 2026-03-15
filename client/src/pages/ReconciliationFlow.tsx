@@ -130,20 +130,29 @@ export default function ReconciliationFlow() {
 
       // Check URL for explicit step override (e.g. ?step=fuel for "Edit Data")
       const urlParams = new URLSearchParams(window.location.search);
-      const requestedStep = urlParams.get("step") as ReconciliationStep | null;
+      const rawStep = urlParams.get("step");
+      const validSteps: ReconciliationStep[] = ["fuel", "bank", "configure", "results"];
+      const requestedStep = rawStep && validSteps.includes(rawStep as ReconciliationStep)
+        ? (rawStep as ReconciliationStep)
+        : null;
 
       if (fuelFile && bankFiles.length > 0) {
         // Both data sources uploaded
-        setCompletedSteps(["fuel", "bank", "configure"]);
+        // If going to results (default), matching must have run — mark configure complete
+        // If explicitly navigating to an earlier step, don't assume matching ran
         if (requestedStep === "fuel" || requestedStep === "bank" || requestedStep === "configure") {
+          setCompletedSteps(["fuel", "bank"]);
           setCurrentStep(requestedStep);
           if (requestedStep === "bank") setBankSubStep("status");
         } else {
+          // Default to results — matching has run before
+          setCompletedSteps(["fuel", "bank", "configure"]);
           setCurrentStep("results");
         }
       } else if (fuelFile) {
         // Fuel uploaded, need bank data
         setCompletedSteps(["fuel"]);
+        // Only honour requested step if eligible
         if (requestedStep === "fuel") {
           setCurrentStep("fuel");
         } else {
@@ -151,30 +160,33 @@ export default function ReconciliationFlow() {
           setBankSubStep("status");
         }
       } else {
-        // Fresh start
+        // Fresh start — ignore any requested step since nothing is uploaded
         setCurrentStep("fuel");
       }
     }
   }, [filesLoading, fuelFile, bankFiles.length]);
 
   // Keep completedSteps in sync with file state (does NOT change currentStep)
+  // Note: "configure" is only marked complete when matching actually runs (see matchResult handler)
   useEffect(() => {
     if (files.length > 0) {
-      const newCompleted: ReconciliationStep[] = [];
+      setCompletedSteps((prev) => {
+        const newCompleted: ReconciliationStep[] = [];
 
-      if (fuelFile) {
-        newCompleted.push("fuel");
-      }
-      if (bankFiles.length > 0) {
-        newCompleted.push("bank");
-      }
+        if (fuelFile) {
+          newCompleted.push("fuel");
+        }
+        if (bankFiles.length > 0) {
+          newCompleted.push("bank");
+        }
 
-      // If both sources uploaded, configure is complete (matching was done)
-      if (fuelFile && bankFiles.length > 0) {
-        newCompleted.push("configure");
-      }
+        // Preserve configure completion if it was already set (from matching)
+        if (prev.includes("configure")) {
+          newCompleted.push("configure");
+        }
 
-      setCompletedSteps(newCompleted);
+        return newCompleted;
+      });
     }
   }, [files, fuelFile, bankFiles.length]);
 
@@ -297,7 +309,12 @@ export default function ReconciliationFlow() {
               </Button>
             </Link>
             <div className="flex-1">
-              <h1 className="text-xl font-semibold">Reconciliation</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold">Reconciliation</h1>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                  Step {(['fuel', 'bank', 'configure', 'results'] as const).indexOf(currentStep) + 1} of 4
+                </span>
+              </div>
               <p className="text-sm text-muted-foreground">
                 {period?.name || "Loading..."}
               </p>

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, AlertTriangle, Plus, Calendar, Building2, Fuel, CreditCard } from "lucide-react";
+import { Check, AlertTriangle, Plus, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BankAccountRange {
@@ -30,66 +30,122 @@ interface PeriodCoverageTimelineProps {
   className?: string;
 }
 
+/** Bank-accurate data viz colors — slots 1-15 */
 const BANK_COLORS = [
-  { bar: "bg-[#6366F1]", track: "bg-[#6366F1]/10 dark:bg-[#6366F1]/20" },    // FNB
-  { bar: "bg-[#EC4899]", track: "bg-[#EC4899]/10 dark:bg-[#EC4899]/20" },    // ABSA
-  { bar: "bg-[#10B981]", track: "bg-[#10B981]/10 dark:bg-[#10B981]/20" },    // Nedbank
-  { bar: "bg-[#8B5CF6]", track: "bg-[#8B5CF6]/10 dark:bg-[#8B5CF6]/20" },    // Std Bank
-  { bar: "bg-[#14B8A6]", track: "bg-[#14B8A6]/10 dark:bg-[#14B8A6]/20" },    // Additional
+  "#007C7F",  // FNB teal
+  "#C0334E",  // ABSA red
+  "#2E8A5A",  // Nedbank green
+  "#1A4B9C",  // Std Bank navy
+  "#7B4FA0",  // Deep violet
+  "#C47A1E",  // Warm gold
+  "#1E6B8C",  // Steel blue
+  "#8C3A3A",  // Burgundy
+  "#2E7A6B",  // Forest teal
+  "#A05030",  // Rust
+  "#4A6FA0",  // Slate blue
+  "#7A3A6B",  // Berry
+  "#5A7A2E",  // Olive
+  "#A04A1E",  // Burnt amber
+  "#2E4A8C",  // Ink blue
 ];
 
-export function PeriodCoverageTimeline({ 
-  periodName, 
-  data, 
+const FUEL_COLOR = "#C05A2A";
+const PERIOD_DOT_COLOR = "#C4C2B8";
+
+export function PeriodCoverageTimeline({
+  periodName,
+  data,
   onAddFuelData,
-  className 
+  className,
 }: PeriodCoverageTimelineProps) {
   const { periodStart, periodEnd, fuelDateRange, bankAccountRanges, unmatchableCount } = data;
 
   const formatDate = (date: Date | string) => {
-    const d = typeof date === 'string' ? new Date(date) : date;
+    const d = typeof date === "string" ? new Date(date) : date;
     return d.toLocaleDateString("en-ZA", { day: "numeric", month: "short" });
   };
 
-  const totalDays = useMemo(() => {
-    return Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
-  }, [periodStart, periodEnd]);
+  const totalMs = periodEnd.getTime() - periodStart.getTime();
 
-  const getPositionPercent = (date: Date) => {
-    const dayOffset = (date.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24);
-    return Math.max(0, Math.min(100, (dayOffset / totalDays) * 100));
+  const getPercent = (date: Date | string) => {
+    const d = typeof date === "string" ? new Date(date) : date;
+    const offset = d.getTime() - periodStart.getTime();
+    return Math.max(0, Math.min(100, (offset / totalMs) * 100));
   };
 
   const fuelStart = fuelDateRange ? new Date(fuelDateRange.min) : null;
   const fuelEnd = fuelDateRange ? new Date(fuelDateRange.max) : null;
+  const fuelHasGap = fuelStart && fuelEnd && (fuelStart > periodStart || fuelEnd < periodEnd);
 
-  const fuelHasStartGap = fuelStart && fuelStart > periodStart;
-  const fuelHasEndGap = fuelEnd && fuelEnd < periodEnd;
-
-  const bankRangesWithGaps = useMemo(() => {
+  const bankRows = useMemo(() => {
     if (!bankAccountRanges || bankAccountRanges.length === 0) return [];
-    
     return bankAccountRanges.map((account, index) => {
       const start = new Date(account.min);
       const end = new Date(account.max);
-      const hasStartGap = start > periodStart;
-      const hasEndGap = end < periodEnd;
-      const colorIndex = index % BANK_COLORS.length;
-      
       return {
         ...account,
         start,
         end,
-        hasStartGap,
-        hasEndGap,
-        hasGap: hasStartGap || hasEndGap,
-        colors: BANK_COLORS[colorIndex],
-        displayName: account.bankName || account.sourceName || `Bank Account ${index + 1}`,
+        hasGap: start > periodStart || end < periodEnd,
+        color: BANK_COLORS[index % BANK_COLORS.length],
+        displayName: account.bankName || account.sourceName || `Bank ${index + 1}`,
       };
     });
   }, [bankAccountRanges, periodStart, periodEnd]);
 
-  const hasAnyGaps = fuelHasStartGap || fuelHasEndGap || bankRangesWithGaps.some(b => b.hasGap);
+  const hasAnyGaps = !!fuelHasGap || bankRows.some((b) => b.hasGap);
+
+  // Build rows for the Gantt
+  interface GanttRow {
+    label: string;
+    color: string;
+    startPct: number;
+    widthPct: number;
+    dateLabel: string;
+    count: number | null;
+    hasGap: boolean;
+    isPeriod?: boolean;
+  }
+
+  const rows: GanttRow[] = [];
+
+  // Period reference row
+  rows.push({
+    label: "Period",
+    color: PERIOD_DOT_COLOR,
+    startPct: 0,
+    widthPct: 100,
+    dateLabel: `${formatDate(periodStart)} — ${formatDate(periodEnd)}`,
+    count: null,
+    hasGap: false,
+    isPeriod: true,
+  });
+
+  // Fuel row
+  if (fuelDateRange && fuelStart && fuelEnd) {
+    rows.push({
+      label: "Fuel",
+      color: FUEL_COLOR,
+      startPct: getPercent(fuelStart),
+      widthPct: getPercent(fuelEnd) - getPercent(fuelStart),
+      dateLabel: `${formatDate(fuelDateRange.min)} — ${formatDate(fuelDateRange.max)}`,
+      count: null,
+      hasGap: !!fuelHasGap,
+    });
+  }
+
+  // Bank rows
+  bankRows.forEach((account) => {
+    rows.push({
+      label: account.displayName,
+      color: account.color,
+      startPct: getPercent(account.start),
+      widthPct: getPercent(account.end) - getPercent(account.start),
+      dateLabel: `${formatDate(account.min)} — ${formatDate(account.max)}`,
+      count: account.txCount,
+      hasGap: account.hasGap,
+    });
+  });
 
   return (
     <Card className={cn("", className)} data-testid="card-period-coverage">
@@ -114,84 +170,76 @@ export function PeriodCoverageTimeline({
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-1 pt-0">
-        {/* Reporting Period Reference Row */}
-        <TimelineRow
-          icon={<Calendar className="h-3.5 w-3.5" />}
-          label="Reporting Period"
-          dateRange={`${formatDate(periodStart)} — ${formatDate(periodEnd)}`}
-          barColor="bg-primary/30"
-          trackColor="bg-muted"
-          startPercent={0}
-          widthPercent={100}
-          isReference
-        />
-        
-        {/* Fuel Data Row */}
-        {fuelDateRange ? (
-          <TimelineRow
-            icon={<Fuel className="h-3.5 w-3.5" />}
-            label="Fuel System"
-            dateRange={`${formatDate(fuelDateRange.min)} — ${formatDate(fuelDateRange.max)}`}
-            barColor={fuelHasStartGap || fuelHasEndGap ? "bg-[#B45309]" : "bg-[#166534]"}
-            trackColor="bg-orange-100 dark:bg-orange-950"
-            startPercent={getPositionPercent(fuelStart!)}
-            widthPercent={getPositionPercent(fuelEnd!) - getPositionPercent(fuelStart!)}
-            hasGap={!!(fuelHasStartGap || fuelHasEndGap)}
-            onAddData={onAddFuelData}
-          />
-        ) : (
-          <TimelineRow
-            icon={<Fuel className="h-3.5 w-3.5" />}
-            label="Fuel System"
-            isEmpty
-            trackColor="bg-orange-100 dark:bg-orange-950"
-          />
-        )}
-        
-        {/* Individual Bank Account Rows */}
-        {bankRangesWithGaps.length > 0 ? (
-          bankRangesWithGaps.map((account, index) => (
-            <TimelineRow
-              key={account.fileId || index}
-              icon={<Building2 className="h-3.5 w-3.5" />}
-              label={account.displayName}
-              dateRange={`${formatDate(account.min)} — ${formatDate(account.max)}`}
-              barColor={account.hasGap ? "bg-[#B45309]" : account.colors.bar}
-              trackColor={account.colors.track}
-              startPercent={getPositionPercent(account.start)}
-              widthPercent={getPositionPercent(account.end) - getPositionPercent(account.start)}
-              hasGap={account.hasGap}
-              txCount={account.txCount}
-              data-testid={`timeline-bank-${index}`}
-            />
-          ))
-        ) : (
-          <TimelineRow
-            icon={<Building2 className="h-3.5 w-3.5" />}
-            label="Bank Data"
-            isEmpty
-            trackColor="bg-[#6366F1]/10 dark:bg-[#6366F1]/20"
-          />
-        )}
+      <CardContent className="pt-0">
+        <div className="space-y-0">
+          {rows.map((row, i) => (
+            <div
+              key={i}
+              className={cn(
+                "grid items-center py-2",
+                i < rows.length - 1 && "border-b border-[#E5E3DC]"
+              )}
+              style={{ gridTemplateColumns: "90px 1fr 110px 48px" }}
+            >
+              {/* Source dot + label */}
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: row.isPeriod ? PERIOD_DOT_COLOR : row.color }}
+                />
+                <span className="text-xs text-muted-foreground truncate">
+                  {row.label}
+                </span>
+              </div>
 
-        {/* Summary Footer */}
-        {(unmatchableCount && unmatchableCount > 0) || hasAnyGaps ? (
-          <div className="pt-3 mt-2 border-t space-y-2">
+              {/* Gantt track */}
+              <div className="relative h-5 mx-2">
+                {/* Period extent reference fill */}
+                <div className="absolute inset-0 rounded bg-[#ECEAE2] dark:bg-[#2A2218]" />
+                {/* Source bar */}
+                {!row.isPeriod && (
+                  <div
+                    className="absolute rounded-full"
+                    style={{
+                      backgroundColor: row.color,
+                      left: `${row.startPct}%`,
+                      width: `${Math.max(row.widthPct, 1.5)}%`,
+                      height: "6px",
+                      top: "7px",
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Date range */}
+              <div className="text-[11px] text-muted-foreground text-right whitespace-nowrap">
+                {row.dateLabel}
+              </div>
+
+              {/* Count */}
+              <div className="text-[11px] text-muted-foreground text-right tabular-nums">
+                {row.count != null ? row.count : "—"}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        {((unmatchableCount && unmatchableCount > 0) || hasAnyGaps) && (
+          <div className="pt-3 mt-2 border-t border-[#E5E3DC] space-y-2">
             {unmatchableCount && unmatchableCount > 0 && (
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <span>Excluded (outside fuel date range):</span>
                 <span className="font-medium">{unmatchableCount} transactions</span>
               </div>
             )}
-            
             {hasAnyGaps && onAddFuelData && (
               <div className="flex items-center gap-2 text-[#B45309] text-sm">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span className="flex-1">Data gaps may affect matching accuracy</span>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={onAddFuelData}
                   data-testid="button-add-missing-data"
                 >
@@ -201,102 +249,8 @@ export function PeriodCoverageTimeline({
               </div>
             )}
           </div>
-        ) : null}
+        )}
       </CardContent>
     </Card>
-  );
-}
-
-interface TimelineRowProps {
-  icon: React.ReactNode;
-  label: string;
-  dateRange?: string;
-  barColor?: string;
-  trackColor: string;
-  startPercent?: number;
-  widthPercent?: number;
-  hasGap?: boolean;
-  isEmpty?: boolean;
-  isReference?: boolean;
-  onAddData?: () => void;
-  txCount?: number;
-}
-
-function TimelineRow({
-  icon,
-  label,
-  dateRange,
-  barColor,
-  trackColor,
-  startPercent = 0,
-  widthPercent = 100,
-  hasGap,
-  isEmpty,
-  isReference,
-  onAddData,
-  txCount,
-}: TimelineRowProps) {
-  return (
-    <div className={cn(
-      "grid grid-cols-[140px_1fr_100px] gap-2 items-center py-1.5",
-      isReference && "pb-2 mb-1 border-b border-dashed"
-    )}>
-      {/* Label Column */}
-      <div className="flex items-center gap-1.5 text-sm min-w-0">
-        <span className="text-muted-foreground shrink-0">{icon}</span>
-        <span className={cn(
-          "truncate",
-          isReference ? "font-medium" : "text-muted-foreground"
-        )}>
-          {label}
-        </span>
-      </div>
-      
-      {/* Bar Column */}
-      <div className="relative h-5">
-        <div className={cn("absolute inset-0 rounded-md", trackColor)} />
-        {!isEmpty && barColor && (
-          <div 
-            className={cn(
-              "absolute h-full rounded-md transition-all",
-              barColor,
-              hasGap && "opacity-90"
-            )}
-            style={{ 
-              left: `${startPercent}%`, 
-              width: `${Math.max(widthPercent, 2)}%` 
-            }}
-          />
-        )}
-        {isEmpty && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Badge variant="outline" className="text-[#B91C1C] text-xs h-5 px-1.5">
-              No data
-            </Badge>
-          </div>
-        )}
-        {hasGap && onAddData && (
-          <div className="absolute right-1 top-1/2 -translate-y-1/2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-4 px-1 text-xs hover:bg-transparent"
-              onClick={onAddData}
-              data-testid="button-add-fuel-gap"
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
-        )}
-      </div>
-      
-      {/* Date Range Column */}
-      <div className="text-xs text-right text-muted-foreground whitespace-nowrap">
-        {dateRange || (isEmpty ? "" : "")}
-        {txCount !== undefined && txCount > 0 && (
-          <span className="ml-1 text-muted-foreground/70">({txCount})</span>
-        )}
-      </div>
-    </div>
   );
 }

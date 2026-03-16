@@ -51,12 +51,12 @@
   --input: 45 6% 88%;             /* #E5E3DC */
   --ring: 48 100% 48%;            /* Sunshine for focus rings */
 
-  /* Data viz palette */
-  --chart-1: 22 80% 51%;          /* #E8601C — Fuel (orange) */
-  --chart-2: 239 84% 67%;         /* #6366F1 — FNB (indigo) */
-  --chart-3: 330 81% 60%;         /* #EC4899 — ABSA (pink) */
-  --chart-4: 160 84% 39%;         /* #10B981 — Nedbank (emerald) */
-  --chart-5: 258 90% 66%;         /* #8B5CF6 — Std Bank (violet) */
+  /* Data viz palette — bank-accurate mid-tones */
+  --chart-1: 18 64% 46%;          /* #C05A2A — Fuel */
+  --chart-2: 181 100% 25%;        /* #007C7F — FNB teal */
+  --chart-3: 348 57% 48%;         /* #C0334E — ABSA red */
+  --chart-4: 150 49% 36%;         /* #2E8A5A — Nedbank green */
+  --chart-5: 215 69% 36%;         /* #1A4B9C — Std Bank navy */
 
   /* Status (semantic) */
   --status-verified: 142 76% 22%; /* #166534 */

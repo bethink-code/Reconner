@@ -1,4 +1,3 @@
-import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -126,14 +125,14 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
   };
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat("en-ZA").format(num);
+    return num.toLocaleString("en-US");
   };
 
   const formatRand = (amount: number) => {
     if (Math.abs(amount) >= 1000) {
-      return "R" + new Intl.NumberFormat("en-ZA", { maximumFractionDigits: 0 }).format(amount);
+      return "R " + amount.toLocaleString("en-US", { maximumFractionDigits: 0 });
     }
-    return "R" + new Intl.NumberFormat("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+    return "R " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   if (isLoading || !summary) {
@@ -200,7 +199,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                 </div>
 
                 {/* Lens 2: Bank Verified */}
-                <div className="rounded-lg border bg-[#DCFCE7]/50 dark:bg-emerald-950/20 p-4">
+                <div className="rounded-lg bg-card p-4">
                   <div className="flex items-baseline gap-2 mb-1">
                     <span className="text-2xl font-bold">
                       {bankMatchPct}%
@@ -219,7 +218,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-3">
                     <div
-                      className="h-full bg-[#F5C400] transition-all duration-500 rounded-full"
+                      className="h-full bg-[#166534] transition-all duration-500 rounded-full"
                       style={{ width: `${bankMatchPct}%` }}
                     />
                   </div>
@@ -230,7 +229,6 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                       </p>
                       <Button
                         size="sm"
-                        variant="outline"
                         onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
                         data-testid="button-investigate"
                       >
@@ -282,7 +280,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
             </div>
 
             {/* Column Headers */}
-            <div className="grid grid-cols-[100px_1fr_120px_60px] gap-3 text-xs text-muted-foreground uppercase tracking-wider mb-2 px-1">
+            <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider mb-2" style={{ gridTemplateColumns: "90px 1fr 110px 48px" }}>
               <span>Source</span>
               <span></span>
               <span className="text-right">Dates</span>
@@ -472,7 +470,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
       max: summary.fuelDateRange.max,
       count: summary.cardFuelTransactions,
       hasGap: fuelHasGap,
-      color: 'bg-[#E8601C]',
+      color: 'bg-[#C05A2A]',
       type: 'fuel',
       onAdd: fuelHasGap ? onAddFuelData : undefined
     });
@@ -480,7 +478,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
 
   // Bank account rows
   const bankAccounts = summary.bankAccountRanges || [];
-  const bankColors = ['bg-[#6366F1]', 'bg-[#EC4899]', 'bg-[#10B981]', 'bg-[#8B5CF6]', 'bg-[#14B8A6]'];
+  const bankColors = ['bg-[#007C7F]', 'bg-[#C0334E]', 'bg-[#2E8A5A]', 'bg-[#1A4B9C]', 'bg-[#7B4FA0]', 'bg-[#C47A1E]', 'bg-[#1E6B8C]', 'bg-[#8C3A3A]', 'bg-[#2E7A6B]', 'bg-[#A05030]', 'bg-[#4A6FA0]', 'bg-[#7A3A6B]', 'bg-[#5A7A2E]', 'bg-[#A04A1E]', 'bg-[#2E4A8C]'];
   
   bankAccounts.forEach((account, index) => {
     const accountHasGap = checkGap(account.min, account.max);
@@ -505,129 +503,79 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
       max: summary.bankDateRange.max,
       count: summary.bankTransactions,
       hasGap: bankHasGap,
-      color: 'bg-[#6366F1]',
+      color: 'bg-[#007C7F]',
       type: 'bank',
       onAdd: bankHasGap ? onAddBankData : undefined
     });
   }
 
-  // Pre-calculate period position for overlay markers on non-period rows
-  const periodLeftPct = getPositionPercent(period.startDate);
-  const periodRightPct = getPositionPercent(period.endDate, true);
-
-  const periodWidthPct = periodRightPct - periodLeftPct;
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const barRef = React.useRef<HTMLDivElement>(null);
-  const [bandStyle, setBandStyle] = React.useState<{ left: number; width: number } | null>(null);
-
-  React.useEffect(() => {
-    const measure = () => {
-      if (!containerRef.current || !barRef.current) return;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const barRect = barRef.current.getBoundingClientRect();
-      const barLeft = barRect.left - containerRect.left;
-      const barWidth = barRect.width;
-      setBandStyle({
-        left: barLeft + (periodLeftPct / 100) * barWidth,
-        width: (periodWidthPct / 100) * barWidth,
-      });
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [periodLeftPct, periodWidthPct]);
 
   return (
-    <div className="relative" ref={containerRef} data-testid="coverage-ledger">
-      {/* Period band spanning all rows — measured from actual bar position */}
-      {bandStyle && (
-        <div
-          className="absolute top-0 bottom-0 bg-slate-200/60 dark:bg-slate-700/30 pointer-events-none"
-          style={{
-            left: `${bandStyle.left}px`,
-            width: `${bandStyle.width}px`
-          }}
-        />
-      )}
-
-      <div className="space-y-1 relative">
+    <div data-testid="coverage-ledger">
+      <div className="space-y-0">
         {rows.map((row, idx) => {
           const leftPct = getPositionPercent(row.min);
           const rightPct = getPositionPercent(row.max, true);
           const widthPct = rightPct - leftPct;
           const isPeriod = row.type === 'period';
 
+          // Period reference fill position
+          const pL = getPositionPercent(period.startDate);
+          const pR = getPositionPercent(period.endDate, true);
+
+          // Dot color: Tailwind bg class → inline style hex
+          const dotHex = isPeriod ? '#C4C2B8' : row.color.match(/#[0-9A-Fa-f]+/)?.[0] || '#1A1200';
+
           return (
             <div
               key={idx}
-              className="grid grid-cols-[100px_1fr_120px_60px] gap-3 items-center py-2"
+              className={cn(
+                "grid items-center py-2",
+                idx < rows.length - 1 && "border-b border-[#E5E3DC]"
+              )}
+              style={{ gridTemplateColumns: "90px 1fr 110px 48px" }}
               data-testid={`coverage-row-${row.type}-${idx}`}
             >
-              {/* Source: Color dot + label */}
-              <div className="flex items-center gap-2">
-                <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", row.color)} />
-                <span className={cn(
-                  "text-sm",
-                  isPeriod ? "text-muted-foreground" : "font-medium"
-                )}>
+              {/* Source dot + label */}
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: dotHex }}
+                />
+                <span className="text-xs text-muted-foreground truncate">
                   {row.label}
                 </span>
               </div>
 
-              {/* Bar visualization */}
-              <div className="relative h-3" ref={idx === 0 ? barRef : undefined}>
-                {/* Gap indicators: dashed outline for uncovered period portions */}
-                {!isPeriod && row.hasGap && (() => {
-                  const pL = getPositionPercent(period.startDate);
-                  const pR = getPositionPercent(period.endDate, true);
-                  const segments: React.ReactNode[] = [];
-                  // Gap before source starts (within period)
-                  if (leftPct > pL) {
-                    const gapW = leftPct - pL;
-                    segments.push(
-                      <div
-                        key="gap-before"
-                        className="absolute h-full rounded-full border-2 border-dashed border-amber-400/60"
-                        style={{ left: `${pL}%`, width: `${gapW}%` }}
-                      />
-                    );
-                  }
-                  // Gap after source ends (within period)
-                  if (rightPct < pR) {
-                    const gapW = pR - rightPct;
-                    segments.push(
-                      <div
-                        key="gap-after"
-                        className="absolute h-full rounded-full border-2 border-dashed border-amber-400/60"
-                        style={{ left: `${rightPct}%`, width: `${gapW}%` }}
-                      />
-                    );
-                  }
-                  return segments;
-                })()}
-                {/* Solid coverage bar */}
+              {/* Gantt track */}
+              <div className="relative h-5 mx-2">
+                {/* Period extent reference fill */}
                 <div
-                  className={cn("absolute h-full rounded-full", row.color)}
-                  style={{
-                    left: `${leftPct}%`,
-                    width: `${Math.max(widthPct, 1)}%`
-                  }}
+                  className="absolute rounded bg-[#ECEAE2] dark:bg-[#2A2218]"
+                  style={{ left: `${pL}%`, width: `${pR - pL}%`, top: 0, bottom: 0 }}
                 />
+                {/* Source bar — 6px pill */}
+                {!isPeriod && (
+                  <div
+                    className={cn("absolute rounded-full", row.color)}
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${Math.max(widthPct, 1.5)}%`,
+                      height: "6px",
+                      top: "7px",
+                    }}
+                  />
+                )}
               </div>
 
-              {/* Dates column */}
-              <div className="text-sm text-muted-foreground text-right whitespace-nowrap">
+              {/* Date range */}
+              <div className="text-[11px] text-muted-foreground text-right whitespace-nowrap">
                 {formatDate(row.min)} — {formatDate(row.max)}
               </div>
 
-              {/* Count column */}
-              <div className="text-sm text-right tabular-nums">
-                {row.count !== undefined ? (
-                  <span className="font-semibold">{formatNumber(row.count)}</span>
-                ) : '—'}
-                {!isPeriod && row.hasGap && (
-                  <span className="block text-[10px] text-[#B45309] dark:text-amber-400 font-medium leading-tight">Partial</span>
-                )}
+              {/* Count */}
+              <div className="text-[11px] text-muted-foreground text-right tabular-nums">
+                {row.count !== undefined ? formatNumber(row.count) : '—'}
               </div>
             </div>
           );

@@ -39,10 +39,7 @@ export default function ManualMatchPanel({
   const [notes, setNotes] = useState("");
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+    return "R " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const handleConfirmMatch = () => {

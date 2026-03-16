@@ -3261,7 +3261,8 @@ async function registerRoutes(app2) {
       });
     } catch (error) {
       console.error("Error uploading file:", error);
-      res.status(500).json({ error: "Failed to upload file" });
+      const detail = error?.message || String(error);
+      res.status(500).json({ error: `Failed to upload file: ${detail}` });
     }
   });
   app2.get("/api/files/:fileId/preview", isAuthenticated, async (req, res) => {

@@ -39,10 +39,7 @@ export default function TransactionTable({
 
   const formatCurrency = (amount: string | number) => {
     const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-ZA', {
-      style: 'currency',
-      currency: 'ZAR',
-    }).format(isNaN(numAmount) ? 0 : numAmount);
+    return "R " + (isNaN(numAmount) ? 0 : numAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const getPaymentTypeIcon = (paymentType: string | null, isCard: string | null) => {

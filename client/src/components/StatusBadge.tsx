@@ -15,13 +15,13 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
       label: "In Progress", 
       className: "bg-chart-4/10 text-chart-4 border-chart-4/20" 
     },
-    complete: { 
-      label: "Complete", 
-      className: "bg-chart-2/10 text-chart-2 border-chart-2/20" 
+    complete: {
+      label: "Complete",
+      className: "bg-[#DCFCE7] text-[#166534] border-transparent font-medium text-[11px] rounded-full"
     },
-    matched: { 
-      label: "Matched", 
-      className: "bg-chart-2/10 text-chart-2 border-chart-2/20" 
+    matched: {
+      label: "Matched",
+      className: "bg-[#DCFCE7] text-[#166534] border-transparent font-medium text-[11px] rounded-full"
     },
     unmatched: { 
       label: "Unmatched", 

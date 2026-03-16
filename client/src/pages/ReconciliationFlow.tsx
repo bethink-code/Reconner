@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
-import { ReconciliationStepper, type ReconciliationStep, type StepEligibility } from "@/components/ReconciliationStepper";
+import { ArrowLeft, Loader2, Check } from "lucide-react";
+import { ReconciliationStepper, STEP_CANVAS_COLORS, type ReconciliationStep, type StepEligibility } from "@/components/ReconciliationStepper";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ReconciliationPeriod, UploadedFile } from "@shared/schema";
@@ -323,8 +324,11 @@ export default function ReconciliationFlow() {
         </div>
       </header>
 
-      <div className="bg-[#F5C400] dark:bg-[#F5C400]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4">
+      <div
+        className="transition-colors duration-300"
+        style={{ backgroundColor: STEP_CANVAS_COLORS[currentStep] }}
+      >
+        <div className="max-w-5xl mx-auto">
           <ReconciliationStepper
             currentStep={currentStep}
             completedSteps={completedSteps}
@@ -367,8 +371,8 @@ export default function ReconciliationFlow() {
         ) : matchResult ? (
           <Card className="max-w-2xl mx-auto">
             <CardHeader className="text-center">
-              <div className="mx-auto mb-4">
-                <CheckCircle2 className="h-12 w-12 text-[#166534]" />
+              <div className="mx-auto mb-4 flex items-center justify-center">
+                <Check className="h-5 w-5 text-[#1A1200]" />
               </div>
               <CardTitle className="text-2xl">Matching Complete</CardTitle>
             </CardHeader>
@@ -384,8 +388,18 @@ export default function ReconciliationFlow() {
 
               {/* Key stats */}
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-lg bg-[#DCFCE7] dark:bg-emerald-950/30 p-3">
-                  <p className="text-2xl font-semibold text-[#166534] dark:text-emerald-400">{matchResult.matchesCreated}</p>
+                <div className={cn(
+                  "rounded-lg p-3",
+                  matchResult.matchesCreated > 0
+                    ? "bg-[#DCFCE7] dark:bg-emerald-950/30"
+                    : "bg-[#FAFAF6] dark:bg-muted/30"
+                )}>
+                  <p className={cn(
+                    "text-2xl font-semibold",
+                    matchResult.matchesCreated > 0
+                      ? "text-[#166534] dark:text-emerald-400"
+                      : "text-[#1A1200] dark:text-foreground"
+                  )}>{matchResult.matchesCreated}</p>
                   <p className="text-xs text-muted-foreground">Verified</p>
                 </div>
                 <div className="rounded-lg bg-[#FEF9C3] dark:bg-amber-950/30 p-3">

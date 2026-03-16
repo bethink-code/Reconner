@@ -560,7 +560,7 @@ export default function InvestigateTransactions() {
 
   const formatCurrency = (amount: string | number) => {
     const num = typeof amount === "string" ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(num);
+    return "R " + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const formatDate = (dateStr: string) => {
@@ -705,7 +705,7 @@ export default function InvestigateTransactions() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-lg font-semibold font-mono">
+                              <span className="text-lg font-semibold tabular-nums">
                                 {formatCurrency(parseFloat(transaction.amount))}
                               </span>
                               <span className="text-sm text-muted-foreground">
@@ -1133,7 +1133,7 @@ export default function InvestigateTransactions() {
                                 >
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-mono font-bold">
+                                      <span className="tabular-nums font-bold">
                                         {formatCurrency(txn.amount)}
                                       </span>
                                       <span className="text-sm text-muted-foreground">
@@ -1250,7 +1250,7 @@ export default function InvestigateTransactions() {
                                           >
                                             <div className="flex items-start gap-2">
                                               {insight.type === 'possible_tip' && <Coins className="h-4 w-4 text-[#B45309] shrink-0 mt-0.5" />}
-                                              {insight.type === 'overfill' && <Fuel className="h-4 w-4 text-[#E8601C] shrink-0 mt-0.5" />}
+                                              {insight.type === 'overfill' && <Fuel className="h-4 w-4 text-[#C05A2A] shrink-0 mt-0.5" />}
                                               {insight.type === 'duplicate_charge' && <AlertTriangle className="h-4 w-4 text-[#B91C1C] shrink-0 mt-0.5" />}
                                               {insight.type === 'no_fuel_record' && <HelpCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />}
                                               <div>
@@ -1274,7 +1274,7 @@ export default function InvestigateTransactions() {
                                         </p>
                                         <div className="flex items-center justify-between">
                                           <div>
-                                            <p className="font-mono font-bold flex items-center gap-2">
+                                            <p className="tabular-nums font-bold flex items-center gap-2">
                                               {formatCurrency(item.bestMatch.transaction.amount)}
                                               {item.bestMatch.transaction.paymentType && (
                                                 <Badge variant="outline" className="text-xs font-normal">{item.bestMatch.transaction.paymentType}</Badge>
@@ -1400,7 +1400,7 @@ export default function InvestigateTransactions() {
                                             >
                                               <div className="min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                  <span className="font-mono font-medium">
+                                                  <span className="tabular-nums font-medium">
                                                     {formatCurrency(match.transaction.amount)}
                                                   </span>
                                                   <span className="text-muted-foreground">
@@ -1565,7 +1565,7 @@ export default function InvestigateTransactions() {
                             <div key={txn.id} className="flex items-center justify-between text-sm p-3 border rounded bg-muted/30">
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-mono font-medium">
+                                  <span className="tabular-nums font-medium">
                                     {formatCurrency(parseFloat(txn.amount))}
                                   </span>
                                   <span className="text-muted-foreground">

@@ -418,9 +418,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         suggestedMappings: suggestedMappingsObject,
         qualityReport,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading file:", error);
-      res.status(500).json({ error: "Failed to upload file" });
+      const detail = error?.message || String(error);
+      res.status(500).json({ error: `Failed to upload file: ${detail}` });
     }
   });
 

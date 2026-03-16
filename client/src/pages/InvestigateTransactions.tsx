@@ -1122,7 +1122,7 @@ export default function InvestigateTransactions() {
                                 key={txn.id}
                                 className={cn(
                                   "border rounded-lg overflow-hidden",
-                                  isExpanded && "ring-2 ring-primary"
+                                  isExpanded && "border-foreground/20"
                                 )}
                                 data-testid={`card-txn-${txn.id}`}
                               >

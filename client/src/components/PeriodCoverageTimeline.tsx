@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Check, AlertTriangle, Plus, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getBankColor } from "@/lib/bankColors";
 
 interface BankAccountRange {
   fileId: string;
@@ -29,25 +30,6 @@ interface PeriodCoverageTimelineProps {
   onAddFuelData?: () => void;
   className?: string;
 }
-
-/** Bank-accurate data viz colors — slots 1-15 */
-const BANK_COLORS = [
-  "#007C7F",  // FNB teal
-  "#C0334E",  // ABSA red
-  "#2E8A5A",  // Nedbank green
-  "#1A4B9C",  // Std Bank navy
-  "#7B4FA0",  // Deep violet
-  "#C47A1E",  // Warm gold
-  "#1E6B8C",  // Steel blue
-  "#8C3A3A",  // Burgundy
-  "#2E7A6B",  // Forest teal
-  "#A05030",  // Rust
-  "#4A6FA0",  // Slate blue
-  "#7A3A6B",  // Berry
-  "#5A7A2E",  // Olive
-  "#A04A1E",  // Burnt amber
-  "#2E4A8C",  // Ink blue
-];
 
 const FUEL_COLOR = "#C05A2A";
 const PERIOD_DOT_COLOR = "#C4C2B8";
@@ -87,8 +69,8 @@ export function PeriodCoverageTimeline({
         start,
         end,
         hasGap: start > periodStart || end < periodEnd,
-        color: BANK_COLORS[index % BANK_COLORS.length],
         displayName: account.bankName || account.sourceName || `Bank ${index + 1}`,
+        color: getBankColor(account.bankName || account.sourceName || `Bank ${index + 1}`),
       };
     });
   }, [bankAccountRanges, periodStart, periodEnd]);

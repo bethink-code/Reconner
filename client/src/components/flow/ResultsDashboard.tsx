@@ -1,19 +1,18 @@
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  AlertTriangle, 
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
   Download,
   Settings,
-  Plus,
-  Flag,
-  Clock
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
+import { getBankColor } from "@/lib/bankColors";
+import { AttendantReport, type AttendantSummaryRow } from "./AttendantReport";
 
 interface BankAccountRange {
   fileId: string;
@@ -23,6 +22,18 @@ interface BankAccountRange {
   max: string;
   txCount: number;
   inRangeCount?: number;
+}
+
+interface PerBankBreakdown {
+  bankName: string;
+  approvedCount: number;
+  approvedAmount: number;
+  declinedCount: number;
+  declinedAmount: number;
+  cancelledCount: number;
+  cancelledAmount: number;
+  totalCount: number;
+  totalAmount: number;
 }
 
 interface PeriodSummary {
@@ -37,46 +48,33 @@ interface PeriodSummary {
   fuelTransactions: number;
   bankTransactions: number;
   cardFuelTransactions: number;
+  cashFuelTransactions: number;
+  cardFuelAmount: number;
+  cashFuelAmount: number;
+  debtorFuelTransactions: number;
+  debtorFuelAmount: number;
   unmatchedBankTransactions: number;
+  unmatchedBankAmount: number;
   unmatchedCardTransactions: number;
+  unmatchedCardAmount: number;
   unmatchableBankTransactions?: number;
+  unmatchableBankAmount?: number;
+  excludedBankTransactions?: number;
+  excludedBankAmount?: number;
+  matchedBankAmount: number;
+  matchedFuelAmount: number;
   resolvedBankTransactions?: number;
+  scopedCardCount: number;
+  scopedCardAmount: number;
+  scopedMatchedCount: number;
+  scopedMatchedAmount: number;
+  scopedUnmatchedCount: number;
+  scopedUnmatchedAmount: number;
   fuelDateRange?: { min: string; max: string };
   bankDateRange?: { min: string; max: string };
+  bankCoverageRange?: { min: string; max: string };
   bankAccountRanges?: BankAccountRange[];
-}
-
-interface VerificationSummary {
-  overview: {
-    fuelSystem: {
-      totalSales: number;
-      cardSales: number;
-      cardTransactions: number;
-      cashSales: number;
-      cashTransactions: number;
-    };
-    bankStatements: {
-      totalAmount: number;
-      totalTransactions: number;
-    };
-  };
-  verificationStatus: {
-    verified: { transactions: number; amount: number; percentage: number };
-    pendingVerification: { transactions: number; amount: number };
-    unverified: { transactions: number; amount: number; percentage: number };
-    cashSales: { transactions: number; amount: number };
-  };
-  discrepancyReport: {
-    unmatchedIssues: { count: number; amount: number };
-  };
-}
-
-interface ResolutionSummary {
-  linked: number;
-  reviewed: number;
-  dismissed: number;
-  flagged: number;
-  writtenOff: number;
+  perBankBreakdown?: PerBankBreakdown[];
 }
 
 interface ResultsDashboardProps {
@@ -93,8 +91,21 @@ interface Period {
   endDate: string;
 }
 
+function heroBarColor(pct: number): string {
+  if (pct > 60) return "bg-[#166534]";
+  if (pct >= 20) return "bg-[#B45309]";
+  return "bg-[#B91C1C]";
+}
+
+function heroTextColor(pct: number): string {
+  if (pct > 60) return "text-[#166534] dark:text-emerald-400";
+  if (pct >= 20) return "text-[#B45309] dark:text-amber-400";
+  return "text-[#B91C1C] dark:text-red-400";
+}
+
 export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onAddBankData }: ResultsDashboardProps) {
   const [, setLocation] = useLocation();
+  const [activeTab, setActiveTab] = useState("summary");
 
   const { data: summary, isLoading } = useQuery<PeriodSummary>({
     queryKey: ["/api/periods", periodId, "summary"],
@@ -106,15 +117,11 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
     enabled: !!periodId,
   });
 
-  const { data: resolutionSummary } = useQuery<ResolutionSummary>({
-    queryKey: ["/api/periods", periodId, "resolution-summary"],
-    enabled: !!periodId,
+  const { data: attendantData, isLoading: attendantLoading } = useQuery<AttendantSummaryRow[]>({
+    queryKey: ["/api/periods", periodId, "attendant-summary"],
+    enabled: !!periodId && activeTab === "attendants",
   });
 
-  const { data: verification } = useQuery<VerificationSummary>({
-    queryKey: ["/api/periods", periodId, "verification-summary"],
-    enabled: !!periodId,
-  });
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -128,10 +135,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
     return num.toLocaleString("en-US");
   };
 
-  const formatRand = (amount: number) => {
-    if (Math.abs(amount) >= 1000) {
-      return "R " + amount.toLocaleString("en-US", { maximumFractionDigits: 0 });
-    }
+  const formatRandExact = (amount: number) => {
     return "R " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
@@ -144,26 +148,41 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
     );
   }
 
-  // Calculate key metrics
+  // ── Shared calculations ──
   const bankTotal = summary.bankTransactions;
-  const matchedBank = summary.matchedPairs;
-  const resolvedBank = summary.resolvedBankTransactions || 0;
-  const verifiedBank = matchedBank + resolvedBank;
   const unmatchableBank = summary.unmatchableBankTransactions || 0;
   const excludedBank = summary.excludedBankTransactions || 0;
   const unmatchedBank = summary.unmatchedBankTransactions;
-  // Only count in-range, non-excluded bank transactions for the verified %
   const matchableBankTotal = bankTotal - unmatchableBank - excludedBank;
-  const verifiedPercent = matchableBankTotal > 0 ? Math.round((verifiedBank / matchableBankTotal) * 100) : 0;
 
-  // Resolution counts
-  const linked = resolutionSummary?.linked || 0;
-  const reviewed = resolutionSummary?.reviewed || 0;
-  const dismissed = resolutionSummary?.dismissed || 0;
-  const flagged = resolutionSummary?.flagged || 0;
+  const cardOnly = summary.cardFuelTransactions - summary.debtorFuelTransactions;
+  const cardOnlyAmount = summary.cardFuelAmount - summary.debtorFuelAmount;
+  const bankApprovedAmount = summary.matchedBankAmount + (summary.unmatchedBankAmount || 0);
+  const fileSurplus = bankApprovedAmount - summary.cardFuelAmount;
+  const matchedSurplus = summary.matchedBankAmount - summary.matchedFuelAmount;
+  const unmatchedBankAmt = summary.unmatchedBankAmount || 0;
+  const unmatchedFuelCardAmount = summary.unmatchedCardAmount || 0;
+  const totalFuelCardReconciled = summary.matchedFuelAmount + unmatchedFuelCardAmount;
+  const reconSurplus = unmatchedFuelCardAmount + fileSurplus;
+  const bankMatchPct = matchableBankTotal > 0 ? Math.round((summary.matchedPairs / matchableBankTotal) * 100) : 0;
+  const outsideRangeAmt = summary.unmatchableBankAmount || 0;
 
-  // Check for any gaps in coverage
-  const hasAnyGap = checkForGaps(period, summary);
+  // Fuel-side verification scoped to bank coverage dates
+  const scopedCardCount = summary.scopedCardCount || 0;
+  const scopedMatchedCount = summary.scopedMatchedCount || 0;
+  const scopedUnmatchedCount = summary.scopedUnmatchedCount || 0;
+  const scopedVerifyPct = scopedCardCount > 0 ? Math.round((scopedMatchedCount / scopedCardCount) * 100) : 0;
+  const banks = summary.perBankBreakdown || [];
+  const totals = banks.reduce((acc, b) => ({
+    declinedCount: acc.declinedCount + b.declinedCount,
+    declinedAmount: acc.declinedAmount + b.declinedAmount,
+    cancelledCount: acc.cancelledCount + b.cancelledCount,
+    cancelledAmount: acc.cancelledAmount + b.cancelledAmount,
+    approvedCount: acc.approvedCount + b.approvedCount,
+    approvedAmount: acc.approvedAmount + b.approvedAmount,
+  }), { declinedCount: 0, declinedAmount: 0, cancelledCount: 0, cancelledAmount: 0, approvedCount: 0, approvedAmount: 0 });
+
+  const tabTriggerClass = "text-xs px-3 py-1 h-7 rounded-lg text-[#6B7280] data-[state=active]:!bg-[#1A1200] data-[state=active]:!text-[#F5EDE6] data-[state=active]:!shadow-none";
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -172,147 +191,373 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
       ═══════════════════════════════════════════════════════════════════ */}
       <Card className="overflow-hidden" data-testid="card-reconciliation-outcome">
         <CardContent className="p-6 space-y-6">
-          
-          {/* ─────────────────────────────────────────────────────────────────
-              HERO: Financial summary — leads with money
-          ───────────────────────────────────────────────────────────────── */}
-          {verification ? (() => {
-            const totalSales = verification.overview.fuelSystem.totalSales;
-            const verifiedAmount = verification.verificationStatus.verified.amount;
-            const notOnBank = totalSales - verifiedAmount;
-            const verifiedPct = totalSales > 0 ? Math.round((verifiedAmount / totalSales) * 100) : 0;
-            const unmatchedBankAmount = verification.discrepancyReport.unmatchedIssues.amount;
-            // Use count-based % for "bank records verified" (consistent with matching complete screen)
-            const bankMatchPct = verifiedPercent;
-            const unmatchedBankPct = 100 - bankMatchPct;
 
-            return (
-              <>
-                {/* Lens 1: The Period — total fuel sales */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Period Fuel Sales
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            {/* Tab bar + Download */}
+            <div className="flex items-center justify-between mb-4">
+              <TabsList className="h-8 bg-transparent p-0 rounded-lg w-auto">
+                <TabsTrigger value="summary" className={tabTriggerClass}>Summary</TabsTrigger>
+                <TabsTrigger value="detail" className={tabTriggerClass}>Detail</TabsTrigger>
+                <TabsTrigger value="attendants" className={tabTriggerClass}>Attendants</TabsTrigger>
+              </TabsList>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="border border-[#E5E3DC]"
+                onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}
+                data-testid="button-export-full"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+            </div>
+
+            {/* ════════════════════════════════════════════════════════════
+                SUMMARY TAB — Owner's view
+            ════════════════════════════════════════════════════════════ */}
+            <TabsContent value="summary" className="mt-0 space-y-6">
+              {/* Hero verified metric */}
+              <div className="text-center space-y-1">
+                <p className={cn("text-3xl font-heading font-semibold", heroTextColor(bankMatchPct))}>
+                  {formatRandExact(summary.matchedBankAmount)}
+                </p>
+                <p className="text-sm text-muted-foreground">Verified</p>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-2 w-full rounded-full bg-[#E5E3DC]">
+                <div
+                  className={cn("h-full rounded-full transition-all", heroBarColor(bankMatchPct))}
+                  style={{ width: `${bankMatchPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-center -mt-4">
+                {bankMatchPct}% of {matchableBankTotal} bank transactions matched
+              </p>
+
+              {/* Supporting metric cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">Period Fuel Sales</p>
+                  <p className="text-lg font-semibold tabular-nums">{formatRandExact(summary.totalFuelAmount)}</p>
+                  <p className="text-xs text-muted-foreground">{summary.fuelTransactions} transactions</p>
+                </div>
+                <div className={cn(
+                  "rounded-xl p-4",
+                  unmatchedBank > 0
+                    ? "bg-[#FEF9C3] dark:bg-amber-950/30"
+                    : "bg-[#FAFAF6] dark:bg-muted/30"
+                )}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">Needs Investigation</p>
+                  <p className={cn("text-lg font-semibold tabular-nums", unmatchedBank > 0 ? "text-[#B45309]" : "")}>{unmatchedBank}</p>
+                  <p className="text-xs text-muted-foreground">{formatRandExact(summary.unmatchedBankAmount || 0)}</p>
+                </div>
+              </div>
+
+              {/* Investigate CTA */}
+              {unmatchedBank > 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    {unmatchedBank} bank transaction{unmatchedBank !== 1 ? 's' : ''} with no matching fuel sale
                   </p>
-                  <span className="text-3xl font-bold tracking-tight">
-                    {formatRand(totalSales)}
-                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
+                    data-testid="button-investigate"
+                  >
+                    Investigate
+                  </Button>
+                </div>
+              )}
+
+              {/* Data Coverage */}
+              <div className="pt-2">
+                <div className="mb-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Data Coverage
+                  </h3>
+                </div>
+                <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider mb-2" style={{ gridTemplateColumns: "90px 1fr 110px 48px" }}>
+                  <span>Source</span>
+                  <span></span>
+                  <span className="text-right">Dates</span>
+                  <span className="text-right">Count</span>
+                </div>
+                {period && (
+                  <CoverageLedger
+                    period={period}
+                    summary={summary}
+                    formatDate={formatDate}
+                    formatNumber={formatNumber}
+                    onAddFuelData={onAddFuelData}
+                    onAddBankData={onAddBankData}
+                  />
+                )}
+              </div>
+            </TabsContent>
+
+            {/* ════════════════════════════════════════════════════════════
+                DETAIL TAB — Accountant's view
+            ════════════════════════════════════════════════════════════ */}
+            <TabsContent value="detail" className="mt-0 space-y-4">
+
+              {/* ── CARD 1: Fuel Sales Breakdown ── */}
+              <DetailCard title="Fuel Sales">
+                <div className="mb-3">
+                  <ResponsiveContainer width="100%" height={32}>
+                    <BarChart
+                      layout="vertical"
+                      data={[{
+                        card: cardOnlyAmount,
+                        debtor: summary.debtorFuelAmount,
+                        cash: summary.cashFuelAmount,
+                      }]}
+                      stackOffset="expand"
+                      barSize={20}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" hide />
+                      <Tooltip
+                        content={({ payload }) => {
+                          if (!payload?.length) return null;
+                          return (
+                            <div className="bg-card border border-border rounded-lg px-2 py-1 text-xs shadow-sm">
+                              {payload.map(p => (
+                                <div key={p.name} className="flex gap-2">
+                                  <span style={{ color: p.color }}>{p.name}</span>
+                                  <span className="tabular-nums">{formatRandExact(p.value as number)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar dataKey="card" name="Card" stackId="a" fill="#C05A2A" radius={[4, 0, 0, 4]} />
+                      <Bar dataKey="debtor" name="Debtor" stackId="a" fill="#B45309" />
+                      <Bar dataKey="cash" name="Cash" stackId="a" fill="#6B7280" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="flex gap-4 text-[10px] text-muted-foreground mt-1">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#C05A2A]" />Card</span>
+                    {summary.debtorFuelTransactions > 0 && (
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#B45309]" />Debtor</span>
+                    )}
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#6B7280]" />Cash</span>
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <DetailRow label="Card" count={cardOnly} amount={formatRandExact(cardOnlyAmount)} />
+                  {summary.debtorFuelTransactions > 0 && (
+                    <DetailRow label="Debtor / Account" count={summary.debtorFuelTransactions} amount={formatRandExact(summary.debtorFuelAmount)} />
+                  )}
+                  <DetailRow label="Cash" count={summary.cashFuelTransactions} amount={formatRandExact(summary.cashFuelAmount)} />
+                  <DetailRow label="Total" count={summary.fuelTransactions} amount={formatRandExact(summary.totalFuelAmount)} bold />
+                </div>
+              </DetailCard>
+
+              {/* ── CARD 2: Bank Transactions ── */}
+              <DetailCard title="Bank Transactions">
+                {banks.length > 1 && (
+                  <div className="mb-3">
+                    <ResponsiveContainer width="100%" height={32}>
+                      <BarChart
+                        layout="vertical"
+                        data={[banks.reduce((acc, b) => ({ ...acc, [b.bankName]: b.approvedAmount }), {} as Record<string, number>)]}
+                        stackOffset="expand"
+                        barSize={20}
+                      >
+                        <XAxis type="number" hide />
+                        <YAxis type="category" hide />
+                        <Tooltip
+                          content={({ payload }) => {
+                            if (!payload?.length) return null;
+                            return (
+                              <div className="bg-card border border-border rounded-lg px-2 py-1 text-xs shadow-sm">
+                                {payload.map(p => (
+                                  <div key={p.name} className="flex gap-2">
+                                    <span style={{ color: p.color }}>{p.name}</span>
+                                    <span className="tabular-nums">{formatRandExact(p.value as number)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          }}
+                        />
+                        {banks.map((b, i) => {
+                          const isFirst = i === 0;
+                          const isLast = i === banks.length - 1;
+                          return (
+                            <Bar
+                              key={b.bankName}
+                              dataKey={b.bankName}
+                              name={b.bankName}
+                              stackId="a"
+                              fill={getBankColor(b.bankName)}
+                              radius={[isFirst ? 4 : 0, isLast ? 4 : 0, isLast ? 4 : 0, isFirst ? 4 : 0]}
+                            />
+                          );
+                        })}
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div className="flex gap-4 text-[10px] text-muted-foreground mt-1">
+                      {banks.map((b) => (
+                        <span key={b.bankName} className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: getBankColor(b.bankName) }} />
+                          {b.bankName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-0.5">
+                  <DetailRow label="Matchable" count={matchableBankTotal} />
+                  {(summary.unmatchableBankTransactions || 0) > 0 && (
+                    <DetailRow label="Outside date range" count={summary.unmatchableBankTransactions || 0}
+                      amount={formatRandExact(outsideRangeAmt)} />
+                  )}
+                  {(summary.excludedBankTransactions || 0) > 0 && (
+                    <DetailRow label="Excluded (declined/reversed)" count={summary.excludedBankTransactions || 0} />
+                  )}
+                  <DetailRow label="Total" count={summary.bankTransactions} bold />
                 </div>
 
-                {/* Lens 2: Bank Verified */}
-                <div className="rounded-lg bg-card p-4">
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-2xl font-bold">
-                      {bankMatchPct}%
-                    </span>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      of Bank Records Verified
-                    </span>
+                {/* Per-bank table */}
+                {banks.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[#E5E3DC]/50">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr>
+                          <th className="text-left py-1 pr-2 font-medium text-muted-foreground text-[10px]"></th>
+                          {banks.map(b => (
+                            <th key={b.bankName} className="text-right py-1 px-1 font-medium text-muted-foreground text-[10px]">{b.bankName}</th>
+                          ))}
+                          <th className="text-right py-1 pl-1 font-medium text-muted-foreground text-[10px]">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className="py-0.5 pr-2 text-xs text-muted-foreground">Approved</td>
+                          {banks.map(b => (
+                            <td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums text-xs">{b.approvedCount || '-'}</td>
+                          ))}
+                          <td className="text-right pl-1 py-0.5 tabular-nums text-xs font-medium">{totals.approvedCount}</td>
+                        </tr>
+                        {totals.declinedCount > 0 && (
+                          <tr>
+                            <td className="py-0.5 pr-2 text-xs text-muted-foreground">Declined</td>
+                            {banks.map(b => (
+                              <td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums text-xs text-muted-foreground">{b.declinedCount || '-'}</td>
+                            ))}
+                            <td className="text-right pl-1 py-0.5 tabular-nums text-xs text-muted-foreground">{totals.declinedCount}</td>
+                          </tr>
+                        )}
+                        {totals.cancelledCount > 0 && (
+                          <tr>
+                            <td className="py-0.5 pr-2 text-xs text-muted-foreground">Cancelled</td>
+                            {banks.map(b => (
+                              <td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums text-xs text-muted-foreground">{b.cancelledCount || '-'}</td>
+                            ))}
+                            <td className="text-right pl-1 py-0.5 tabular-nums text-xs text-muted-foreground">{totals.cancelledCount}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-[#166534] dark:text-emerald-400">
-                      {formatRand(verifiedAmount)}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      of {formatRand(totalSales)} total sales
-                    </span>
+                )}
+              </DetailCard>
+
+              {/* ── CARD 3: Matching ── */}
+              <DetailCard title="Matching">
+                <div className="mb-3">
+                  <ResponsiveContainer width="100%" height={32}>
+                    <BarChart
+                      layout="vertical"
+                      data={[{
+                        matched: summary.matchedPairs,
+                        unmatched: unmatchedBank,
+                      }]}
+                      stackOffset="expand"
+                      barSize={20}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis type="category" hide />
+                      <Tooltip
+                        content={({ payload }) => {
+                          if (!payload?.length) return null;
+                          return (
+                            <div className="bg-card border border-border rounded-lg px-2 py-1 text-xs shadow-sm">
+                              {payload.map(p => (
+                                <div key={p.name} className="flex gap-2">
+                                  <span style={{ color: p.color }}>{p.name}</span>
+                                  <span className="tabular-nums">{p.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar dataKey="matched" name="Matched" stackId="a" fill="#166534" radius={[4, 0, 0, 4]} />
+                      <Bar dataKey="unmatched" name="Unmatched" stackId="a" fill="#B45309" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="flex gap-4 text-[10px] text-muted-foreground mt-1">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#166534]" />Matched</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#B45309]" />Unmatched</span>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden mt-3">
-                    <div
-                      className="h-full bg-[#166534] transition-all duration-500 rounded-full"
-                      style={{ width: `${bankMatchPct}%` }}
-                    />
-                  </div>
-                  {unmatchedBankAmount > 0 && (
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#166534]/20 dark:border-emerald-900">
-                      <p className="text-sm text-muted-foreground">
-                        {formatRand(unmatchedBankAmount)} ({unmatchedBankPct}% of bank records) didn't match fuel data
-                      </p>
-                      <Button
-                        size="sm"
-                        onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
-                        data-testid="button-investigate"
-                      >
-                        Investigate
-                      </Button>
-                    </div>
+                </div>
+                <div className="space-y-0.5">
+                  <DetailRow label="Matched" count={summary.matchedPairs} />
+                  <DetailRow label="Match rate" value={`${bankMatchPct}%`} />
+                  <DetailRow label="Unmatched bank" count={unmatchedBank} highlight={unmatchedBank > 0} />
+                </div>
+              </DetailCard>
+
+              {/* ── CARD 4: Financial Reconciliation ── */}
+              <DetailCard title="Financial Reconciliation">
+                <div className="space-y-0.5">
+                  <DetailRow label="Fuel card sales" amount={formatRandExact(summary.cardFuelAmount)} />
+                  <DetailRow label="Bank approved amount" amount={formatRandExact(bankApprovedAmount)} />
+                  <DetailRow label="File surplus / shortfall" amount={formatRandExact(fileSurplus)} highlight={fileSurplus !== 0} />
+                </div>
+                <div className="space-y-0.5 mt-3 pt-3 border-t border-[#E5E3DC]/50">
+                  <DetailRow label="Matched bank amount" amount={formatRandExact(summary.matchedBankAmount)} />
+                  <DetailRow label="Corresponding fuel amount" amount={formatRandExact(summary.matchedFuelAmount)} />
+                  <DetailRow label="Matched surplus / shortfall" amount={formatRandExact(matchedSurplus)} highlight={matchedSurplus !== 0} />
+                  {unmatchedBankAmt > 0 && (
+                    <DetailRow label="Unmatched bank amount" amount={formatRandExact(unmatchedBankAmt)} />
                   )}
                 </div>
-
-                {/* Lens 3: Not on Bank */}
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Not on Bank Records
-                  </p>
-                  <span className="text-3xl font-bold tracking-tight">
-                    {formatRand(notOnBank)}
-                  </span>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {100 - verifiedPct}% of period fuel sales not covered in this reconciliation (likely cash payments, missing bank statements, or other unreconciled methods)
-                  </p>
+                <div className="space-y-0.5 mt-3 pt-3 border-t border-[#E5E3DC]/50">
+                  <DetailRow label="Unmatched fuel card" amount={formatRandExact(unmatchedFuelCardAmount)} />
+                  <DetailRow label="Total fuel card reconciled" amount={formatRandExact(totalFuelCardReconciled)} />
                 </div>
-              </>
-            );
-          })() : (
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-bold tracking-tight">
-                  {verifiedPercent}%
-                </span>
-                <span className="text-lg text-muted-foreground font-medium uppercase tracking-wide">
-                  Verified
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {verifiedBank} of {matchableBankTotal} bank transactions matched
-              </p>
-            </div>
-          )}
+                <div className="mt-3 pt-2 bg-[#F0EFE8] dark:bg-muted/50 -mx-4 px-4 pb-2 rounded-b-xl">
+                  <DetailRow label="Reconciliation surplus / shortfall" amount={formatRandExact(reconSurplus)} bold highlight={reconSurplus !== 0} />
+                </div>
+                {(summary.excludedBankAmount || 0) > 0 && (
+                  <div className="mt-2">
+                    <DetailRow label="Excluded bank amount" amount={formatRandExact(summary.excludedBankAmount || 0)} muted />
+                  </div>
+                )}
+              </DetailCard>
+            </TabsContent>
 
-          {/* ─────────────────────────────────────────────────────────────────
-              DATA COVERAGE SECTION
-          ───────────────────────────────────────────────────────────────── */}
-          <div className="pt-2">
-            {/* Section Header */}
-            <div className="mb-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Data Coverage
-              </h3>
-            </div>
-
-            {/* Column Headers */}
-            <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider mb-2" style={{ gridTemplateColumns: "90px 1fr 110px 48px" }}>
-              <span>Source</span>
-              <span></span>
-              <span className="text-right">Dates</span>
-              <span className="text-right">Count</span>
-            </div>
-
-            {/* Coverage Rows */}
-            {period && (
-              <CoverageLedger 
-                period={period}
-                summary={summary}
-                formatDate={formatDate}
-                formatNumber={formatNumber}
-                onAddFuelData={onAddFuelData}
-                onAddBankData={onAddBankData}
+            {/* ════════════════════════════════════════════════════════════
+                ATTENDANTS TAB — Insight view
+            ════════════════════════════════════════════════════════════ */}
+            <TabsContent value="attendants" className="mt-0">
+              <AttendantReport
+                data={attendantData}
+                isLoading={attendantLoading}
+                formatRandExact={formatRandExact}
+                periodId={periodId}
+                bankCoverageRange={summary.bankCoverageRange}
+                unmatchedBankCount={unmatchedBank}
+                unmatchedBankAmount={summary.unmatchedBankAmount || 0}
+                onInvestigate={() => setLocation(`/investigate?periodId=${periodId}`)}
               />
-            )}
-          </div>
-
-          {/* ─────────────────────────────────────────────────────────────────
-              FOOTER: Export Buttons
-          ───────────────────────────────────────────────────────────────── */}
-          <div className="flex flex-wrap gap-3 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}
-              data-testid="button-export-full"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download Report (Excel)
-            </Button>
-          </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -324,8 +569,8 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
               <Settings className="h-4 w-4" />
               <span>Matching Rules</span>
             </div>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="sm"
               onClick={onRerunMatching}
               data-testid="button-adjust-rules"
@@ -340,59 +585,42 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
   );
 }
 
-// Helper component for status badges
-function RevenueRow({ color, label, amount, total, formatRand }: {
-  color: string; label: string; amount: number; total: number; formatRand: (n: number) => string;
+function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({ label, count, amount, value, bold, highlight, muted }: {
+  label: string;
+  count?: number;
+  amount?: string;
+  value?: string;
+  bold?: boolean;
+  highlight?: boolean;
+  muted?: boolean;
 }) {
-  const pct = total > 0 ? (amount / total) * 100 : 0;
   return (
-    <div className="flex items-center gap-3">
-      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", color)} />
-      <span className="text-sm flex-1">{label}</span>
-      <span className="text-sm font-semibold tabular-nums">{formatRand(amount)}</span>
-      <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{pct.toFixed(0)}%</span>
+    <div className={cn("flex items-center justify-between text-xs py-0.5", bold && "font-medium", muted && "text-muted-foreground")}>
+      <span className={cn(muted && "text-muted-foreground")}>{label}</span>
+      <div className="flex items-center gap-4">
+        {count !== undefined && (
+          <span className="tabular-nums text-muted-foreground w-10 text-right">{count.toLocaleString()}</span>
+        )}
+        {amount && (
+          <span className={cn("tabular-nums text-right min-w-[100px]", highlight && "text-[#B45309] dark:text-amber-400")}>{amount}</span>
+        )}
+        {value && (
+          <span className="tabular-nums text-right min-w-[100px]">{value}</span>
+        )}
+      </div>
     </div>
   );
-}
-
-function StatusBadge({ color, count, label }: { color: string; count: number; label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className={cn("w-2.5 h-2.5 rounded-full", color)} />
-      <span className="font-semibold tabular-nums">{count}</span>
-      <span className="text-muted-foreground">{label}</span>
-    </div>
-  );
-}
-
-// Check if there are any gaps in coverage
-function checkForGaps(period: Period | undefined, summary: PeriodSummary): boolean {
-  if (!period) return false;
-  
-  const periodStart = new Date(period.startDate);
-  const periodEnd = new Date(period.endDate);
-  
-  const checkGap = (minDate: string, maxDate: string) => {
-    return new Date(minDate) > periodStart || new Date(maxDate) < periodEnd;
-  };
-  
-  if (summary.fuelDateRange && checkGap(summary.fuelDateRange.min, summary.fuelDateRange.max)) {
-    return true;
-  }
-  
-  if (summary.bankAccountRanges) {
-    for (const account of summary.bankAccountRanges) {
-      if (checkGap(account.min, account.max)) {
-        return true;
-      }
-    }
-  }
-  
-  if (summary.bankDateRange && checkGap(summary.bankDateRange.min, summary.bankDateRange.max)) {
-    return true;
-  }
-  
-  return false;
 }
 
 interface CoverageLedgerProps {
@@ -450,7 +678,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
   }
 
   const rows: LedgerRow[] = [];
-  
+
   // Period reference row
   rows.push({
     label: 'Period',
@@ -470,7 +698,7 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
       max: summary.fuelDateRange.max,
       count: summary.cardFuelTransactions,
       hasGap: fuelHasGap,
-      color: 'bg-[#C05A2A]',
+      color: '#C05A2A',
       type: 'fuel',
       onAdd: fuelHasGap ? onAddFuelData : undefined
     });
@@ -478,17 +706,17 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
 
   // Bank account rows
   const bankAccounts = summary.bankAccountRanges || [];
-  const bankColors = ['bg-[#007C7F]', 'bg-[#C0334E]', 'bg-[#2E8A5A]', 'bg-[#1A4B9C]', 'bg-[#7B4FA0]', 'bg-[#C47A1E]', 'bg-[#1E6B8C]', 'bg-[#8C3A3A]', 'bg-[#2E7A6B]', 'bg-[#A05030]', 'bg-[#4A6FA0]', 'bg-[#7A3A6B]', 'bg-[#5A7A2E]', 'bg-[#A04A1E]', 'bg-[#2E4A8C]'];
-  
+
   bankAccounts.forEach((account, index) => {
+    const bankLabel = account.bankName || account.sourceName || `Bank ${index + 1}`;
     const accountHasGap = checkGap(account.min, account.max);
     rows.push({
-      label: account.bankName || account.sourceName || `Bank ${index + 1}`,
+      label: bankLabel,
       min: account.min,
       max: account.max,
       count: account.inRangeCount ?? account.txCount,
       hasGap: accountHasGap,
-      color: bankColors[index % bankColors.length],
+      color: getBankColor(bankLabel),
       type: 'bank',
       onAdd: accountHasGap ? onAddBankData : undefined
     });
@@ -523,8 +751,8 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
           const pL = getPositionPercent(period.startDate);
           const pR = getPositionPercent(period.endDate, true);
 
-          // Dot color: Tailwind bg class → inline style hex
-          const dotHex = isPeriod ? '#C4C2B8' : row.color.match(/#[0-9A-Fa-f]+/)?.[0] || '#1A1200';
+          // Dot color: now a hex string directly
+          const dotHex = isPeriod ? '#C4C2B8' : row.color;
 
           return (
             <div
@@ -557,12 +785,13 @@ function CoverageLedger({ period, summary, formatDate, formatNumber, onAddFuelDa
                 {/* Source bar — 6px pill */}
                 {!isPeriod && (
                   <div
-                    className={cn("absolute rounded-full", row.color)}
+                    className="absolute rounded-full"
                     style={{
                       left: `${leftPct}%`,
                       width: `${Math.max(widthPct, 1.5)}%`,
                       height: "6px",
                       top: "7px",
+                      backgroundColor: row.color,
                     }}
                   />
                 )}

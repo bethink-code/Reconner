@@ -1524,6 +1524,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Attendant summary — per-attendant breakdown of matched/unmatched fuel transactions
+  app.get("/api/periods/:periodId/attendant-summary", isAuthenticated, async (req, res) => {
+    try {
+      const period = await storage.getPeriod(req.params.periodId);
+      if (!period) {
+        return res.status(404).json({ error: "Period not found" });
+      }
+      const attendantSummary = await storage.getAttendantSummary(req.params.periodId);
+      res.json(attendantSummary);
+    } catch (error) {
+      console.error("Error fetching attendant summary:", error);
+      res.status(500).json({ error: "Failed to fetch attendant summary" });
+    }
+  });
+
   // Export full reconciliation report as Excel
   app.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
     try {
@@ -1535,6 +1550,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
       const matchesData = await storage.getMatchesByPeriod(req.params.periodId);
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
+      const attendantSummary = await storage.getAttendantSummary(req.params.periodId);
 
       // Build lookup maps
       const matchMap = new Map<string, typeof matchesData[0]>();
@@ -1556,29 +1572,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
 
-      // Sheet 1: Summary
-      const summaryRows = [
-        { 'Metric': 'Period', 'Value': period.name },
-        { 'Metric': 'Period Dates', 'Value': `${period.startDate} to ${period.endDate}` },
-        { 'Metric': '', 'Value': '' },
-        { 'Metric': 'Fuel Transactions', 'Value': fuelTxns.length },
-        { 'Metric': '  Card', 'Value': fuelTxns.filter(t => t.isCardTransaction === 'yes' && !t.paymentType?.toLowerCase().includes('debtor')).length },
-        { 'Metric': '  Debtor/Account', 'Value': fuelTxns.filter(t => t.paymentType?.toLowerCase().includes('debtor') || t.paymentType?.toLowerCase().includes('account') || t.paymentType?.toLowerCase().includes('fleet')).length },
-        { 'Metric': '  Cash', 'Value': fuelTxns.filter(t => t.isCardTransaction === 'no').length },
-        { 'Metric': '', 'Value': '' },
-        { 'Metric': 'Bank Transactions (Total)', 'Value': bankTxns.length },
-        { 'Metric': '  Matchable', 'Value': matchableBank.length },
-        { 'Metric': '  Outside Date Range', 'Value': outsideRange.length },
-        { 'Metric': '  Excluded (reversed/declined)', 'Value': excludedBank.length },
-        { 'Metric': '', 'Value': '' },
-        { 'Metric': 'Matched', 'Value': matchedBank.length },
-        { 'Metric': 'Match Rate', 'Value': matchableBank.length > 0 ? `${Math.round((matchedBank.length / matchableBank.length) * 100)}%` : 'N/A' },
-        { 'Metric': 'Unmatched Bank', 'Value': unmatchedBank.length },
-        { 'Metric': '', 'Value': '' },
-        { 'Metric': 'Matched Bank Amount', 'Value': matchedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
-        { 'Metric': 'Unmatched Bank Amount', 'Value': unmatchedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
-        { 'Metric': 'Excluded Bank Amount', 'Value': excludedBank.reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2) },
+      // Compute additional metrics for summary
+      const isDebtor = (t: typeof fuelTxns[0]) =>
+        t.paymentType?.toLowerCase().includes('debtor') ||
+        t.paymentType?.toLowerCase().includes('account') ||
+        t.paymentType?.toLowerCase().includes('fleet');
+      const debtorFuel = fuelTxns.filter(t => t.isCardTransaction === 'yes' && isDebtor(t));
+      const cardOnlyFuel = fuelTxns.filter(t => t.isCardTransaction === 'yes' && !isDebtor(t));
+      const cashFuel = fuelTxns.filter(t => t.isCardTransaction === 'no');
+
+      const sumAmount = (txns: typeof fuelTxns) => txns.reduce((s, t) => s + parseFloat(t.amount), 0);
+
+      const cardOnlyAmount = sumAmount(cardOnlyFuel);
+      const debtorAmount = sumAmount(debtorFuel);
+      const cashAmount = sumAmount(cashFuel);
+      const totalFuelAmount = sumAmount(fuelTxns);
+      const matchedBankAmount = sumAmount(matchedBank);
+      const unmatchedBankAmount = sumAmount(unmatchedBank);
+      const excludedBankAmount = sumAmount(excludedBank);
+
+      // Corresponding fuel amounts for matched pairs
+      const matchedFuelAmount = matchesData.reduce((s, m) => {
+        const fuel = txMap.get(m.fuelTransactionId);
+        return s + (fuel ? parseFloat(fuel.amount) : 0);
+      }, 0);
+
+      const cardFuelAmount = sumAmount(fuelTxns.filter(t => t.isCardTransaction === 'yes'));
+      const bankApprovedAmount = matchedBankAmount + unmatchedBankAmount;
+      // File Surplus: negative = fuel exceeds bank (shortfall from bank side)
+      const fileSurplus = bankApprovedAmount - cardFuelAmount;
+      const matchedSurplus = matchedBankAmount - matchedFuelAmount;
+      const unmatchedFuelCard = fuelTxns.filter(t => t.isCardTransaction === 'yes' && t.matchStatus !== 'matched' && parseFloat(t.amount) > 0);
+      const unmatchedFuelCardAmount = sumAmount(unmatchedFuelCard);
+      const totalFuelCardReconciled = matchedFuelAmount + unmatchedFuelCardAmount;
+      // Recon Surplus = Unmatched Fuel Card + File Surplus/Shortfall
+      const reconSurplus = unmatchedFuelCardAmount + fileSurplus;
+      const outsideRangeAmount = sumAmount(outsideRange);
+      const matchRate = matchableBank.length > 0 ? Math.round((matchedBank.length / matchableBank.length) * 100) : 0;
+
+      // Per-bank breakdown
+      const bankBySource = new Map<string, { approved: typeof bankTxns; declined: typeof bankTxns; cancelled: typeof bankTxns }>();
+      for (const t of bankTxns) {
+        const name = t.sourceName || 'Bank';
+        if (!bankBySource.has(name)) bankBySource.set(name, { approved: [], declined: [], cancelled: [] });
+        const entry = bankBySource.get(name)!;
+        if (t.matchStatus === 'excluded') {
+          const desc = (t.description || '').toLowerCase();
+          if (desc.includes('declined')) entry.declined.push(t);
+          else entry.cancelled.push(t);
+        } else {
+          entry.approved.push(t);
+        }
+      }
+
+      // Sheet 1: Summary — structured to match reconciliation report
+      const fmt = (n: number) => parseFloat(n.toFixed(2));
+      const summaryRows: { Metric: string; Count?: number | string; Amount?: number | string }[] = [
+        { Metric: 'Period', Count: '', Amount: period.name },
+        { Metric: 'Period Dates', Count: '', Amount: `${period.startDate} to ${period.endDate}` },
+        { Metric: '' },
+        { Metric: 'FUEL TRANSACTIONS', Count: 'Count', Amount: 'Amount' },
+        { Metric: '  Card', Count: cardOnlyFuel.length, Amount: fmt(cardOnlyAmount) },
       ];
+      if (debtorFuel.length > 0) {
+        summaryRows.push({ Metric: '  Debtor / Account', Count: debtorFuel.length, Amount: fmt(debtorAmount) });
+      }
+      summaryRows.push(
+        { Metric: '  Cash', Count: cashFuel.length, Amount: fmt(cashAmount) },
+        { Metric: '  Total', Count: fuelTxns.length, Amount: fmt(totalFuelAmount) },
+        { Metric: '' },
+        { Metric: 'BANK TRANSACTIONS' },
+        { Metric: '  Total', Count: bankTxns.length },
+        { Metric: '  Matchable', Count: matchableBank.length },
+        { Metric: '  Outside Date Range', Count: outsideRange.length, Amount: outsideRangeAmount > 0 ? fmt(outsideRangeAmount) : undefined },
+        { Metric: '  Excluded (reversed/declined/cancelled)', Count: excludedBank.length },
+      );
+
+      // Per-bank breakdown — columnar layout with bank names as headers + Total
+      if (bankBySource.size > 0) {
+        summaryRows.push({ Metric: '' });
+        const bankNames = Array.from(bankBySource.keys()).sort();
+        // Header row with bank names
+        const headerRow: Record<string, string> = { Metric: '' };
+        for (const name of bankNames) headerRow[name] = name;
+        headerRow['Total'] = 'Total';
+        summaryRows.push(headerRow as any);
+
+        for (const { label, getter } of [
+          { label: 'Declined', getter: (e: { declined: typeof bankTxns; cancelled: typeof bankTxns; approved: typeof bankTxns }) => e.declined },
+          { label: 'Cancelled', getter: (e: { declined: typeof bankTxns; cancelled: typeof bankTxns; approved: typeof bankTxns }) => e.cancelled },
+          { label: 'Approved', getter: (e: { declined: typeof bankTxns; cancelled: typeof bankTxns; approved: typeof bankTxns }) => e.approved },
+        ]) {
+          // Count row
+          const countRow: Record<string, any> = { Metric: label };
+          let totalCount = 0;
+          for (const name of bankNames) {
+            const c = getter(bankBySource.get(name)!).length;
+            countRow[name] = c;
+            totalCount += c;
+          }
+          countRow['Total'] = totalCount;
+          summaryRows.push(countRow as any);
+
+          // Amount row
+          const amtRow: Record<string, any> = { Metric: 'Amount' };
+          let totalAmt = 0;
+          for (const name of bankNames) {
+            const a = sumAmount(getter(bankBySource.get(name)!));
+            amtRow[name] = a > 0 ? fmt(a) : '-';
+            totalAmt += a;
+          }
+          amtRow['Total'] = totalAmt > 0 ? fmt(totalAmt) : '-';
+          summaryRows.push(amtRow as any);
+        }
+      }
+
+      summaryRows.push(
+        { Metric: '' },
+        { Metric: 'MATCHING' },
+        { Metric: '  Matched', Count: matchedBank.length },
+        { Metric: '  Match Rate', Count: `${matchRate}%` },
+        { Metric: '  Unmatched Bank', Count: unmatchedBank.length },
+        { Metric: '' },
+        { Metric: 'FINANCIAL RECONCILIATION', Count: '', Amount: 'Amount' },
+        { Metric: '  Fuel Card Sales Amount', Amount: fmt(cardFuelAmount) },
+        { Metric: '  Bank Approved Amount', Amount: fmt(bankApprovedAmount) },
+        { Metric: '  File Surplus / Shortfall', Amount: fmt(fileSurplus) },
+        { Metric: '' },
+        { Metric: '  Matched Bank Amount', Amount: fmt(matchedBankAmount) },
+        { Metric: '  Corresponding Fuel Amount', Amount: fmt(matchedFuelAmount) },
+        { Metric: '  Matched Surplus / Shortfall', Amount: fmt(matchedSurplus) },
+        { Metric: '  Unmatched Bank Amount', Amount: unmatchedBankAmount > 0 ? fmt(unmatchedBankAmount) : '-' },
+        { Metric: '' },
+        { Metric: '  Unmatched Fuel Card', Amount: fmt(unmatchedFuelCardAmount) },
+        { Metric: '  Total Fuel Card Reconciled', Amount: fmt(totalFuelCardReconciled) },
+        { Metric: '  Reconciliation Surplus / Shortfall', Amount: fmt(reconSurplus) },
+        { Metric: '' },
+        { Metric: '  Excluded Bank Amount', Amount: fmt(excludedBankAmount) },
+      );
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
 
       // Sheet 2: Matched pairs
@@ -1680,7 +1811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sheet 7: Unmatched Fuel (card transactions without a bank match)
       const unmatchedFuel = fuelTxns.filter(t => t.isCardTransaction === 'yes' && t.matchStatus !== 'matched');
       if (unmatchedFuel.length > 0) {
-        const unmatchedFuelRows = unmatchedFuel.map(t => ({
+        const unmatchedFuelRows: Record<string, any>[] = unmatchedFuel.map(t => ({
           'Date': t.transactionDate,
           'Time': t.transactionTime || '',
           'Amount': parseFloat(t.amount),
@@ -1692,10 +1823,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Pump': t.pump || '',
           'Description': t.description || '',
         }));
+
+        // Per-attendant summary
+        const attendantTotals = new Map<string, number>();
+        for (const t of unmatchedFuel) {
+          const name = t.attendant || 'Unknown';
+          attendantTotals.set(name, (attendantTotals.get(name) || 0) + parseFloat(t.amount));
+        }
+        unmatchedFuelRows.push({});
+        unmatchedFuelRows.push({ 'Date': '', 'Amount': fmt(unmatchedFuelCardAmount) });
+        for (const [name, total] of Array.from(attendantTotals.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+          unmatchedFuelRows.push({ 'Date': name, 'Amount': fmt(total) });
+        }
+        unmatchedFuelRows.push({ 'Date': 'Fuel Card Unmatched', 'Amount': fmt(unmatchedFuelCardAmount) });
+
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unmatchedFuelRows), 'Unmatched Fuel');
       }
 
-      // Sheet 8: All Transactions
+      // Sheet 8: Attendant Summary — per-attendant bank verification
+      if (attendantSummary.length > 0) {
+        const attendantRows: Record<string, any>[] = [];
+        // Header context
+        attendantRows.push({ 'Attendant': 'VERIFIED CARD SALES BY ATTENDANT' });
+        attendantRows.push({});
+
+        let grandVerifiedCount = 0;
+        let grandVerifiedAmount = 0;
+
+        for (const att of attendantSummary.filter(a => a.matchedCount > 0).sort((a, b) => b.matchedBankAmount - a.matchedBankAmount)) {
+          grandVerifiedCount += att.matchedCount;
+          grandVerifiedAmount += att.matchedBankAmount;
+
+          attendantRows.push({
+            'Attendant': att.attendant,
+            'Verified Sales': att.matchedCount,
+            'Verified Amount (Fuel)': fmt(att.matchedAmount),
+            'Verified Amount (Bank)': fmt(att.matchedBankAmount),
+            'Unmatched Card Sales': att.unmatchedCount > 0 ? att.unmatchedCount : '',
+            'Unmatched Amount': att.unmatchedCount > 0 ? fmt(att.unmatchedAmount) : '',
+          });
+
+          // Bank breakdown per attendant
+          for (const bank of att.banks) {
+            attendantRows.push({
+              'Attendant': `  ${bank.bankName}`,
+              'Verified Sales': bank.count,
+              'Verified Amount (Bank)': fmt(bank.amount),
+            });
+          }
+        }
+
+        // Grand total
+        attendantRows.push({});
+        attendantRows.push({
+          'Attendant': 'Total',
+          'Verified Sales': grandVerifiedCount,
+          'Verified Amount (Bank)': fmt(grandVerifiedAmount),
+        });
+
+        // Attendants with no verified sales
+        const unverified = attendantSummary.filter(a => a.matchedCount === 0 && a.unmatchedCount > 0);
+        if (unverified.length > 0) {
+          attendantRows.push({});
+          attendantRows.push({ 'Attendant': 'NO VERIFIED CARD SALES' });
+          for (const att of unverified) {
+            attendantRows.push({
+              'Attendant': att.attendant,
+              'Unmatched Card Sales': att.unmatchedCount,
+              'Unmatched Amount': fmt(att.unmatchedAmount),
+            });
+          }
+        }
+
+        // Unmatched bank transactions
+        if (unmatchedBank.length > 0) {
+          attendantRows.push({});
+          attendantRows.push({
+            'Attendant': 'UNMATCHED BANK TRANSACTIONS',
+            'Verified Sales': unmatchedBank.length,
+            'Verified Amount (Bank)': fmt(unmatchedBankAmount),
+          });
+          attendantRows.push({ 'Attendant': 'These could not be attributed to any attendant — see Unmatched sheet' });
+        }
+
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attendantRows), 'Attendant Summary');
+      }
+
+      // Sheet 9: All Transactions
       const allRows = transactions.map(t => ({
         'Date': t.transactionDate,
         'Time': t.transactionTime || '',

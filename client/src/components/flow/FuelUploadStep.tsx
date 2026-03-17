@@ -352,7 +352,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
                   key={columnName}
                   className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
                     fieldType !== "ignore"
-                      ? "bg-primary/5 border border-primary/20"
+                      ? "bg-card border border-[#E5E3DC]"
                       : "bg-muted/20 opacity-60"
                   }`}
                 >

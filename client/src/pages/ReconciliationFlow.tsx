@@ -126,7 +126,7 @@ export default function ReconciliationFlow() {
 
   // Initialize on mount - mark as initialized once files query completes
   useEffect(() => {
-    if (!filesLoading && !hasInitialized.current) {
+    if (!filesLoading && !periodLoading && !hasInitialized.current) {
       hasInitialized.current = true;
 
       // Check URL for explicit step override (e.g. ?step=fuel for "Edit Data")
@@ -137,7 +137,11 @@ export default function ReconciliationFlow() {
         ? (rawStep as ReconciliationStep)
         : null;
 
-      if (fuelFile && bankFiles.length > 0) {
+      // Completed periods go straight to results (no re-running reconciliation)
+      if (period?.status === "complete" && !requestedStep) {
+        setCompletedSteps(["fuel", "bank", "configure"]);
+        setCurrentStep("results");
+      } else if (fuelFile && bankFiles.length > 0) {
         // Both data sources uploaded
         // If going to results (default), matching must have run — mark configure complete
         // If explicitly navigating to an earlier step, don't assume matching ran
@@ -165,7 +169,7 @@ export default function ReconciliationFlow() {
         setCurrentStep("fuel");
       }
     }
-  }, [filesLoading, fuelFile, bankFiles.length]);
+  }, [filesLoading, periodLoading, period?.status, fuelFile, bankFiles.length]);
 
   // Keep completedSteps in sync with file state (does NOT change currentStep)
   // Note: "configure" is only marked complete when matching actually runs (see matchResult handler)
@@ -275,7 +279,7 @@ export default function ReconciliationFlow() {
     return null;
   }
 
-  if (periodLoading || filesLoading) {
+  if (periodLoading || filesLoading || !hasInitialized.current) {
     return (
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card sticky top-0 z-10">
@@ -414,7 +418,7 @@ export default function ReconciliationFlow() {
 
               {/* Secondary info: data outside range */}
               {matchResult.bankTransactionsUnmatchable > 0 && (
-                <div className="rounded-lg border bg-muted/20 p-3 text-center">
+                <div className="rounded-lg bg-muted/20 p-3 text-center">
                   <p className="text-sm text-muted-foreground">
                     {matchResult.bankTransactionsUnmatchable} bank transaction{matchResult.bankTransactionsUnmatchable !== 1 ? 's' : ''} from your upload fell outside the period dates
                     {period ? ` (${period.startDate} to ${period.endDate})` : ''} and were excluded.

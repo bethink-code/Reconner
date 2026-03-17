@@ -59,8 +59,60 @@ export interface PeriodSummary {
   excludedBankAmount: number;
   resolvedBankTransactions: number;
   resolvedBankAmount: number;
+  matchedBankAmount: number;
+  matchedFuelAmount: number;
+  debtorFuelTransactions: number;
+  debtorFuelAmount: number;
+  // Fuel card transactions scoped to bank coverage dates
+  scopedCardCount: number;
+  scopedCardAmount: number;
+  scopedMatchedCount: number;
+  scopedMatchedAmount: number;
+  scopedUnmatchedCount: number;
+  scopedUnmatchedAmount: number;
   fuelDateRange?: { min: string; max: string };
   bankDateRange?: { min: string; max: string };
+  bankCoverageRange?: { min: string; max: string };
+  bankAccountRanges?: Array<{
+    sourceName: string;
+    bankName: string | null;
+    fileId: string;
+    min: string;
+    max: string;
+    txCount: number;
+    inRangeCount: number;
+  }>;
+  perBankBreakdown?: PerBankBreakdown[];
+}
+
+export interface PerBankBreakdown {
+  bankName: string;
+  approvedCount: number;
+  approvedAmount: number;
+  declinedCount: number;
+  declinedAmount: number;
+  cancelledCount: number;
+  cancelledAmount: number;
+  totalCount: number;
+  totalAmount: number;
+}
+
+export interface AttendantBankBreakdown {
+  bankName: string;
+  count: number;
+  amount: number;
+}
+
+export interface AttendantSummaryRow {
+  attendant: string;
+  matchedCount: number;
+  matchedAmount: number;
+  matchedBankAmount: number;
+  unmatchedCount: number;
+  unmatchedAmount: number;
+  banks: AttendantBankBreakdown[];
+  totalCount: number;
+  totalAmount: number;
 }
 
 export interface VerificationSummary {
@@ -163,6 +215,7 @@ export interface IStorage {
   resetMatchesByPeriod(periodId: string): Promise<void>;
   
   getPeriodSummary(periodId: string): Promise<PeriodSummary>;
+  getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]>;
   getVerificationSummary(periodId: string): Promise<VerificationSummary>;
   
   getMatchingRules(periodId: string): Promise<MatchingRulesConfig>;
@@ -470,8 +523,17 @@ export class DatabaseStorage implements IStorage {
 
   async getPeriodSummary(periodId: string): Promise<PeriodSummary> {
     const result = await pool.query(`
-      WITH tx_stats AS (
-        SELECT 
+      WITH bank_coverage AS (
+        SELECT
+          MIN(transaction_date) AS min_date,
+          MAX(transaction_date) AS max_date
+        FROM transactions
+        WHERE period_id = $1
+          AND source_type LIKE 'bank%'
+          AND match_status NOT IN ('unmatchable', 'excluded')
+      ),
+      tx_stats AS (
+        SELECT
           COUNT(*) as total_transactions,
           COUNT(CASE WHEN source_type = 'fuel' THEN 1 END) as fuel_transactions,
           COUNT(CASE WHEN source_type LIKE 'bank%' THEN 1 END) as bank_transactions,
@@ -487,8 +549,16 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' THEN amount::numeric ELSE 0 END), 0) as card_fuel_amount,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_fuel_amount,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
-          
+
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (
+            LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
+          ) THEN 1 END) as debtor_fuel_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (
+            LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
+          ) THEN amount::numeric ELSE 0 END), 0) as debtor_fuel_amount,
+
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN 1 END) as matched_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched' THEN 1 END) as matched_card_fuel,
           
           COUNT(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0 THEN 1 END) as unmatched_bank_transactions,
@@ -502,18 +572,38 @@ export class DatabaseStorage implements IStorage {
           
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN 1 END) as unmatched_card_transactions,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
-          
+
+          -- Fuel card transactions scoped to bank coverage dates
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes'
+                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN 1 END) as scoped_card_count,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes'
+                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_card_amount,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
+                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN 1 END) as scoped_matched_count,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
+                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_matched_amount,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched'
+                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN 1 END) as scoped_unmatched_count,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched'
+                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_unmatched_amount,
+
+          bc.min_date as bank_coverage_min,
+          bc.max_date as bank_coverage_max,
+
           MIN(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_date_min,
           MAX(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_date_max,
           MIN(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_date_min,
           MAX(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_date_max
-          
+
         FROM transactions
+        CROSS JOIN bank_coverage bc
         WHERE period_id = $1
+        GROUP BY bc.min_date, bc.max_date
       ),
       match_stats AS (
-        SELECT 
+        SELECT
           COUNT(*) as matched_pairs,
+          COALESCE(SUM(t_fuel.amount::numeric), 0) as matched_fuel_amount,
           COUNT(CASE WHEN ABS(
             TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
             TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
@@ -538,6 +628,7 @@ export class DatabaseStorage implements IStorage {
       SELECT 
         tx.*,
         COALESCE(ms.matched_pairs, 0) as matched_pairs,
+        COALESCE(ms.matched_fuel_amount, 0) as matched_fuel_amount,
         COALESCE(ms.matches_same_day, 0) as matches_same_day,
         COALESCE(ms.matches_1_day, 0) as matches_1_day,
         COALESCE(ms.matches_2_day, 0) as matches_2_day,
@@ -605,6 +696,16 @@ export class DatabaseStorage implements IStorage {
       excludedBankAmount: parseFloat(row.excluded_bank_amount || '0'),
       resolvedBankTransactions: parseInt(row.resolved_bank_transactions || '0'),
       resolvedBankAmount: parseFloat(row.resolved_bank_amount || '0'),
+      matchedBankAmount: parseFloat(row.matched_bank_amount || '0'),
+      matchedFuelAmount: parseFloat(row.matched_fuel_amount || '0'),
+      debtorFuelTransactions: parseInt(row.debtor_fuel_transactions || '0'),
+      debtorFuelAmount: parseFloat(row.debtor_fuel_amount || '0'),
+      scopedCardCount: parseInt(row.scoped_card_count || '0'),
+      scopedCardAmount: parseFloat(row.scoped_card_amount || '0'),
+      scopedMatchedCount: parseInt(row.scoped_matched_count || '0'),
+      scopedMatchedAmount: parseFloat(row.scoped_matched_amount || '0'),
+      scopedUnmatchedCount: parseInt(row.scoped_unmatched_count || '0'),
+      scopedUnmatchedAmount: parseFloat(row.scoped_unmatched_amount || '0'),
       fuelDateRange: row.fuel_date_min && row.fuel_date_max ? {
         min: row.fuel_date_min,
         max: row.fuel_date_max,
@@ -613,10 +714,130 @@ export class DatabaseStorage implements IStorage {
         min: row.bank_date_min,
         max: row.bank_date_max,
       } : undefined,
+      bankCoverageRange: row.bank_coverage_min && row.bank_coverage_max ? {
+        min: row.bank_coverage_min,
+        max: row.bank_coverage_max,
+      } : undefined,
       bankAccountRanges: await this.getBankAccountCoverageRanges(periodId),
+      perBankBreakdown: await this.getPerBankBreakdown(periodId),
     };
   }
-  
+
+  private async getPerBankBreakdown(periodId: string): Promise<PerBankBreakdown[]> {
+    const result = await pool.query(`
+      SELECT
+        COALESCE(f.bank_name, t.source_name, 'Bank') as bank_name,
+        COUNT(CASE WHEN t.match_status != 'excluded' THEN 1 END) as approved_count,
+        COALESCE(SUM(CASE WHEN t.match_status != 'excluded' THEN t.amount::numeric ELSE 0 END), 0) as approved_amount,
+        COUNT(CASE WHEN t.match_status = 'excluded' AND LOWER(t.description) LIKE '%declined%' THEN 1 END) as declined_count,
+        COALESCE(SUM(CASE WHEN t.match_status = 'excluded' AND LOWER(t.description) LIKE '%declined%' THEN t.amount::numeric ELSE 0 END), 0) as declined_amount,
+        COUNT(CASE WHEN t.match_status = 'excluded' AND (LOWER(t.description) LIKE '%cancel%' OR LOWER(t.description) LIKE '%revers%') THEN 1 END) as cancelled_count,
+        COALESCE(SUM(CASE WHEN t.match_status = 'excluded' AND (LOWER(t.description) LIKE '%cancel%' OR LOWER(t.description) LIKE '%revers%') THEN t.amount::numeric ELSE 0 END), 0) as cancelled_amount,
+        COUNT(*) as total_count,
+        COALESCE(SUM(t.amount::numeric), 0) as total_amount
+      FROM transactions t
+      LEFT JOIN uploaded_files f ON t.file_id = f.id
+      WHERE t.period_id = $1 AND t.source_type LIKE 'bank%'
+      GROUP BY COALESCE(f.bank_name, t.source_name, 'Bank')
+      ORDER BY COALESCE(f.bank_name, t.source_name, 'Bank')
+    `, [periodId]);
+
+    return result.rows.map(row => ({
+      bankName: row.bank_name,
+      approvedCount: parseInt(row.approved_count || '0'),
+      approvedAmount: parseFloat(row.approved_amount || '0'),
+      declinedCount: parseInt(row.declined_count || '0'),
+      declinedAmount: parseFloat(row.declined_amount || '0'),
+      cancelledCount: parseInt(row.cancelled_count || '0'),
+      cancelledAmount: parseFloat(row.cancelled_amount || '0'),
+      totalCount: parseInt(row.total_count || '0'),
+      totalAmount: parseFloat(row.total_amount || '0'),
+    }));
+  }
+
+  async getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]> {
+    // Query 1: Per-attendant verified card sales (via matches table) + unmatched card sales
+    // Scoped to bank coverage dates
+    const result = await pool.query(`
+      WITH bank_coverage AS (
+        SELECT
+          MIN(transaction_date) AS min_date,
+          MAX(transaction_date) AS max_date
+        FROM transactions
+        WHERE period_id = $1
+          AND source_type LIKE 'bank%'
+          AND match_status NOT IN ('unmatchable', 'excluded')
+      )
+      SELECT
+        COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown') AS attendant,
+        COUNT(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status = 'matched'
+                    AND t.transaction_date >= bc.min_date
+                    AND t.transaction_date <= bc.max_date THEN 1 END)::int AS matched_count,
+        COALESCE(SUM(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status = 'matched'
+                    AND t.transaction_date >= bc.min_date
+                    AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS matched_amount,
+        COUNT(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status != 'matched'
+                    AND t.transaction_date >= bc.min_date
+                    AND t.transaction_date <= bc.max_date THEN 1 END)::int AS unmatched_count,
+        COALESCE(SUM(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status != 'matched'
+                    AND t.transaction_date >= bc.min_date
+                    AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS unmatched_amount,
+        COUNT(*)::int AS total_count,
+        COALESCE(SUM(t.amount::numeric), 0) AS total_amount
+      FROM transactions t
+      CROSS JOIN bank_coverage bc
+      WHERE t.period_id = $1 AND t.source_type = 'fuel'
+      GROUP BY COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown')
+      ORDER BY matched_count DESC, attendant ASC
+    `, [periodId]);
+
+    // Query 2: Per-attendant bank breakdown — which banks verified each attendant's sales
+    const bankBreakdown = await pool.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(t_fuel.attendant), ''), 'Unknown') AS attendant,
+        COALESCE(f.bank_name, t_bank.source_name, 'Bank') AS bank_name,
+        COUNT(*)::int AS count,
+        COALESCE(SUM(t_bank.amount::numeric), 0) AS amount
+      FROM matches m
+      JOIN transactions t_fuel ON m.fuel_transaction_id = t_fuel.id
+      JOIN transactions t_bank ON m.bank_transaction_id = t_bank.id
+      LEFT JOIN uploaded_files f ON t_bank.file_id = f.id
+      WHERE m.period_id = $1
+      GROUP BY COALESCE(NULLIF(TRIM(t_fuel.attendant), ''), 'Unknown'),
+               COALESCE(f.bank_name, t_bank.source_name, 'Bank')
+      ORDER BY count DESC
+    `, [periodId]);
+
+    // Build bank breakdown lookup: attendant → banks[]
+    const banksByAttendant: Record<string, AttendantBankBreakdown[]> = {};
+    for (const row of bankBreakdown.rows) {
+      const att = row.attendant;
+      if (!banksByAttendant[att]) banksByAttendant[att] = [];
+      banksByAttendant[att].push({
+        bankName: row.bank_name,
+        count: parseInt(row.count || '0'),
+        amount: parseFloat(row.amount || '0'),
+      });
+    }
+
+    return result.rows.map(row => {
+      const matchedCount = parseInt(row.matched_count || '0');
+      const banks = banksByAttendant[row.attendant] || [];
+      const matchedBankAmount = banks.reduce((sum, b) => sum + b.amount, 0);
+      return {
+        attendant: row.attendant,
+        matchedCount,
+        matchedAmount: parseFloat(row.matched_amount || '0'),
+        matchedBankAmount,
+        unmatchedCount: parseInt(row.unmatched_count || '0'),
+        unmatchedAmount: parseFloat(row.unmatched_amount || '0'),
+        banks,
+        totalCount: parseInt(row.total_count || '0'),
+        totalAmount: parseFloat(row.total_amount || '0'),
+      };
+    });
+  }
+
   private async getBankAccountCoverageRanges(periodId: string): Promise<Array<{
     sourceName: string;
     bankName: string | null;

@@ -7,10 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { User, AuditLog, InvitedUser } from "@shared/schema";
+import type { User, AuditLog, InvitedUser, AccessRequest } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -52,7 +52,7 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests">("users");
   const [auditPage, setAuditPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
@@ -96,6 +96,31 @@ export default function Admin() {
       toast({ title: "Error", description: error.message || "Failed to revoke invite", variant: "destructive" });
     },
   });
+
+  const { data: accessRequests, isLoading: requestsLoading } = useQuery<AccessRequest[]>({
+    queryKey: ["/api/admin/access-requests"],
+    enabled: activeTab === "requests",
+    retry: false,
+  });
+
+  const handleRequestMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "approved" | "declined" }) => {
+      return await apiRequest("PATCH", `/api/admin/access-requests/${id}`, { status });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/access-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
+      toast({
+        title: variables.status === "approved" ? "Request approved" : "Request declined",
+        description: variables.status === "approved" ? "User has been invited and can now log in." : "Request has been declined.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to update request", variant: "destructive" });
+    },
+  });
+
+  const pendingRequests = accessRequests?.filter(r => r.status === "pending") || [];
 
   const { data: auditData, isLoading: auditLoading } = useQuery<{
     logs: AuditLog[];
@@ -217,6 +242,17 @@ export default function Admin() {
           >
             <UserPlus className="h-4 w-4 mr-2" />
             Invites
+          </Button>
+          <Button
+            variant={activeTab === "requests" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("requests")}
+          >
+            <Inbox className="h-4 w-4 mr-2" />
+            Requests
+            {pendingRequests.length > 0 && (
+              <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">{pendingRequests.length}</Badge>
+            )}
           </Button>
         </div>
 
@@ -556,6 +592,80 @@ export default function Admin() {
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   No users invited yet. Add a Google email above to get started.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Requests tab */}
+        {activeTab === "requests" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Inbox className="h-5 w-5" />
+                Access Requests
+                {pendingRequests.length > 0 && (
+                  <Badge variant="destructive" className="text-xs">{pendingRequests.length} pending</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {requestsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : accessRequests && accessRequests.length > 0 ? (
+                <div className="space-y-3">
+                  {accessRequests.map((req) => (
+                    <div
+                      key={req.id}
+                      className={`flex items-start justify-between gap-4 p-4 rounded-lg border bg-card ${req.status === "pending" ? "border-amber-200 bg-amber-50/30" : ""}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{req.name}</span>
+                          {req.status === "pending" && (
+                            <Badge variant="outline" className="text-xs text-amber-700 border-amber-300 bg-amber-50">Pending</Badge>
+                          )}
+                          {req.status === "approved" && (
+                            <Badge variant="outline" className="text-xs text-emerald-700 border-emerald-300 bg-emerald-50">Approved</Badge>
+                          )}
+                          {req.status === "declined" && (
+                            <Badge variant="outline" className="text-xs text-red-700 border-red-300 bg-red-50">Declined</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{req.email}</p>
+                        <p className="text-xs text-muted-foreground">{req.cell} · {formatDate(req.createdAt)}</p>
+                      </div>
+                      {req.status === "pending" && (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleRequestMutation.mutate({ id: req.id, status: "approved" })}
+                            disabled={handleRequestMutation.isPending}
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRequestMutation.mutate({ id: req.id, status: "declined" })}
+                            disabled={handleRequestMutation.isPending}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Decline
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No access requests yet
                 </div>
               )}
             </CardContent>

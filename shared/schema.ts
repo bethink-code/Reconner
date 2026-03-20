@@ -261,6 +261,18 @@ export const invitedUsers = pgTable("invited_users", {
 export type InvitedUser = typeof invitedUsers.$inferSelect;
 export type InsertInvitedUser = typeof invitedUsers.$inferInsert;
 
+// Access Requests — uninvited users can request access
+export const accessRequests = pgTable("access_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: varchar("email").notNull(),
+  cell: text("cell").notNull(),
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'declined'
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AccessRequest = typeof accessRequests.$inferSelect;
+
 // Resolution reason options
 export const RESOLUTION_REASONS = [
   { value: "timing_difference", label: "Timing difference (posted next day)" },

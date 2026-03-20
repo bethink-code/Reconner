@@ -15,6 +15,7 @@ import {
   type TransactionResolution,
   type InsertTransactionResolution,
   type InvitedUser,
+  type AccessRequest,
   users,
   reconciliationPeriods,
   uploadedFiles,
@@ -22,7 +23,8 @@ import {
   matches,
   matchingRules,
   transactionResolutions,
-  invitedUsers
+  invitedUsers,
+  accessRequests
 } from "../shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -1383,6 +1385,26 @@ export class DatabaseStorage implements IStorage {
 
   async removeInvite(id: string): Promise<void> {
     await db.delete(invitedUsers).where(eq(invitedUsers.id, id));
+  }
+
+  // Access requests
+  async createAccessRequest(name: string, email: string, cell: string): Promise<AccessRequest> {
+    const [request] = await db.insert(accessRequests)
+      .values({ name, email: email.toLowerCase(), cell })
+      .returning();
+    return request;
+  }
+
+  async getAccessRequests(): Promise<AccessRequest[]> {
+    return await db.select().from(accessRequests).orderBy(desc(accessRequests.createdAt));
+  }
+
+  async updateAccessRequestStatus(id: string, status: string): Promise<AccessRequest | undefined> {
+    const [updated] = await db.update(accessRequests)
+      .set({ status })
+      .where(eq(accessRequests.id, id))
+      .returning();
+    return updated;
   }
 }
 

@@ -183,6 +183,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public: request access (no auth required)
+  app.post('/api/request-access', async (req, res) => {
+    try {
+      const { name, email, cell } = req.body;
+      if (!name || !email || !cell) {
+        return res.status(400).json({ error: "Name, email, and cell number are required" });
+      }
+      const trimmedEmail = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      await storage.createAccessRequest(String(name).trim(), trimmedEmail, String(cell).trim());
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error creating access request:", error);
+      res.status(500).json({ error: "Failed to submit request" });
+    }
+  });
+
+  // Admin: access requests
+  app.get('/api/admin/access-requests', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const requests = await storage.getAccessRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching access requests:", error);
+      res.status(500).json({ error: "Failed to fetch access requests" });
+    }
+  });
+
+  app.patch('/api/admin/access-requests/:id', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { status } = req.body;
+      if (!status || !['approved', 'declined'].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'approved' or 'declined'" });
+      }
+      const updated = await storage.updateAccessRequestStatus(req.params.id, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+      // Auto-invite on approval
+      if (status === 'approved') {
+        const isAlready = await storage.isEmailInvited(updated.email);
+        if (!isAlready) {
+          const userId = req.user?.claims?.sub;
+          await storage.inviteUser(updated.email, userId);
+        }
+      }
+      audit(req, { action: `access_request.${status}`, resourceType: "access_request", resourceId: req.params.id, detail: updated.email });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating access request:", error);
+      res.status(500).json({ error: "Failed to update access request" });
+    }
+  });
+
   // Admin audit log endpoint
   app.get('/api/admin/audit-logs', isAuthenticated, isAdmin, async (req: any, res) => {
     try {

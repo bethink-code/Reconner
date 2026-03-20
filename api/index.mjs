@@ -20,6 +20,7 @@ import multer from "multer";
 var schema_exports = {};
 __export(schema_exports, {
   RESOLUTION_REASONS: () => RESOLUTION_REASONS,
+  accessRequests: () => accessRequests,
   auditLogs: () => auditLogs,
   insertMatchSchema: () => insertMatchSchema,
   insertMatchingRulesSchema: () => insertMatchingRulesSchema,
@@ -239,6 +240,15 @@ var invitedUsers = pgTable("invited_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").notNull().unique(),
   invitedBy: varchar("invited_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow()
+});
+var accessRequests = pgTable("access_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: varchar("email").notNull(),
+  cell: text("cell").notNull(),
+  status: text("status").notNull().default("pending"),
+  // 'pending', 'approved', 'declined'
   createdAt: timestamp("created_at").defaultNow()
 });
 var RESOLUTION_REASONS = [
@@ -1197,6 +1207,18 @@ var DatabaseStorage = class {
   }
   async removeInvite(id) {
     await db.delete(invitedUsers).where(eq(invitedUsers.id, id));
+  }
+  // Access requests
+  async createAccessRequest(name, email, cell) {
+    const [request] = await db.insert(accessRequests).values({ name, email: email.toLowerCase(), cell }).returning();
+    return request;
+  }
+  async getAccessRequests() {
+    return await db.select().from(accessRequests).orderBy(desc(accessRequests.createdAt));
+  }
+  async updateAccessRequestStatus(id, status) {
+    const [updated] = await db.update(accessRequests).set({ status }).where(eq(accessRequests.id, id)).returning();
+    return updated;
   }
 };
 var storage = new DatabaseStorage();
@@ -3345,6 +3367,56 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error removing invite:", error);
       res.status(500).json({ error: "Failed to remove invite" });
+    }
+  });
+  app2.post("/api/request-access", async (req, res) => {
+    try {
+      const { name, email, cell } = req.body;
+      if (!name || !email || !cell) {
+        return res.status(400).json({ error: "Name, email, and cell number are required" });
+      }
+      const trimmedEmail = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      await storage.createAccessRequest(String(name).trim(), trimmedEmail, String(cell).trim());
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error creating access request:", error);
+      res.status(500).json({ error: "Failed to submit request" });
+    }
+  });
+  app2.get("/api/admin/access-requests", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const requests = await storage.getAccessRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching access requests:", error);
+      res.status(500).json({ error: "Failed to fetch access requests" });
+    }
+  });
+  app2.patch("/api/admin/access-requests/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!status || !["approved", "declined"].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'approved' or 'declined'" });
+      }
+      const updated = await storage.updateAccessRequestStatus(req.params.id, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+      if (status === "approved") {
+        const isAlready = await storage.isEmailInvited(updated.email);
+        if (!isAlready) {
+          const userId = req.user?.claims?.sub;
+          await storage.inviteUser(updated.email, userId);
+        }
+      }
+      audit(req, { action: `access_request.${status}`, resourceType: "access_request", resourceId: req.params.id, detail: updated.email });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating access request:", error);
+      res.status(500).json({ error: "Failed to update access request" });
     }
   });
   app2.get("/api/admin/audit-logs", isAuthenticated, isAdmin, async (req, res) => {

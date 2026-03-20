@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { User, AuditLog } from "@shared/schema";
@@ -285,6 +285,14 @@ export default function Admin() {
                   )}
                 </CardTitle>
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/audit-logs"] })}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
                   <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setAuditPage(0); }}>
                     <SelectTrigger className="w-[160px] h-8 text-xs">
                       <SelectValue placeholder="All actions" />

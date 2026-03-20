@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import TermsModal from "@/components/TermsModal";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
@@ -47,7 +48,7 @@ class ErrorBoundary extends Component<
 }
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -62,13 +63,16 @@ function Router() {
   }
 
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/flow/:periodId" component={ReconciliationFlow} />
-      <Route path="/investigate" component={InvestigateTransactions} />
-<Route path="/admin" component={Admin} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <TermsModal open={!!user && !user.termsAcceptedAt} />
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/flow/:periodId" component={ReconciliationFlow} />
+        <Route path="/investigate" component={InvestigateTransactions} />
+        <Route path="/admin" component={Admin} />
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
 }
 

@@ -56,6 +56,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Accept terms of use
+  app.post('/api/user/accept-terms', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const updated = await storage.acceptTerms(userId);
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      audit(req, { action: "terms.accepted", resourceType: "user", resourceId: userId });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error accepting terms:", error);
+      res.status(500).json({ error: "Failed to accept terms" });
+    }
+  });
+
   // Admin middleware - checks if user is admin
   const isAdmin = async (req: any, res: any, next: any) => {
     try {

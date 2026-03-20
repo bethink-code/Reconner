@@ -48,6 +48,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { ReconciliationPeriod, AccessRequest } from "@shared/schema";
+import PreAlphaModal from "@/components/PreAlphaModal";
 
 interface DisplayPeriod {
   id: string;
@@ -67,6 +68,7 @@ export default function Dashboard() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", description: "", startDate: "", endDate: "" });
   const [templateSourceId, setTemplateSourceId] = useState<string | null>(null);
+  const [showPreAlpha, setShowPreAlpha] = useState(false);
 
   const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
     queryKey: ["/api/periods"],
@@ -199,7 +201,15 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-heading font-normal tracking-tight">lekana</h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-2xl font-heading font-normal tracking-tight">lekana</h1>
+                <button
+                  onClick={() => setShowPreAlpha(true)}
+                  className="inline-flex items-center px-2 py-0.5 bg-[#F5EDE6] text-[#1A1200] rounded-full font-heading font-semibold text-[10px] tracking-wide hover:bg-[#EDE5DE] transition-colors border-none cursor-pointer"
+                >
+                  Pre-alpha
+                </button>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">
                 Manage and track your reconciliation periods
               </p>
@@ -507,6 +517,8 @@ export default function Dashboard() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <PreAlphaModal open={showPreAlpha} onClose={() => setShowPreAlpha(false)} />
     </div>
   );
 }

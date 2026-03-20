@@ -59,6 +59,7 @@ var users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   isAdmin: boolean("is_admin").default(false),
+  termsAcceptedAt: timestamp("terms_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 });
@@ -304,6 +305,10 @@ var DatabaseStorage = class {
   }
   async setUserAdmin(id, isAdmin) {
     const [updated] = await db.update(users).set({ isAdmin, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, id)).returning();
+    return updated || void 0;
+  }
+  async acceptTerms(userId) {
+    const [updated] = await db.update(users).set({ termsAcceptedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, userId)).returning();
     return updated || void 0;
   }
   async getPeriods(userId) {
@@ -3257,6 +3262,19 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+  app2.post("/api/user/accept-terms", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const updated = await storage.acceptTerms(userId);
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      audit(req, { action: "terms.accepted", resourceType: "user", resourceId: userId });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error accepting terms:", error);
+      res.status(500).json({ error: "Failed to accept terms" });
     }
   });
   const isAdmin = async (req, res, next) => {

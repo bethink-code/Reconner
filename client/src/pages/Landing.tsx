@@ -205,7 +205,7 @@ export default function Landing() {
                 </div>
                 <p className="font-heading font-semibold text-[17px] text-[#1A1200]">Request sent</p>
                 <p className="text-[13px] font-light text-[#1A1200]/50 leading-relaxed">
-                  Thanks — we'll review your request<br />and be in touch soon.
+                  Thanks! We'll be in touch on WhatsApp shortly.
                 </p>
               </div>
             )}

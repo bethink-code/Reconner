@@ -285,6 +285,14 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
+  async acceptTerms(userId: string): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set({ termsAcceptedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated || undefined;
+  }
+
   async getPeriods(userId?: string): Promise<ReconciliationPeriod[]> {
     if (userId) {
       return await db.select().from(reconciliationPeriods)

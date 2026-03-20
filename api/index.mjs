@@ -3101,6 +3101,18 @@ async function setupAuth(app2) {
       const isInvited = await storage.isEmailInvited(email);
       if (!isInvited) {
         console.log(`[AUTH] Login blocked for uninvited email: ${email}`);
+        try {
+          await db.insert(auditLogs).values({
+            userId: null,
+            userEmail: email,
+            action: "auth.blocked_uninvited",
+            resourceType: "user",
+            outcome: "denied",
+            detail: `Uninvited email attempted login: ${email}`
+          });
+        } catch (e) {
+          console.error("[AUDIT] Failed to log blocked login:", e);
+        }
         verified(null, false, { message: "not_invited" });
         return;
       }

@@ -7,6 +7,8 @@ import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
+import { db } from "./db";
+import { auditLogs } from "../shared/schema";
 
 interface SessionUser {
   claims: Record<string, string | number | undefined>;
@@ -116,6 +118,19 @@ export async function setupAuth(app: Express) {
       const isInvited = await storage.isEmailInvited(email);
       if (!isInvited) {
         console.log(`[AUTH] Login blocked for uninvited email: ${email}`);
+        // Log directly since there's no req.user at this point
+        try {
+          await db.insert(auditLogs).values({
+            userId: null,
+            userEmail: email,
+            action: "auth.blocked_uninvited",
+            resourceType: "user",
+            outcome: "denied",
+            detail: `Uninvited email attempted login: ${email}`,
+          });
+        } catch (e) {
+          console.error("[AUDIT] Failed to log blocked login:", e);
+        }
         verified(null, false, { message: "not_invited" });
         return;
       }

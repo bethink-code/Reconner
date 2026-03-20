@@ -1,9 +1,35 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+
+// Security headers — relax CSP in development for Vite inline scripts
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+}));
+
+// CORS — restrict to known origins
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production'
+    ? 'https://reconner.vercel.app'
+    : 'http://localhost:5000'),
+  credentials: true,
+}));
+
+// Rate limiting — general API protection
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200,                  // 200 requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" },
+});
+app.use("/api/", apiLimiter);
 
 declare module 'http' {
   interface IncomingMessage {
@@ -52,10 +78,9 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+    console.error("Unhandled error:", err);
+    // Never leak internal error details to the client
+    res.status(status).json({ message: status >= 500 ? "Internal Server Error" : (err.message || "Error") });
   });
 
   // importantly only setup vite in development and after

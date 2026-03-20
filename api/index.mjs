@@ -7,6 +7,9 @@ var __export = (target, all) => {
 // server/api.ts
 import "dotenv/config";
 import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 
 // server/routes.ts
 import { createServer } from "http";
@@ -17,6 +20,7 @@ import multer from "multer";
 var schema_exports = {};
 __export(schema_exports, {
   RESOLUTION_REASONS: () => RESOLUTION_REASONS,
+  auditLogs: () => auditLogs,
   insertMatchSchema: () => insertMatchSchema,
   insertMatchingRulesSchema: () => insertMatchingRulesSchema,
   insertReconciliationPeriodSchema: () => insertReconciliationPeriodSchema,
@@ -210,6 +214,26 @@ var insertTransactionResolutionSchema = createInsertSchema(transactionResolution
   id: true,
   createdAt: true
 });
+var auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  userEmail: text("user_email"),
+  action: text("action").notNull(),
+  // e.g. 'period.delete', 'file.upload', 'auth.login_failed'
+  resourceType: text("resource_type"),
+  // e.g. 'period', 'file', 'match', 'user'
+  resourceId: varchar("resource_id"),
+  outcome: text("outcome").notNull().default("success"),
+  // 'success', 'denied', 'error'
+  detail: text("detail"),
+  // Additional context (e.g. "Ownership check failed")
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("IDX_audit_logs_user_id").on(table.userId),
+  index("IDX_audit_logs_action").on(table.action),
+  index("IDX_audit_logs_created_at").on(table.createdAt)
+]);
 var RESOLUTION_REASONS = [
   { value: "timing_difference", label: "Timing difference (posted next day)" },
   { value: "cash_as_card", label: "Cash recorded as card (or vice versa)" },
@@ -3094,6 +3118,50 @@ var isAuthenticated = async (req, res, next) => {
   }
 };
 
+// server/auditLog.ts
+import { desc as desc2, eq as eq2, and as and2, gte, lte, sql as sql3 } from "drizzle-orm";
+async function audit(req, entry) {
+  try {
+    const userId = req.user?.claims?.sub || null;
+    const userEmail = req.user?.claims?.email || null;
+    const ipAddress = req.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || null;
+    await db.insert(auditLogs).values({
+      userId,
+      userEmail,
+      action: entry.action,
+      resourceType: entry.resourceType || null,
+      resourceId: entry.resourceId || null,
+      outcome: entry.outcome || "success",
+      detail: entry.detail || null,
+      ipAddress
+    });
+  } catch (err) {
+    console.error("[AUDIT] Failed to write audit log:", err);
+  }
+}
+async function queryAuditLogs(filters) {
+  const conditions = [];
+  if (filters.userId) conditions.push(eq2(auditLogs.userId, filters.userId));
+  if (filters.action) conditions.push(eq2(auditLogs.action, filters.action));
+  if (filters.resourceType) conditions.push(eq2(auditLogs.resourceType, filters.resourceType));
+  if (filters.outcome) conditions.push(eq2(auditLogs.outcome, filters.outcome));
+  if (filters.from) conditions.push(gte(auditLogs.createdAt, new Date(filters.from)));
+  if (filters.to) conditions.push(lte(auditLogs.createdAt, new Date(filters.to)));
+  const limit = Math.min(filters.limit || 100, 500);
+  const offset = filters.offset || 0;
+  const where = conditions.length > 0 ? and2(...conditions) : void 0;
+  const [logs, countResult] = await Promise.all([
+    db.select().from(auditLogs).where(where).orderBy(desc2(auditLogs.createdAt)).limit(limit).offset(offset),
+    db.select({ count: sql3`count(*)` }).from(auditLogs).where(where)
+  ]);
+  return {
+    logs,
+    total: Number(countResult[0]?.count || 0),
+    limit,
+    offset
+  };
+}
+
 // server/routes.ts
 import { z as z2 } from "zod";
 function computeContentHash(buffer) {
@@ -3139,6 +3207,30 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Internal server error" });
     }
   };
+  async function assertPeriodOwner(periodId, req, res) {
+    const period = await storage.getPeriod(periodId);
+    if (!period) {
+      res.status(404).json({ error: "Period not found" });
+      return null;
+    }
+    const userId = req.user?.claims?.sub;
+    if (period.userId && period.userId !== userId) {
+      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: `Owner: ${period.userId}` });
+      res.status(403).json({ error: "Access denied" });
+      return null;
+    }
+    return period;
+  }
+  async function assertFileOwner(fileId, req, res) {
+    const file = await storage.getFile(fileId);
+    if (!file) {
+      res.status(404).json({ error: "File not found" });
+      return null;
+    }
+    const period = await assertPeriodOwner(file.periodId, req, res);
+    if (!period) return null;
+    return file;
+  }
   app2.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const users2 = await storage.getAllUsers();
@@ -3161,10 +3253,29 @@ async function registerRoutes(app2) {
       if (!updated) {
         return res.status(404).json({ message: "User not found" });
       }
+      audit(req, { action: makeAdmin ? "admin.grant" : "admin.revoke", resourceType: "user", resourceId: req.params.id, detail: updated.email || void 0 });
       res.json(updated);
     } catch (error) {
       console.error("Error updating user admin status:", error);
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+  app2.get("/api/admin/audit-logs", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const result = await queryAuditLogs({
+        userId: req.query.userId,
+        action: req.query.action,
+        resourceType: req.query.resourceType,
+        outcome: req.query.outcome,
+        from: req.query.from,
+        to: req.query.to,
+        limit: req.query.limit ? parseInt(req.query.limit) : 100,
+        offset: req.query.offset ? parseInt(req.query.offset) : 0
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching audit logs:", error);
+      res.status(500).json({ error: "Failed to fetch audit logs" });
     }
   });
   app2.get("/api/periods", isAuthenticated, async (req, res) => {
@@ -3180,14 +3291,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
-      const period = await storage.getPeriod(req.params.id);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
-      const userId = req.user?.claims?.sub;
-      if (period.userId && period.userId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const period = await assertPeriodOwner(req.params.id, req, res);
+      if (!period) return;
       res.json(period);
     } catch (error) {
       console.error("Error fetching period:", error);
@@ -3207,6 +3312,8 @@ async function registerRoutes(app2) {
   });
   app2.patch("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.id, req, res);
+      if (!period) return;
       const partialSchema = insertReconciliationPeriodSchema.partial();
       const validated = partialSchema.parse(req.body);
       const updated = await storage.updatePeriod(req.params.id, validated);
@@ -3221,7 +3328,10 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.id, req, res);
+      if (!period) return;
       await storage.deletePeriod(req.params.id);
+      audit(req, { action: "period.delete", resourceType: "period", resourceId: req.params.id, detail: period.name });
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting period:", error);
@@ -3230,6 +3340,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/files", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const files = await storage.getFilesByPeriod(req.params.periodId);
       res.json(files);
     } catch (error) {
@@ -3239,6 +3351,8 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/periods/:periodId/files/upload", isAuthenticated, upload.single("file"), async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
       }
@@ -3304,6 +3418,11 @@ async function registerRoutes(app2) {
       }
       const fileType = isCSV ? "csv" : isExcel ? "xlsx" : "pdf";
       const parsed = await fileParser.parse(req.file.buffer, fileType);
+      if (parsed.rowCount > 5e5) {
+        return res.status(400).json({
+          error: `File contains ${parsed.rowCount.toLocaleString()} rows, which exceeds the 500,000 row limit. Please upload a smaller file.`
+        });
+      }
       const columnMappings = fileParser.autoDetectColumns(parsed.headers);
       const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
       const normalizeSourceType = (st) => st.replace(/\d+$/, "");
@@ -3375,14 +3494,15 @@ async function registerRoutes(app2) {
         shiftDetails: rawQualityReport.shiftDetails,
         detectedPreset: rawQualityReport.detectedPreset
       };
+      const safeFileName = req.file.originalname.replace(/[^a-zA-Z0-9._\- ]/g, "_").slice(0, 200);
       const fileUrl = await objectStorageService.uploadFile(
         req.file.buffer,
-        req.file.originalname,
+        safeFileName,
         req.file.mimetype
       );
       const uploadedFile = await storage.createFile({
         periodId: req.params.periodId,
-        fileName: req.file.originalname,
+        fileName: safeFileName,
         fileType,
         sourceType,
         sourceName,
@@ -3407,6 +3527,7 @@ async function registerRoutes(app2) {
           console.warn("Could not fully clean up old file:", cleanupError);
         }
       }
+      audit(req, { action: "file.upload", resourceType: "file", resourceId: uploadedFile.id, detail: `${safeFileName} (${sourceType}/${sourceName})` });
       res.json({
         file: uploadedFile,
         preview: {
@@ -3419,16 +3540,14 @@ async function registerRoutes(app2) {
       });
     } catch (error) {
       console.error("Error uploading file:", error);
-      const detail = error?.message || String(error);
-      res.status(500).json({ error: `Failed to upload file: ${detail}` });
+      console.error("Upload error detail:", error?.message || String(error));
+      res.status(500).json({ error: "Failed to upload file" });
     }
   });
   app2.get("/api/files/:fileId/preview", isAuthenticated, async (req, res) => {
     try {
-      const file = await storage.getFile(req.params.fileId);
-      if (!file) {
-        return res.status(404).json({ error: "File not found" });
-      }
+      const file = await assertFileOwner(req.params.fileId, req, res);
+      if (!file) return;
       const objectFile = await objectStorageService.getFile(file.fileUrl);
       const [buffer] = await objectFile.download();
       const parsed = await fileParser.parse(buffer, file.fileType);
@@ -3527,10 +3646,8 @@ async function registerRoutes(app2) {
   app2.post("/api/files/:fileId/column-mapping", isAuthenticated, async (req, res) => {
     try {
       const validatedMapping = columnMappingSchema.parse(req.body.columnMapping);
-      const file = await storage.getFile(req.params.fileId);
-      if (!file) {
-        return res.status(404).json({ error: "File not found" });
-      }
+      const file = await assertFileOwner(req.params.fileId, req, res);
+      if (!file) return;
       const mappedFields = {};
       const duplicates = [];
       for (const [column, field] of Object.entries(validatedMapping)) {
@@ -3563,11 +3680,14 @@ async function registerRoutes(app2) {
       res.json({ success: true });
     } catch (error) {
       console.error("Error saving column mapping:", error?.message || String(error));
-      res.status(400).json({ error: error?.message || "Invalid column mapping data" });
+      console.error("Column mapping error:", error?.message || String(error));
+      res.status(400).json({ error: "Invalid column mapping data" });
     }
   });
   app2.post("/api/periods/:periodId/files/:fileId/process", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const file = await storage.getFile(req.params.fileId);
       if (!file) {
         return res.status(404).json({ error: "File not found" });
@@ -3582,6 +3702,11 @@ async function registerRoutes(app2) {
       const objectFile = await objectStorageService.getFile(file.fileUrl);
       const [buffer] = await objectFile.download();
       const parsed = await fileParser.parse(buffer, file.fileType);
+      if (parsed.rowCount > 5e5) {
+        return res.status(400).json({
+          error: `File contains ${parsed.rowCount.toLocaleString()} rows, which exceeds the 500,000 row limit.`
+        });
+      }
       const skipStats = {
         header_row: 0,
         empty_date: 0,
@@ -3611,12 +3736,20 @@ async function registerRoutes(app2) {
           continue;
         }
         skipStats.total_processed++;
+        const scrubbedRow = { ...row };
+        const mapping = file.columnMapping;
+        for (const [col, field] of Object.entries(mapping)) {
+          if (field === "cardNumber" && scrubbedRow[col]) {
+            const val = String(scrubbedRow[col]);
+            scrubbedRow[col] = val.length > 4 ? "****" + val.slice(-4) : val;
+          }
+        }
         validTransactions.push({
           fileId: file.id,
           periodId: file.periodId,
           sourceType: file.sourceType,
           sourceName: file.sourceName,
-          rawData: row,
+          rawData: scrubbedRow,
           transactionDate: extracted.transactionDate,
           transactionTime: extracted.transactionTime || null,
           amount: extracted.amount,
@@ -3662,15 +3795,15 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/files/:fileId", isAuthenticated, async (req, res) => {
     try {
-      const file = await storage.getFile(req.params.fileId);
-      if (file) {
-        await storage.deleteMatchesByFile(file.id);
-        await storage.deleteTransactionsByFile(file.id);
-        if (file.fileUrl) {
-          await objectStorageService.deleteFile(file.fileUrl);
-        }
-        await storage.deleteFile(file.id);
+      const file = await assertFileOwner(req.params.fileId, req, res);
+      if (!file) return;
+      await storage.deleteMatchesByFile(file.id);
+      await storage.deleteTransactionsByFile(file.id);
+      if (file.fileUrl) {
+        await objectStorageService.deleteFile(file.fileUrl);
       }
+      await storage.deleteFile(file.id);
+      audit(req, { action: "file.delete", resourceType: "file", resourceId: file.id, detail: file.fileName });
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting file:", error);
@@ -3679,6 +3812,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/transactions", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const page = parseInt(req.query.page) || 1;
       const limit = Math.min(parseInt(req.query.limit) || 100, 500);
       const offset = (page - 1) * limit;
@@ -3705,6 +3840,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/verification-summary", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const summary = await storage.getVerificationSummary(req.params.periodId);
       res.json(summary);
     } catch (error) {
@@ -3714,6 +3851,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/matching-rules", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const rules = await storage.getMatchingRules(req.params.periodId);
       res.json(rules);
     } catch (error) {
@@ -3723,13 +3862,16 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/periods/:periodId/matching-rules", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const validatedRules = matchingRulesConfigSchema.parse(req.body);
       const saved = await storage.saveMatchingRules(req.params.periodId, validatedRules);
       res.json({ success: true, rules: saved });
     } catch (error) {
       if (error instanceof z2.ZodError) {
         console.error("Validation error:", error.errors);
-        return res.status(400).json({ error: "Invalid matching rules data", details: error.errors });
+        console.error("Matching rules validation:", error.errors);
+        return res.status(400).json({ error: "Invalid matching rules data" });
       }
       console.error("Error saving matching rules:", error);
       res.status(500).json({ error: "Failed to save matching rules" });
@@ -3780,6 +3922,8 @@ async function registerRoutes(app2) {
   }
   app2.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       await storage.resetMatchesByPeriod(req.params.periodId);
       const rules = await storage.getMatchingRules(req.params.periodId);
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
@@ -3966,6 +4110,7 @@ async function registerRoutes(app2) {
       const matchableCount = matchableBankTransactions.length;
       const matchRate = matchableCount > 0 ? (matchCount / matchableCount * 100).toFixed(1) : "0";
       await storage.updatePeriod(req.params.periodId, { status: "complete" });
+      audit(req, { action: "reconciliation.run", resourceType: "period", resourceId: req.params.periodId, detail: `${matchCount} matches created` });
       res.json({
         success: true,
         matchesCreated: matchCount,
@@ -3987,6 +4132,8 @@ async function registerRoutes(app2) {
   app2.post("/api/matches/manual", isAuthenticated, async (req, res) => {
     try {
       const matchInput = insertMatchSchema.omit({ matchType: true, matchConfidence: true }).parse(req.body);
+      const period = await assertPeriodOwner(matchInput.periodId, req, res);
+      if (!period) return;
       const match = await storage.createMatch({
         ...matchInput,
         matchType: "manual",
@@ -4012,6 +4159,8 @@ async function registerRoutes(app2) {
       if (!match) {
         return res.status(404).json({ error: "Match not found" });
       }
+      const period = await assertPeriodOwner(match.periodId, req, res);
+      if (!period) return;
       await storage.updateTransaction(match.fuelTransactionId, {
         matchStatus: "unmatched",
         matchId: null
@@ -4021,6 +4170,7 @@ async function registerRoutes(app2) {
         matchId: null
       });
       await storage.deleteMatch(req.params.matchId);
+      audit(req, { action: "match.delete", resourceType: "match", resourceId: req.params.matchId });
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting match:", error);
@@ -4029,6 +4179,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
       res.json(resolutions);
     } catch (error) {
@@ -4038,6 +4190,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/resolution-summary", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
       const summary = {
         linked: 0,
@@ -4073,6 +4227,12 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/transactions/:transactionId/resolutions", isAuthenticated, async (req, res) => {
     try {
+      const transaction = await storage.getTransaction(req.params.transactionId);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      const period = await assertPeriodOwner(transaction.periodId, req, res);
+      if (!period) return;
       const resolutions = await storage.getResolutionsByTransaction(req.params.transactionId);
       res.json(resolutions);
     } catch (error) {
@@ -4087,6 +4247,8 @@ async function registerRoutes(app2) {
       if (!transactionId || !periodId || !resolutionType) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
       const resolution = await storage.createResolution({
         transactionId,
         periodId,
@@ -4117,6 +4279,8 @@ async function registerRoutes(app2) {
       if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
       const resolutions = [];
       for (const transactionId of transactionIds) {
         const resolution = await storage.createResolution({
@@ -4149,6 +4313,8 @@ async function registerRoutes(app2) {
       if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
       const resolutions = [];
       for (const transactionId of transactionIds) {
         const resolution = await storage.createResolution({
@@ -4176,6 +4342,8 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const count = await storage.clearResolutionsByPeriod(req.params.periodId);
       res.json({ success: true, count });
     } catch (error) {
@@ -4190,6 +4358,8 @@ async function registerRoutes(app2) {
       if (!matches2 || !Array.isArray(matches2) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
       const createdMatches = [];
       for (const { bankId, fuelId } of matches2) {
         try {
@@ -4227,10 +4397,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/summary", isAuthenticated, async (req, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const summary = await storage.getPeriodSummary(req.params.periodId);
       res.json(summary);
     } catch (error) {
@@ -4240,10 +4408,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/attendant-summary", isAuthenticated, async (req, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const attendantSummary = await storage.getAttendantSummary(req.params.periodId);
       res.json(attendantSummary);
     } catch (error) {
@@ -4253,10 +4419,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
       const matchesData = await storage.getMatchesByPeriod(req.params.periodId);
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
@@ -4309,8 +4473,8 @@ async function registerRoutes(app2) {
         if (!bankBySource.has(name)) bankBySource.set(name, { approved: [], declined: [], cancelled: [] });
         const entry = bankBySource.get(name);
         if (t.matchStatus === "excluded") {
-          const desc2 = (t.description || "").toLowerCase();
-          if (desc2.includes("declined")) entry.declined.push(t);
+          const desc3 = (t.description || "").toLowerCase();
+          if (desc3.includes("declined")) entry.declined.push(t);
           else entry.cancelled.push(t);
         } else {
           entry.approved.push(t);
@@ -4576,6 +4740,7 @@ async function registerRoutes(app2) {
       }));
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(allRows), "All Transactions");
       const buffer = XLSX2.write(wb, { type: "buffer", bookType: "xlsx" });
+      audit(req, { action: "data.export", resourceType: "period", resourceId: req.params.periodId, detail: `Full reconciliation export: ${period.name}` });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="Reconciliation_${period.name.replace(/\s+/g, "_")}.xlsx"`);
       res.send(buffer);
@@ -4586,10 +4751,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods/:periodId/export-flagged", isAuthenticated, async (req, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
       const flaggedResolutions = resolutions.filter((r) => r.resolutionType === "flagged");
       if (flaggedResolutions.length === 0) {
@@ -4614,6 +4777,7 @@ async function registerRoutes(app2) {
       const wb = XLSX2.utils.book_new();
       XLSX2.utils.book_append_sheet(wb, ws2, "Flagged Transactions");
       const buffer = XLSX2.write(wb, { type: "buffer", bookType: "xlsx" });
+      audit(req, { action: "data.export_flagged", resourceType: "period", resourceId: req.params.periodId, detail: `${flaggedResolutions.length} flagged transactions` });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="Flagged_Transactions_${period.name.replace(/\s+/g, "_")}.xlsx"`);
       res.send(buffer);
@@ -4628,6 +4792,21 @@ async function registerRoutes(app2) {
 
 // server/api.ts
 var app = express();
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || "https://reconner.vercel.app",
+  credentials: true
+}));
+var apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1e3,
+  // 15 minutes
+  max: 200,
+  // 200 requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" }
+});
+app.use("/api/", apiLimiter);
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
@@ -4641,8 +4820,8 @@ var readyPromise = (async () => {
     await registerRoutes(app);
     app.use((err, _req, res, _next) => {
       const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-      res.status(status).json({ message });
+      console.error("Unhandled error:", err);
+      res.status(status).json({ message: status >= 500 ? "Internal Server Error" : err.message || "Error" });
     });
     isReady = true;
   } catch (err) {

@@ -235,7 +235,7 @@ export default function Dashboard() {
                       <DropdownMenuItem asChild>
                         <Link href="/admin" className="cursor-pointer" data-testid="link-admin">
                           <Shield className="mr-2 h-4 w-4" />
-                          <span>User Management</span>
+                          <span>Admin Console</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />

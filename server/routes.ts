@@ -7,13 +7,16 @@ import { fileParser, DataNormalizer, SOURCE_PRESETS, detectAndExcludeReversals }
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
 import { setupAuth, isAuthenticated } from "./auth";
-import { 
+import { audit, queryAuditLogs } from "./auditLog";
+import {
   insertReconciliationPeriodSchema,
   insertUploadedFileSchema,
   insertTransactionSchema,
   insertMatchSchema,
   matchingRulesConfigSchema,
-  type User
+  type User,
+  type ReconciliationPeriod,
+  type UploadedFile
 } from "../shared/schema";
 import { z } from "zod";
 
@@ -70,6 +73,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
+  // Ownership helpers — return the entity if the caller owns it, or null after sending 403/404
+  async function assertPeriodOwner(periodId: string, req: any, res: any): Promise<ReconciliationPeriod | null> {
+    const period = await storage.getPeriod(periodId);
+    if (!period) {
+      res.status(404).json({ error: "Period not found" });
+      return null;
+    }
+    const userId = req.user?.claims?.sub;
+    if (period.userId && period.userId !== userId) {
+      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: `Owner: ${period.userId}` });
+      res.status(403).json({ error: "Access denied" });
+      return null;
+    }
+    return period;
+  }
+
+  async function assertFileOwner(fileId: string, req: any, res: any): Promise<UploadedFile | null> {
+    const file = await storage.getFile(fileId);
+    if (!file) {
+      res.status(404).json({ error: "File not found" });
+      return null;
+    }
+    const period = await assertPeriodOwner(file.periodId, req, res);
+    if (!period) return null;
+    return file;
+  }
+
   // Admin routes - get all users
   app.get('/api/admin/users', isAuthenticated, isAdmin, async (req, res) => {
     try {
@@ -98,13 +128,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updated) {
         return res.status(404).json({ message: "User not found" });
       }
+      audit(req, { action: makeAdmin ? "admin.grant" : "admin.revoke", resourceType: "user", resourceId: req.params.id, detail: updated.email || undefined });
       res.json(updated);
     } catch (error) {
       console.error("Error updating user admin status:", error);
       res.status(500).json({ message: "Failed to update user" });
     }
   });
-  
+
+  // Admin audit log endpoint
+  app.get('/api/admin/audit-logs', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const result = await queryAuditLogs({
+        userId: req.query.userId as string | undefined,
+        action: req.query.action as string | undefined,
+        resourceType: req.query.resourceType as string | undefined,
+        outcome: req.query.outcome as string | undefined,
+        from: req.query.from as string | undefined,
+        to: req.query.to as string | undefined,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 100,
+        offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching audit logs:", error);
+      res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+
   app.get("/api/periods", isAuthenticated, async (req: any, res) => {
     try {
       const rawSub = req.user?.claims?.sub;
@@ -119,15 +170,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/periods/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await storage.getPeriod(req.params.id);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
-      // Ownership check: users can only access their own periods
-      const userId = req.user?.claims?.sub;
-      if (period.userId && period.userId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const period = await assertPeriodOwner(req.params.id, req, res);
+      if (!period) return;
       res.json(period);
     } catch (error) {
       console.error("Error fetching period:", error);
@@ -147,8 +191,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/periods/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/periods/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.id, req, res);
+      if (!period) return;
       const partialSchema = insertReconciliationPeriodSchema.partial();
       const validated = partialSchema.parse(req.body);
       const updated = await storage.updatePeriod(req.params.id, validated);
@@ -162,9 +208,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/periods/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/periods/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.id, req, res);
+      if (!period) return;
       await storage.deletePeriod(req.params.id);
+      audit(req, { action: "period.delete", resourceType: "period", resourceId: req.params.id, detail: period.name });
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting period:", error);
@@ -172,8 +221,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/files", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/files", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const files = await storage.getFilesByPeriod(req.params.periodId);
       res.json(files);
     } catch (error) {
@@ -182,8 +233,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/periods/:periodId/files/upload", isAuthenticated, upload.single("file"), async (req, res) => {
+  app.post("/api/periods/:periodId/files/upload", isAuthenticated, upload.single("file"), async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
       }
@@ -283,8 +337,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fileType = isCSV ? 'csv' : isExcel ? 'xlsx' : 'pdf';
 
       const parsed = await fileParser.parse(req.file.buffer, fileType);
+
+      // Decompression bomb protection — reject files with excessive rows
+      if (parsed.rowCount > 500000) {
+        return res.status(400).json({
+          error: `File contains ${parsed.rowCount.toLocaleString()} rows, which exceeds the 500,000 row limit. Please upload a smaller file.`
+        });
+      }
+
       const columnMappings = fileParser.autoDetectColumns(parsed.headers);
-      
+
       // Detect source preset to validate file type
       const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
       
@@ -367,15 +429,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         detectedPreset: rawQualityReport.detectedPreset,
       };
 
+      // Sanitize filename — strip path traversal, special chars, limit length
+      const safeFileName = req.file.originalname
+        .replace(/[^a-zA-Z0-9._\- ]/g, '_')
+        .slice(0, 200);
+
       const fileUrl = await objectStorageService.uploadFile(
         req.file.buffer,
-        req.file.originalname,
+        safeFileName,
         req.file.mimetype
       );
 
       const uploadedFile = await storage.createFile({
         periodId: req.params.periodId,
-        fileName: req.file.originalname,
+        fileName: safeFileName,
         fileType,
         sourceType,
         sourceName,
@@ -408,6 +475,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      audit(req, { action: "file.upload", resourceType: "file", resourceId: uploadedFile.id, detail: `${safeFileName} (${sourceType}/${sourceName})` });
+
       res.json({
         file: uploadedFile,
         preview: {
@@ -420,17 +489,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error uploading file:", error);
-      const detail = error?.message || String(error);
-      res.status(500).json({ error: `Failed to upload file: ${detail}` });
+      console.error("Upload error detail:", error?.message || String(error));
+      res.status(500).json({ error: "Failed to upload file" });
     }
   });
 
-  app.get("/api/files/:fileId/preview", isAuthenticated, async (req, res) => {
+  app.get("/api/files/:fileId/preview", isAuthenticated, async (req: any, res) => {
     try {
-      const file = await storage.getFile(req.params.fileId);
-      if (!file) {
-        return res.status(404).json({ error: "File not found" });
-      }
+      const file = await assertFileOwner(req.params.fileId, req, res);
+      if (!file) return;
 
       const objectFile = await objectStorageService.getFile(file.fileUrl);
       const [buffer] = await objectFile.download();
@@ -552,14 +619,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/files/:fileId/column-mapping", isAuthenticated, async (req, res) => {
+  app.post("/api/files/:fileId/column-mapping", isAuthenticated, async (req: any, res) => {
     try {
       const validatedMapping = columnMappingSchema.parse(req.body.columnMapping);
 
-      const file = await storage.getFile(req.params.fileId);
-      if (!file) {
-        return res.status(404).json({ error: "File not found" });
-      }
+      const file = await assertFileOwner(req.params.fileId, req, res);
+      if (!file) return;
 
       // Check for duplicate mappings (same field mapped to multiple columns)
       const mappedFields: Record<string, string> = {};
@@ -600,13 +665,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error saving column mapping:", error?.message || String(error));
-      res.status(400).json({ error: error?.message || "Invalid column mapping data" });
+      console.error("Column mapping error:", error?.message || String(error));
+      res.status(400).json({ error: "Invalid column mapping data" });
     }
   });
 
   // Alias route for periods-based URL pattern used by the flow components
-  app.post("/api/periods/:periodId/files/:fileId/process", isAuthenticated, async (req, res) => {
+  app.post("/api/periods/:periodId/files/:fileId/process", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+
       const file = await storage.getFile(req.params.fileId);
       if (!file) {
         return res.status(404).json({ error: "File not found" });
@@ -628,7 +697,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [buffer] = await objectFile.download();
       
       const parsed = await fileParser.parse(buffer, file.fileType);
-      
+
+      if (parsed.rowCount > 500000) {
+        return res.status(400).json({
+          error: `File contains ${parsed.rowCount.toLocaleString()} rows, which exceeds the 500,000 row limit.`
+        });
+      }
+
       // Track skip statistics
       const skipStats = {
         header_row: 0,
@@ -665,12 +740,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         skipStats.total_processed++;
         
+        // Scrub sensitive fields (card numbers) from raw data before storage
+        const scrubbedRow = { ...row };
+        const mapping = file.columnMapping as Record<string, string>;
+        for (const [col, field] of Object.entries(mapping)) {
+          if (field === 'cardNumber' && scrubbedRow[col]) {
+            const val = String(scrubbedRow[col]);
+            scrubbedRow[col] = val.length > 4 ? '****' + val.slice(-4) : val;
+          }
+        }
+
         validTransactions.push({
           fileId: file.id,
           periodId: file.periodId,
           sourceType: file.sourceType,
           sourceName: file.sourceName,
-          rawData: row,
+          rawData: scrubbedRow,
           transactionDate: extracted.transactionDate,
           transactionTime: extracted.transactionTime || null,
           amount: extracted.amount,
@@ -723,17 +808,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/files/:fileId", isAuthenticated, async (req, res) => {
+  app.delete("/api/files/:fileId", isAuthenticated, async (req: any, res) => {
     try {
-      const file = await storage.getFile(req.params.fileId);
-      if (file) {
-        await storage.deleteMatchesByFile(file.id);
-        await storage.deleteTransactionsByFile(file.id);
-        if (file.fileUrl) {
-          await objectStorageService.deleteFile(file.fileUrl);
-        }
-        await storage.deleteFile(file.id);
+      const file = await assertFileOwner(req.params.fileId, req, res);
+      if (!file) return;
+      await storage.deleteMatchesByFile(file.id);
+      await storage.deleteTransactionsByFile(file.id);
+      if (file.fileUrl) {
+        await objectStorageService.deleteFile(file.fileUrl);
       }
+      await storage.deleteFile(file.id);
+      audit(req, { action: "file.delete", resourceType: "file", resourceId: file.id, detail: file.fileName });
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting file:", error);
@@ -741,8 +826,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/transactions", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/transactions", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const page = parseInt(req.query.page as string) || 1;
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
       const offset = (page - 1) * limit;
@@ -776,8 +863,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // VERIFICATION SUMMARY ENDPOINT
   // ============================================
   
-  app.get("/api/periods/:periodId/verification-summary", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/verification-summary", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const summary = await storage.getVerificationSummary(req.params.periodId);
       res.json(summary);
     } catch (error) {
@@ -790,8 +879,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // MATCHING RULES ENDPOINTS
   // ============================================
   
-  app.get("/api/periods/:periodId/matching-rules", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/matching-rules", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const rules = await storage.getMatchingRules(req.params.periodId);
       res.json(rules);
     } catch (error) {
@@ -800,15 +891,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/periods/:periodId/matching-rules", isAuthenticated, async (req, res) => {
+  app.post("/api/periods/:periodId/matching-rules", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const validatedRules = matchingRulesConfigSchema.parse(req.body);
       const saved = await storage.saveMatchingRules(req.params.periodId, validatedRules);
       res.json({ success: true, rules: saved });
     } catch (error) {
       if (error instanceof z.ZodError) {
         console.error("Validation error:", error.errors);
-        return res.status(400).json({ error: "Invalid matching rules data", details: error.errors });
+        console.error("Matching rules validation:", error.errors);
+        return res.status(400).json({ error: "Invalid matching rules data" });
       }
       console.error("Error saving matching rules:", error);
       res.status(500).json({ error: "Failed to save matching rules" });
@@ -887,8 +981,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AUTO-MATCH WITH INVOICE GROUPING
   // ============================================
   
-  app.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
+  app.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       // Reset previous matches so re-running always gives accurate totals
       await storage.resetMatchesByPeriod(req.params.periodId);
 
@@ -1201,6 +1297,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update period status to complete after matching
       await storage.updatePeriod(req.params.periodId, { status: 'complete' });
 
+      audit(req, { action: "reconciliation.run", resourceType: "period", resourceId: req.params.periodId, detail: `${matchCount} matches created` });
+
       res.json({
         success: true,
         matchesCreated: matchCount,
@@ -1220,9 +1318,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/matches/manual", isAuthenticated, async (req, res) => {
+  app.post("/api/matches/manual", isAuthenticated, async (req: any, res) => {
     try {
       const matchInput = insertMatchSchema.omit({ matchType: true, matchConfidence: true }).parse(req.body);
+
+      const period = await assertPeriodOwner(matchInput.periodId, req, res);
+      if (!period) return;
 
       const match = await storage.createMatch({
         ...matchInput,
@@ -1246,12 +1347,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/matches/:matchId", isAuthenticated, async (req, res) => {
+  app.delete("/api/matches/:matchId", isAuthenticated, async (req: any, res) => {
     try {
       const match = await storage.getMatch(req.params.matchId);
       if (!match) {
         return res.status(404).json({ error: "Match not found" });
       }
+
+      const period = await assertPeriodOwner(match.periodId, req, res);
+      if (!period) return;
 
       await storage.updateTransaction(match.fuelTransactionId, { 
         matchStatus: 'unmatched',
@@ -1263,6 +1367,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       await storage.deleteMatch(req.params.matchId);
+      audit(req, { action: "match.delete", resourceType: "match", resourceId: req.params.matchId });
 
       res.json({ success: true });
     } catch (error) {
@@ -1272,8 +1377,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transaction Resolution Routes
-  app.get("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/resolutions", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
       res.json(resolutions);
     } catch (error) {
@@ -1283,8 +1390,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Resolution Summary - counts by type for completion state logic
-  app.get("/api/periods/:periodId/resolution-summary", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/resolution-summary", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
       
       const summary = {
@@ -1322,8 +1431,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/transactions/:transactionId/resolutions", isAuthenticated, async (req, res) => {
+  app.get("/api/transactions/:transactionId/resolutions", isAuthenticated, async (req: any, res) => {
     try {
+      const transaction = await storage.getTransaction(req.params.transactionId);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      const period = await assertPeriodOwner(transaction.periodId, req, res);
+      if (!period) return;
       const resolutions = await storage.getResolutionsByTransaction(req.params.transactionId);
       res.json(resolutions);
     } catch (error) {
@@ -1332,7 +1447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/resolutions", isAuthenticated, async (req, res) => {
+  app.post("/api/resolutions", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const { transactionId, periodId, resolutionType, reason, notes, linkedTransactionId, assignee } = req.body;
@@ -1340,6 +1455,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!transactionId || !periodId || !resolutionType) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
 
       const resolution = await storage.createResolution({
         transactionId,
@@ -1369,7 +1487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk dismiss low-value transactions
-  app.post("/api/resolutions/bulk-dismiss", isAuthenticated, async (req, res) => {
+  app.post("/api/resolutions/bulk-dismiss", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const { transactionIds, periodId } = req.body;
@@ -1377,6 +1495,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
 
       const resolutions = [];
       for (const transactionId of transactionIds) {
@@ -1407,7 +1528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk flag transactions for review
-  app.post("/api/resolutions/bulk-flag", isAuthenticated, async (req, res) => {
+  app.post("/api/resolutions/bulk-flag", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const { transactionIds, periodId } = req.body;
@@ -1415,6 +1536,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
 
       const resolutions = [];
       for (const transactionId of transactionIds) {
@@ -1445,8 +1569,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Clear all resolutions for a period (undo)
-  app.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
+  app.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req: any, res) => {
     try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const count = await storage.clearResolutionsByPeriod(req.params.periodId);
       res.json({ success: true, count });
     } catch (error) {
@@ -1456,7 +1582,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk confirm matches (quick wins)
-  app.post("/api/matches/bulk-confirm", isAuthenticated, async (req, res) => {
+  app.post("/api/matches/bulk-confirm", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const { matches, periodId } = req.body;
@@ -1464,6 +1590,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!matches || !Array.isArray(matches) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+
+      const period = await assertPeriodOwner(periodId, req, res);
+      if (!period) return;
 
       const createdMatches = [];
       for (const { bankId, fuelId } of matches) {
@@ -1508,12 +1637,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  app.get("/api/periods/:periodId/summary", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/summary", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
 
       const summary = await storage.getPeriodSummary(req.params.periodId);
       
@@ -1525,12 +1652,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Attendant summary — per-attendant breakdown of matched/unmatched fuel transactions
-  app.get("/api/periods/:periodId/attendant-summary", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/attendant-summary", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
       const attendantSummary = await storage.getAttendantSummary(req.params.periodId);
       res.json(attendantSummary);
     } catch (error) {
@@ -1540,12 +1665,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export full reconciliation report as Excel
-  app.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/export", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
 
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
       const matchesData = await storage.getMatchesByPeriod(req.params.periodId);
@@ -1928,6 +2051,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
+      audit(req, { action: "data.export", resourceType: "period", resourceId: req.params.periodId, detail: `Full reconciliation export: ${period.name}` });
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="Reconciliation_${period.name.replace(/\s+/g, '_')}.xlsx"`);
       res.send(buffer);
@@ -1937,12 +2062,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/export-flagged", isAuthenticated, async (req, res) => {
+  app.get("/api/periods/:periodId/export-flagged", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await storage.getPeriod(req.params.periodId);
-      if (!period) {
-        return res.status(404).json({ error: "Period not found" });
-      }
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
 
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
       const flaggedResolutions = resolutions.filter(r => r.resolutionType === 'flagged');
@@ -1974,6 +2097,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
       
+      audit(req, { action: "data.export_flagged", resourceType: "period", resourceId: req.params.periodId, detail: `${flaggedResolutions.length} flagged transactions` });
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="Flagged_Transactions_${period.name.replace(/\s+/g, '_')}.xlsx"`);
       res.send(buffer);

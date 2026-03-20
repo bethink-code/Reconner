@@ -229,6 +229,27 @@ export const insertTransactionResolutionSchema = createInsertSchema(transactionR
 export type InsertTransactionResolution = z.infer<typeof insertTransactionResolutionSchema>;
 export type TransactionResolution = typeof transactionResolutions.$inferSelect;
 
+// Audit Logs — tracks security-sensitive operations
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  userEmail: text("user_email"),
+  action: text("action").notNull(), // e.g. 'period.delete', 'file.upload', 'auth.login_failed'
+  resourceType: text("resource_type"), // e.g. 'period', 'file', 'match', 'user'
+  resourceId: varchar("resource_id"),
+  outcome: text("outcome").notNull().default("success"), // 'success', 'denied', 'error'
+  detail: text("detail"), // Additional context (e.g. "Ownership check failed")
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_audit_logs_user_id").on(table.userId),
+  index("IDX_audit_logs_action").on(table.action),
+  index("IDX_audit_logs_created_at").on(table.createdAt),
+]);
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
 // Resolution reason options
 export const RESOLUTION_REASONS = [
   { value: "timing_difference", label: "Timing difference (posted next day)" },

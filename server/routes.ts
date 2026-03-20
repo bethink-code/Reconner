@@ -211,6 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid email address" });
       }
       await storage.createAccessRequest(String(name).trim(), trimmedEmail, String(cell).trim());
+      audit(req, { action: "access_request.submitted", resourceType: "access_request", detail: `${String(name).trim()} (${trimmedEmail})` });
       res.json({ success: true });
     } catch (error) {
       console.error("Error creating access request:", error);

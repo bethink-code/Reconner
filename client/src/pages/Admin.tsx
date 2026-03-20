@@ -16,6 +16,8 @@ import { useAuth } from "@/hooks/useAuth";
 const ACTION_LABELS: Record<string, string> = {
   "access.denied": "Access Denied",
   "auth.blocked_uninvited": "Login Blocked (Uninvited)",
+  "auth.error": "Login Error",
+  "access_request.submitted": "Access Request Submitted",
   "period.delete": "Period Deleted",
   "file.upload": "File Uploaded",
   "file.delete": "File Deleted",

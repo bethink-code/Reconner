@@ -3150,6 +3150,10 @@ async function setupAuth(app2) {
       passport.authenticate("google", (err, user, info) => {
         if (err) {
           console.error("Auth error:", err);
+          try {
+            db.insert(auditLogs).values({ action: "auth.error", outcome: "error", detail: String(err?.message || err), ipAddress: req.headers?.["x-forwarded-for"]?.toString()?.split(",")[0]?.trim() || req.socket?.remoteAddress || null });
+          } catch {
+          }
           return res.redirect("/api/login");
         }
         if (!user) {
@@ -3410,6 +3414,7 @@ async function registerRoutes(app2) {
         return res.status(400).json({ error: "Invalid email address" });
       }
       await storage.createAccessRequest(String(name).trim(), trimmedEmail, String(cell).trim());
+      audit(req, { action: "access_request.submitted", resourceType: "access_request", detail: `${String(name).trim()} (${trimmedEmail})` });
       res.json({ success: true });
     } catch (error) {
       console.error("Error creating access request:", error);

@@ -172,6 +172,7 @@ export async function setupAuth(app: Express) {
       passport.authenticate("google", (err: any, user: any, info: any) => {
         if (err) {
           console.error("Auth error:", err);
+          try { db.insert(auditLogs).values({ action: "auth.error", outcome: "error", detail: String(err?.message || err), ipAddress: req.headers?.["x-forwarded-for"]?.toString()?.split(",")[0]?.trim() || req.socket?.remoteAddress || null }); } catch {}
           return res.redirect("/api/login");
         }
         if (!user) {

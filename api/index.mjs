@@ -4147,6 +4147,7 @@ async function registerRoutes(app2) {
         matchStatus: "matched",
         matchId: match.id
       });
+      audit(req, { action: "match.manual", resourceType: "match", resourceId: match.id, detail: `Fuel ${matchInput.fuelTransactionId.slice(0, 8)}... \u2194 Bank ${matchInput.bankTransactionId.slice(0, 8)}...` });
       res.json({ success: true, match });
     } catch (error) {
       console.error("Error creating manual match:", error);
@@ -4266,6 +4267,7 @@ async function registerRoutes(app2) {
           matchStatus: "resolved"
         });
       }
+      audit(req, { action: `resolution.${resolutionType}`, resourceType: "transaction", resourceId: transactionId, detail: reason || notes || void 0 });
       res.json({ success: true, resolution });
     } catch (error) {
       console.error("Error creating resolution:", error);
@@ -4300,6 +4302,7 @@ async function registerRoutes(app2) {
           matchStatus: "resolved"
         });
       }
+      audit(req, { action: "resolution.bulk_dismiss", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions dismissed` });
       res.json({ success: true, count: resolutions.length });
     } catch (error) {
       console.error("Error bulk dismissing:", error);
@@ -4334,6 +4337,7 @@ async function registerRoutes(app2) {
           matchStatus: "resolved"
         });
       }
+      audit(req, { action: "resolution.bulk_flag", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions flagged` });
       res.json({ success: true, count: resolutions.length });
     } catch (error) {
       console.error("Error bulk flagging:", error);
@@ -4389,6 +4393,7 @@ async function registerRoutes(app2) {
           console.error(`Error creating match for bank ${bankId}:`, matchError);
         }
       }
+      audit(req, { action: "match.bulk_confirm", resourceType: "period", resourceId: periodId, detail: `${createdMatches.length} matches confirmed` });
       res.json({ success: true, count: createdMatches.length });
     } catch (error) {
       console.error("Error bulk confirming:", error);

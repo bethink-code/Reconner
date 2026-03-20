@@ -1335,11 +1335,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         matchStatus: 'matched',
         matchId: match.id 
       });
-      await storage.updateTransaction(matchInput.bankTransactionId, { 
+      await storage.updateTransaction(matchInput.bankTransactionId, {
         matchStatus: 'matched',
-        matchId: match.id 
+        matchId: match.id
       });
 
+      audit(req, { action: "match.manual", resourceType: "match", resourceId: match.id, detail: `Fuel ${matchInput.fuelTransactionId.slice(0,8)}... ↔ Bank ${matchInput.bankTransactionId.slice(0,8)}...` });
       res.json({ success: true, match });
     } catch (error) {
       console.error("Error creating manual match:", error);
@@ -1479,6 +1480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      audit(req, { action: `resolution.${resolutionType}`, resourceType: "transaction", resourceId: transactionId, detail: reason || notes || undefined });
       res.json({ success: true, resolution });
     } catch (error) {
       console.error("Error creating resolution:", error);
@@ -1520,6 +1522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      audit(req, { action: "resolution.bulk_dismiss", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions dismissed` });
       res.json({ success: true, count: resolutions.length });
     } catch (error) {
       console.error("Error bulk dismissing:", error);
@@ -1561,6 +1564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      audit(req, { action: "resolution.bulk_flag", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions flagged` });
       res.json({ success: true, count: resolutions.length });
     } catch (error) {
       console.error("Error bulk flagging:", error);
@@ -1629,6 +1633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      audit(req, { action: "match.bulk_confirm", resourceType: "period", resourceId: periodId, detail: `${createdMatches.length} matches confirmed` });
       res.json({ success: true, count: createdMatches.length });
     } catch (error) {
       console.error("Error bulk confirming:", error);

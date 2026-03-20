@@ -18,7 +18,16 @@ const ACTION_LABELS: Record<string, string> = {
   "file.upload": "File Uploaded",
   "file.delete": "File Deleted",
   "reconciliation.run": "Reconciliation Run",
+  "match.manual": "Manual Match",
   "match.delete": "Match Deleted",
+  "match.bulk_confirm": "Bulk Confirm Matches",
+  "resolution.linked": "Linked Resolution",
+  "resolution.reviewed": "Reviewed Resolution",
+  "resolution.flagged": "Flagged Transaction",
+  "resolution.dismissed": "Dismissed Transaction",
+  "resolution.written_off": "Written Off",
+  "resolution.bulk_dismiss": "Bulk Dismiss",
+  "resolution.bulk_flag": "Bulk Flag",
   "data.export": "Data Export",
   "data.export_flagged": "Flagged Export",
   "admin.grant": "Admin Granted",
@@ -304,7 +313,11 @@ export default function Admin() {
                       <SelectItem value="file.upload">File Upload</SelectItem>
                       <SelectItem value="file.delete">File Deleted</SelectItem>
                       <SelectItem value="reconciliation.run">Reconciliation</SelectItem>
+                      <SelectItem value="match.manual">Manual Match</SelectItem>
+                      <SelectItem value="match.bulk_confirm">Bulk Confirm</SelectItem>
                       <SelectItem value="match.delete">Match Deleted</SelectItem>
+                      <SelectItem value="resolution.bulk_dismiss">Bulk Dismiss</SelectItem>
+                      <SelectItem value="resolution.bulk_flag">Bulk Flag</SelectItem>
                       <SelectItem value="data.export">Data Export</SelectItem>
                       <SelectItem value="data.export_flagged">Flagged Export</SelectItem>
                       <SelectItem value="admin.grant">Admin Granted</SelectItem>

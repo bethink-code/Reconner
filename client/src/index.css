@@ -4,6 +4,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes pageFadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes fadeSlideIn {
+  from { transform: translateY(6px); }
+  to { transform: translateY(0); }
+}
+
 /* LEKANA — LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);

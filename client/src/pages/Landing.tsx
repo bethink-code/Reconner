@@ -5,12 +5,19 @@ export default function Landing() {
   const notInvited = params.get("error") === "not_invited";
 
   const [flipped, setFlipped] = useState(false);
+  const [fading, setFading] = useState(false);
   const [formData, setFormData] = useState({ name: "", email: "", cell: "" });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const flip = () => setFlipped((f) => !f);
+  const flip = () => {
+    setFading(true);
+    setTimeout(() => {
+      setFlipped((f) => !f);
+      setFading(false);
+    }, 300);
+  };
 
   const handleSubmit = async () => {
     const { name, email, cell } = formData;
@@ -41,9 +48,11 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5C400] flex flex-col items-center justify-center px-4 py-10 gap-10">
+    <div className="min-h-screen bg-[#F5C400] flex flex-col items-center justify-center px-4 py-10">
+      {/* Centered content group */}
+      <div className="flex flex-col items-center">
       {/* Brand */}
-      <div className="flex items-center gap-2.5 mb-2.5">
+      <div className="flex items-center gap-2.5 mb-2.5" style={{ animation: "pageFadeIn 0.5s ease-out" }}>
         <svg viewBox="0 0 80 40" width="44" height="22" fill="none" aria-hidden="true">
           <circle cx="8" cy="20" r="7" fill="#1A1200" />
           <rect x="34" y="2" width="4" height="36" rx="2" fill="#1A1200" />
@@ -52,30 +61,20 @@ export default function Landing() {
         <h1 className="font-heading text-4xl font-normal text-[#1A1200] tracking-tight">lekana</h1>
       </div>
 
-      <p className="font-heading text-[22px] font-light text-[#1A1200] mb-4 text-center">
+      <p className="font-heading text-[22px] font-light text-[#1A1200] mb-4 text-center" style={{ animation: "pageFadeIn 0.6s ease-out" }}>
         A day's work in 5 minutes.
       </p>
 
-      <div className="flex flex-col items-center gap-2 mb-12 text-center">
+      <div className="flex flex-col items-center gap-2 mb-10 text-center" style={{ animation: "pageFadeIn 0.7s ease-out" }}>
         <p className="text-[15px] text-[#1A1200]/65">Every transaction matched. Nothing missed.</p>
         <p className="text-[15px] text-[#1A1200]/65">See exactly what needs your attention.</p>
         <p className="text-[15px] text-[#1A1200]/65">Works with FNB, ABSA, Standard Bank and Nedbank.</p>
       </div>
 
-      {/* Flip card */}
-      <div className="w-full max-w-[380px]" style={{ perspective: "1200px" }}>
-        <div
-          className="relative w-full transition-transform duration-500"
-          style={{
-            transformStyle: "preserve-3d",
-            transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-          }}
-        >
-          {/* Front: Sign in */}
-          <div
-            className="w-full bg-white rounded-xl px-8 py-8"
-            style={{ backfaceVisibility: "hidden" }}
-          >
+      {/* Card */}
+      <div className="w-full max-w-[380px]" style={{ opacity: fading ? 0 : 1, transition: "opacity 0.3s ease-out" }}>
+        {!flipped ? (
+          <div key="sign-in" className="w-full bg-white rounded-xl px-8 py-8" style={{ animation: "fadeSlideIn 0.2s ease-out" }}>
             <p className="font-heading font-semibold text-lg text-[#1A1200] text-center mb-1.5">
               Welcome!
             </p>
@@ -96,7 +95,7 @@ export default function Landing() {
 
             <a
               href="/api/login"
-              className="w-full flex items-center justify-center gap-2.5 bg-[#F5EDE6] text-[#1A1200] border border-[#1A1200]/12 rounded-lg px-4 py-3 font-medium text-sm hover:bg-[#EDE5DE] transition-colors"
+              className="w-full flex items-center justify-center gap-2.5 bg-[#F4F4F0] text-[#1A1200] border border-[#E5E3DC] rounded-lg px-4 py-3 font-medium text-sm hover:bg-[#ECEAE6] transition-colors"
               data-testid="button-login"
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -115,112 +114,108 @@ export default function Landing() {
               Need access? <span className="underline underline-offset-2">Request an invite</span>
             </button>
           </div>
+        ) : !submitted ? (
+          <div key="request" className="w-full bg-white rounded-xl px-8 py-8" style={{ animation: "fadeSlideIn 0.2s ease-out" }}>
+            <p className="font-heading font-semibold text-lg text-[#1A1200] mb-1.5">
+              Request an invite
+            </p>
+            <p className="text-[13px] text-[#1A1200] mb-6 leading-relaxed">
+              Tell us where we can get hold of you and we'll be in touch.
+            </p>
 
-          {/* Back: Request form */}
-          <div
-            className="absolute top-0 left-0 w-full bg-white rounded-xl px-8 py-8"
-            style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
-          >
-            {!submitted ? (
-              <div>
-                <p className="font-heading font-semibold text-lg text-[#1A1200] mb-1.5">
-                  Request an invite
-                </p>
-                <p className="text-[13px] text-[#1A1200] mb-6 leading-relaxed">
-                  Tell us where we can get hold of you and we'll be in touch.
-                </p>
-
-                <div className="flex flex-col gap-3.5">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
-                      Full name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Your name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className={`bg-[#F5EDE6] border ${errors.name ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
-                    />
-                    {errors.name && <span className="text-[11px] text-red-600">Please enter your name</span>}
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
-                      Email address
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="you@yourcompany.co.za"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className={`bg-[#F5EDE6] border ${errors.email ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
-                    />
-                    {errors.email && <span className="text-[11px] text-red-600">Please enter a valid email address</span>}
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
-                      Cell number
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="+27 82 000 0000"
-                      value={formData.cell}
-                      onChange={(e) => setFormData({ ...formData, cell: e.target.value })}
-                      className={`bg-[#F5EDE6] border ${errors.cell ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
-                    />
-                    {errors.cell && <span className="text-[11px] text-red-600">Please enter your cell number</span>}
-                  </div>
-
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="w-full mt-2 flex items-center justify-center gap-2.5 bg-[#FC6722] text-white rounded-lg px-4 py-3 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? (
-                      <>
-                        Sending...
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      </>
-                    ) : (
-                      "Send request"
-                    )}
-                  </button>
-                </div>
-
-                <button
-                  onClick={flip}
-                  className="block w-full mt-5 text-[13px] text-[#1A1200]/40 text-center hover:text-[#1A1200]/70 transition-colors bg-transparent border-none cursor-pointer"
-                >
-                  Already have access? <span className="underline underline-offset-2">Sign in</span>
-                </button>
+            <div className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1.5">
+                <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
+                  Full name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Your name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className={`bg-[#F4F4F0] border ${errors.name ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                />
+                {errors.name && <span className="text-[11px] text-red-600">Please enter your name</span>}
               </div>
-            ) : (
-              <div className="flex flex-col items-center text-center gap-3 py-3">
-                <div className="w-11 h-11 rounded-full bg-[#F5EDE6] flex items-center justify-center">
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M3 10.5L8 15.5L17 5.5" stroke="#1A1200" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <p className="font-heading font-semibold text-[17px] text-[#1A1200]">Request sent</p>
-                <p className="text-[13px] font-light text-[#1A1200]/50 leading-relaxed">
-                  Thanks! We'll be in touch on WhatsApp shortly.
-                </p>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
+                  Email address
+                </label>
+                <input
+                  type="email"
+                  placeholder="you@yourcompany.co.za"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className={`bg-[#F4F4F0] border ${errors.email ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                />
+                {errors.email && <span className="text-[11px] text-red-600">Please enter a valid email address</span>}
               </div>
-            )}
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
+                  Cell number
+                </label>
+                <input
+                  type="tel"
+                  placeholder="+27 82 000 0000"
+                  value={formData.cell}
+                  onChange={(e) => setFormData({ ...formData, cell: e.target.value })}
+                  className={`bg-[#F4F4F0] border ${errors.cell ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                />
+                {errors.cell && <span className="text-[11px] text-red-600">Please enter your cell number</span>}
+              </div>
+
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="w-full mt-2 flex items-center justify-center gap-2.5 bg-[#FC6722] text-white rounded-lg px-4 py-3 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {submitting ? (
+                  <>
+                    Sending...
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  </>
+                ) : (
+                  "Send request"
+                )}
+              </button>
+            </div>
+
+            <button
+              onClick={flip}
+              className="block w-full mt-5 text-[13px] text-[#1A1200]/40 text-center hover:text-[#1A1200]/70 transition-colors bg-transparent border-none cursor-pointer"
+            >
+              Already have access? <span className="underline underline-offset-2">Sign in</span>
+            </button>
           </div>
-        </div>
+        ) : (
+          <div key="success" className="w-full bg-white rounded-xl px-8 py-8" style={{ animation: "fadeSlideIn 0.2s ease-out" }}>
+            <div className="flex flex-col items-center text-center gap-3 py-3">
+              <div className="w-11 h-11 rounded-full bg-[#F4F4F0] flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M3 10.5L8 15.5L17 5.5" stroke="#1A1200" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <p className="font-heading font-semibold text-[17px] text-[#1A1200]">Request sent</p>
+              <p className="text-[13px] font-light text-[#1A1200]/50 leading-relaxed">
+                Thanks! We'll be in touch on WhatsApp shortly.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
       </div>
 
       {/* Footer */}
-      <div className="flex flex-col items-center gap-1.5 mt-auto">
-        <span className="text-[11px] font-light text-[#1A1200]/40 tracking-wide">a TimeWarp product by</span>
+      <a href="https://bethink.co.za" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5 mt-8 no-underline" style={{ animation: "pageFadeIn 0.8s ease-out" }}>
+        <span className="text-[12px] font-normal text-[#1A1200] tracking-wide">a TimeWarp product by</span>
         <svg width="80" height="30" viewBox="0 0 761 245" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path fillRule="evenodd" clipRule="evenodd" d="M70.1708 40.8079C87.1065 40.8079 98.367 45.7625 103.952 55.6717C109.537 65.4007 112.33 82.2463 112.33 106.209C112.33 129.991 109.357 147.557 103.412 158.907C97.4662 170.258 85.8454 175.933 68.5493 175.933C55.0368 175.933 45.578 172.42 40.173 165.393H39.092L36.3895 173.231H0.986633V0H46.1185V46.7534H47.1995C53.145 42.7897 60.8021 40.8079 70.1708 40.8079ZM65.3063 132.693C66.027 129.45 66.4774 126.297 66.6576 123.234C66.8377 120.172 66.9278 114.406 66.9278 105.938C66.9278 97.2903 66.2972 90.7142 65.0361 86.21C63.7749 81.5257 61.1625 79.1835 57.1988 79.1835C53.4153 79.1835 49.6318 80.2645 45.8483 82.4265V138.368C49.2714 139.99 52.5144 140.801 55.5773 140.801C58.8203 140.801 61.0724 140.26 62.3336 139.179C63.7749 137.918 64.7658 135.756 65.3063 132.693ZM180.925 79.1835C176.241 79.1835 173.178 80.805 171.737 84.048C170.295 87.1108 169.575 91.8853 169.575 98.3713H193.086V91.8853C193.086 83.4174 189.033 79.1835 180.925 79.1835ZM182.006 40.5376C200.563 40.5376 213.806 45.0418 221.733 54.0502C229.84 62.8783 233.894 75.5801 233.894 92.1555C233.894 94.3175 233.264 104.047 232.002 121.343H170.385C170.385 134.855 176.601 141.611 189.033 141.611C194.978 141.611 206.599 139.539 223.895 135.396L227.678 168.907C212.544 173.591 197.41 175.933 182.276 175.933C163.719 175.933 149.486 169.898 139.577 157.826C129.668 145.575 124.713 129 124.713 108.1C124.713 63.0585 143.811 40.5376 182.006 40.5376ZM319.397 173.501C306.065 175.122 294.444 175.933 284.535 175.933C274.806 175.933 267.148 173.411 261.563 168.366C256.158 163.141 253.456 154.223 253.456 141.611V78.9132H240.484V45.4021H255.618L258.05 20.5391H298.858V45.4021H322.91L321.018 78.9132H298.588V132.693C298.588 136.477 300.389 138.368 303.993 138.368C304.353 138.368 309.938 138.098 320.748 137.558L319.397 173.501ZM378.415 53.2394C388.324 44.7715 399.044 40.5376 410.575 40.5376C422.106 40.5376 430.213 43.3302 434.897 48.9154C439.762 54.3204 442.194 62.518 442.194 73.5082V173.231H396.252V88.9125C396.252 84.4083 394.27 82.1562 390.306 82.1562C385.261 82.1562 381.027 83.4174 377.604 85.9398V173.231H332.202V0H377.334V53.2394H378.415ZM504.027 173.231H459.435V45.1319H504.027V173.231ZM566.298 53.2394C576.208 44.7715 587.108 40.5376 598.999 40.5376C610.89 40.5376 619.178 43.3302 623.862 48.9154C628.726 54.3204 631.159 62.518 631.159 73.5082V173.231H585.216V88.9125C585.216 84.4083 583.234 82.1562 579.27 82.1562C574.226 82.1562 569.992 83.4174 566.569 85.9398V173.231H521.167V43.7806H562.515L565.217 53.2394H566.298ZM758.932 173.231H708.936L692.451 123.505H691.37V173.231H647.319V0H691.91V95.3985H692.991L712.719 43.7806H760.013L732.718 108.371L758.932 173.231Z" fill="#1A1200" />
           <circle cx="482.5" cy="210.433" r="18.5" fill="#FC6722" />
         </svg>
-      </div>
+      </a>
     </div>
   );
 }

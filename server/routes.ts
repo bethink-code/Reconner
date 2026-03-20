@@ -254,6 +254,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin security overview
+  app.get('/api/admin/security-overview', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      // Active sessions (not expired)
+      const sessionsResult = await pool.query(
+        `SELECT COUNT(*) as count FROM sessions WHERE expire > NOW()`
+      );
+      const activeSessions = parseInt(sessionsResult.rows[0]?.count || '0');
+
+      // Total users
+      const usersResult = await pool.query(`SELECT COUNT(*) as count FROM users`);
+      const totalUsers = parseInt(usersResult.rows[0]?.count || '0');
+
+      // Users who accepted terms
+      const termsResult = await pool.query(
+        `SELECT COUNT(*) as count FROM users WHERE terms_accepted_at IS NOT NULL`
+      );
+      const termsAccepted = parseInt(termsResult.rows[0]?.count || '0');
+
+      // Pending invites (invited but never logged in)
+      const pendingInvitesResult = await pool.query(
+        `SELECT COUNT(*) as count FROM invited_users iu WHERE NOT EXISTS (SELECT 1 FROM users u WHERE LOWER(u.email) = LOWER(iu.email))`
+      );
+      const pendingInvites = parseInt(pendingInvitesResult.rows[0]?.count || '0');
+
+      // Audit stats from last 24 hours
+      const last24h = await pool.query(
+        `SELECT action, outcome, COUNT(*) as count FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY action, outcome ORDER BY count DESC`
+      );
+
+      // Access denials from last 7 days
+      const denials7d = await pool.query(
+        `SELECT user_email, ip_address, detail, created_at FROM audit_logs WHERE outcome = 'denied' AND created_at > NOW() - INTERVAL '7 days' ORDER BY created_at DESC LIMIT 20`
+      );
+
+      // Audit totals
+      const auditTotalResult = await pool.query(
+        `SELECT COUNT(*) as count FROM audit_logs`
+      );
+      const totalAuditEvents = parseInt(auditTotalResult.rows[0]?.count || '0');
+
+      res.json({
+        activeSessions,
+        totalUsers,
+        termsAccepted,
+        pendingInvites,
+        totalAuditEvents,
+        last24h: last24h.rows,
+        recentDenials: denials7d.rows,
+      });
+    } catch (error) {
+      console.error("Error fetching security overview:", error);
+      res.status(500).json({ error: "Failed to fetch security overview" });
+    }
+  });
+
   // Admin audit log endpoint
   app.get('/api/admin/audit-logs', isAuthenticated, isAdmin, async (req: any, res) => {
     try {

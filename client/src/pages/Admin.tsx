@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { User, AuditLog, InvitedUser, AccessRequest } from "@shared/schema";
@@ -52,7 +52,7 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security">("users");
   const [auditPage, setAuditPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
@@ -121,6 +121,22 @@ export default function Admin() {
   });
 
   const pendingRequests = accessRequests?.filter(r => r.status === "pending") || [];
+
+  interface SecurityOverview {
+    activeSessions: number;
+    totalUsers: number;
+    termsAccepted: number;
+    pendingInvites: number;
+    totalAuditEvents: number;
+    last24h: { action: string; outcome: string; count: string }[];
+    recentDenials: { user_email: string; ip_address: string; detail: string; created_at: string }[];
+  }
+
+  const { data: securityData, isLoading: securityLoading } = useQuery<SecurityOverview>({
+    queryKey: ["/api/admin/security-overview"],
+    enabled: activeTab === "security",
+    retry: false,
+  });
 
   const { data: auditData, isLoading: auditLoading } = useQuery<{
     logs: AuditLog[];
@@ -253,6 +269,14 @@ export default function Admin() {
             {pendingRequests.length > 0 && (
               <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">{pendingRequests.length}</Badge>
             )}
+          </Button>
+          <Button
+            variant={activeTab === "security" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("security")}
+          >
+            <Lock className="h-4 w-4 mr-2" />
+            Security
           </Button>
         </div>
 
@@ -670,6 +694,126 @@ export default function Admin() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* Security tab */}
+        {activeTab === "security" && (
+          <div className="space-y-6">
+            {securityLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : securityData ? (
+              <>
+                {/* Stats grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-5 pb-4 px-5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Activity className="h-4 w-4 text-emerald-600" />
+                        <p className="text-xs text-muted-foreground">Active Sessions</p>
+                      </div>
+                      <p className="text-2xl font-heading font-semibold">{securityData.activeSessions}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-5 pb-4 px-5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Users className="h-4 w-4 text-blue-600" />
+                        <p className="text-xs text-muted-foreground">Total Users</p>
+                      </div>
+                      <p className="text-2xl font-heading font-semibold">{securityData.totalUsers}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{securityData.termsAccepted} accepted terms</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-5 pb-4 px-5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <UserPlus className="h-4 w-4 text-amber-600" />
+                        <p className="text-xs text-muted-foreground">Pending Invites</p>
+                      </div>
+                      <p className="text-2xl font-heading font-semibold">{securityData.pendingInvites}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Invited, not logged in</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-5 pb-4 px-5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ScrollText className="h-4 w-4 text-violet-600" />
+                        <p className="text-xs text-muted-foreground">Audit Events</p>
+                      </div>
+                      <p className="text-2xl font-heading font-semibold">{securityData.totalAuditEvents}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Total logged</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Activity last 24h */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Activity className="h-4 w-4" />
+                      Last 24 Hours
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {securityData.last24h.length > 0 ? (
+                      <div className="space-y-2">
+                        {securityData.last24h.map((row, i) => (
+                          <div key={i} className="flex items-center justify-between py-1.5 text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium border ${
+                                row.outcome === "success" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                row.outcome === "denied" ? "bg-red-50 text-red-700 border-red-200" :
+                                "bg-gray-50 text-gray-700 border-gray-200"
+                              }`}>
+                                {row.outcome}
+                              </span>
+                              <span>{ACTION_LABELS[row.action] || row.action}</span>
+                            </div>
+                            <span className="text-muted-foreground font-medium">{row.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No activity in the last 24 hours</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Recent denials */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      Access Denials (Last 7 Days)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {securityData.recentDenials.length > 0 ? (
+                      <div className="space-y-2">
+                        {securityData.recentDenials.map((denial, i) => (
+                          <div key={i} className="flex items-start justify-between gap-4 p-3 rounded-lg border bg-red-50/30 text-sm">
+                            <div className="space-y-0.5">
+                              <p className="font-medium">{denial.user_email || "Unknown"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {denial.ip_address && `${denial.ip_address} - `}{denial.detail || "Access denied"}
+                              </p>
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDate(denial.created_at)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No access denials in the last 7 days</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
+          </div>
         )}
       </div>
     </div>

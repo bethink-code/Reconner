@@ -47,7 +47,7 @@ import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { ReconciliationPeriod } from "@shared/schema";
+import type { ReconciliationPeriod, AccessRequest } from "@shared/schema";
 
 interface DisplayPeriod {
   id: string;
@@ -71,6 +71,14 @@ export default function Dashboard() {
   const { data: periods = [], isLoading } = useQuery<ReconciliationPeriod[]>({
     queryKey: ["/api/periods"],
   });
+
+  // Pending access requests count (admin only)
+  const { data: pendingRequests } = useQuery<AccessRequest[]>({
+    queryKey: ["/api/admin/access-requests"],
+    enabled: !!user?.isAdmin,
+    refetchInterval: 60000, // Poll every 60s
+  });
+  const pendingCount = pendingRequests?.filter(r => r.status === "pending").length || 0;
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -211,6 +219,11 @@ export default function Dashboard() {
                         {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || <User className="h-4 w-4" />}
                       </AvatarFallback>
                     </Avatar>
+                    {pendingCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center ring-2 ring-background">
+                        {pendingCount}
+                      </span>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
@@ -233,9 +246,12 @@ export default function Dashboard() {
                   {user?.isAdmin && (
                     <>
                       <DropdownMenuItem asChild>
-                        <Link href="/admin" className="cursor-pointer" data-testid="link-admin">
+                        <Link href="/admin" className="cursor-pointer flex items-center" data-testid="link-admin">
                           <Shield className="mr-2 h-4 w-4" />
                           <span>Admin Console</span>
+                          {pendingCount > 0 && (
+                            <Badge variant="destructive" className="ml-auto text-[10px] px-1.5 py-0">{pendingCount}</Badge>
+                          )}
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />

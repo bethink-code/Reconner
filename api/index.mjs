@@ -272,8 +272,8 @@ if (!process.env.DATABASE_URL) {
     "DATABASE_URL must be set. Did you forget to provision a database?"
   );
 }
-var pool2 = new Pool({ connectionString: process.env.DATABASE_URL });
-var db = drizzle({ client: pool2, schema: schema_exports });
+var pool = new Pool({ connectionString: process.env.DATABASE_URL });
+var db = drizzle({ client: pool, schema: schema_exports });
 
 // server/storage.ts
 import { eq, and, or, desc, sql as sql2, inArray } from "drizzle-orm";
@@ -460,7 +460,7 @@ var DatabaseStorage = class {
     ));
   }
   async getPeriodSummary(periodId) {
-    const result = await pool2.query(`
+    const result = await pool.query(`
       WITH bank_coverage AS (
         SELECT
           MIN(transaction_date) AS min_date,
@@ -649,7 +649,7 @@ var DatabaseStorage = class {
     };
   }
   async getPerBankBreakdown(periodId) {
-    const result = await pool2.query(`
+    const result = await pool.query(`
       SELECT
         COALESCE(f.bank_name, t.source_name, 'Bank') as bank_name,
         COUNT(CASE WHEN t.match_status != 'excluded' THEN 1 END) as approved_count,
@@ -679,7 +679,7 @@ var DatabaseStorage = class {
     }));
   }
   async getAttendantSummary(periodId) {
-    const result = await pool2.query(`
+    const result = await pool.query(`
       WITH bank_coverage AS (
         SELECT
           MIN(transaction_date) AS min_date,
@@ -711,7 +711,7 @@ var DatabaseStorage = class {
       GROUP BY COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown')
       ORDER BY matched_count DESC, attendant ASC
     `, [periodId]);
-    const bankBreakdown = await pool2.query(`
+    const bankBreakdown = await pool.query(`
       SELECT
         COALESCE(NULLIF(TRIM(t_fuel.attendant), ''), 'Unknown') AS attendant,
         COALESCE(f.bank_name, t_bank.source_name, 'Bank') AS bank_name,
@@ -754,7 +754,7 @@ var DatabaseStorage = class {
     });
   }
   async getBankAccountCoverageRanges(periodId) {
-    const result = await pool2.query(`
+    const result = await pool.query(`
       SELECT
         t.file_id,
         COALESCE(f.bank_name, t.source_name, 'Bank Account') as bank_name,
@@ -780,7 +780,7 @@ var DatabaseStorage = class {
     }));
   }
   async getVerificationSummary(periodId) {
-    const result = await pool2.query(`
+    const result = await pool.query(`
       WITH fuel_stats AS (
         SELECT 
           COUNT(*) as total_fuel,
@@ -909,7 +909,7 @@ var DatabaseStorage = class {
       CROSS JOIN match_date_offsets md
       CROSS JOIN invoice_groups ig
     `, [periodId]);
-    const sourcesResult = await pool2.query(`
+    const sourcesResult = await pool.query(`
       SELECT 
         source_name,
         COUNT(*) as tx_count,

@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { createHash } from "crypto";
 import multer from "multer";
 import { storage } from "./storage";
+import { pool } from "./db";
 import { fileParser, DataNormalizer, SOURCE_PRESETS, detectAndExcludeReversals } from "./fileParser";
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";

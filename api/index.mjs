@@ -27,6 +27,7 @@ __export(schema_exports, {
   insertTransactionResolutionSchema: () => insertTransactionResolutionSchema,
   insertTransactionSchema: () => insertTransactionSchema,
   insertUploadedFileSchema: () => insertUploadedFileSchema,
+  invitedUsers: () => invitedUsers,
   matches: () => matches,
   matchingRules: () => matchingRules,
   matchingRulesConfigSchema: () => matchingRulesConfigSchema,
@@ -234,6 +235,12 @@ var auditLogs = pgTable("audit_logs", {
   index("IDX_audit_logs_action").on(table.action),
   index("IDX_audit_logs_created_at").on(table.createdAt)
 ]);
+var invitedUsers = pgTable("invited_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull().unique(),
+  invitedBy: varchar("invited_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow()
+});
 var RESOLUTION_REASONS = [
   { value: "timing_difference", label: "Timing difference (posted next day)" },
   { value: "cash_as_card", label: "Cash recorded as card (or vice versa)" },
@@ -1175,6 +1182,21 @@ var DatabaseStorage = class {
   async getResolvedTransactionIds(periodId) {
     const resolutions = await db.select({ transactionId: transactionResolutions.transactionId }).from(transactionResolutions).where(eq(transactionResolutions.periodId, periodId));
     return resolutions.map((r) => r.transactionId);
+  }
+  // Invite management
+  async isEmailInvited(email) {
+    const result = await db.select({ id: invitedUsers.id }).from(invitedUsers).where(eq(invitedUsers.email, email.toLowerCase())).limit(1);
+    return result.length > 0;
+  }
+  async getInvitedUsers() {
+    return await db.select().from(invitedUsers).orderBy(desc(invitedUsers.createdAt));
+  }
+  async inviteUser(email, invitedById) {
+    const [invited] = await db.insert(invitedUsers).values({ email: email.toLowerCase(), invitedBy: invitedById }).returning();
+    return invited;
+  }
+  async removeInvite(id) {
+    await db.delete(invitedUsers).where(eq(invitedUsers.id, id));
   }
 };
 var storage = new DatabaseStorage();
@@ -3047,9 +3069,17 @@ async function setupAuth(app2) {
     const config = await getOidcConfig();
     const callbackUrl = process.env.AUTH_CALLBACK_URL || "http://localhost:5000/api/callback";
     const verify = async (tokens, verified) => {
+      const claims = tokens.claims();
+      const email = String(claims.email || "").toLowerCase();
+      const isInvited = await storage.isEmailInvited(email);
+      if (!isInvited) {
+        console.log(`[AUTH] Login blocked for uninvited email: ${email}`);
+        verified(null, false, { message: "not_invited" });
+        return;
+      }
       const user = {};
       updateUserSession(user, tokens);
-      await upsertUser(tokens.claims());
+      await upsertUser(claims);
       verified(null, user);
     };
     const strategy = new Strategy(
@@ -3078,9 +3108,24 @@ async function setupAuth(app2) {
   app2.get("/api/callback", async (req, res, next) => {
     try {
       await ensureStrategy();
-      passport.authenticate("google", {
-        successReturnToOrRedirect: "/",
-        failureRedirect: "/api/login"
+      passport.authenticate("google", (err, user, info) => {
+        if (err) {
+          console.error("Auth error:", err);
+          return res.redirect("/api/login");
+        }
+        if (!user) {
+          if (info?.message === "not_invited") {
+            return res.redirect("/?error=not_invited");
+          }
+          return res.redirect("/api/login");
+        }
+        req.logIn(user, (loginErr) => {
+          if (loginErr) {
+            console.error("Login error:", loginErr);
+            return res.redirect("/api/login");
+          }
+          return res.redirect("/");
+        });
       })(req, res, next);
     } catch (err) {
       console.error("Callback init error:", err);
@@ -3258,6 +3303,48 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error updating user admin status:", error);
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+  app2.get("/api/admin/invites", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const invites = await storage.getInvitedUsers();
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      res.status(500).json({ error: "Failed to fetch invites" });
+    }
+  });
+  app2.post("/api/admin/invites", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ error: "Email is required" });
+      }
+      const trimmed = email.trim().toLowerCase();
+      if (!trimmed.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      const isAlready = await storage.isEmailInvited(trimmed);
+      if (isAlready) {
+        return res.status(409).json({ error: "This email is already invited" });
+      }
+      const userId = req.user?.claims?.sub;
+      const invited = await storage.inviteUser(trimmed, userId);
+      audit(req, { action: "invite.create", resourceType: "invite", resourceId: invited.id, detail: trimmed });
+      res.json(invited);
+    } catch (error) {
+      console.error("Error creating invite:", error);
+      res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+  app2.delete("/api/admin/invites/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      await storage.removeInvite(req.params.id);
+      audit(req, { action: "invite.revoke", resourceType: "invite", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing invite:", error);
+      res.status(500).json({ error: "Failed to remove invite" });
     }
   });
   app2.get("/api/admin/audit-logs", isAuthenticated, isAdmin, async (req, res) => {

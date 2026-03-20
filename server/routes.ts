@@ -136,6 +136,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin invite management
+  app.get('/api/admin/invites', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const invites = await storage.getInvitedUsers();
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      res.status(500).json({ error: "Failed to fetch invites" });
+    }
+  });
+
+  app.post('/api/admin/invites', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: "Email is required" });
+      }
+      const trimmed = email.trim().toLowerCase();
+      if (!trimmed.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      // Check if already invited
+      const isAlready = await storage.isEmailInvited(trimmed);
+      if (isAlready) {
+        return res.status(409).json({ error: "This email is already invited" });
+      }
+      const userId = req.user?.claims?.sub;
+      const invited = await storage.inviteUser(trimmed, userId);
+      audit(req, { action: "invite.create", resourceType: "invite", resourceId: invited.id, detail: trimmed });
+      res.json(invited);
+    } catch (error) {
+      console.error("Error creating invite:", error);
+      res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+
+  app.delete('/api/admin/invites/:id', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      await storage.removeInvite(req.params.id);
+      audit(req, { action: "invite.revoke", resourceType: "invite", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing invite:", error);
+      res.status(500).json({ error: "Failed to remove invite" });
+    }
+  });
+
   // Admin audit log endpoint
   app.get('/api/admin/audit-logs', isAuthenticated, isAdmin, async (req: any, res) => {
     try {

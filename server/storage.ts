@@ -14,13 +14,15 @@ import {
   type MatchingRulesConfig,
   type TransactionResolution,
   type InsertTransactionResolution,
+  type InvitedUser,
   users,
   reconciliationPeriods,
   uploadedFiles,
   transactions,
   matches,
   matchingRules,
-  transactionResolutions
+  transactionResolutions,
+  invitedUsers
 } from "../shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -1357,6 +1359,30 @@ export class DatabaseStorage implements IStorage {
       .from(transactionResolutions)
       .where(eq(transactionResolutions.periodId, periodId));
     return resolutions.map(r => r.transactionId);
+  }
+
+  // Invite management
+  async isEmailInvited(email: string): Promise<boolean> {
+    const result = await db.select({ id: invitedUsers.id })
+      .from(invitedUsers)
+      .where(eq(invitedUsers.email, email.toLowerCase()))
+      .limit(1);
+    return result.length > 0;
+  }
+
+  async getInvitedUsers(): Promise<InvitedUser[]> {
+    return await db.select().from(invitedUsers).orderBy(desc(invitedUsers.createdAt));
+  }
+
+  async inviteUser(email: string, invitedById: string): Promise<InvitedUser> {
+    const [invited] = await db.insert(invitedUsers)
+      .values({ email: email.toLowerCase(), invitedBy: invitedById })
+      .returning();
+    return invited;
+  }
+
+  async removeInvite(id: string): Promise<void> {
+    await db.delete(invitedUsers).where(eq(invitedUsers.id, id));
   }
 }
 

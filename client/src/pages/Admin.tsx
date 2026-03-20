@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { User, AuditLog } from "@shared/schema";
+import type { User, AuditLog, InvitedUser } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -51,15 +52,49 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "audit">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites">("users");
   const [auditPage, setAuditPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
+  const [inviteEmail, setInviteEmail] = useState("");
   const AUDIT_LIMIT = 50;
 
   const { data: users, isLoading, error } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
     retry: false,
+  });
+
+  const { data: invites, isLoading: invitesLoading } = useQuery<InvitedUser[]>({
+    queryKey: ["/api/admin/invites"],
+    enabled: activeTab === "invites",
+    retry: false,
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (email: string) => {
+      return await apiRequest("POST", "/api/admin/invites", { email });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
+      setInviteEmail("");
+      toast({ title: "Invite sent", description: "User has been invited to Lekana." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to invite user", variant: "destructive" });
+    },
+  });
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/admin/invites/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
+      toast({ title: "Invite revoked", description: "User can no longer log in." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to revoke invite", variant: "destructive" });
+    },
   });
 
   const { data: auditData, isLoading: auditLoading } = useQuery<{
@@ -174,6 +209,14 @@ export default function Admin() {
           >
             <ScrollText className="h-4 w-4 mr-2" />
             Audit Log
+          </Button>
+          <Button
+            variant={activeTab === "invites" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("invites")}
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            Invites
           </Button>
         </div>
 
@@ -408,6 +451,111 @@ export default function Admin() {
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   No audit events recorded yet
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Invites tab */}
+        {activeTab === "invites" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5" />
+                Invited Users
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Invite form */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (inviteEmail.trim()) inviteMutation.mutate(inviteEmail.trim());
+                }}
+                className="flex gap-2"
+              >
+                <div className="relative flex-1">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="name@gmail.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                >
+                  {inviteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Invite
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              {/* Invite list */}
+              {invitesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : invites && invites.length > 0 ? (
+                <div className="space-y-2">
+                  {invites.map((invite) => {
+                    // Check if this invited email has a matching user account
+                    const matchedUser = users?.find(u => u.email?.toLowerCase() === invite.email.toLowerCase());
+                    return (
+                      <div
+                        key={invite.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      >
+                        <div className="flex items-center gap-3">
+                          {matchedUser ? (
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={matchedUser.profileImageUrl || undefined} />
+                              <AvatarFallback className="text-xs">
+                                {(matchedUser.firstName?.[0] || "") + (matchedUser.lastName?.[0] || "") || invite.email[0].toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-medium">{invite.email}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {matchedUser ? (
+                                <span className="text-emerald-600">Active user</span>
+                              ) : (
+                                "Invited — not yet logged in"
+                              )}
+                              {" · "}{formatDate(invite.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => revokeInviteMutation.mutate(invite.id)}
+                          disabled={revokeInviteMutation.isPending}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No users invited yet. Add a Google email above to get started.
                 </div>
               )}
             </CardContent>

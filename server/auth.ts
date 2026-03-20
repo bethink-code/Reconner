@@ -109,9 +109,20 @@ export async function setupAuth(app: Express) {
       tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
       verified: passport.AuthenticateCallback
     ) => {
+      const claims = tokens.claims() as Record<string, string | number | undefined>;
+      const email = String(claims.email || "").toLowerCase();
+
+      // Invite-only: check if this email is in the invited_users table
+      const isInvited = await storage.isEmailInvited(email);
+      if (!isInvited) {
+        console.log(`[AUTH] Login blocked for uninvited email: ${email}`);
+        verified(null, false, { message: "not_invited" });
+        return;
+      }
+
       const user = {} as SessionUser;
       updateUserSession(user, tokens);
-      await upsertUser(tokens.claims());
+      await upsertUser(claims);
       verified(null, user);
     };
 
@@ -143,9 +154,25 @@ export async function setupAuth(app: Express) {
   app.get("/api/callback", async (req, res, next) => {
     try {
       await ensureStrategy();
-      passport.authenticate("google", {
-        successReturnToOrRedirect: "/",
-        failureRedirect: "/api/login",
+      passport.authenticate("google", (err: any, user: any, info: any) => {
+        if (err) {
+          console.error("Auth error:", err);
+          return res.redirect("/api/login");
+        }
+        if (!user) {
+          // Not invited — redirect to landing with error
+          if (info?.message === "not_invited") {
+            return res.redirect("/?error=not_invited");
+          }
+          return res.redirect("/api/login");
+        }
+        req.logIn(user, (loginErr) => {
+          if (loginErr) {
+            console.error("Login error:", loginErr);
+            return res.redirect("/api/login");
+          }
+          return res.redirect("/");
+        });
       })(req, res, next);
     } catch (err) {
       console.error("Callback init error:", err);

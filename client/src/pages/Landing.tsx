@@ -1,4 +1,7 @@
 export default function Landing() {
+  const params = new URLSearchParams(window.location.search);
+  const notInvited = params.get("error") === "not_invited";
+
   return (
     <div className="min-h-screen bg-[#F5C400] flex flex-col items-center justify-center px-4">
       <div className="flex flex-col items-center gap-8 max-w-lg text-center">
@@ -31,6 +34,18 @@ export default function Landing() {
             Works with FNB, ABSA, Standard Bank and Nedbank.
           </p>
         </div>
+
+        {/* Not invited message */}
+        {notInvited && (
+          <div className="bg-[#1A1200]/10 border border-[#1A1200]/20 rounded-lg px-6 py-4 mt-2">
+            <p className="text-sm font-medium text-[#1A1200]">
+              Your account hasn't been invited yet.
+            </p>
+            <p className="text-sm text-[#1A1200]/70 mt-1">
+              Contact your administrator to request access.
+            </p>
+          </div>
+        )}
 
         {/* Sign in button */}
         <a

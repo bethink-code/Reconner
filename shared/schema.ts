@@ -250,6 +250,17 @@ export const auditLogs = pgTable("audit_logs", {
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
+// Invited Users — only these emails can log in
+export const invitedUsers = pgTable("invited_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull().unique(),
+  invitedBy: varchar("invited_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type InvitedUser = typeof invitedUsers.$inferSelect;
+export type InsertInvitedUser = typeof invitedUsers.$inferInsert;
+
 // Resolution reason options
 export const RESOLUTION_REASONS = [
   { value: "timing_difference", label: "Timing difference (posted next day)" },

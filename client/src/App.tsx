@@ -12,6 +12,7 @@ import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
 import ReconciliationFlow from "@/pages/ReconciliationFlow";
 import InvestigateTransactions from "@/pages/InvestigateTransactions";
+import Convert from "@/pages/Convert";
 import { Loader2 } from "lucide-react";
 
 class ErrorBoundary extends Component<
@@ -70,6 +71,7 @@ function Router() {
         <Route path="/flow/:periodId" component={ReconciliationFlow} />
         <Route path="/investigate" component={InvestigateTransactions} />
         <Route path="/admin" component={Admin} />
+        <Route path="/convert" component={Convert} />
         <Route component={NotFound} />
       </Switch>
     </>

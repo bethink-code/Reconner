@@ -274,6 +274,24 @@ export const accessRequests = pgTable("access_requests", {
 
 export type AccessRequest = typeof accessRequests.$inferSelect;
 
+// AI Usage tracking for billing
+export const aiUsage = pgTable("ai_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  userEmail: text("user_email"),
+  action: text("action").notNull(), // e.g. 'convert.ai_extract'
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  estimatedCostUsd: decimal("estimated_cost_usd", { precision: 10, scale: 6 }).notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_ai_usage_user_id").on(table.userId),
+  index("IDX_ai_usage_created_at").on(table.createdAt),
+]);
+
+export type AiUsageRecord = typeof aiUsage.$inferSelect;
+
 // Resolution reason options
 export const RESOLUTION_REASONS = [
   { value: "timing_difference", label: "Timing difference (posted next day)" },

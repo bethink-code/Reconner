@@ -9,7 +9,7 @@ import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
+import rateLimit2 from "express-rate-limit";
 
 // server/routes.ts
 import { createServer } from "http";
@@ -21,6 +21,7 @@ var schema_exports = {};
 __export(schema_exports, {
   RESOLUTION_REASONS: () => RESOLUTION_REASONS,
   accessRequests: () => accessRequests,
+  aiUsage: () => aiUsage,
   auditLogs: () => auditLogs,
   insertMatchSchema: () => insertMatchSchema,
   insertMatchingRulesSchema: () => insertMatchingRulesSchema,
@@ -252,6 +253,21 @@ var accessRequests = pgTable("access_requests", {
   // 'pending', 'approved', 'declined'
   createdAt: timestamp("created_at").defaultNow()
 });
+var aiUsage = pgTable("ai_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  userEmail: text("user_email"),
+  action: text("action").notNull(),
+  // e.g. 'convert.ai_extract'
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  estimatedCostUsd: decimal("estimated_cost_usd", { precision: 10, scale: 6 }).notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("IDX_ai_usage_user_id").on(table.userId),
+  index("IDX_ai_usage_created_at").on(table.createdAt)
+]);
 var RESOLUTION_REASONS = [
   { value: "timing_difference", label: "Timing difference (posted next day)" },
   { value: "cash_as_card", label: "Cash recorded as card (or vice versa)" },
@@ -3250,7 +3266,152 @@ async function queryAuditLogs(filters) {
   };
 }
 
+// server/pdfAiExtractor.ts
+import Anthropic from "@anthropic-ai/sdk";
+function computeConfidenceScore(parsed) {
+  const { headers, rows } = parsed;
+  if (rows.length === 0) return 0;
+  const cellCounts = rows.map(
+    (row) => headers.filter((h) => row[h] && String(row[h]).trim() !== "").length
+  );
+  const mostCommonCount = cellCounts.sort(
+    (a, b) => cellCounts.filter((v) => v === a).length - cellCounts.filter((v) => v === b).length
+  ).pop();
+  const consistencyRatio = cellCounts.filter((c) => c === mostCommonCount).length / cellCounts.length;
+  const columnConsistency = consistencyRatio * 100;
+  const goodHeaders = headers.filter((h) => {
+    if (!h || h.trim() === "") return false;
+    if (/^Column \d+$/.test(h)) return false;
+    if (/^\d+$/.test(h.trim())) return false;
+    return true;
+  });
+  const headerQuality = goodHeaders.length / Math.max(headers.length, 1) * 100;
+  const datePattern = /\d{1,4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,4}/;
+  let hasDateColumn = false;
+  for (const header of headers) {
+    const dateCount = rows.filter((r) => datePattern.test(String(r[header] || ""))).length;
+    if (dateCount / rows.length > 0.4) {
+      hasDateColumn = true;
+      break;
+    }
+  }
+  const dateScore = hasDateColumn ? 100 : 0;
+  const numericPattern = /^[R$€£]?\s*-?\d[\d\s,]*\.?\d*$/;
+  let hasNumericColumn = false;
+  for (const header of headers) {
+    const numCount = rows.filter((r) => numericPattern.test(String(r[header] || "").trim())).length;
+    if (numCount / rows.length > 0.4) {
+      hasNumericColumn = true;
+      break;
+    }
+  }
+  const numericScore = hasNumericColumn ? 100 : 0;
+  let rowScore = 100;
+  if (rows.length < 3) rowScore = rows.length * 20;
+  else if (rows.length > 5e3) rowScore = Math.max(0, 100 - (rows.length - 5e3) / 100);
+  const totalCells = rows.length * headers.length;
+  const emptyCells = rows.reduce(
+    (acc, row) => acc + headers.filter((h) => !row[h] || String(row[h]).trim() === "").length,
+    0
+  );
+  const emptyRatio = emptyCells / Math.max(totalCells, 1);
+  let emptyScore = 100;
+  if (emptyRatio > 0.5) emptyScore = 0;
+  else if (emptyRatio > 0.2) emptyScore = Math.round((1 - (emptyRatio - 0.2) / 0.3) * 100);
+  const score = Math.round(
+    columnConsistency * 0.3 + headerQuality * 0.15 + dateScore * 0.15 + numericScore * 0.15 + rowScore * 0.1 + emptyScore * 0.15
+  );
+  return Math.max(0, Math.min(100, score));
+}
+async function extractTablesWithAI(pdfBuffer) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY not configured");
+  }
+  const client2 = new Anthropic();
+  const base64Pdf = pdfBuffer.toString("base64");
+  const response = await client2.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 8192,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: base64Pdf
+            }
+          },
+          {
+            type: "text",
+            text: `Extract all tabular transaction data from this PDF document.
+
+Rules:
+- Return ONLY a JSON object with exactly this structure: {"headers": ["col1", "col2", ...], "rows": [["val1", "val2", ...], ...]}
+- Each row array must have the same length as the headers array
+- Merge multi-line rows that belong to the same transaction into a single row
+- Ignore decorative elements, page headers, page footers, page numbers, and summary totals
+- Focus on the main transaction table(s): dates, descriptions, references, amounts, balances
+- If there are multiple tables, combine them if they have the same structure, otherwise use the largest one
+- Use the actual column headers from the document
+- Preserve all data values exactly as they appear
+- Return valid JSON only, no markdown or explanation`
+          }
+        ]
+      }
+    ]
+  });
+  const textContent = response.content.find((block) => block.type === "text");
+  if (!textContent || textContent.type !== "text") {
+    throw new Error("No text response from AI extraction");
+  }
+  let jsonStr = textContent.text.trim();
+  if (jsonStr.startsWith("```")) {
+    jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    const match = jsonStr.match(/\{[\s\S]*\}/);
+    if (match) {
+      parsed = JSON.parse(match[0]);
+    } else {
+      throw new Error("AI returned invalid JSON response");
+    }
+  }
+  if (!parsed.headers || !Array.isArray(parsed.headers) || !parsed.rows || !Array.isArray(parsed.rows)) {
+    throw new Error("AI response missing headers or rows");
+  }
+  const rows = parsed.rows.map((row) => {
+    const obj = {};
+    parsed.headers.forEach((header, i) => {
+      obj[header] = row[i] || "";
+    });
+    return obj;
+  });
+  const inputTokens = response.usage?.input_tokens || 0;
+  const outputTokens = response.usage?.output_tokens || 0;
+  const estimatedCostUsd = (inputTokens * 3 + outputTokens * 15) / 1e6;
+  return {
+    headers: parsed.headers,
+    rows,
+    rowCount: rows.length,
+    usage: {
+      model: "claude-sonnet-4-20250514",
+      inputTokens,
+      outputTokens,
+      estimatedCostUsd: Math.round(estimatedCostUsd * 1e4) / 1e4
+      // 4 decimal places
+    }
+  };
+}
+
 // server/routes.ts
+import rateLimit from "express-rate-limit";
 import { z as z2 } from "zod";
 function computeContentHash(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -3510,6 +3671,95 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error fetching audit logs:", error);
       res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+  app2.get("/api/admin/ai-usage", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const summary = await pool.query(`
+        SELECT
+          COUNT(*) as total_calls,
+          COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+          COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+          COALESCE(SUM(estimated_cost_usd::numeric), 0) as total_cost_usd
+        FROM ai_usage
+      `);
+      const byUser = await pool.query(`
+        SELECT user_email, COUNT(*) as calls, COALESCE(SUM(estimated_cost_usd::numeric), 0) as cost_usd
+        FROM ai_usage
+        GROUP BY user_email
+        ORDER BY cost_usd DESC
+      `);
+      const recent = await pool.query(`
+        SELECT user_email, action, model, input_tokens, output_tokens, estimated_cost_usd, created_at
+        FROM ai_usage
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+      res.json({
+        summary: summary.rows[0],
+        byUser: byUser.rows,
+        recent: recent.rows
+      });
+    } catch (error) {
+      console.error("Error fetching AI usage:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage" });
+    }
+  });
+  const aiExtractLimiter = rateLimit({
+    windowMs: 60 * 60 * 1e3,
+    max: 10,
+    message: { error: "AI extraction limit reached. Try again later." }
+  });
+  app2.post("/api/convert/parse", isAuthenticated, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const isPDF = req.file.mimetype === "application/pdf" || req.file.originalname?.endsWith(".pdf");
+      if (!isPDF) return res.status(400).json({ error: "Only PDF files are accepted" });
+      const parsed = await fileParser.parsePDF(req.file.buffer);
+      const confidence = computeConfidenceScore(parsed);
+      const aiAvailable = !!process.env.ANTHROPIC_API_KEY;
+      audit(req, { action: "convert.parse", outcome: "success", detail: `${parsed.rowCount} rows, confidence ${confidence}%` });
+      res.json({ headers: parsed.headers, rows: parsed.rows, rowCount: parsed.rowCount, confidence, aiAvailable });
+    } catch (error) {
+      audit(req, { action: "convert.parse", outcome: "error", detail: error.message });
+      res.status(422).json({ error: error.message || "Failed to extract data from PDF" });
+    }
+  });
+  app2.post("/api/convert/ai-extract", isAuthenticated, aiExtractLimiter, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const isPDF = req.file.mimetype === "application/pdf" || req.file.originalname?.endsWith(".pdf");
+      if (!isPDF) return res.status(400).json({ error: "Only PDF files are accepted" });
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(503).json({ error: "AI extraction is not configured" });
+      }
+      if (req.file.size > 10 * 1024 * 1024) {
+        return res.status(400).json({ error: "PDF too large for AI extraction. Maximum 10MB." });
+      }
+      const result = await extractTablesWithAI(req.file.buffer);
+      const { usage } = result;
+      audit(req, {
+        action: "convert.ai_extract",
+        outcome: "success",
+        detail: `${result.rowCount} rows | ${usage.inputTokens} in / ${usage.outputTokens} out | $${usage.estimatedCostUsd}`
+      });
+      try {
+        const rawSub = req.user?.claims?.sub;
+        const userId = rawSub != null ? String(rawSub) : void 0;
+        const userEmail = req.user?.claims?.email || req.user?.email;
+        await pool.query(
+          `INSERT INTO ai_usage (user_id, user_email, action, model, input_tokens, output_tokens, estimated_cost_usd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [userId, userEmail, "convert.ai_extract", usage.model, usage.inputTokens, usage.outputTokens, usage.estimatedCostUsd]
+        );
+      } catch (e) {
+        console.error("Failed to log AI usage:", e);
+      }
+      res.json({ headers: result.headers, rows: result.rows, rowCount: result.rowCount, usage });
+    } catch (error) {
+      audit(req, { action: "convert.ai_extract", outcome: "error", detail: error.message });
+      const status = error.message?.includes("not configured") ? 503 : 422;
+      res.status(status).json({ error: error.message || "AI extraction failed" });
     }
   });
   app2.get("/api/periods", isAuthenticated, async (req, res) => {
@@ -5036,7 +5286,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || "https://reconner.vercel.app",
   credentials: true
 }));
-var apiLimiter = rateLimit({
+var apiLimiter = rateLimit2({
   windowMs: 15 * 60 * 1e3,
   // 15 minutes
   max: 200,

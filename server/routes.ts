@@ -9,6 +9,8 @@ import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
 import { setupAuth, isAuthenticated } from "./auth";
 import { audit, queryAuditLogs } from "./auditLog";
+import { computeConfidenceScore, extractTablesWithAI } from "./pdfAiExtractor";
+import rateLimit from "express-rate-limit";
 import {
   insertReconciliationPeriodSchema,
   insertUploadedFileSchema,
@@ -329,6 +331,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching audit logs:", error);
       res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+
+  // ── AI Usage admin endpoint ──
+
+  app.get('/api/admin/ai-usage', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const summary = await pool.query(`
+        SELECT
+          COUNT(*) as total_calls,
+          COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+          COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+          COALESCE(SUM(estimated_cost_usd::numeric), 0) as total_cost_usd
+        FROM ai_usage
+      `);
+      const byUser = await pool.query(`
+        SELECT user_email, COUNT(*) as calls, COALESCE(SUM(estimated_cost_usd::numeric), 0) as cost_usd
+        FROM ai_usage
+        GROUP BY user_email
+        ORDER BY cost_usd DESC
+      `);
+      const recent = await pool.query(`
+        SELECT user_email, action, model, input_tokens, output_tokens, estimated_cost_usd, created_at
+        FROM ai_usage
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+      res.json({
+        summary: summary.rows[0],
+        byUser: byUser.rows,
+        recent: recent.rows,
+      });
+    } catch (error) {
+      console.error("Error fetching AI usage:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage" });
+    }
+  });
+
+  // ── PDF Converter routes ──
+
+  const aiExtractLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: { error: "AI extraction limit reached. Try again later." },
+  });
+
+  app.post("/api/convert/parse", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const isPDF = req.file.mimetype === "application/pdf" || req.file.originalname?.endsWith(".pdf");
+      if (!isPDF) return res.status(400).json({ error: "Only PDF files are accepted" });
+
+      const parsed = await fileParser.parsePDF(req.file.buffer);
+      const confidence = computeConfidenceScore(parsed);
+      const aiAvailable = !!process.env.ANTHROPIC_API_KEY;
+
+      audit(req, { action: "convert.parse", outcome: "success", detail: `${parsed.rowCount} rows, confidence ${confidence}%` });
+      res.json({ headers: parsed.headers, rows: parsed.rows, rowCount: parsed.rowCount, confidence, aiAvailable });
+    } catch (error: any) {
+      audit(req, { action: "convert.parse", outcome: "error", detail: error.message });
+      res.status(422).json({ error: error.message || "Failed to extract data from PDF" });
+    }
+  });
+
+  app.post("/api/convert/ai-extract", isAuthenticated, aiExtractLimiter, upload.single("file"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const isPDF = req.file.mimetype === "application/pdf" || req.file.originalname?.endsWith(".pdf");
+      if (!isPDF) return res.status(400).json({ error: "Only PDF files are accepted" });
+
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(503).json({ error: "AI extraction is not configured" });
+      }
+
+      // Cap at 10MB for AI extraction
+      if (req.file.size > 10 * 1024 * 1024) {
+        return res.status(400).json({ error: "PDF too large for AI extraction. Maximum 10MB." });
+      }
+
+      const result = await extractTablesWithAI(req.file.buffer);
+      const { usage } = result;
+
+      // Log to audit trail
+      audit(req, {
+        action: "convert.ai_extract",
+        outcome: "success",
+        detail: `${result.rowCount} rows | ${usage.inputTokens} in / ${usage.outputTokens} out | $${usage.estimatedCostUsd}`,
+      });
+
+      // Log to usage table for billing
+      try {
+        const rawSub = req.user?.claims?.sub;
+        const userId = rawSub != null ? String(rawSub) : undefined;
+        const userEmail = req.user?.claims?.email || req.user?.email;
+        await pool.query(
+          `INSERT INTO ai_usage (user_id, user_email, action, model, input_tokens, output_tokens, estimated_cost_usd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [userId, userEmail, "convert.ai_extract", usage.model, usage.inputTokens, usage.outputTokens, usage.estimatedCostUsd]
+        );
+      } catch (e) {
+        console.error("Failed to log AI usage:", e);
+      }
+
+      res.json({ headers: result.headers, rows: result.rows, rowCount: result.rowCount, usage });
+    } catch (error: any) {
+      audit(req, { action: "convert.ai_extract", outcome: "error", detail: error.message });
+      const status = error.message?.includes("not configured") ? 503 : 422;
+      res.status(status).json({ error: error.message || "AI extraction failed" });
     }
   });
 

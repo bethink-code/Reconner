@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { User, AuditLog, InvitedUser, AccessRequest } from "@shared/schema";
@@ -55,7 +55,7 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security" | "ai-usage">("users");
   const [auditPage, setAuditPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
@@ -138,6 +138,18 @@ export default function Admin() {
   const { data: securityData, isLoading: securityLoading } = useQuery<SecurityOverview>({
     queryKey: ["/api/admin/security-overview"],
     enabled: activeTab === "security",
+    retry: false,
+  });
+
+  interface AiUsageData {
+    summary: { total_calls: string; total_input_tokens: string; total_output_tokens: string; total_cost_usd: string };
+    byUser: { user_email: string; calls: string; cost_usd: string }[];
+    recent: { user_email: string; action: string; model: string; input_tokens: number; output_tokens: number; estimated_cost_usd: string; created_at: string }[];
+  }
+
+  const { data: aiUsageData, isLoading: aiUsageLoading } = useQuery<AiUsageData>({
+    queryKey: ["/api/admin/ai-usage"],
+    enabled: activeTab === "ai-usage",
     retry: false,
   });
 
@@ -280,6 +292,14 @@ export default function Admin() {
           >
             <Lock className="h-4 w-4 mr-2" />
             Security
+          </Button>
+          <Button
+            variant={activeTab === "ai-usage" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("ai-usage")}
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            AI Costs
           </Button>
         </div>
 
@@ -811,6 +831,100 @@ export default function Admin() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground text-center py-4">No access denials in the last 7 days</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
+          </div>
+        )}
+
+        {/* AI Costs tab */}
+        {activeTab === "ai-usage" && (
+          <div className="space-y-6">
+            {aiUsageLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : aiUsageData ? (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5" /> Total Calls
+                      </p>
+                      <p className="text-2xl font-semibold mt-1">{aiUsageData.summary.total_calls}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <p className="text-xs text-muted-foreground">Input Tokens</p>
+                      <p className="text-2xl font-semibold mt-1">{Number(aiUsageData.summary.total_input_tokens).toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <p className="text-xs text-muted-foreground">Output Tokens</p>
+                      <p className="text-2xl font-semibold mt-1">{Number(aiUsageData.summary.total_output_tokens).toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <p className="text-xs text-muted-foreground">Total Cost</p>
+                      <p className="text-2xl font-semibold mt-1">${Number(aiUsageData.summary.total_cost_usd).toFixed(4)}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Cost by user */}
+                {aiUsageData.byUser.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Cost by User</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {aiUsageData.byUser.map((u, i) => (
+                          <div key={i} className="flex items-center justify-between p-3 rounded-lg border text-sm">
+                            <div>
+                              <p className="font-medium">{u.user_email}</p>
+                              <p className="text-xs text-muted-foreground">{u.calls} extraction{Number(u.calls) !== 1 ? "s" : ""}</p>
+                            </div>
+                            <span className="font-mono text-sm">${Number(u.cost_usd).toFixed(4)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Recent calls */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Recent AI Calls</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {aiUsageData.recent.length > 0 ? (
+                      <div className="space-y-2">
+                        {aiUsageData.recent.map((call, i) => (
+                          <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-lg border text-sm">
+                            <div className="space-y-0.5 min-w-0">
+                              <p className="font-medium truncate">{call.user_email}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {call.input_tokens.toLocaleString()} in / {call.output_tokens.toLocaleString()} out
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="font-mono text-sm">${Number(call.estimated_cost_usd).toFixed(4)}</span>
+                              <p className="text-xs text-muted-foreground">{formatDate(call.created_at)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No AI usage recorded yet</p>
                     )}
                   </CardContent>
                 </Card>

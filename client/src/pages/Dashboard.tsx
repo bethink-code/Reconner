@@ -215,6 +215,10 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center gap-4">
+              <Button variant="outline" onClick={() => setLocation("/convert")} className="text-sm">
+                <FileBarChart className="h-4 w-4 mr-2" />
+                PDF Converter
+              </Button>
               <Button data-testid="button-create-period" onClick={() => { setTemplateSourceId(null); setCreateForm({ name: "", description: "", startDate: "", endDate: "" }); setShowCreateDialog(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Reconciliation

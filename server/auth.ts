@@ -62,6 +62,7 @@ export function getSession() {
     resave: false,
     saveUninitialized: false,
     cookie: {
+      path: "/",
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -150,6 +151,15 @@ export async function setupAuth(app: Express) {
       },
       verify,
     );
+    // Override to add access_type=offline for Google refresh tokens
+    const origParams = strategy.authorizationRequestParams.bind(strategy);
+    strategy.authorizationRequestParams = (req, options) => {
+      const params = origParams(req, options) || {};
+      const result = params instanceof URLSearchParams ? params : new URLSearchParams(Object.entries(params));
+      result.set("access_type", "offline");
+      return result;
+    };
+
     passport.use(strategy);
     strategyReady = true;
   }

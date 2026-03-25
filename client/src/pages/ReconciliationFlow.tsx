@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -44,7 +44,7 @@ export default function ReconciliationFlow() {
   const [currentBankName, setCurrentBankName] = useState<string>("");
   const [replacingFileId, setReplacingFileId] = useState<string | null>(null);
   
-  const hasInitialized = useRef(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const periodId = params?.periodId || "";
 
@@ -126,8 +126,8 @@ export default function ReconciliationFlow() {
 
   // Initialize on mount - mark as initialized once files query completes
   useEffect(() => {
-    if (!filesLoading && !periodLoading && !hasInitialized.current) {
-      hasInitialized.current = true;
+    if (!filesLoading && !periodLoading && !hasInitialized) {
+      setHasInitialized(true);
 
       // Check URL for explicit step override (e.g. ?step=fuel for "Edit Data")
       const urlParams = new URLSearchParams(window.location.search);
@@ -198,7 +198,13 @@ export default function ReconciliationFlow() {
   const handleStepClick = (step: ReconciliationStep) => {
     const fuelProcessed = !!fuelFile;
     const hasAnyBank = bankFiles.length > 0;
-    
+
+    // Clear matching result screen when navigating away
+    if (step !== "configure") {
+      setMatchResult(null);
+      setIsAutoMatching(false);
+    }
+
     if (step === "fuel") {
       setCurrentStep(step);
       return;
@@ -244,10 +250,13 @@ export default function ReconciliationFlow() {
   };
 
   const handleContinueToMatching = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId] });
     setCurrentStep("configure");
   };
 
   const handleStartMatching = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
     autoMatchMutation.mutate();
   };
 
@@ -279,7 +288,7 @@ export default function ReconciliationFlow() {
     return null;
   }
 
-  if (periodLoading || filesLoading || !hasInitialized.current) {
+  if (periodLoading || filesLoading || !hasInitialized) {
     return (
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card sticky top-0 z-10">
@@ -385,9 +394,15 @@ export default function ReconciliationFlow() {
               <div className="text-center space-y-1">
                 <p className="text-5xl font-heading font-bold text-[#1A1200] dark:text-[#F0EAE0]">{matchResult.matchRate}</p>
                 <p className="text-lg font-medium">of your {period?.name || "period"} bank transactions verified</p>
-                <p className="text-sm text-muted-foreground">
-                  {matchResult.matchesCreated} of {matchResult.bankTransactionsMatchable} transactions automatically matched to fuel records
-                </p>
+                {matchResult.bankTransactionsMatchable - matchResult.matchesCreated > 0 ? (
+                  <p className="text-base font-medium text-[#B45309]">
+                    {matchResult.matchesCreated} of {matchResult.bankTransactionsMatchable} transactions automatically matched — {matchResult.bankTransactionsMatchable - matchResult.matchesCreated} need review
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {matchResult.matchesCreated} of {matchResult.bankTransactionsMatchable} transactions automatically matched to fuel records
+                  </p>
+                )}
               </div>
 
               {/* Key stats */}

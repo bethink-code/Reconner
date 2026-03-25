@@ -269,6 +269,10 @@ var aiUsage = pgTable("ai_usage", {
   index("IDX_ai_usage_created_at").on(table.createdAt)
 ]);
 var RESOLUTION_REASONS = [
+  { value: "attendant_overfill", label: "Attendant error / overfill" },
+  { value: "possible_tip", label: "Possible attendant tip" },
+  { value: "duplicate_charge", label: "Duplicate bank charge" },
+  { value: "no_fuel_record", label: "No matching fuel record" },
   { value: "timing_difference", label: "Timing difference (posted next day)" },
   { value: "cash_as_card", label: "Cash recorded as card (or vice versa)" },
   { value: "test_transaction", label: "Test/pre-auth transaction" },
@@ -3077,6 +3081,7 @@ function getSession() {
     resave: false,
     saveUninitialized: false,
     cookie: {
+      path: "/",
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -3146,6 +3151,13 @@ async function setupAuth(app2) {
       },
       verify
     );
+    const origParams = strategy.authorizationRequestParams.bind(strategy);
+    strategy.authorizationRequestParams = (req, options) => {
+      const params = origParams(req, options) || {};
+      const result = params instanceof URLSearchParams ? params : new URLSearchParams(Object.entries(params));
+      result.set("access_type", "offline");
+      return result;
+    };
     passport.use(strategy);
     strategyReady = true;
   }
@@ -4417,24 +4429,36 @@ async function registerRoutes(app2) {
       const bankTransactions = transactions2.filter(
         (t) => t.sourceType && t.sourceType.startsWith("bank") && t.matchStatus === "unmatched"
       );
+      console.log(`[AUTO-MATCH] Period: ${period.name}, Fuel txns: ${fuelTransactions.length}, Bank txns: ${bankTransactions.length}`);
+      if (fuelTransactions.length > 0) {
+        const fuelDateSet = new Set(fuelTransactions.map((t) => t.transactionDate?.substring(0, 10)));
+        console.log(`[AUTO-MATCH] Fuel dates: ${[...fuelDateSet].sort().join(", ")}`);
+      }
+      if (bankTransactions.length > 0) {
+        const bankDateSet = new Set(bankTransactions.map((t) => t.transactionDate?.substring(0, 10)));
+        console.log(`[AUTO-MATCH] Bank dates: ${[...bankDateSet].sort().join(", ")}`);
+      }
       const fuelDates = fuelTransactions.map((t) => t.transactionDate).filter((d) => d && d.trim()).map((d) => new Date(d).getTime()).filter((d) => !isNaN(d));
       const bankDates = bankTransactions.map((t) => t.transactionDate).filter((d) => d && d.trim()).map((d) => new Date(d).getTime()).filter((d) => !isNaN(d));
       let unmatchableBankTransactions = [];
       let dateRangeWarning = "";
+      const toDateOnly = (d) => {
+        const dt = new Date(d);
+        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+      };
       if (fuelDates.length > 0 && bankDates.length > 0) {
-        const maxFuelDate = Math.max(...fuelDates);
-        const minFuelDate = Math.min(...fuelDates);
-        const maxBankDate = Math.max(...bankDates);
-        const minBankDate = Math.min(...bankDates);
+        const maxFuelDay = toDateOnly(Math.max(...fuelDates));
+        const minFuelDay = toDateOnly(Math.min(...fuelDates));
         unmatchableBankTransactions = bankTransactions.filter((t) => {
           if (!t.transactionDate) return false;
           const bankTime = new Date(t.transactionDate).getTime();
           if (isNaN(bankTime)) return false;
-          return bankTime > maxFuelDate || bankTime < minFuelDate;
+          const bankDay = toDateOnly(bankTime);
+          return bankDay > maxFuelDay || bankDay < minFuelDay;
         });
         if (unmatchableBankTransactions.length > 0) {
-          const maxFuelDateStr = new Date(maxFuelDate).toISOString().split("T")[0];
-          const minFuelDateStr = new Date(minFuelDate).toISOString().split("T")[0];
+          const maxFuelDateStr = new Date(maxFuelDay).toISOString().split("T")[0];
+          const minFuelDateStr = new Date(minFuelDay).toISOString().split("T")[0];
           dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
           await storage.updateTransactionsBatch(
             unmatchableBankTransactions.map((tx) => ({ id: tx.id, data: { matchStatus: "unmatchable", matchId: null } }))
@@ -4560,7 +4584,9 @@ async function registerRoutes(app2) {
           }
         }
         if (bestMatch) {
-          const matchType = bestMatch.confidence >= rules.autoMatchThreshold ? "auto" : "auto_review";
+          const isExact = Math.abs(bestMatch.amountDiff) < 5e-3;
+          const aboveThreshold = bestMatch.confidence >= rules.autoMatchThreshold;
+          const matchType = isExact && aboveThreshold ? "auto_exact" : isExact ? "auto_exact_review" : aboveThreshold ? "auto_rules" : "auto_rules_review";
           pendingMatches.push({
             matchData: {
               periodId: req.params.periodId,
@@ -4620,7 +4646,7 @@ async function registerRoutes(app2) {
       if (!period) return;
       const match = await storage.createMatch({
         ...matchInput,
-        matchType: "manual",
+        matchType: "user_confirmed",
         matchConfidence: "100"
       });
       await storage.updateTransaction(matchInput.fuelTransactionId, {
@@ -4660,6 +4686,69 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error deleting match:", error);
       res.status(500).json({ error: "Failed to delete match" });
+    }
+  });
+  app2.get("/api/periods/:periodId/matches/details", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const [matchRecords, allTransactions, resolutions] = await Promise.all([
+        storage.getMatchesByPeriod(req.params.periodId),
+        storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId)
+      ]);
+      const txMap = new Map(allTransactions.map((t) => [t.id, t]));
+      const matchedTxIds = /* @__PURE__ */ new Set();
+      const details = matchRecords.map((m) => {
+        matchedTxIds.add(m.bankTransactionId);
+        matchedTxIds.add(m.fuelTransactionId);
+        return {
+          match: m,
+          bankTransaction: txMap.get(m.bankTransactionId),
+          fuelTransaction: txMap.get(m.fuelTransactionId)
+        };
+      }).filter((d) => d.bankTransaction && d.fuelTransaction);
+      for (const r of resolutions) {
+        if (r.resolutionType !== "linked" || !r.linkedTransactionId) continue;
+        if (matchedTxIds.has(r.transactionId)) continue;
+        const bankTx = txMap.get(r.transactionId);
+        const fuelTx = txMap.get(r.linkedTransactionId);
+        if (!bankTx || !fuelTx) continue;
+        details.push({
+          match: {
+            id: r.id,
+            periodId: r.periodId,
+            bankTransactionId: r.transactionId,
+            fuelTransactionId: r.linkedTransactionId,
+            matchType: "linked",
+            matchConfidence: null,
+            createdAt: r.createdAt
+          },
+          bankTransaction: bankTx,
+          fuelTransaction: fuelTx
+        });
+      }
+      for (const tx of allTransactions) {
+        if (tx.matchStatus !== "excluded") continue;
+        if (tx.sourceType !== "bank" && !tx.sourceType?.startsWith("bank")) continue;
+        details.push({
+          match: {
+            id: `excluded_${tx.id}`,
+            periodId: req.params.periodId,
+            bankTransactionId: tx.id,
+            fuelTransactionId: "",
+            matchType: "excluded",
+            matchConfidence: null,
+            createdAt: tx.createdAt
+          },
+          bankTransaction: tx,
+          fuelTransaction: null
+        });
+      }
+      res.json(details);
+    } catch (error) {
+      console.error("Error fetching match details:", error);
+      res.status(500).json({ error: "Failed to fetch match details" });
     }
   });
   app2.get("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
@@ -4855,12 +4944,12 @@ async function registerRoutes(app2) {
             periodId,
             bankTransactionId: bankId,
             fuelTransactionId: fuelId,
-            matchType: "manual",
+            matchType: "user_confirmed",
             matchConfidence: "100"
           });
           createdMatches.push(match);
-          await storage.updateTransaction(bankId, { matchStatus: "matched" });
-          await storage.updateTransaction(fuelId, { matchStatus: "matched" });
+          await storage.updateTransaction(bankId, { matchStatus: "matched", matchId: match.id });
+          await storage.updateTransaction(fuelId, { matchStatus: "matched", matchId: match.id });
           await storage.createResolution({
             transactionId: bankId,
             periodId,
@@ -5067,7 +5156,7 @@ async function registerRoutes(app2) {
           "Cashier": fuel?.cashier || "",
           "Pump": fuel?.pump || "",
           "Confidence": m.matchConfidence ? `${m.matchConfidence}%` : "",
-          "Match Type": m.matchType === "auto" ? "Auto Matched" : m.matchType === "auto_review" ? "Suggestion Accepted" : m.matchType === "manual" ? "Manual Accepted" : m.matchType || "Auto Matched"
+          "Match Type": m.matchType === "auto_exact" || m.matchType === "auto_exact_review" ? "Lekana (Exact)" : m.matchType === "auto_rules" || m.matchType === "auto_rules_review" ? "Lekana (Rules)" : m.matchType === "auto" ? "Lekana (Rules)" : m.matchType === "auto_review" ? "Lekana (Rules)" : m.matchType === "user_confirmed" || m.matchType === "manual" ? "User (Confirmed)" : m.matchType === "linked" ? "User (With reason)" : m.matchType || "Lekana (Rules)"
         };
       });
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(matchedRows), "Matched");

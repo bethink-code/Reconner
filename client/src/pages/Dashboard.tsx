@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield, Search, Copy } from "lucide-react";
+import { Plus, FileText, MoreVertical, Trash2, Eye, Pencil, FileBarChart, LogOut, User, Shield, Search, Copy, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import PeriodCard from "@/components/PeriodCard";
@@ -63,6 +63,8 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [deleteTarget, setDeleteTarget] = useState<DisplayPeriod | null>(null);
+  const [editTarget, setEditTarget] = useState<ReconciliationPeriod | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", startDate: "", endDate: "" });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -89,6 +91,17 @@ export default function Dashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
       setDeleteTarget(null);
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { name: string; description?: string; startDate: string; endDate: string } }) => {
+      await apiRequest("PATCH", `/api/periods/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
+      setEditTarget(null);
+      toast({ title: "Period updated" });
     },
   });
 
@@ -389,19 +402,38 @@ export default function Dashboard() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleView(period.id)} data-testid={`button-view-${period.id}`}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Results
-                              </DropdownMenuItem>
+                              {period.status === "complete" && (
+                                <DropdownMenuItem onClick={() => handleView(period.id)} data-testid={`button-view-${period.id}`}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Results
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem onClick={() => handleEdit(period.id)} data-testid={`button-edit-${period.id}`}>
-                                <Pencil className="h-4 w-4 mr-2" />
+                                <FileText className="h-4 w-4 mr-2" />
                                 Edit Data
                               </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleViewReport(period.id)} data-testid={`button-report-${period.id}`}>
-                                <FileBarChart className="h-4 w-4 mr-2" />
-                                Download Excel
+                              <DropdownMenuItem onClick={() => {
+                                const p = periods.find(pp => pp.id === period.id);
+                                if (p) {
+                                  setEditTarget(p);
+                                  setEditForm({
+                                    name: p.name,
+                                    description: p.description || "",
+                                    startDate: p.startDate,
+                                    endDate: p.endDate,
+                                  });
+                                }
+                              }}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit Name & Period
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {period.status === "complete" && (
+                                <DropdownMenuItem onClick={() => handleViewReport(period.id)} data-testid={`button-report-${period.id}`}>
+                                  <FileBarChart className="h-4 w-4 mr-2" />
+                                  Download Excel
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem onClick={() => handleNewFromPrevious(period)} data-testid={`button-template-${period.id}`}>
                                 <Copy className="h-4 w-4 mr-2" />
                                 New from This Period
@@ -429,6 +461,68 @@ export default function Dashboard() {
         </Card>
       </main>
 
+      {/* Edit Period Dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Period</DialogTitle>
+            <DialogDescription>Update the period details</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (editTarget && editForm.name.trim() && editForm.startDate && editForm.endDate) {
+              editMutation.mutate({ id: editTarget.id, data: editForm });
+            }
+          }} className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Period Name *</label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g., January 2024 Reconciliation"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <textarea
+                className="w-full min-h-[60px] px-3 py-2 text-sm border rounded-md bg-background"
+                value={editForm.description}
+                onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Optional description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Start Date *</label>
+                <Input
+                  type="date"
+                  value={editForm.startDate}
+                  onChange={(e) => setEditForm(f => ({ ...f, startDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">End Date *</label>
+                <Input
+                  type="date"
+                  value={editForm.endDate}
+                  onChange={(e) => setEditForm(f => ({ ...f, endDate: e.target.value }))}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+              <Button
+                type="submit"
+                disabled={!editForm.name.trim() || !editForm.startDate || !editForm.endDate || editMutation.isPending}
+              >
+                {editMutation.isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Saving...</> : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
@@ -442,8 +536,10 @@ export default function Dashboard() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
               Delete Period
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -515,7 +611,7 @@ export default function Dashboard() {
                 Cancel
               </Button>
               <Button type="submit" disabled={createMutation.isPending || !!createDateError}>
-                {createMutation.isPending ? "Creating..." : "Create & Continue"}
+                {createMutation.isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Creating...</> : "Create & Continue"}
               </Button>
             </DialogFooter>
           </form>

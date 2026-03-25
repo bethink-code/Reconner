@@ -52,9 +52,17 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { Transaction, TransactionResolution, MatchingRulesConfig } from "@shared/schema";
+import { InvestigateModal } from "@/components/flow/InvestigateModal";
 import { RESOLUTION_REASONS } from "@shared/schema";
 
 const LOW_VALUE_THRESHOLD = 50; // R50
+
+const CATEGORY_LABELS: Record<string, string> = {
+  quick_win: "Quick win",
+  investigate: "Investigate",
+  no_match: "No match",
+  low_value: "Low value",
+};
 
 interface PaginatedResponse {
   transactions: Transaction[];
@@ -95,6 +103,29 @@ export default function InvestigateTransactions() {
   const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState<string>("");
   const [resolutionNotes, setResolutionNotes] = useState<string>("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalInitialIndex, setModalInitialIndex] = useState(0);
+  const [modalItems, setModalItems] = useState<CategorizedTransaction[]>([]);
+
+  // Pre-populate resolve form based on Lekana's insights
+  const expandWithInsights = (txnId: string | null, insights?: TransactionInsight[]) => {
+    setExpandedTxn(txnId);
+    if (!txnId || !insights || insights.length === 0) {
+      setSelectedReason('');
+      setResolutionNotes('');
+      return;
+    }
+    const primary = insights[0];
+    const reasonMap: Record<string, string> = {
+      'possible_tip': 'other',
+      'overfill': 'other',
+      'duplicate_charge': 'other',
+      'no_fuel_record': 'other',
+    };
+    setSelectedReason(reasonMap[primary.type] || '');
+    setResolutionNotes(primary.detail || primary.message);
+  };
+
   const [pendingBulkAction, setPendingBulkAction] = useState<{
     type: 'confirm' | 'flag' | 'dismiss';
     count: number;
@@ -193,7 +224,7 @@ export default function InvestigateTransactions() {
       if (!response.ok) throw new Error("Failed to fetch all bank transactions");
       return response.json();
     },
-    enabled: !!periodId && filterMode === 'flagged',
+    enabled: !!periodId,
   });
 
   // Fetch matching rules to know the configured date window
@@ -218,8 +249,8 @@ export default function InvestigateTransactions() {
 
   // Build list of flagged transactions with their resolution info
   const flaggedTransactions = useMemo(() => {
-    if (!allBankData?.transactions || filterMode !== 'flagged') return [];
-    
+    if (!allBankData?.transactions) return [];
+
     return allBankData.transactions
       .filter(txn => flaggedTransactionIds.has(txn.id))
       .map(txn => {
@@ -227,7 +258,7 @@ export default function InvestigateTransactions() {
         return { transaction: txn, resolution };
       })
       .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
-  }, [allBankData, flaggedTransactionIds, flaggedResolutions, filterMode]);
+  }, [allBankData, flaggedTransactionIds, flaggedResolutions]);
 
   // Count resolutions by type for completion state
   const resolutionCounts = useMemo(() => {
@@ -305,12 +336,22 @@ export default function InvestigateTransactions() {
           });
 
         const potentialMatches = allScored
-          .filter((m) => m.confidence > 20)
+          .filter((m) => {
+            if (m.confidence <= 20) return false;
+            const fuelDate = new Date(m.transaction.transactionDate);
+            const days = Math.abs((bankDate.getTime() - fuelDate.getTime()) / (1000 * 60 * 60 * 24));
+            return days <= dateWindowDays;
+          })
           .sort((a, b) => b.confidence - a.confidence)
           .slice(0, 5);
 
-        // Always keep top 3 nearest by amount (for "no match" cases)
+        // Top 3 nearest by amount within the configured date window
         const nearestByAmount = [...allScored]
+          .filter(m => {
+            const fuelDate = new Date(m.transaction.transactionDate);
+            const days = Math.abs((bankDate.getTime() - fuelDate.getTime()) / (1000 * 60 * 60 * 24));
+            return days <= dateWindowDays;
+          })
           .sort((a, b) => a.amountDiff - b.amountDiff)
           .slice(0, 3);
 
@@ -445,10 +486,42 @@ export default function InvestigateTransactions() {
     return groups;
   }, [filteredTransactions]);
 
+  const openModal = (txnId: string) => {
+    const idx = categorizedTransactions.findIndex(ct => ct.transaction.id === txnId);
+    if (idx >= 0) {
+      setModalItems(categorizedTransactions);
+      setModalInitialIndex(idx);
+      setModalOpen(true);
+    }
+  };
+
+  const openFlaggedModal = (txnId: string) => {
+    const flaggedAsCategorized: CategorizedTransaction[] = flaggedTransactions.map(({ transaction }) => ({
+      transaction,
+      category: 'no_match' as const,
+      potentialMatches: [],
+      nearestByAmount: [],
+      insights: [],
+    }));
+    const idx = flaggedAsCategorized.findIndex(ct => ct.transaction.id === txnId);
+    if (idx >= 0) {
+      setModalItems(flaggedAsCategorized);
+      setModalInitialIndex(idx);
+      setModalOpen(true);
+    }
+  };
+
   const totalUnresolved = categorizedTransactions.length;
   const totalResolved = resolvedIds.size;
   const totalAll = totalUnresolved + totalResolved;
   const progressPercent = totalAll > 0 ? Math.round((totalResolved / totalAll) * 100) : 0;
+
+  // Auto-select flagged tab when no unresolved items exist
+  useEffect(() => {
+    if (totalUnresolved === 0 && flaggedTransactions.length > 0 && filterMode === 'all') {
+      setFilterMode('flagged');
+    }
+  }, [totalUnresolved, flaggedTransactions.length, filterMode]);
 
   // Mutations
   const createMatchMutation = useMutation({
@@ -466,6 +539,7 @@ export default function InvestigateTransactions() {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "fuel"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
       setExpandedTxn(null);
     },
     onError: (error: Error) => {
@@ -531,6 +605,7 @@ export default function InvestigateTransactions() {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "fuel"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
     },
     onError: (error: Error) => {
       toast({ title: "Failed to confirm matches", description: error.message, variant: "destructive" });
@@ -587,7 +662,7 @@ export default function InvestigateTransactions() {
     }
   };
 
-  if (unmatchedLoading || !periodId) {
+  if (unmatchedLoading || !periodId || !fuelData || !unmatchedData) {
     return (
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card sticky top-0 z-10">
@@ -620,354 +695,153 @@ export default function InvestigateTransactions() {
               </Button>
             </Link>
             <div className="flex-1">
-              <h1 className="text-xl font-semibold">
-                {filterMode === 'flagged' ? 'Flagged Transactions' : 'Review Transactions'}
-              </h1>
+              <h1 className="text-xl font-semibold">Review Transactions</h1>
               <p className="text-sm text-muted-foreground">
-                {filterMode === 'flagged' 
-                  ? `${flaggedTransactions.length} transaction${flaggedTransactions.length !== 1 ? "s" : ""} flagged for follow-up`
-                  : `${totalUnresolved} transaction${totalUnresolved !== 1 ? "s" : ""} need your attention`
-                }
+                {totalUnresolved + flaggedTransactions.length} transaction{(totalUnresolved + flaggedTransactions.length) !== 1 ? "s" : ""} need your attention
               </p>
             </div>
-            {filterMode === 'flagged' && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  setFilterMode('all');
-                  setLocation(`/investigate?periodId=${periodId}`);
-                }}
-                data-testid="button-view-all"
-              >
-                View All
-              </Button>
-            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6">
         <div className="space-y-6">
-          {/* Filter Mode Indicator */}
-          {filterMode === 'flagged' ? (
-            <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg text-sm">
-              <Flag className="h-4 w-4 text-orange-600" />
-              <span className="text-orange-800 dark:text-orange-200">
-                Showing only transactions flagged for manager/accountant review
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-              <Info className="h-3.5 w-3.5" />
-              <span>
-                Showing unmatched bank transactions within your fuel data date range. 
-                Matched and outside-date-range transactions are not included.
-              </span>
-            </div>
-          )}
+          {/* Summary Cards */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilterMode(filterMode === 'all' ? 'all' : 'all')}
+              className={cn(
+                "rounded-lg p-2.5 text-left transition-colors border flex-1",
+                filterMode === 'all'
+                  ? "border-[#B8860B]/30 bg-[#FEF9C3]"
+                  : "border-[#E5E3DC]/50 bg-[#FAFAF6] hover:border-[#B8860B]/20"
+              )}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">No Match Found</p>
+              <p className={cn("text-lg font-semibold tabular-nums", filterMode === 'all' && totalUnresolved > 0 && "text-[#B45309]")}>{totalUnresolved}</p>
+            </button>
+            <button
+              onClick={() => setFilterMode(filterMode === 'flagged' ? 'all' : 'flagged')}
+              className={cn(
+                "rounded-lg p-2.5 text-left transition-colors border flex-1",
+                filterMode === 'flagged'
+                  ? "border-[#B8860B]/30 bg-[#FEF9C3]"
+                  : "border-[#E5E3DC]/50 bg-[#FAFAF6] hover:border-[#B8860B]/20"
+              )}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Investigate</p>
+              <p className={cn("text-lg font-semibold tabular-nums", filterMode === 'flagged' && flaggedTransactions.length > 0 && "text-[#B45309]")}>{flaggedTransactions.length}</p>
+            </button>
+          </div>
 
           {/* Flagged Mode Content */}
           {filterMode === 'flagged' ? (
             <>
-              {/* Flagged Transactions List */}
               {flaggedTransactions.length === 0 ? (
-                <Card className="bg-[#DCFCE7] dark:bg-emerald-950/30 border-[#166534]/20 dark:border-emerald-800">
-                  <CardContent className="pt-6 pb-6">
-                    <div className="flex flex-col items-center text-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-[#DCFCE7] dark:bg-emerald-950/30 flex items-center justify-center">
-                        <Check className="h-6 w-6 text-[#166534]" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-[#166534] dark:text-emerald-300">
-                          No Flagged Items
-                        </h3>
-                        <p className="text-sm text-[#166534] dark:text-emerald-300 mt-1">
-                          All flagged transactions have been resolved.
-                        </p>
-                      </div>
-                      <Link href={`/flow/${periodId}?mode=view`}>
-                        <Button variant="outline" data-testid="button-back-results">
-                          Back to Results
-                        </Button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  No flagged transactions.
+                </div>
               ) : (
-                <div className="space-y-3">
+                <Card>
+                <CardContent className="pt-4 pb-4">
+                <div className="space-y-2">
                   {flaggedTransactions.map(({ transaction, resolution }) => (
-                    <Card key={transaction.id} className="border-orange-200 dark:border-orange-800" data-testid={`card-flagged-${transaction.id}`}>
-                      <CardContent className="pt-4 pb-4">
-                        <div className="flex items-start gap-4">
-                          <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg shrink-0">
-                            <Flag className="h-4 w-4 text-orange-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-lg font-semibold tabular-nums">
-                                {formatCurrency(parseFloat(transaction.amount))}
-                              </span>
-                              <span className="text-sm text-muted-foreground">
-                                {formatDate(transaction.transactionDate)}
-                              </span>
-                              {transaction.transactionTime && (
-                                <span className="text-sm text-muted-foreground flex items-center gap-0.5">
-                                  <Clock className="h-3 w-3" />
-                                  {transaction.transactionTime}
-                                </span>
-                              )}
-                            </div>
-                            {transaction.description && (
-                              <p className="text-sm text-muted-foreground mt-1 truncate">
-                                {transaction.description}
-                              </p>
-                            )}
-                            {resolution && (
-                              <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                                <div className="flex items-center gap-1">
-                                  <span>Flagged by:</span>
-                                  <span className="font-medium">{resolution.userName || resolution.userEmail || 'Unknown'}</span>
-                                </div>
-                                {resolution.notes && (
-                                  <div className="flex items-start gap-1">
-                                    <span>Notes:</span>
-                                    <span className="italic">{resolution.notes}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          {expandedTxn !== transaction.id && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => {
-                                setExpandedTxn(transaction.id);
-                                setSelectedReason('');
-                                setResolutionNotes('');
-                              }}
-                              data-testid={`button-resolve-${transaction.id}`}
-                            >
-                              Resolve
-                            </Button>
-                          )}
-                          {expandedTxn === transaction.id && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => setExpandedTxn(null)}
-                              data-testid={`button-collapse-${transaction.id}`}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                    <div
+                      key={transaction.id}
+                      className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:border-foreground/20"
+                      onClick={() => openFlaggedModal(transaction.id)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="tabular-nums font-bold">{formatCurrency(parseFloat(transaction.amount))}</span>
+                          <span className="text-sm text-muted-foreground">{formatDate(transaction.transactionDate)}</span>
+                          {transaction.transactionTime && (
+                            <span className="text-sm text-muted-foreground flex items-center gap-0.5">
+                              <Clock className="h-3 w-3" />
+                              {transaction.transactionTime}
+                            </span>
                           )}
                         </div>
-                        
-                        {/* Expanded Resolution Panel */}
-                        {expandedTxn === transaction.id && (
-                          <div className="mt-4 pt-4 border-t space-y-4">
-                            <p className="text-sm font-medium">How do you want to resolve this transaction?</p>
-                            
-                            <div className="space-y-3">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <Select value={selectedReason} onValueChange={setSelectedReason}>
-                                  <SelectTrigger data-testid="select-reason-flagged">
-                                    <SelectValue placeholder="Select resolution" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {RESOLUTION_REASONS.map((reason) => (
-                                      <SelectItem key={reason.value} value={reason.value}>
-                                        {reason.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              
-                              <Textarea 
-                                placeholder="Add notes (optional)..."
-                                value={resolutionNotes}
-                                onChange={(e) => setResolutionNotes(e.target.value)}
-                                className="min-h-[80px]"
-                                data-testid="input-notes-flagged"
-                              />
-                              
-                              <div className="flex gap-2 flex-wrap">
-                                <Button
-                                  onClick={() => {
-                                    if (selectedReason) {
-                                      createResolutionMutation.mutate({
-                                        transactionId: transaction.id,
-                                        resolutionType: selectedReason as 'reviewed' | 'dismissed' | 'written_off',
-                                        reason: selectedReason,
-                                        notes: resolutionNotes || undefined,
-                                      });
-                                    }
-                                  }}
-                                  disabled={!selectedReason || createResolutionMutation.isPending}
-                                  data-testid="button-confirm-resolution"
-                                >
-                                  <Check className="h-4 w-4 mr-2" />
-                                  Confirm Resolution
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  onClick={() => setExpandedTxn(null)}
-                                  data-testid="button-cancel-resolution"
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
+                        {resolution?.notes && (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{resolution.notes}</p>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                      <div className="flex items-center gap-2 ml-2">
+                        <Badge variant="outline" className="text-xs text-[#B45309]">Flagged</Badge>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
                   ))}
                 </div>
-              )}
-
-              {/* Export button for flagged items */}
-              {flaggedTransactions.length > 0 && (
-                <div className="flex justify-center">
-                  <Button 
-                    variant="outline"
-                    onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, '_blank')}
-                    data-testid="button-export-flagged-list"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Export Flagged Transactions
-                  </Button>
-                </div>
+                </CardContent>
+                </Card>
               )}
             </>
           ) : (
             <>
-              {/* Progress Indicator - Normal Mode */}
-              <Card data-testid="card-progress">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Progress</span>
-                    <span className="text-sm font-medium" data-testid="text-progress">
-                      {totalResolved} of {totalAll} resolved
-                    </span>
-                  </div>
-                  <Progress value={progressPercent} className="h-2" />
-                </CardContent>
-              </Card>
-
-              {totalUnresolved === 0 ? (
-            resolutionCounts.flagged > 0 ? (
-              // Items flagged - show summary with pending items
-              <Card className="border-[#B45309]/20 dark:border-amber-800 bg-[#FEF9C3]/50 dark:bg-amber-950/20" data-testid="card-review-complete">
-                <CardContent className="pt-6 pb-6">
-                  <div className="flex flex-col items-center text-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#FEF9C3] dark:bg-amber-950/30 flex items-center justify-center">
-                      <AlertTriangle className="h-6 w-6 text-[#B45309]" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Review Complete — {resolutionCounts.total} of {resolutionCounts.total} categorized
-                      </h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Some transactions need manager/accountant follow-up
-                      </p>
-                    </div>
-                    
-                    {/* Summary breakdown */}
-                    <div className="w-full max-w-sm text-left space-y-2 px-4">
-                      {resolutionCounts.linked > 0 && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-[#166534]" />
-                          <span>{resolutionCounts.linked} Linked to fuel records</span>
-                        </div>
-                      )}
-                      {resolutionCounts.dismissed > 0 && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-[#166534]" />
-                          <span>{resolutionCounts.dismissed} Dismissed (low value)</span>
-                        </div>
-                      )}
-                      {resolutionCounts.reviewed > 0 && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-[#166534]" />
-                          <span>{resolutionCounts.reviewed} Marked as reviewed</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 text-sm font-medium text-[#B45309] dark:text-amber-400">
-                        <AlertTriangle className="h-4 w-4" />
-                        <span>{resolutionCounts.flagged} Flagged for follow-up</span>
-                      </div>
-                    </div>
-
-                    <p className="text-sm text-muted-foreground">
-                      Next: {resolutionCounts.flagged} transaction{resolutionCounts.flagged !== 1 ? 's' : ''} need manager/accountant review
-                    </p>
-
-                    <div className="flex gap-2 flex-wrap justify-center">
-                      <Button 
-                        variant="outline"
-                        onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, '_blank')}
-                        data-testid="button-export-flagged"
-                      >
-                        Export Flagged
-                      </Button>
-                      <Link href={`/flow/${periodId}?mode=view`}>
-                        <Button variant="outline" data-testid="button-back-results">Back to Results</Button>
-                      </Link>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              // All items closed - show success
-              <Card className="bg-[#DCFCE7] dark:bg-emerald-950/30 border-[#166534]/20 dark:border-emerald-800" data-testid="card-all-clear">
-                <CardContent className="pt-6 pb-6">
-                  <div className="flex flex-col items-center justify-center py-4 text-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#DCFCE7] dark:bg-emerald-950/30 flex items-center justify-center">
+              {totalUnresolved === 0 && flaggedTransactions.length === 0 && unmatchedData ? (
+              // All clear — no unresolved, no flagged
+              <Card className="bg-[#FAFAF6] border-[#E5E3DC]" data-testid="card-all-clear">
+                <CardContent className="pt-8 pb-8">
+                  <div className="flex flex-col items-center justify-center text-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[#DCFCE7] flex items-center justify-center">
                       <Check className="h-6 w-6 text-[#166534]" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-[#166534] dark:text-emerald-300">All Clear!</h3>
-                      <p className="text-sm text-[#166534] dark:text-emerald-300 mt-1">
-                        All transactions have been resolved.
+                      <h3 className="text-lg font-semibold text-[#1A1200]">Review Complete</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        All transactions have been reviewed.
                       </p>
                     </div>
 
-                    {/* Summary breakdown */}
                     {resolutionCounts.total > 0 && (
-                      <div className="w-full max-w-sm text-left space-y-1.5 px-4 text-sm text-[#166534] dark:text-emerald-300">
+                      <div className="w-full max-w-sm text-left space-y-1.5 px-4 text-sm text-muted-foreground">
+                        {resolutionCounts.reviewed > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-3.5 w-3.5 text-[#166534]" />
+                            <span>{resolutionCounts.reviewed} Resolved</span>
+                          </div>
+                        )}
                         {resolutionCounts.linked > 0 && (
                           <div className="flex items-center gap-2">
-                            <Check className="h-3.5 w-3.5" />
+                            <Check className="h-3.5 w-3.5 text-[#166534]" />
                             <span>{resolutionCounts.linked} Linked to fuel records</span>
                           </div>
                         )}
                         {resolutionCounts.dismissed > 0 && (
                           <div className="flex items-center gap-2">
-                            <Check className="h-3.5 w-3.5" />
-                            <span>{resolutionCounts.dismissed} Dismissed (low value)</span>
-                          </div>
-                        )}
-                        {resolutionCounts.reviewed > 0 && (
-                          <div className="flex items-center gap-2">
-                            <Check className="h-3.5 w-3.5" />
-                            <span>{resolutionCounts.reviewed} Marked as reviewed</span>
+                            <Check className="h-3.5 w-3.5 text-[#166534]" />
+                            <span>{resolutionCounts.dismissed} Dismissed</span>
                           </div>
                         )}
                       </div>
                     )}
-                    
+
                     <Link href={`/flow/${periodId}?mode=view`}>
                       <Button variant="outline" data-testid="button-back-results">Back to Results</Button>
                     </Link>
                   </div>
                 </CardContent>
               </Card>
-            )
           ) : (
             <>
+              {searchQuery && filteredTransactions.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6 pb-6 text-center">
+                    <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      No transactions match "{searchQuery}"
+                    </p>
+                    <Button variant="link" size="sm" onClick={() => setSearchQuery("")}>
+                      Clear search
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+              <>
+              {/* Transaction List — flat, click to open modal */}
+              <Card>
+              <CardContent className="pt-4 pb-4 space-y-4">
               {/* Search Bar */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -990,23 +864,42 @@ export default function InvestigateTransactions() {
                   </Button>
                 )}
               </div>
-
-              {searchQuery && filteredTransactions.length === 0 ? (
-                <Card>
-                  <CardContent className="pt-6 pb-6 text-center">
-                    <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      No transactions match "{searchQuery}"
-                    </p>
-                    <Button variant="link" size="sm" onClick={() => setSearchQuery("")}>
-                      Clear search
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-              <>
-              {/* Category Sections */}
-              {(['quick_win', 'investigate', 'no_match', 'low_value'] as const).map((category) => {
+              <div className="space-y-2">
+                {filteredTransactions.map((item) => {
+                  const txn = item.transaction;
+                  const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
+                  return (
+                    <div
+                      key={txn.id}
+                      className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:border-foreground/20"
+                      onClick={() => openModal(txn.id)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="tabular-nums font-bold">{formatCurrency(txn.amount)}</span>
+                          <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
+                          {txn.transactionTime && (
+                            <span className="text-sm text-muted-foreground flex items-center gap-0.5">
+                              <Clock className="h-3 w-3" />
+                              {txn.transactionTime}
+                            </span>
+                          )}
+                        </div>
+                        {txn.description && (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{txn.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-2">
+                        <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              </CardContent>
+              </Card>
+              {false && (['quick_win', 'investigate', 'no_match', 'low_value'] as const).map((category) => {
                 const items = groupedTransactions[category];
                 if (items.length === 0) return null;
 
@@ -1015,8 +908,8 @@ export default function InvestigateTransactions() {
                 const isExpanded = expandedCategories[category];
 
                 return (
-                  <Collapsible 
-                    key={category} 
+                  <Collapsible
+                    key={category}
                     open={isExpanded}
                     onOpenChange={(open) => setExpandedCategories(prev => ({ ...prev, [category]: open }))}
                   >
@@ -1079,7 +972,7 @@ export default function InvestigateTransactions() {
                                   disabled={bulkFlagMutation.isPending}
                                   data-testid="button-flag-all"
                                 >
-                                  Flag All for Review
+                                  Investigate All
                                 </Button>
                               )}
                               {/* Dismiss All for Low Value */}
@@ -1121,15 +1014,14 @@ export default function InvestigateTransactions() {
                               <div
                                 key={txn.id}
                                 className={cn(
-                                  "border rounded-lg overflow-hidden",
-                                  isExpanded && "border-foreground/20"
+                                  "border rounded-lg overflow-hidden hover:border-foreground/20"
                                 )}
                                 data-testid={`card-txn-${txn.id}`}
                               >
                                 {/* Transaction Header */}
                                 <div
                                   className="flex items-center gap-3 p-3 cursor-pointer hover-elevate"
-                                  onClick={() => setExpandedTxn(isExpanded ? null : txn.id)}
+                                  onClick={() => openModal(txn.id)}
                                 >
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
@@ -1218,8 +1110,8 @@ export default function InvestigateTransactions() {
                                   )} />
                                 </div>
 
-                                {/* Expanded Detail */}
-                                {isExpanded && (
+                                {/* Expanded Detail — now handled by InvestigateModal */}
+                                {false && (
                                   <div className="border-t p-4 space-y-4 bg-muted/20">
                                     {/* Transaction Details */}
                                     <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1475,7 +1367,7 @@ export default function InvestigateTransactions() {
                                             data-testid="button-mark-reviewed"
                                           >
                                             <CheckCircle2 className="h-4 w-4 mr-2" />
-                                            Mark as Reviewed
+                                            Match
                                           </Button>
                                         </div>
                                         <Textarea
@@ -1492,13 +1384,13 @@ export default function InvestigateTransactions() {
                                             onClick={() => createResolutionMutation.mutate({
                                               transactionId: txn.id,
                                               resolutionType: 'flagged',
-                                              notes: resolutionNotes || 'Flagged for manager review',
+                                              notes: resolutionNotes || 'To investigate',
                                             })}
                                             disabled={createResolutionMutation.isPending}
                                             data-testid="button-flag"
                                           >
                                             <Flag className="h-4 w-4 mr-1" />
-                                            Flag for Review
+                                            Investigate
                                           </Button>
                                           {parseFloat(txn.amount) < LOW_VALUE_THRESHOLD && (
                                             <Button
@@ -1530,69 +1422,6 @@ export default function InvestigateTransactions() {
                 );
               })}
 
-              {/* Excluded Transactions — audit trail for reversed/declined/cancelled */}
-              {excludedData && excludedData.transactions.length > 0 && (
-                <Collapsible
-                  open={expandedCategories['excluded'] || false}
-                  onOpenChange={(open) => setExpandedCategories(prev => ({ ...prev, excluded: open }))}
-                >
-                  <Card className="opacity-75">
-                    <CollapsibleTrigger asChild>
-                      <CardHeader className="cursor-pointer hover-elevate py-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
-                              <XCircle className="h-4 w-4 text-slate-500" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base flex items-center gap-2">
-                                Excluded Transactions
-                                <Badge variant="secondary">{excludedData.transactions.length}</Badge>
-                              </CardTitle>
-                              <CardDescription className="text-xs">Reversed, declined, or cancelled — excluded from matching</CardDescription>
-                            </div>
-                          </div>
-                          <ChevronRight className={cn("h-4 w-4 transition-transform", expandedCategories['excluded'] && "rotate-90")} />
-                        </div>
-                      </CardHeader>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <CardContent className="pt-0 space-y-2">
-                        {excludedData.transactions.map((txn) => {
-                          const reason = txn.description?.match(/\[Excluded: (.+?)\]/)?.[1] || 'Excluded';
-                          const cleanDescription = txn.description?.replace(/\s*\[Excluded:.*?\]/g, '').trim();
-                          return (
-                            <div key={txn.id} className="flex items-center justify-between text-sm p-3 border rounded bg-muted/30">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="tabular-nums font-medium">
-                                    {formatCurrency(parseFloat(txn.amount))}
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    {formatDate(txn.transactionDate)}
-                                  </span>
-                                  {txn.transactionTime && (
-                                    <span className="text-xs text-muted-foreground">{txn.transactionTime}</span>
-                                  )}
-                                  <span className="text-xs text-muted-foreground">
-                                    {txn.sourceName || txn.sourceType}
-                                  </span>
-                                </div>
-                                {cleanDescription && (
-                                  <p className="text-xs text-muted-foreground truncate">{cleanDescription}</p>
-                                )}
-                              </div>
-                              <Badge variant="outline" className="ml-2 shrink-0 text-xs">
-                                {reason}
-                              </Badge>
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </CollapsibleContent>
-                  </Card>
-                </Collapsible>
-              )}
             </>
           )}
               </>
@@ -1608,7 +1437,7 @@ export default function InvestigateTransactions() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {pendingBulkAction?.type === 'confirm' && 'Confirm All Quick Wins'}
-              {pendingBulkAction?.type === 'flag' && 'Flag All for Review'}
+              {pendingBulkAction?.type === 'flag' && 'Investigate All'}
               {pendingBulkAction?.type === 'dismiss' && 'Dismiss All Low Value'}
             </AlertDialogTitle>
             <AlertDialogDescription>
@@ -1624,12 +1453,26 @@ export default function InvestigateTransactions() {
               setPendingBulkAction(null);
             }}>
               {pendingBulkAction?.type === 'confirm' && 'Confirm All'}
-              {pendingBulkAction?.type === 'flag' && 'Flag All'}
+              {pendingBulkAction?.type === 'flag' && 'Investigate All'}
               {pendingBulkAction?.type === 'dismiss' && 'Dismiss All'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Investigate Modal */}
+      <InvestigateModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        items={modalItems}
+        initialIndex={modalInitialIndex}
+        periodId={periodId}
+        matchingRules={matchingRules}
+        onResolved={() => {
+          // Data refreshes via query invalidation in the modal
+        }}
+        hideInvestigateButton={filterMode === 'flagged'}
+      />
     </div>
   );
 }

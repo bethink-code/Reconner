@@ -8,11 +8,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Download,
   Settings,
+  ChevronRight,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 import { getBankColor } from "@/lib/bankColors";
 import { AttendantReport, type AttendantSummaryRow } from "./AttendantReport";
+import type { MatchingRulesConfig } from "@shared/schema";
+import { MatchedPairsTab } from "./MatchedPairsTab";
 
 interface BankAccountRange {
   fileId: string;
@@ -106,6 +109,7 @@ function heroTextColor(pct: number): string {
 export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onAddBankData }: ResultsDashboardProps) {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("summary");
+  const [rulesExpanded, setRulesExpanded] = useState(false);
 
   const { data: summary, isLoading } = useQuery<PeriodSummary>({
     queryKey: ["/api/periods", periodId, "summary"],
@@ -122,6 +126,10 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
     enabled: !!periodId && activeTab === "attendants",
   });
 
+  const { data: rules } = useQuery<MatchingRulesConfig>({
+    queryKey: ["/api/periods", periodId, "matching-rules"],
+    enabled: !!periodId,
+  });
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -182,10 +190,10 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
     approvedAmount: acc.approvedAmount + b.approvedAmount,
   }), { declinedCount: 0, declinedAmount: 0, cancelledCount: 0, cancelledAmount: 0, approvedCount: 0, approvedAmount: 0 });
 
-  const tabTriggerClass = "text-xs px-3 py-1 h-7 rounded-lg text-[#6B7280] data-[state=active]:!bg-[#1A1200] data-[state=active]:!text-[#F5EDE6] data-[state=active]:!shadow-none";
+  const tabTriggerClass = "text-sm px-1 pb-2.5 -mb-px text-[#6B7280] border-b-2 border-transparent rounded-none bg-transparent shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-[#1A1200] data-[state=active]:!font-semibold data-[state=active]:!text-base data-[state=active]:!border-[#1A1200] data-[state=active]:!shadow-none hover:text-[#1A1200] transition-colors";
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className={cn("space-y-6 mx-auto transition-all", activeTab === "matched" ? "max-w-4xl" : "max-w-2xl")}>
       {/* ═══════════════════════════════════════════════════════════════════
           MAIN RESULTS CARD
       ═══════════════════════════════════════════════════════════════════ */}
@@ -194,16 +202,28 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Tab bar + Download */}
-            <div className="flex items-center justify-between mb-4">
-              <TabsList className="h-8 bg-transparent p-0 rounded-lg w-auto">
-                <TabsTrigger value="summary" className={tabTriggerClass}>Summary</TabsTrigger>
-                <TabsTrigger value="detail" className={tabTriggerClass}>Detail</TabsTrigger>
-                <TabsTrigger value="attendants" className={tabTriggerClass}>Attendants</TabsTrigger>
-              </TabsList>
+            <div className="flex items-end justify-between border-b border-[#E5E3DC] mb-16">
+              <div className="flex items-end gap-4">
+                <TabsList className="bg-transparent p-0 rounded-none w-auto h-auto gap-4">
+                  <TabsTrigger value="summary" className={tabTriggerClass}>Summary</TabsTrigger>
+                  <TabsTrigger value="detail" className={tabTriggerClass}>Detail</TabsTrigger>
+                  <TabsTrigger value="attendants" className={tabTriggerClass}>Attendants</TabsTrigger>
+                  <TabsTrigger value="matched" className={tabTriggerClass}>Transactions</TabsTrigger>
+                </TabsList>
+                <button
+                  onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
+                  className={cn(
+                    "text-sm px-1 pb-[12px] -mb-px border-b-2 border-transparent transition-colors hover:text-[#1A1200]",
+                    unmatchedBank > 0 ? "text-[#B45309]" : "text-[#6B7280]"
+                  )}
+                >
+                  Review ({unmatchedBank})
+                </button>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
-                className="border border-[#E5E3DC]"
+                className="border border-[#E5E3DC] mb-2"
                 onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}
                 data-testid="button-export-full"
               >
@@ -217,58 +237,60 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
             ════════════════════════════════════════════════════════════ */}
             <TabsContent value="summary" className="mt-0 space-y-6">
               {/* Hero verified metric */}
-              <div className="text-center space-y-1">
+              <div className="text-center space-y-0.5">
                 <p className={cn("text-3xl font-heading font-semibold", heroTextColor(bankMatchPct))}>
                   {formatRandExact(summary.matchedBankAmount)}
                 </p>
                 <p className="text-sm text-muted-foreground">Verified</p>
-              </div>
-
-              {/* Progress bar */}
-              <div className="h-2 w-full rounded-full bg-[#E5E3DC]">
-                <div
-                  className={cn("h-full rounded-full transition-all", heroBarColor(bankMatchPct))}
-                  style={{ width: `${bankMatchPct}%` }}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground text-center -mt-4">
-                {bankMatchPct}% of {matchableBankTotal} bank transactions matched
-              </p>
-
-              {/* Supporting metric cards */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">Period Fuel Sales</p>
-                  <p className="text-lg font-semibold tabular-nums">{formatRandExact(summary.totalFuelAmount)}</p>
-                  <p className="text-xs text-muted-foreground">{summary.fuelTransactions} transactions</p>
-                </div>
-                <div className={cn(
-                  "rounded-xl p-4",
-                  unmatchedBank > 0
-                    ? "bg-[#FEF9C3] dark:bg-amber-950/30"
-                    : "bg-[#FAFAF6] dark:bg-muted/30"
+                <p className={cn("text-xs font-medium",
+                  bankMatchPct >= 90 ? "text-[#166534]"
+                  : bankMatchPct >= 70 ? "text-[#B45309]"
+                  : "text-red-600"
                 )}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">Needs Investigation</p>
-                  <p className={cn("text-lg font-semibold tabular-nums", unmatchedBank > 0 ? "text-[#B45309]" : "")}>{unmatchedBank}</p>
-                  <p className="text-xs text-muted-foreground">{formatRandExact(summary.unmatchedBankAmount || 0)}</p>
-                </div>
+                  {bankMatchPct}% of {matchableBankTotal} bank transactions matched
+                </p>
               </div>
 
-              {/* Investigate CTA */}
-              {unmatchedBank > 0 && (
-                <div className="flex items-center justify-between rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
-                  <p className="text-sm text-muted-foreground">
-                    {unmatchedBank} bank transaction{unmatchedBank !== 1 ? 's' : ''} with no matching fuel sale
-                  </p>
-                  <Button
-                    size="sm"
-                    onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
-                    data-testid="button-investigate"
-                  >
-                    Investigate
-                  </Button>
-                </div>
-              )}
+              {/* Fuel sales breakdown */}
+              {(() => {
+                const segments = [
+                  { key: "all", label: "All", count: summary.fuelTransactions, amount: summary.totalFuelAmount },
+                  { key: "card", label: "Card", count: summary.cardFuelTransactions, amount: summary.cardFuelAmount },
+                  { key: "cash", label: "Cash", count: summary.cashFuelTransactions, amount: summary.cashFuelAmount },
+                  ...(summary.debtorFuelTransactions > 0 ? [{ key: "debtor", label: "Debtors", count: summary.debtorFuelTransactions, amount: summary.debtorFuelAmount }] : []),
+                  { key: "review", label: "Needs Review", count: unmatchedBank, amount: summary.unmatchedBankAmount || 0 },
+                ];
+                return (
+                  <div className="rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">Period Fuel Sales</p>
+                    <div className="flex divide-x divide-border/50">
+                      {segments.map((seg) => (
+                        <button
+                          key={seg.key}
+                          onClick={() => {
+                            if (seg.key === "review" && unmatchedBank > 0) {
+                              setLocation(`/investigate?periodId=${periodId}`);
+                            }
+                          }}
+                          className={cn(
+                            "flex-1 py-2 px-3 text-center transition-colors",
+                            seg.key === "review" && unmatchedBank > 0
+                              ? "hover:bg-[#FEF9C3] cursor-pointer"
+                              : ""
+                          )}
+                        >
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{seg.label}</p>
+                          <p className={cn(
+                            "text-base font-semibold tabular-nums",
+                            seg.key === "review" && unmatchedBank > 0 ? "text-[#B45309]" : ""
+                          )}>{seg.count}</p>
+                          <p className="text-[10px] text-muted-foreground tabular-nums">{formatRandExact(seg.amount)}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Data Coverage */}
               <div className="pt-2">
@@ -557,28 +579,49 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                 onInvestigate={() => setLocation(`/investigate?periodId=${periodId}`)}
               />
             </TabsContent>
+
+            <TabsContent value="matched" className="mt-0">
+              <MatchedPairsTab periodId={periodId} />
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
 
-      {/* Matching Rules Card */}
+      {/* Matching Rules Row */}
       <Card data-testid="card-matching-rules">
         <CardContent className="py-3 px-4">
-          <div className="flex items-center justify-between">
+          <div
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setRulesExpanded(!rulesExpanded)}
+          >
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Settings className="h-4 w-4" />
               <span>Matching Rules</span>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRerunMatching}
-              data-testid="button-adjust-rules"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Adjust
-            </Button>
+            <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform rotate-90", rulesExpanded && "rotate-[270deg]")} />
           </div>
+          {rulesExpanded && rules && (
+            <div className="mt-4 pt-4 border-t border-[#E5E3DC] space-y-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-4 gap-y-2">
+                <RuleValue label="Tolerance" value={`±R ${Number(rules.amountTolerance).toFixed(2)}`} />
+                <RuleValue label="Date Window" value={`${rules.dateWindowDays} day${rules.dateWindowDays !== 1 ? "s" : ""}`} />
+                <RuleValue label="Time Window" value={`${rules.timeWindowMinutes} min`} />
+                <RuleValue label="Min Confidence" value={`${rules.minimumConfidence}%`} />
+                <RuleValue label="Auto-Match" value={`${rules.autoMatchThreshold}%`} />
+                <RuleValue label="Invoice Group" value={rules.groupByInvoice ? "On" : "Off"} />
+                <RuleValue label="Card Required" value={rules.requireCardMatch ? "Yes" : "No"} />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); onRerunMatching(); }}
+                data-testid="button-adjust-rules"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Adjust
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -619,6 +662,15 @@ function DetailRow({ label, count, amount, value, bold, highlight, muted }: {
           <span className="tabular-nums text-right min-w-[100px]">{value}</span>
         )}
       </div>
+    </div>
+  );
+}
+
+function RuleValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</p>
+      <p className="text-sm tabular-nums">{value}</p>
     </div>
   );
 }

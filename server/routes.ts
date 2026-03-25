@@ -1295,6 +1295,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
 
+      console.log(`[AUTO-MATCH] Period: ${period.name}, Fuel txns: ${fuelTransactions.length}, Bank txns: ${bankTransactions.length}`);
+      if (fuelTransactions.length > 0) {
+        const fuelDateSet = new Set(fuelTransactions.map(t => t.transactionDate?.substring(0, 10)));
+        console.log(`[AUTO-MATCH] Fuel dates: ${[...fuelDateSet].sort().join(', ')}`);
+      }
+      if (bankTransactions.length > 0) {
+        const bankDateSet = new Set(bankTransactions.map(t => t.transactionDate?.substring(0, 10)));
+        console.log(`[AUTO-MATCH] Bank dates: ${[...bankDateSet].sort().join(', ')}`);
+      }
+
       // *** DATE RANGE VALIDATION ***
       // Detect bank transactions that cannot be matched because no fuel data exists for those dates
       const fuelDates = fuelTransactions
@@ -1312,24 +1322,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let unmatchableBankTransactions: typeof bankTransactions = [];
       let dateRangeWarning = '';
       
+      // Helper to get date-only (midnight) from a timestamp
+      const toDateOnly = (d: number) => {
+        const dt = new Date(d);
+        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+      };
+
       if (fuelDates.length > 0 && bankDates.length > 0) {
-        const maxFuelDate = Math.max(...fuelDates);
-        const minFuelDate = Math.min(...fuelDates);
-        const maxBankDate = Math.max(...bankDates);
-        const minBankDate = Math.min(...bankDates);
-        
-        // Find bank transactions outside fuel date range
+        const maxFuelDay = toDateOnly(Math.max(...fuelDates));
+        const minFuelDay = toDateOnly(Math.min(...fuelDates));
+
+        // Find bank transactions outside fuel date range (comparing date-only, ignoring time)
         unmatchableBankTransactions = bankTransactions.filter(t => {
           if (!t.transactionDate) return false;
           const bankTime = new Date(t.transactionDate).getTime();
           if (isNaN(bankTime)) return false;
+          const bankDay = toDateOnly(bankTime);
           // Bank date is after fuel data ends OR before fuel data starts
-          return bankTime > maxFuelDate || bankTime < minFuelDate;
+          return bankDay > maxFuelDay || bankDay < minFuelDay;
         });
         
         if (unmatchableBankTransactions.length > 0) {
-          const maxFuelDateStr = new Date(maxFuelDate).toISOString().split('T')[0];
-          const minFuelDateStr = new Date(minFuelDate).toISOString().split('T')[0];
+          const maxFuelDateStr = new Date(maxFuelDay).toISOString().split('T')[0];
+          const minFuelDateStr = new Date(minFuelDay).toISOString().split('T')[0];
           dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
           // Mark these as unmatchable in bulk
           await storage.updateTransactionsBatch(
@@ -1534,7 +1549,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Collect match for bulk creation
         if (bestMatch) {
-          const matchType = bestMatch.confidence >= rules.autoMatchThreshold ? 'auto' : 'auto_review';
+          const isExact = Math.abs(bestMatch.amountDiff) < 0.005;
+          const aboveThreshold = bestMatch.confidence >= rules.autoMatchThreshold;
+          const matchType = isExact && aboveThreshold ? 'auto_exact'
+            : isExact ? 'auto_exact_review'
+            : aboveThreshold ? 'auto_rules'
+            : 'auto_rules_review';
 
           pendingMatches.push({
             matchData: {
@@ -1613,7 +1633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const match = await storage.createMatch({
         ...matchInput,
-        matchType: 'manual',
+        matchType: 'user_confirmed',
         matchConfidence: '100',
       });
 
@@ -1660,6 +1680,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting match:", error);
       res.status(500).json({ error: "Failed to delete match" });
+    }
+  });
+
+  // Matched pairs with full transaction details (includes matches + linked resolutions)
+  app.get("/api/periods/:periodId/matches/details", isAuthenticated, async (req: any, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+
+      const [matchRecords, allTransactions, resolutions] = await Promise.all([
+        storage.getMatchesByPeriod(req.params.periodId),
+        storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId),
+      ]);
+
+      const txMap = new Map(allTransactions.map(t => [t.id, t]));
+
+      // Match records (auto + manual matches)
+      const matchedTxIds = new Set<string>();
+      const details = matchRecords
+        .map(m => {
+          matchedTxIds.add(m.bankTransactionId);
+          matchedTxIds.add(m.fuelTransactionId);
+          return {
+            match: m,
+            bankTransaction: txMap.get(m.bankTransactionId),
+            fuelTransaction: txMap.get(m.fuelTransactionId),
+          };
+        })
+        .filter(d => d.bankTransaction && d.fuelTransaction);
+
+      // Linked resolutions (manual reconciliation with reason)
+      for (const r of resolutions) {
+        if (r.resolutionType !== 'linked' || !r.linkedTransactionId) continue;
+        if (matchedTxIds.has(r.transactionId)) continue; // already covered by a match record
+
+        const bankTx = txMap.get(r.transactionId);
+        const fuelTx = txMap.get(r.linkedTransactionId);
+        if (!bankTx || !fuelTx) continue;
+
+        details.push({
+          match: {
+            id: r.id,
+            periodId: r.periodId,
+            bankTransactionId: r.transactionId,
+            fuelTransactionId: r.linkedTransactionId,
+            matchType: 'linked',
+            matchConfidence: null,
+            createdAt: r.createdAt,
+          },
+          bankTransaction: bankTx,
+          fuelTransaction: fuelTx,
+        });
+      }
+
+      // Excluded transactions (reversed, declined, cancelled — bank only, no fuel pair)
+      for (const tx of allTransactions) {
+        if (tx.matchStatus !== 'excluded') continue;
+        if (tx.sourceType !== 'bank' && !tx.sourceType?.startsWith('bank')) continue;
+        details.push({
+          match: {
+            id: `excluded_${tx.id}`,
+            periodId: req.params.periodId,
+            bankTransactionId: tx.id,
+            fuelTransactionId: '',
+            matchType: 'excluded',
+            matchConfidence: null,
+            createdAt: tx.createdAt,
+          },
+          bankTransaction: tx,
+          fuelTransaction: null,
+        });
+      }
+
+      res.json(details);
+    } catch (error) {
+      console.error("Error fetching match details:", error);
+      res.status(500).json({ error: "Failed to fetch match details" });
     }
   });
 
@@ -1892,14 +1990,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             periodId,
             bankTransactionId: bankId,
             fuelTransactionId: fuelId,
-            matchType: 'manual',
+            matchType: 'user_confirmed',
             matchConfidence: '100',
           });
           createdMatches.push(match);
 
           // Update transaction statuses
-          await storage.updateTransaction(bankId, { matchStatus: 'matched' });
-          await storage.updateTransaction(fuelId, { matchStatus: 'matched' });
+          await storage.updateTransaction(bankId, { matchStatus: 'matched', matchId: match.id });
+          await storage.updateTransaction(fuelId, { matchStatus: 'matched', matchId: match.id });
 
           // Create resolution for audit trail
           await storage.createResolution({
@@ -2148,7 +2246,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Cashier': fuel?.cashier || '',
           'Pump': fuel?.pump || '',
           'Confidence': m.matchConfidence ? `${m.matchConfidence}%` : '',
-          'Match Type': m.matchType === 'auto' ? 'Auto Matched' : m.matchType === 'auto_review' ? 'Suggestion Accepted' : m.matchType === 'manual' ? 'Manual Accepted' : m.matchType || 'Auto Matched',
+          'Match Type': m.matchType === 'auto_exact' || m.matchType === 'auto_exact_review' ? 'Lekana (Exact)'
+            : m.matchType === 'auto_rules' || m.matchType === 'auto_rules_review' ? 'Lekana (Rules)'
+            : m.matchType === 'auto' ? 'Lekana (Rules)' : m.matchType === 'auto_review' ? 'Lekana (Rules)'
+            : m.matchType === 'user_confirmed' || m.matchType === 'manual' ? 'User (Confirmed)'
+            : m.matchType === 'linked' ? 'User (With reason)'
+            : m.matchType || 'Lekana (Rules)',
         };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchedRows), 'Matched');

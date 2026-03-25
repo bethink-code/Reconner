@@ -294,6 +294,10 @@ export type AiUsageRecord = typeof aiUsage.$inferSelect;
 
 // Resolution reason options
 export const RESOLUTION_REASONS = [
+  { value: "attendant_overfill", label: "Attendant error / overfill" },
+  { value: "possible_tip", label: "Possible attendant tip" },
+  { value: "duplicate_charge", label: "Duplicate bank charge" },
+  { value: "no_fuel_record", label: "No matching fuel record" },
   { value: "timing_difference", label: "Timing difference (posted next day)" },
   { value: "cash_as_card", label: "Cash recorded as card (or vice versa)" },
   { value: "test_transaction", label: "Test/pre-auth transaction" },

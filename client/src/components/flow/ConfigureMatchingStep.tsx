@@ -101,13 +101,37 @@ interface ConfigureMatchingStepProps {
   isMatching: boolean;
 }
 
-export function ConfigureMatchingStep({ 
-  periodId, 
-  onStartMatching, 
+export function ConfigureMatchingStep({
+  periodId,
+  onStartMatching,
   onBack,
-  isMatching 
+  isMatching
 }: ConfigureMatchingStepProps) {
   const { toast } = useToast();
+
+  // Fetch verification summary for data coverage
+  const { data: verSummary } = useQuery<{
+    overview: {
+      fuelSystem: { totalSales: number; cardTransactions: number; cashTransactions: number };
+      bankStatements: {
+        totalTransactions: number;
+        sources: { name: string; transactions: number; amount: number }[];
+        dateRange: { earliest: string; latest: string; days: number };
+      };
+    };
+    coverageAnalysis?: {
+      fuelDateRange: { earliest: string; latest: string; days: number };
+      bankDateRange: { earliest: string; latest: string; days: number };
+    };
+  }>({
+    queryKey: ["/api/periods", periodId, "verification-summary"],
+    enabled: !!periodId,
+  });
+
+  const { data: period } = useQuery<{ startDate: string; endDate: string; name: string }>({
+    queryKey: ["/api/periods", periodId],
+    enabled: !!periodId,
+  });
   const [selectedPreset, setSelectedPreset] = useState<string>("moderate");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customRules, setCustomRules] = useState<MatchingRules>({
@@ -243,11 +267,59 @@ export function ConfigureMatchingStep({
             </p>
           </div>
 
+          {/* Data Coverage Preview */}
+          {verSummary && (
+            <div className="rounded-lg bg-[#FAFAF6] dark:bg-muted/30 p-4 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Data Coverage</p>
+              {period && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Period</span>
+                  <span className="font-medium">{period.startDate} to {period.endDate}</span>
+                </div>
+              )}
+              {verSummary.coverageAnalysis?.fuelDateRange && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Fuel data</span>
+                  <span className="font-medium">
+                    {verSummary.coverageAnalysis.fuelDateRange.earliest} to {verSummary.coverageAnalysis.fuelDateRange.latest}
+                    <span className="text-muted-foreground ml-1">({verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions} txns)</span>
+                  </span>
+                </div>
+              )}
+              {verSummary.overview.bankStatements.sources.map((src, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">{src.name}</span>
+                  <span className="font-medium">
+                    {verSummary.overview.bankStatements.dateRange.earliest} to {verSummary.overview.bankStatements.dateRange.latest}
+                    <span className="text-muted-foreground ml-1">({src.transactions} txns)</span>
+                  </span>
+                </div>
+              ))}
+              {(() => {
+                const fuelRange = verSummary.coverageAnalysis?.fuelDateRange;
+                const bankRange = verSummary.overview.bankStatements.dateRange;
+                if (fuelRange && bankRange?.earliest && bankRange?.latest) {
+                  const hasOverlap = bankRange.earliest <= fuelRange.latest && bankRange.latest >= fuelRange.earliest;
+                  if (!hasOverlap) {
+                    return (
+                      <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-2 mt-2">
+                        <p className="text-xs font-medium text-red-700 dark:text-red-400">
+                          Date ranges don't overlap — matching will likely produce 0 results. Check your uploaded files.
+                        </p>
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
+            </div>
+          )}
+
           <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
             <CollapsibleTrigger asChild>
-              <Button 
-                variant="ghost" 
-                className="w-full justify-between"
+              <Button
+                variant="ghost"
+                className="w-full justify-between bg-muted/50 text-muted-foreground hover:bg-muted"
                 data-testid="button-toggle-advanced"
               >
                 <span>Advanced Settings</span>

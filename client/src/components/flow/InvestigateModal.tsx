@@ -267,7 +267,16 @@ export function InvestigateModal({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-[#166534] mb-1">Best Match</p>
-                    <p className="text-base font-bold tabular-nums text-[#1A1200]">{formatCurrency(item.bestMatch.transaction.amount)}</p>
+                    <p className="text-base font-bold tabular-nums text-[#1A1200]">
+                      {formatCurrency(item.bestMatch.transaction.amount)}
+                      {(() => {
+                        const bankAmt = parseFloat(item.transaction.amount) || 0;
+                        const fuelAmt = parseFloat(item.bestMatch!.transaction.amount) || 0;
+                        const diff = Math.abs(bankAmt - fuelAmt);
+                        if (diff < 0.005) return null;
+                        return <span className="text-sm font-medium text-[#B45309] ml-2">diff R {diff.toFixed(2)}</span>;
+                      })()}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {formatDate(item.bestMatch.transaction.transactionDate)}
                       {item.bestMatch.transaction.transactionTime && ` · ${item.bestMatch.transaction.transactionTime}`}

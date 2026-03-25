@@ -236,29 +236,51 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                 SUMMARY TAB — Owner's view
             ════════════════════════════════════════════════════════════ */}
             <TabsContent value="summary" className="mt-0 space-y-6">
-              {/* Hero verified metric */}
-              <div className="text-center space-y-0.5">
-                <p className={cn("text-3xl font-heading font-semibold", heroTextColor(bankMatchPct))}>
-                  {formatRandExact(summary.matchedBankAmount)}
-                </p>
-                <p className="text-sm text-muted-foreground">Verified</p>
-                <p className={cn("text-xs font-medium",
-                  bankMatchPct >= 90 ? "text-[#166534]"
-                  : bankMatchPct >= 70 ? "text-[#B45309]"
-                  : "text-red-600"
+              {/* Hero — matching summary */}
+              <div className="text-center space-y-1">
+                <p className="text-lg font-heading font-semibold text-[#1A1200]">Matching Complete</p>
+                <p className="text-5xl font-heading font-bold text-[#1A1200] dark:text-[#F0EAE0]">{bankMatchPct}%</p>
+                <p className="text-sm text-muted-foreground">of your {period?.name || "period"} bank transactions verified</p>
+                <p className={cn("text-lg font-medium",
+                  bankMatchPct >= 90 ? "text-[#166534]" : bankMatchPct >= 70 ? "text-[#B45309]" : "text-red-600"
                 )}>
-                  {bankMatchPct}% of {matchableBankTotal} bank transactions matched
+                  {summary.matchedPairs} matched · {formatRandExact(summary.matchedBankAmount)} verified
                 </p>
+              </div>
+
+              {/* Review cards — the most important info */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className={cn(
+                  "rounded-lg p-4",
+                  unmatchedBank > 0
+                    ? "bg-[#FEF9C3] dark:bg-amber-950/30"
+                    : "bg-[#DCFCE7] dark:bg-emerald-950/30"
+                , "text-center")}>
+                  <p className={cn("text-2xl font-semibold", unmatchedBank > 0 ? "text-[#B45309]" : "text-[#166534]")}>{unmatchedBank}</p>
+                  <p className="text-sm font-medium">bank transactions with no fuel match</p>
+                  <p className="text-lg font-semibold text-[#1A1200] tabular-nums">{formatRandExact(summary.unmatchedBankAmount || 0)}</p>
+                  <p className="text-xs text-muted-foreground mt-2">of {matchableBankTotal} bank statements totalling {formatRandExact(summary.totalBankAmount)}</p>
+                </div>
+                <div className={cn(
+                  "rounded-lg p-4",
+                  summary.cardFuelTransactions - summary.matchedPairs > 0
+                    ? "bg-[#FEF9C3] dark:bg-amber-950/30"
+                    : "bg-[#DCFCE7] dark:bg-emerald-950/30"
+                , "text-center")}>
+                  <p className={cn("text-2xl font-semibold", summary.cardFuelTransactions - summary.debtorFuelTransactions - summary.matchedPairs > 0 ? "text-[#B45309]" : "text-[#166534]")}>{summary.cardFuelTransactions - summary.debtorFuelTransactions - summary.matchedPairs}</p>
+                  <p className="text-sm font-medium">fuel card sales with no bank payment</p>
+                  <p className="text-lg font-semibold text-[#1A1200] tabular-nums">{formatRandExact(summary.unmatchedCardAmount || 0)}</p>
+                  <p className="text-xs text-muted-foreground mt-2">of {summary.cardFuelTransactions - summary.debtorFuelTransactions} card sales totalling {formatRandExact(summary.cardFuelAmount - summary.debtorFuelAmount)}</p>
+                </div>
               </div>
 
               {/* Fuel sales breakdown */}
               {(() => {
                 const segments = [
                   { key: "all", label: "All", count: summary.fuelTransactions, amount: summary.totalFuelAmount },
-                  { key: "card", label: "Card", count: summary.cardFuelTransactions, amount: summary.cardFuelAmount },
+                  { key: "card", label: "Card", count: summary.cardFuelTransactions - summary.debtorFuelTransactions, amount: summary.cardFuelAmount - summary.debtorFuelAmount },
+                  ...(summary.debtorFuelTransactions > 0 ? [{ key: "debtor", label: "Card (Debtor)", count: summary.debtorFuelTransactions, amount: summary.debtorFuelAmount }] : []),
                   { key: "cash", label: "Cash", count: summary.cashFuelTransactions, amount: summary.cashFuelAmount },
-                  ...(summary.debtorFuelTransactions > 0 ? [{ key: "debtor", label: "Debtors", count: summary.debtorFuelTransactions, amount: summary.debtorFuelAmount }] : []),
-                  { key: "review", label: "Needs Review", count: unmatchedBank, amount: summary.unmatchedBankAmount || 0 },
                 ];
                 return (
                   <div className="rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
@@ -284,7 +306,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                             "text-base font-semibold tabular-nums",
                             seg.key === "review" && unmatchedBank > 0 ? "text-[#B45309]" : ""
                           )}>{seg.count}</p>
-                          <p className="text-[10px] text-muted-foreground tabular-nums">{formatRandExact(seg.amount)}</p>
+                          <p className="text-sm text-muted-foreground tabular-nums">{formatRandExact(seg.amount)}</p>
                         </button>
                       ))}
                     </div>
@@ -292,30 +314,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, onAddFuelData, onA
                 );
               })()}
 
-              {/* Data Coverage */}
-              <div className="pt-2">
-                <div className="mb-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Data Coverage
-                  </h3>
-                </div>
-                <div className="grid text-[10px] text-muted-foreground uppercase tracking-wider mb-2" style={{ gridTemplateColumns: "90px 1fr 110px 48px" }}>
-                  <span>Source</span>
-                  <span></span>
-                  <span className="text-right">Dates</span>
-                  <span className="text-right">Count</span>
-                </div>
-                {period && (
-                  <CoverageLedger
-                    period={period}
-                    summary={summary}
-                    formatDate={formatDate}
-                    formatNumber={formatNumber}
-                    onAddFuelData={onAddFuelData}
-                    onAddBankData={onAddBankData}
-                  />
-                )}
-              </div>
+
             </TabsContent>
 
             {/* ════════════════════════════════════════════════════════════

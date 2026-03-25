@@ -61,6 +61,17 @@ export default function ReconciliationFlow() {
   const bankFiles = files.filter((f) => f.sourceType === "bank" && f.status === "processed");
   const fuelFile = files.find((f) => f.sourceType === "fuel" && f.status === "processed");
 
+  // Fetch verification summary for fuel breakdown on matching complete screen
+  const { data: verSummary } = useQuery<{
+    overview: {
+      fuelSystem: { totalSales: number; cardSales: number; cardTransactions: number; cashSales: number; cashTransactions: number };
+    };
+    fuelBreakdown?: { debtorTransactions: number; debtorAmount: number };
+  }>({
+    queryKey: ["/api/periods", periodId, "verification-summary"],
+    enabled: !!periodId && !!matchResult,
+  });
+
   const autoMatchMutation = useMutation({
     mutationFn: async () => {
       setIsAutoMatching(true);
@@ -79,12 +90,15 @@ export default function ReconciliationFlow() {
       const response = await apiRequest("POST", `/api/periods/${periodId}/auto-match`, {});
       return await response.json();
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "verification-summary"] });
       setIsAutoMatching(false);
-      setMatchResult(result);
+      setMatchResult(null);
+      setCompletedSteps(prev => [...prev.filter(s => s !== "configure"), "configure"]);
+      setCurrentStep("results");
     },
     onError: (error: Error) => {
       setIsAutoMatching(false);
@@ -404,6 +418,27 @@ export default function ReconciliationFlow() {
                   </p>
                 )}
               </div>
+
+              {/* Fuel sales breakdown */}
+              {verSummary && (
+                <div className="rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">Period Fuel Sales</p>
+                  <div className="flex divide-x divide-border/50">
+                    {[
+                      { label: "All", count: verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions, amount: verSummary.overview.fuelSystem.totalSales },
+                      { label: "Card", count: verSummary.overview.fuelSystem.cardTransactions - (verSummary.fuelBreakdown?.debtorTransactions || 0), amount: verSummary.overview.fuelSystem.cardSales - (verSummary.fuelBreakdown?.debtorAmount || 0) },
+                      { label: "Cash", count: verSummary.overview.fuelSystem.cashTransactions, amount: verSummary.overview.fuelSystem.cashSales },
+                      ...((verSummary.fuelBreakdown?.debtorTransactions || 0) > 0 ? [{ label: "Debtors", count: verSummary.fuelBreakdown!.debtorTransactions, amount: verSummary.fuelBreakdown!.debtorAmount }] : []),
+                    ].map((seg) => (
+                      <div key={seg.label} className="flex-1 py-2 px-3 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{seg.label}</p>
+                        <p className="text-base font-semibold tabular-nums">{seg.count}</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">R {seg.amount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Key stats */}
               <div className="grid grid-cols-3 gap-3 text-center">

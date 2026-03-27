@@ -115,10 +115,20 @@ export function InvestigateModal({
   // Mutations — must be before any early returns
   const createMatchMutation = useMutation({
     mutationFn: async ({ bankId, fuelId }: { bankId: string; fuelId: string }) => {
-      return await apiRequest("POST", "/api/matches/manual", {
+      // Create the match
+      await apiRequest("POST", "/api/matches/manual", {
         periodId,
         bankTransactionId: bankId,
         fuelTransactionId: fuelId,
+      });
+      // Also create a resolution so the Review tab can track it
+      const primaryId = side === 'fuel' ? fuelId : bankId;
+      await apiRequest("POST", "/api/resolutions", {
+        transactionId: primaryId,
+        resolutionType: "linked",
+        reason: "manual_match",
+        notes: "Linked via review",
+        periodId,
       });
     },
     onSuccess: () => {

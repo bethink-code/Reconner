@@ -169,7 +169,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
       .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
   }, [allSideData, flaggedTransactionIds, flaggedResolutions]);
 
-  // Per-side resolution counts + amounts — cross-reference against ALL transaction lists
+  // Per-side counts — all user actions create resolutions, so count from resolutions table
   const perSideCounts = useMemo(() => {
     const result = {
       bank: { matched: 0, matchedAmount: 0, flagged: 0, flaggedAmount: 0 },
@@ -177,7 +177,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     };
     if (!resolutions) return result;
 
-    // Build lookup: txId → amount, side
+    // Build lookup: txId → { side, amount }
     const txLookup = new Map<string, { side: 'bank' | 'fuel'; amount: number }>();
     for (const t of allBankData?.transactions || []) {
       txLookup.set(t.id, { side: 'bank', amount: parseFloat(t.amount) || 0 });
@@ -205,11 +205,24 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const categorizedTransactions = useMemo((): CategorizedTransaction[] => {
     if (!unmatchedData?.transactions || !fuelData?.transactions) return [];
 
-    // Keep resolved items visible (exclude only flagged — those go to Investigate)
+    // Show: unmatched transactions + user-resolved transactions (not flagged, not auto-matched)
+    // Flagged go to Investigate tab. Auto-matched (no resolution) stay in Transactions tab.
     const flaggedIds = new Set(flaggedResolutions.map(r => r.transactionId));
-    const primaryTxns = side === 'fuel'
-      ? fuelData.transactions.filter(txn => !flaggedIds.has(txn.id))
-      : unmatchedData.transactions.filter(txn => !flaggedIds.has(txn.id));
+
+    // Use allData to include resolved/linked items that left the unmatched query
+    const allPrimary = side === 'fuel'
+      ? (allFuelData?.transactions || fuelData.transactions)
+      : (allBankData?.transactions || unmatchedData.transactions);
+
+    // Filter to: unmatched OR has a user resolution (linked/reviewed/dismissed)
+    const primaryTxns = allPrimary.filter(txn => {
+      if (flaggedIds.has(txn.id)) return false; // flagged → Investigate tab
+      if (txn.matchStatus === 'unmatched') return true; // still needs review
+      if (resolvedIds.has(txn.id)) return true; // user acted on it — show as resolved
+      return false; // auto-matched by engine — belongs in Transactions tab
+    });
+
+    // Candidates for matching: always use the opposite side's unmatched list
     const candidateTxns = side === 'fuel'
       ? unmatchedData.transactions
       : fuelData.transactions;
@@ -371,10 +384,18 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
 
   const createMatchMutation = useMutation({
     mutationFn: async ({ primaryId, candidateId }: { primaryId: string; candidateId: string }) => {
-      return await apiRequest("POST", "/api/matches/manual", {
+      await apiRequest("POST", "/api/matches/manual", {
         periodId,
         bankTransactionId: side === 'fuel' ? candidateId : primaryId,
         fuelTransactionId: side === 'fuel' ? primaryId : candidateId,
+      });
+      // Also create a resolution so counts track correctly
+      await apiRequest("POST", "/api/resolutions", {
+        transactionId: primaryId,
+        resolutionType: "linked",
+        reason: "manual_match",
+        notes: "Linked via review",
+        periodId,
       });
     },
     onSuccess: () => { toast({ title: "Match created", description: "The transactions have been linked." }); invalidateAll(); },
@@ -523,12 +544,12 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   <div className={cn("rounded-lg p-2.5", isActive ? "bg-section" : "bg-white dark:bg-card")}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Matched by {userName}</p>
                     <p className={cn("text-lg font-bold tabular-nums", sideCounts.matched > 0 ? "text-[#166534]" : "")}>{sideCounts.matched}</p>
-                    <p className="text-[10px] tabular-nums text-muted-foreground">{sideCounts.matchedAmount > 0 ? formatCurrency(sideCounts.matchedAmount) : "\u2014"}</p>
+                    <p className={cn("text-sm tabular-nums font-medium", sideCounts.matched > 0 ? "text-[#166534]" : "text-muted-foreground")}>{sideCounts.matchedAmount > 0 ? formatCurrency(sideCounts.matchedAmount) : "\u2014"}</p>
                   </div>
                   <div className={cn("rounded-lg p-2.5", isActive ? "bg-section" : "bg-white dark:bg-card")}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">To Investigate</p>
                     <p className={cn("text-lg font-bold tabular-nums", sideCounts.flagged > 0 ? "text-[#B45309]" : "")}>{sideCounts.flagged}</p>
-                    <p className="text-[10px] tabular-nums text-muted-foreground">{sideCounts.flaggedAmount > 0 ? formatCurrency(sideCounts.flaggedAmount) : "\u2014"}</p>
+                    <p className={cn("text-sm tabular-nums font-medium", sideCounts.flagged > 0 ? "text-[#B45309]" : "text-muted-foreground")}>{sideCounts.flaggedAmount > 0 ? formatCurrency(sideCounts.flaggedAmount) : "\u2014"}</p>
                   </div>
                 </div>
               </button>

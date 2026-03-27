@@ -74,6 +74,7 @@ interface Period {
 
 export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: ResultsDashboardProps) {
   const [activeTab, setActiveTab] = useState("summary");
+  const [reviewSide, setReviewSide] = useState<'bank' | 'fuel'>('bank');
   const [rulesExpanded, setRulesExpanded] = useState(false);
 
   const { data: summary, isLoading } = useQuery<PeriodSummary>({
@@ -168,14 +169,14 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
             <div className="grid grid-cols-4 gap-3">
               {([
                 { key: "transactions", label: "01 · Transactions", desc: "How did matching go?", value: `${bankMatchPct}%`, sub: `${summary.matchedPairs} matched · ${formatRandExact(summary.matchedBankAmount)}`, context: `of ${matchableBankTotal} transactions · ${formatRandExact(summary.totalBankAmount)}`, action: "View all transactions", hasIssue: false },
-                { key: "review", label: "02 · Review Bank", desc: "Bank money with no fuel explanation", value: String(unmatchedBank), sub: formatRandExact(summary.unmatchedBankAmount || 0), context: `of ${matchableBankTotal} totalling ${formatRandExact(summary.totalBankAmount)}`, action: "Review bank side", hasIssue: unmatchedBank > 0 },
-                { key: "review", label: "03 · Review Fuel", desc: "Fuel dispensed, no bank payment", value: String(Math.max(0, unmatchedFuelCount)), sub: formatRandExact(summary.unmatchedCardAmount || 0), context: `of ${summary.cardFuelTransactions - summary.debtorFuelTransactions} totalling ${formatRandExact(summary.cardFuelAmount - summary.debtorFuelAmount)}`, action: "Review fuel side", hasIssue: unmatchedFuelCount > 0 },
+                { key: "review", side: "bank" as const, label: "02 · Review Bank", desc: "Bank money with no fuel explanation", value: String(unmatchedBank), sub: formatRandExact(summary.unmatchedBankAmount || 0), context: `of ${matchableBankTotal} totalling ${formatRandExact(summary.totalBankAmount)}`, action: "Review bank side", hasIssue: unmatchedBank > 0 },
+                { key: "review", side: "fuel" as const, label: "03 · Review Fuel", desc: "Fuel dispensed, no bank payment", value: String(Math.max(0, unmatchedFuelCount)), sub: formatRandExact(summary.unmatchedCardAmount || 0), context: `of ${summary.cardFuelTransactions - summary.debtorFuelTransactions} totalling ${formatRandExact(summary.cardFuelAmount - summary.debtorFuelAmount)}`, action: "Review fuel side", hasIssue: unmatchedFuelCount > 0 },
                 { key: "investigate", label: "04 · Investigate", desc: "Your real-world follow-up list", value: String(flaggedCount), sub: flaggedCount === 0 ? "nothing to investigate yet" : "items flagged", context: "", action: "View investigate list", hasIssue: flaggedCount > 0 },
               ] as const).map((card, idx) => (
                 <InfoCard
                   key={idx}
                   className="cursor-pointer hover:bg-card/80 transition-colors text-center flex flex-col"
-                  onClick={() => setActiveTab(card.key)}
+                  onClick={() => { setActiveTab(card.key); if ('side' in card && card.side) setReviewSide(card.side); }}
                 >
                   {/* Header — fixed height so all cards align */}
                   <div className="min-h-[3.5rem]">
@@ -255,7 +256,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
         </TabsContent>
 
         <TabsContent value="review" className="mt-0 max-w-4xl mx-auto ring-0 ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0">
-          <ReviewTab periodId={periodId} />
+          <ReviewTab periodId={periodId} initialSide={reviewSide} />
         </TabsContent>
 
         <TabsContent value="investigate" className="mt-0 max-w-4xl mx-auto">

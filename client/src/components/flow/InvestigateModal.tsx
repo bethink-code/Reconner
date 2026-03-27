@@ -30,7 +30,7 @@ interface TransactionInsight {
 
 interface CategorizedTransaction {
   transaction: Transaction;
-  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value';
+  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value' | 'resolved';
   bestMatch?: PotentialMatch;
   potentialMatches: PotentialMatch[];
   nearestByAmount: PotentialMatch[];
@@ -143,6 +143,19 @@ export function InvestigateModal({
     },
   });
 
+  const unmatchResolutionMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      return await apiRequest("DELETE", `/api/resolutions/${transactionId}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Resolution removed", description: "Transaction is back to unmatched." });
+      invalidateAndAdvance();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to unmatch", description: error.message, variant: "destructive" });
+    },
+  });
+
   const invalidateAndAdvance = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
@@ -185,7 +198,7 @@ export function InvestigateModal({
     createMatchMutation.mutate({ bankId, fuelId });
   };
 
-  const isPending = resolveMutation.isPending || createMatchMutation.isPending;
+  const isPending = resolveMutation.isPending || createMatchMutation.isPending || unmatchResolutionMutation.isPending;
 
   const item = items[currentIndex];
   if (!item) return null;
@@ -451,15 +464,27 @@ export function InvestigateModal({
                 Investigate
               </Button>
             )}
-            <Button
-              size="sm"
-              onClick={handleResolve}
-              disabled={!selectedReason || isPending}
-              className="bg-[#1A1200] text-[#F5EDE6] hover:bg-[#2A2218]"
-            >
-              {isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              Match
-            </Button>
+            {item.category === 'resolved' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => unmatchResolutionMutation.mutate(txn.id)}
+                disabled={isPending || unmatchResolutionMutation.isPending}
+              >
+                {unmatchResolutionMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                Unmatch
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={handleResolve}
+                disabled={!selectedReason || isPending}
+                className="bg-[#1A1200] text-[#F5EDE6] hover:bg-[#2A2218]"
+              >
+                {isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                Match
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

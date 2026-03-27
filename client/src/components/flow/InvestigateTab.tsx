@@ -104,7 +104,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
 
   if (resLoading) {
     return (
-      <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="space-y-4 mx-auto">
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -116,7 +116,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
   // ═══════════════════════════════════════════════════════════
   if (totalCount === 0) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Investigate</h2>
@@ -152,7 +152,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
   //  INVESTIGATE LIST — Two sections
   // ═══════════════════════════════════════════════════════════
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="mx-auto space-y-6">
       {/* Header + downloads */}
       <div className="flex items-center justify-between">
         <div>

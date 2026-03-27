@@ -103,7 +103,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
 
   if (isLoading || !summary) {
     return (
-      <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="space-y-4 mx-auto">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-3 gap-4">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 w-full" />)}
@@ -156,7 +156,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
   // ═══════════════════════════════════════════════════════════
   if (view === 'landing') {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="mx-auto space-y-6">
         <div>
           <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Insights</h2>
           <p className="text-sm text-muted-foreground">Reports and analysis for this reconciliation period</p>
@@ -249,7 +249,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
   // ═══════════════════════════════════════════════════════════
   if (view === 'detail') {
     return (
-      <div className="max-w-2xl mx-auto space-y-4">
+      <div className="mx-auto space-y-4">
         <BackHeader title="Detail" />
 
         {/* Fuel Sales */}
@@ -407,7 +407,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
   // ═══════════════════════════════════════════════════════════
   if (view === 'attendants') {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="mx-auto">
         <BackHeader title="Attendants" />
         <AttendantReport
           data={attendantData}
@@ -429,7 +429,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
     const hasDeclined = totals.declinedCount > 0 || totals.cancelledCount > 0;
 
     return (
-      <div className="max-w-2xl mx-auto space-y-4">
+      <div className="mx-auto space-y-4">
         <BackHeader title="Declined" />
 
         {!hasDeclined ? (

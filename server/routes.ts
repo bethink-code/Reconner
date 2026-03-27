@@ -1971,6 +1971,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete resolution for a single transaction (unmatch)
+  app.delete("/api/resolutions/:transactionId", isAuthenticated, async (req: any, res) => {
+    try {
+      const count = await storage.deleteResolutionByTransaction(req.params.transactionId);
+      if (count === 0) return res.status(404).json({ error: "No resolution found" });
+      res.json({ success: true, count });
+    } catch (error) {
+      console.error("Error deleting resolution:", error);
+      res.status(500).json({ error: "Failed to delete resolution" });
+    }
+  });
+
   // Clear all resolutions for a period (undo)
   app.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req: any, res) => {
     try {

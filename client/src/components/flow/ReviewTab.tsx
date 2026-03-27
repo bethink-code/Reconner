@@ -39,6 +39,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   investigate: "Needs review",
   no_match: "No match",
   low_value: "Low value",
+  resolved: "Matched",
 };
 
 interface PaginatedResponse {
@@ -64,7 +65,7 @@ interface TransactionInsight {
 
 interface CategorizedTransaction {
   transaction: Transaction;
-  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value';
+  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value' | 'resolved';
   bestMatch?: PotentialMatch;
   potentialMatches: PotentialMatch[];
   nearestByAmount: PotentialMatch[];
@@ -204,9 +205,11 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const categorizedTransactions = useMemo((): CategorizedTransaction[] => {
     if (!unmatchedData?.transactions || !fuelData?.transactions) return [];
 
+    // Keep resolved items visible (exclude only flagged — those go to Investigate)
+    const flaggedIds = new Set(flaggedResolutions.map(r => r.transactionId));
     const primaryTxns = side === 'fuel'
-      ? fuelData.transactions.filter(txn => !resolvedIds.has(txn.id))
-      : unmatchedData.transactions.filter(txn => !resolvedIds.has(txn.id));
+      ? fuelData.transactions.filter(txn => !flaggedIds.has(txn.id))
+      : unmatchedData.transactions.filter(txn => !flaggedIds.has(txn.id));
     const candidateTxns = side === 'fuel'
       ? unmatchedData.transactions
       : fuelData.transactions;
@@ -260,7 +263,8 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
         const bestMatch = potentialMatches[0];
 
         let category: CategorizedTransaction['category'];
-        if (primaryAmount < LOW_VALUE_THRESHOLD) category = 'low_value';
+        if (resolvedIds.has(primaryTxn.id)) category = 'resolved';
+        else if (primaryAmount < LOW_VALUE_THRESHOLD) category = 'low_value';
         else if (bestMatch && bestMatch.confidence >= 80) category = 'quick_win';
         else if (bestMatch && bestMatch.confidence >= 50) category = 'investigate';
         else category = 'no_match';
@@ -345,7 +349,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     });
   }, [categorizedTransactions, searchQuery]);
 
-  const totalUnresolved = categorizedTransactions.length;
+  const totalUnresolved = categorizedTransactions.filter(ct => ct.category !== 'resolved').length;
 
   const openModal = (txnId: string) => {
     const idx = categorizedTransactions.findIndex(ct => ct.transaction.id === txnId);
@@ -455,7 +459,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
 
   if (unmatchedLoading || !fuelData || !unmatchedData) {
     return (
-      <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="space-y-4 mx-auto">
         {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full" />)}
       </div>
     );
@@ -471,7 +475,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const sideTotalAmount = side === 'bank' ? bankTotalAmount : fuelTotalAmount;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="mx-auto space-y-4">
       {/* Header */}
       <div>
         <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Review</h2>
@@ -533,7 +537,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
         </div>
 
       {/* Transaction list for selected side */}
-      {totalUnresolved === 0 && flaggedTransactions.length === 0 ? (
+      {totalUnresolved === 0 && categorizedTransactions.length === 0 ? (
         <div className="bg-card rounded-xl p-8">
           <div className="flex flex-col items-center justify-center text-center gap-4">
             <div className="w-12 h-12 rounded-full bg-[#DCFCE7] flex items-center justify-center">
@@ -573,16 +577,20 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
             <div className="space-y-2">
               {filteredTransactions.map(item => {
                 const txn = item.transaction;
+                const isResolved = item.category === 'resolved';
                 const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
                 return (
                   <div
                     key={txn.id}
-                    className="bg-card flex items-center justify-between p-3 border border-[#E5E3DC]/50 rounded-lg cursor-pointer hover:border-foreground/20"
+                    className={cn(
+                      "bg-card flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:border-foreground/20",
+                      isResolved ? "border-[#166534]/20 opacity-75" : "border-[#E5E3DC]/50"
+                    )}
                     onClick={() => openModal(txn.id)}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="tabular-nums font-bold">{formatCurrency(txn.amount)}</span>
+                        <span className={cn("tabular-nums font-bold", isResolved && "text-muted-foreground")}>{formatCurrency(txn.amount)}</span>
                         <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
                         {txn.transactionTime && (
                           <span className="text-sm text-muted-foreground flex items-center gap-0.5">
@@ -591,12 +599,12 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                         )}
                       </div>
                       {txn.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{txn.description}</p>}
-                      {item.insights.length > 0 && (
+                      {!isResolved && item.insights.length > 0 && (
                         <p className="text-xs text-[#B45309] mt-0.5">{item.insights[0].message}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 ml-2">
-                      <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>
+                      <Badge variant="outline" className={cn("text-xs", isResolved && "text-[#166534] border-[#166534]/30")}>{categoryLabel}</Badge>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>

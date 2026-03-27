@@ -231,6 +231,7 @@ export interface IStorage {
   createResolution(resolution: InsertTransactionResolution): Promise<TransactionResolution>;
   getResolvedTransactionIds(periodId: string): Promise<string[]>;
   clearResolutionsByPeriod(periodId: string): Promise<number>;
+  deleteResolutionByTransaction(transactionId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1349,6 +1350,12 @@ export class DatabaseStorage implements IStorage {
 
     const result = await db.delete(transactionResolutions)
       .where(eq(transactionResolutions.periodId, periodId));
+    return result.rowCount ?? 0;
+  }
+
+  async deleteResolutionByTransaction(transactionId: string): Promise<number> {
+    const result = await db.delete(transactionResolutions)
+      .where(eq(transactionResolutions.transactionId, transactionId));
     return result.rowCount ?? 0;
   }
 

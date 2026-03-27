@@ -1211,6 +1211,10 @@ var DatabaseStorage = class {
     const result = await db.delete(transactionResolutions).where(eq(transactionResolutions.periodId, periodId));
     return result.rowCount ?? 0;
   }
+  async deleteResolutionByTransaction(transactionId) {
+    const result = await db.delete(transactionResolutions).where(eq(transactionResolutions.transactionId, transactionId));
+    return result.rowCount ?? 0;
+  }
   async getResolutionsByTransaction(transactionId) {
     return await db.select().from(transactionResolutions).where(eq(transactionResolutions.transactionId, transactionId)).orderBy(desc(transactionResolutions.createdAt));
   }
@@ -4931,6 +4935,16 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error bulk flagging:", error);
       res.status(500).json({ error: "Failed to bulk flag transactions" });
+    }
+  });
+  app2.delete("/api/resolutions/:transactionId", isAuthenticated, async (req, res) => {
+    try {
+      const count = await storage.deleteResolutionByTransaction(req.params.transactionId);
+      if (count === 0) return res.status(404).json({ error: "No resolution found" });
+      res.json({ success: true, count });
+    } catch (error) {
+      console.error("Error deleting resolution:", error);
+      res.status(500).json({ error: "Failed to delete resolution" });
     }
   });
   app2.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {

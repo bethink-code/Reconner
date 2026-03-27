@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { InfoCard, InfoCardContent } from "@/components/ui/info-card";
 import {
   Popover,
   PopoverContent,
@@ -189,10 +190,10 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
   ];
 
   return (
-    <div>
+    <div className="bg-section rounded-2xl p-6 space-y-4">
       {/* Category summary — segmented card */}
-      <div className="rounded-xl bg-section dark:bg-muted/30 p-4 mb-6 border border-[#E5E3DC]/50 dark:border-border">
-        <div className="flex divide-x divide-border/50 items-end">
+      <InfoCard>
+        <InfoCardContent className="flex divide-x divide-border/50 items-end">
           {([
             ["all", "All", null, pairs.length + unmatchedCount],
             ["exact", "Lekana", "Exact", exactCount],
@@ -233,7 +234,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
               </button>
             );
           })}
-        </div>
+        </InfoCardContent>
 
         {/* Search + legend — inside segmented card */}
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/30">
@@ -265,7 +266,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
             </PopoverContent>
           </Popover>
         </div>
-      </div>
+      </InfoCard>
 
       {/* Context card explaining current filter */}
       {typeFilter !== "all" && (() => {
@@ -298,10 +299,10 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
         const ctx = contexts[typeFilter];
         if (!ctx) return null;
         return (
-          <div className="rounded-lg bg-section border border-[#E5E3DC]/50 p-3 mb-4">
+          <InfoCard className="p-3">
             <p className="text-sm font-medium text-[#1A1200]">{ctx.title}</p>
             <p className="text-xs text-muted-foreground mt-1">{ctx.description}</p>
-          </div>
+          </InfoCard>
         );
       })()}
 
@@ -337,26 +338,67 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                 "rounded-lg border p-3 grid gap-4",
                 excluded
                   ? "border-muted bg-muted/20 grid-cols-[1fr_auto]"
-                  : "border-[#E5E3DC] bg-section dark:bg-muted/30 grid-cols-[1fr_auto_1fr]"
+                  : "border-[#E5E3DC]/50 bg-card grid-cols-[1fr_auto_1fr]"
               )}
             >
-              {/* Left — Bank */}
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Bank</p>
-                <p className={cn("text-sm font-semibold tabular-nums", excluded && "text-muted-foreground")}>{formatRand(bankAmt)}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {p.bankTransaction.transactionDate}
-                  {p.bankTransaction.transactionTime && ` ${p.bankTransaction.transactionTime}`}
-                  {p.bankTransaction.description && ` \u2022 ${p.bankTransaction.description}`}
-                </p>
-                {(p.bankTransaction.cardNumber || p.bankTransaction.referenceNumber) && (
-                  <p className="text-xs text-muted-foreground">
-                    {p.bankTransaction.referenceNumber && <span>Ref: {p.bankTransaction.referenceNumber}</span>}
-                    {p.bankTransaction.referenceNumber && p.bankTransaction.cardNumber && ' \u2022 '}
-                    {p.bankTransaction.cardNumber}
+              {/* Left — Fuel */}
+              {p.fuelTransaction && !p.fuelItems && (
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    Fuel
+                    {p.fuelTransaction.referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelTransaction.referenceNumber}</span>}
                   </p>
-                )}
-              </div>
+                  <p className="text-sm font-semibold tabular-nums">{formatRand(fuelAmt)}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {p.fuelTransaction.transactionDate}
+                    {p.fuelTransaction.transactionTime && ` ${p.fuelTransaction.transactionTime}`}
+                    {p.fuelTransaction.attendant && ` \u2022 ${p.fuelTransaction.attendant}`}
+                  </p>
+                  {p.fuelTransaction.pump && (
+                    <p className="text-xs text-muted-foreground">Pump {p.fuelTransaction.pump}</p>
+                  )}
+                </div>
+              )}
+              {/* Left — Fuel (invoice group: multiple items) */}
+              {p.fuelItems && p.fuelItems.length > 1 && (
+                <div className="min-w-0 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    Fuel · {p.fuelItems.length} items
+                    {p.fuelItems[0].referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelItems[0].referenceNumber}</span>}
+                  </p>
+                  {p.fuelItems.map((item, idx) => (
+                    <div key={item.id} className={cn("space-y-0.5", idx > 0 && "pt-1.5 border-t border-[#E5E3DC]/30")}>
+                      <p className="text-sm font-semibold tabular-nums">{formatRand(item.amount)}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {item.transactionDate}
+                        {item.transactionTime && ` ${item.transactionTime}`}
+                        {item.attendant && ` \u2022 ${item.attendant}`}
+                      </p>
+                      {item.pump && (
+                        <p className="text-xs text-muted-foreground">Pump {item.pump}</p>
+                      )}
+                    </div>
+                  ))}
+                  <p className="text-xs font-medium text-muted-foreground pt-1 border-t border-[#E5E3DC]/30 tabular-nums">
+                    Total: {formatRand(p.fuelItems.reduce((s, i) => s + parseFloat(i.amount), 0))}
+                  </p>
+                </div>
+              )}
+              {/* Left — Excluded (bank only, no fuel pair) */}
+              {excluded && (
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Bank</p>
+                  <p className="text-sm font-semibold tabular-nums text-muted-foreground">{formatRand(bankAmt)}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {p.bankTransaction.transactionDate}
+                    {p.bankTransaction.transactionTime && ` ${p.bankTransaction.transactionTime}`}
+                    {p.bankTransaction.description && ` \u2022 ${p.bankTransaction.description}`}
+                  </p>
+                  {p.bankTransaction.cardNumber && (
+                    <p className="text-xs text-muted-foreground">{p.bankTransaction.cardNumber}</p>
+                  )}
+                </div>
+              )}
 
               {/* Middle — Match info */}
               <div className="flex flex-col items-center justify-center gap-1.5 min-w-[140px] -my-3 py-3 px-3 bg-card">
@@ -385,47 +427,23 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                 )}
               </div>
 
-              {/* Right — Fuel */}
-              {p.fuelTransaction && !p.fuelItems && (
+              {/* Right — Bank */}
+              {!excluded && (
                 <div className="min-w-0 space-y-0.5 text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    Fuel
-                    {p.fuelTransaction.referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelTransaction.referenceNumber}</span>}
-                  </p>
-                  <p className="text-sm font-semibold tabular-nums">{formatRand(fuelAmt)}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Bank</p>
+                  <p className="text-sm font-semibold tabular-nums">{formatRand(bankAmt)}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {p.fuelTransaction.transactionDate}
-                    {p.fuelTransaction.transactionTime && ` ${p.fuelTransaction.transactionTime}`}
-                    {p.fuelTransaction.attendant && ` \u2022 ${p.fuelTransaction.attendant}`}
+                    {p.bankTransaction.transactionDate}
+                    {p.bankTransaction.transactionTime && ` ${p.bankTransaction.transactionTime}`}
+                    {p.bankTransaction.description && ` \u2022 ${p.bankTransaction.description}`}
                   </p>
-                  {p.fuelTransaction.pump && (
-                    <p className="text-xs text-muted-foreground">Pump {p.fuelTransaction.pump}</p>
+                  {(p.bankTransaction.cardNumber || p.bankTransaction.referenceNumber) && (
+                    <p className="text-xs text-muted-foreground">
+                      {p.bankTransaction.referenceNumber && <span>Ref: {p.bankTransaction.referenceNumber}</span>}
+                      {p.bankTransaction.referenceNumber && p.bankTransaction.cardNumber && ' \u2022 '}
+                      {p.bankTransaction.cardNumber}
+                    </p>
                   )}
-                </div>
-              )}
-              {/* Right — Fuel (invoice group: multiple items) */}
-              {p.fuelItems && p.fuelItems.length > 1 && (
-                <div className="min-w-0 text-right space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    Fuel · {p.fuelItems.length} items
-                    {p.fuelItems[0].referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelItems[0].referenceNumber}</span>}
-                  </p>
-                  {p.fuelItems.map((item, idx) => (
-                    <div key={item.id} className={cn("space-y-0.5", idx > 0 && "pt-1.5 border-t border-[#E5E3DC]/30")}>
-                      <p className="text-sm font-semibold tabular-nums">{formatRand(item.amount)}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {item.transactionDate}
-                        {item.transactionTime && ` ${item.transactionTime}`}
-                        {item.attendant && ` \u2022 ${item.attendant}`}
-                      </p>
-                      {item.pump && (
-                        <p className="text-xs text-muted-foreground">Pump {item.pump}</p>
-                      )}
-                    </div>
-                  ))}
-                  <p className="text-xs font-medium text-muted-foreground pt-1 border-t border-[#E5E3DC]/30 tabular-nums">
-                    Total: {formatRand(p.fuelItems.reduce((s, i) => s + parseFloat(i.amount), 0))}
-                  </p>
                 </div>
               )}
             </div>

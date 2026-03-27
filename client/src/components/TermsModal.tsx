@@ -49,7 +49,7 @@ export default function TermsModal({ open }: TermsModalProps) {
 
         <div className="px-7 py-5">
           {/* Scrollable terms */}
-          <div className="bg-[#F4F4F0] border border-[#E5E3DC] rounded-lg p-4 max-h-[220px] overflow-y-auto mb-4 space-y-3">
+          <div className="bg-background border border-[#E5E3DC] rounded-lg p-4 max-h-[220px] overflow-y-auto mb-4 space-y-3">
             <h3 className="font-heading font-semibold text-[13px] text-[#1A1200]">1. This is a pre-alpha system</h3>
             <p className="text-xs text-[#1A1200]/75 leading-relaxed">
               lekana is not a finished product. You are using an early version still under active development. Features will change, things will break, and we may need to reset or migrate data during this phase. <strong className="font-medium opacity-100">Do not rely on lekana as your only record of reconciliation data.</strong>

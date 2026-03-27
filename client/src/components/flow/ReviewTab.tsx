@@ -1,0 +1,649 @@
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Search,
+  X,
+  Check,
+  ChevronRight,
+  Clock,
+  ArrowRight,
+  Building2,
+  Fuel,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import type { Transaction, TransactionResolution, MatchingRulesConfig } from "@shared/schema";
+import { InvestigateModal } from "./InvestigateModal";
+
+const LOW_VALUE_THRESHOLD = 50;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  quick_win: "Quick win",
+  investigate: "Needs review",
+  no_match: "No match",
+  low_value: "Low value",
+};
+
+interface PaginatedResponse {
+  transactions: Transaction[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+interface PotentialMatch {
+  transaction: Transaction;
+  confidence: number;
+  timeDiff: string;
+  amountDiff: number;
+}
+
+interface TransactionInsight {
+  type: 'possible_tip' | 'overfill' | 'duplicate_charge' | 'no_fuel_record';
+  message: string;
+  detail?: string;
+}
+
+interface CategorizedTransaction {
+  transaction: Transaction;
+  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value';
+  bestMatch?: PotentialMatch;
+  potentialMatches: PotentialMatch[];
+  nearestByAmount: PotentialMatch[];
+  insights: TransactionInsight[];
+}
+
+interface ReviewTabProps {
+  periodId: string;
+  initialSide?: 'bank' | 'fuel';
+}
+
+export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const userName = user?.firstName || "User";
+  const [side, setSide] = useState<'bank' | 'fuel'>(initialSide || 'bank');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalInitialIndex, setModalInitialIndex] = useState(0);
+  const [modalItems, setModalItems] = useState<CategorizedTransaction[]>([]);
+  const [pendingBulkAction, setPendingBulkAction] = useState<{
+    type: 'confirm' | 'flag' | 'dismiss';
+    count: number;
+    action: () => void;
+  } | null>(null);
+
+  // Reset search when switching sides
+  useEffect(() => { setSearchQuery(""); }, [side]);
+
+  // ── Data fetching ──
+  const { data: unmatchedData, isLoading: unmatchedLoading } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: "1", limit: "200", matchStatus: "unmatched", sourceType: "bank" });
+      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch transactions");
+      return response.json();
+    },
+    enabled: !!periodId,
+  });
+
+  const { data: fuelData } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/periods", periodId, "transactions", "unmatched", "fuel"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: "1", limit: "500", matchStatus: "unmatched", sourceType: "fuel", isCardTransaction: "yes" });
+      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch fuel transactions");
+      return response.json();
+    },
+    enabled: !!periodId,
+  });
+
+  const { data: resolutions } = useQuery<TransactionResolution[]>({
+    queryKey: ["/api/periods", periodId, "resolutions"],
+    enabled: !!periodId,
+  });
+
+  // Fetch ALL bank transactions (including resolved) for resolution counting
+  const { data: allBankData } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/periods", periodId, "transactions", "all", "bank"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: "1", limit: "500", sourceType: "bank" });
+      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch all bank transactions");
+      return response.json();
+    },
+    enabled: !!periodId,
+  });
+
+  // Fetch ALL fuel transactions (including resolved) for resolution counting
+  const { data: allFuelData } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/periods", periodId, "transactions", "all", "fuel"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: "1", limit: "500", sourceType: "fuel", isCardTransaction: "yes" });
+      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch all fuel transactions");
+      return response.json();
+    },
+    enabled: !!periodId,
+  });
+
+  const allSideData = side === 'bank' ? allBankData : allFuelData;
+
+  const { data: matchingRules } = useQuery<MatchingRulesConfig>({
+    queryKey: ["/api/periods", periodId, "matching-rules"],
+    enabled: !!periodId,
+  });
+  const dateWindowDays = matchingRules?.dateWindowDays ?? 3;
+
+  // ── Derived data ──
+  const resolvedIds = useMemo(() => new Set(resolutions?.map(r => r.transactionId) || []), [resolutions]);
+
+  const flaggedResolutions = useMemo(() => (resolutions || []).filter(r => r.resolutionType === 'flagged'), [resolutions]);
+  const flaggedTransactionIds = useMemo(() => new Set(flaggedResolutions.map(r => r.transactionId)), [flaggedResolutions]);
+
+  const flaggedTransactions = useMemo(() => {
+    if (!allSideData?.transactions) return [];
+    return allSideData.transactions
+      .filter(txn => flaggedTransactionIds.has(txn.id))
+      .map(txn => ({ transaction: txn, resolution: flaggedResolutions.find(r => r.transactionId === txn.id) }))
+      .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
+  }, [allSideData, flaggedTransactionIds, flaggedResolutions]);
+
+  // Per-side resolution counts + amounts — cross-reference against ALL transaction lists
+  const perSideCounts = useMemo(() => {
+    const result = {
+      bank: { matched: 0, matchedAmount: 0, flagged: 0, flaggedAmount: 0 },
+      fuel: { matched: 0, matchedAmount: 0, flagged: 0, flaggedAmount: 0 },
+    };
+    if (!resolutions) return result;
+
+    // Build lookup: txId → amount, side
+    const txLookup = new Map<string, { side: 'bank' | 'fuel'; amount: number }>();
+    for (const t of allBankData?.transactions || []) {
+      txLookup.set(t.id, { side: 'bank', amount: parseFloat(t.amount) || 0 });
+    }
+    for (const t of allFuelData?.transactions || []) {
+      txLookup.set(t.id, { side: 'fuel', amount: parseFloat(t.amount) || 0 });
+    }
+
+    for (const r of resolutions) {
+      const tx = txLookup.get(r.transactionId);
+      if (!tx) continue;
+
+      if (r.resolutionType === 'flagged') {
+        result[tx.side].flagged++;
+        result[tx.side].flaggedAmount += tx.amount;
+      } else {
+        result[tx.side].matched++;
+        result[tx.side].matchedAmount += tx.amount;
+      }
+    }
+    return result;
+  }, [resolutions, allBankData, allFuelData]);
+
+  // ── Categorization ──
+  const categorizedTransactions = useMemo((): CategorizedTransaction[] => {
+    if (!unmatchedData?.transactions || !fuelData?.transactions) return [];
+
+    const primaryTxns = side === 'fuel'
+      ? fuelData.transactions.filter(txn => !resolvedIds.has(txn.id))
+      : unmatchedData.transactions.filter(txn => !resolvedIds.has(txn.id));
+    const candidateTxns = side === 'fuel'
+      ? unmatchedData.transactions
+      : fuelData.transactions;
+
+    const result = primaryTxns
+      .map((primaryTxn): CategorizedTransaction => {
+        const primaryAmount = parseFloat(primaryTxn.amount);
+        const primaryDate = new Date(primaryTxn.transactionDate);
+
+        const allScored = candidateTxns.map((candidateTxn): PotentialMatch => {
+          const candidateAmount = parseFloat(candidateTxn.amount);
+          const candidateDate = new Date(candidateTxn.transactionDate);
+          const daysDiff = Math.abs((primaryDate.getTime() - candidateDate.getTime()) / (1000 * 60 * 60 * 24));
+          const amountDiff = Math.abs(primaryAmount - candidateAmount);
+
+          let confidence = 100;
+          if (daysDiff > 0) confidence -= daysDiff * 10;
+          if (amountDiff <= 1) confidence -= amountDiff * 2;
+          else if (amountDiff <= 10) confidence -= amountDiff * 1;
+          else if (amountDiff <= 50) confidence -= 10 + (amountDiff - 10) * 0.5;
+          else confidence -= 30 + (amountDiff - 50) * 0.3;
+          confidence = Math.max(0, Math.min(100, confidence));
+
+          return {
+            transaction: candidateTxn,
+            confidence,
+            timeDiff: daysDiff === 0 ? "Same day" : daysDiff < 1 ? "< 1 day" : `${Math.floor(daysDiff)} day${daysDiff >= 2 ? "s" : ""}`,
+            amountDiff,
+          };
+        });
+
+        const potentialMatches = allScored
+          .filter(m => {
+            if (m.confidence <= 20) return false;
+            const candidateDate = new Date(m.transaction.transactionDate);
+            const days = Math.abs((primaryDate.getTime() - candidateDate.getTime()) / (1000 * 60 * 60 * 24));
+            return days <= dateWindowDays;
+          })
+          .sort((a, b) => b.confidence - a.confidence)
+          .slice(0, 5);
+
+        const nearestByAmount = [...allScored]
+          .filter(m => {
+            const candidateDate = new Date(m.transaction.transactionDate);
+            const days = Math.abs((primaryDate.getTime() - candidateDate.getTime()) / (1000 * 60 * 60 * 24));
+            return days <= dateWindowDays;
+          })
+          .sort((a, b) => a.amountDiff - b.amountDiff)
+          .slice(0, 3);
+
+        const bestMatch = potentialMatches[0];
+
+        let category: CategorizedTransaction['category'];
+        if (primaryAmount < LOW_VALUE_THRESHOLD) category = 'low_value';
+        else if (bestMatch && bestMatch.confidence >= 80) category = 'quick_win';
+        else if (bestMatch && bestMatch.confidence >= 50) category = 'investigate';
+        else category = 'no_match';
+
+        const insights: TransactionInsight[] = [];
+        try {
+          const nearest = nearestByAmount[0];
+          if (nearest && (category === 'no_match' || category === 'investigate')) {
+            const diff = primaryAmount - parseFloat(nearest.transaction.amount);
+            const absDiff = Math.abs(diff);
+            if (absDiff > 2 && absDiff <= 25) {
+              if (side === 'fuel') {
+                insights.push(diff > 0
+                  ? { type: 'overfill', message: `Fuel sale R${absDiff.toFixed(2)} more than bank payment`, detail: `Bank: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} — possible overfill by attendant` }
+                  : { type: 'possible_tip', message: `Bank payment R${absDiff.toFixed(2)} more than fuel sale`, detail: `Bank: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} — difference may include attendant tip` }
+                );
+              } else {
+                insights.push(diff > 0
+                  ? { type: 'possible_tip', message: `Bank paid R${absDiff.toFixed(2)} more than fuel record`, detail: `Fuel: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} — difference may include attendant tip` }
+                  : { type: 'overfill', message: `Fuel record R${absDiff.toFixed(2)} more than bank payment`, detail: `Fuel: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} — possible overfill by attendant` }
+                );
+              }
+            } else if (absDiff > 25) {
+              insights.push(side === 'fuel'
+                ? { type: 'no_fuel_record', message: `Nearest bank payment is R${absDiff.toFixed(2)} away`, detail: `No close bank match found — may not have settled yet` }
+                : { type: 'no_fuel_record', message: `Nearest fuel record is R${absDiff.toFixed(2)} away`, detail: `No close fuel match found — may be a non-fuel POS charge or missing fuel record` }
+              );
+            }
+          }
+        } catch (e) { console.error('Insight generation error:', e); }
+
+        return { transaction: primaryTxn, category, bestMatch, potentialMatches, nearestByAmount, insights };
+      })
+      .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
+
+    // Duplicate detection
+    try {
+      const amountDateGroups = new Map<string, CategorizedTransaction[]>();
+      for (const ct of result) {
+        const key = `${parseFloat(ct.transaction.amount).toFixed(2)}_${ct.transaction.transactionDate}`;
+        if (!amountDateGroups.has(key)) amountDateGroups.set(key, []);
+        amountDateGroups.get(key)!.push(ct);
+      }
+      Array.from(amountDateGroups.values()).forEach(group => {
+        if (group.length > 1) {
+          const primaryAmt = parseFloat(group[0].transaction.amount);
+          const primaryDateStr = group[0].transaction.transactionDate;
+          const candidatesOnDate = (side === 'fuel' ? unmatchedData!.transactions : fuelData!.transactions).filter((ct: Transaction) => {
+            const diff = Math.abs(parseFloat(ct.amount) - primaryAmt);
+            return diff < 15 && ct.transactionDate === primaryDateStr;
+          }).length;
+          const chargeLabel = side === 'fuel' ? 'fuel sales' : 'bank charges';
+          const recordLabel = side === 'fuel' ? 'bank payment' : 'fuel record';
+          group.forEach(ct => {
+            ct.insights.unshift({
+              type: 'duplicate_charge',
+              message: `${group.length} identical ${chargeLabel} of R${parseFloat(group[0].transaction.amount).toFixed(2)} on this date`,
+              detail: candidatesOnDate < group.length
+                ? `Only ${candidatesOnDate} matching ${recordLabel}${candidatesOnDate !== 1 ? 's' : ''} found — ${group.length - candidatesOnDate} may be duplicate ${chargeLabel} or missing ${recordLabel}s`
+                : `${candidatesOnDate} ${recordLabel}s found at similar amounts`,
+            });
+          });
+        }
+      });
+    } catch (e) { console.error('Duplicate detection error:', e); }
+
+    return result;
+  }, [unmatchedData, fuelData, resolvedIds, side, dateWindowDays]);
+
+  const filteredTransactions = useMemo(() => {
+    if (!searchQuery.trim()) return categorizedTransactions;
+    const q = searchQuery.toLowerCase().trim();
+    return categorizedTransactions.filter(ct => {
+      const txn = ct.transaction;
+      return (
+        txn.description?.toLowerCase().includes(q) ||
+        txn.referenceNumber?.toLowerCase().includes(q) ||
+        txn.sourceName?.toLowerCase().includes(q) ||
+        parseFloat(txn.amount).toFixed(2).includes(q) ||
+        formatDate(txn.transactionDate).toLowerCase().includes(q)
+      );
+    });
+  }, [categorizedTransactions, searchQuery]);
+
+  const totalUnresolved = categorizedTransactions.length;
+
+  const openModal = (txnId: string) => {
+    const idx = categorizedTransactions.findIndex(ct => ct.transaction.id === txnId);
+    if (idx >= 0) {
+      setModalItems(categorizedTransactions);
+      setModalInitialIndex(idx);
+      setModalOpen(true);
+    }
+  };
+
+  // ── Mutations ──
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "verification-summary"] });
+  };
+
+  const createMatchMutation = useMutation({
+    mutationFn: async ({ primaryId, candidateId }: { primaryId: string; candidateId: string }) => {
+      return await apiRequest("POST", "/api/matches/manual", {
+        periodId,
+        bankTransactionId: side === 'fuel' ? candidateId : primaryId,
+        fuelTransactionId: side === 'fuel' ? primaryId : candidateId,
+      });
+    },
+    onSuccess: () => { toast({ title: "Match created", description: "The transactions have been linked." }); invalidateAll(); },
+    onError: (error: Error) => { toast({ title: "Failed to create match", description: error.message, variant: "destructive" }); },
+  });
+
+  const bulkConfirmMutation = useMutation({
+    mutationFn: async (matches: { bankId: string; fuelId: string }[]): Promise<{ count: number }> => {
+      const response = await apiRequest("POST", "/api/matches/bulk-confirm", { matches, periodId });
+      return response.json();
+    },
+    onSuccess: (data: { count: number }) => { toast({ title: "Matches confirmed", description: `${data.count} transactions linked.` }); invalidateAll(); },
+    onError: (error: Error) => { toast({ title: "Failed to confirm", description: error.message, variant: "destructive" }); },
+  });
+
+  const bulkDismissMutation = useMutation({
+    mutationFn: async (transactionIds: string[]): Promise<{ count: number }> => {
+      const response = await apiRequest("POST", "/api/resolutions/bulk-dismiss", { transactionIds, periodId });
+      return response.json();
+    },
+    onSuccess: (data: { count: number }) => { toast({ title: "Dismissed", description: `${data.count} low-value transactions dismissed.` }); invalidateAll(); },
+    onError: (error: Error) => { toast({ title: "Failed to dismiss", description: error.message, variant: "destructive" }); },
+  });
+
+  const bulkFlagMutation = useMutation({
+    mutationFn: async (transactionIds: string[]): Promise<{ count: number }> => {
+      const response = await apiRequest("POST", "/api/resolutions/bulk-flag", { transactionIds, periodId });
+      return response.json();
+    },
+    onSuccess: (data: { count: number }) => { toast({ title: "Flagged", description: `${data.count} transactions flagged for investigation.` }); invalidateAll(); },
+    onError: (error: Error) => { toast({ title: "Failed to flag", description: error.message, variant: "destructive" }); },
+  });
+
+  // ── Helpers ──
+  const formatCurrency = (amount: string | number) => {
+    const num = typeof amount === "string" ? parseFloat(amount) : amount;
+    return "R " + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+  };
+
+  // ── Landing counts ──
+  const bankUnmatchedCount = unmatchedData?.transactions?.filter(t => !resolvedIds.has(t.id)).length || 0;
+  const bankUnmatchedAmount = unmatchedData?.transactions?.filter(t => !resolvedIds.has(t.id)).reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+  const bankTotalCount = unmatchedData?.total || 0;
+  const bankTotalAmount = unmatchedData?.transactions?.reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+
+  const fuelUnmatchedCount = fuelData?.transactions?.filter(t => !resolvedIds.has(t.id)).length || 0;
+  const fuelUnmatchedAmount = fuelData?.transactions?.filter(t => !resolvedIds.has(t.id)).reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+  const fuelTotalCount = fuelData?.total || 0;
+  const fuelTotalAmount = fuelData?.transactions?.reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+
+  // Flagged counts per side (approximate — flagged resolutions don't store side, but we can check against the transaction lists)
+  const bankFlaggedIds = useMemo(() => {
+    if (!resolutions || !unmatchedData) return new Set<string>();
+    const flagIds = new Set(resolutions.filter(r => r.resolutionType === 'flagged').map(r => r.transactionId));
+    // We can't easily determine side from resolutions alone, so count all flagged for now
+    return flagIds;
+  }, [resolutions, unmatchedData]);
+
+  const fuelFlaggedIds = bankFlaggedIds; // Same set — shown on both sides until we refine
+
+  // Count resolution types for the "Review Complete" state
+  const resolutionCounts = useMemo(() => {
+    const counts = { linked: 0, reviewed: 0, dismissed: 0, flagged: 0, total: 0 };
+    if (!resolutions) return counts;
+    resolutions.forEach(r => {
+      counts.total++;
+      if (r.resolutionType === 'linked') counts.linked++;
+      else if (r.resolutionType === 'reviewed') counts.reviewed++;
+      else if (r.resolutionType === 'dismissed') counts.dismissed++;
+      else if (r.resolutionType === 'flagged') counts.flagged++;
+    });
+    return counts;
+  }, [resolutions]);
+
+  const catAmount = categorizedTransactions.reduce((sum, t) => sum + (parseFloat(t.transaction.amount) || 0), 0);
+  const flagAmount = flaggedTransactions.reduce((sum, f) => sum + (parseFloat(f.transaction.amount) || 0), 0);
+
+  if (unmatchedLoading || !fuelData || !unmatchedData) {
+    return (
+      <div className="space-y-4 max-w-2xl mx-auto">
+        {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  SINGLE SCREEN — Summary cards + filtered list
+  // ═══════════════════════════════════════════════════════════
+  const sideLabel = side === 'fuel' ? 'fuel card sales with no bank payment' : 'bank transactions with no fuel match';
+  const sideCount = side === 'bank' ? bankUnmatchedCount : fuelUnmatchedCount;
+  const sideAmount = side === 'bank' ? bankUnmatchedAmount : fuelUnmatchedAmount;
+  const sideTotalCount = side === 'bank' ? bankTotalCount : fuelTotalCount;
+  const sideTotalAmount = side === 'bank' ? bankTotalAmount : fuelTotalAmount;
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      {/* Header */}
+      <div>
+        <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Review</h2>
+        <p className="text-sm text-muted-foreground">Work through each side. Resolve what you can. Anything you can't explain goes to Investigate.</p>
+      </div>
+
+      {/* Review container — beige background for everything */}
+      <div className="bg-section rounded-xl overflow-hidden p-4 space-y-4">
+
+      {/* Side selector — two cards */}
+      <div className="grid grid-cols-2 gap-3">
+          {([
+            { key: 'bank' as const, label: 'Bank transactions', count: bankUnmatchedCount, amount: bankUnmatchedAmount, total: bankTotalCount, totalAmt: bankTotalAmount },
+            { key: 'fuel' as const, label: 'Fuel system card transactions', count: fuelUnmatchedCount, amount: fuelUnmatchedAmount, total: fuelTotalCount, totalAmt: fuelTotalAmount },
+          ]).map((s, idx) => {
+            const isActive = side === s.key;
+            const sideCounts = perSideCounts[s.key];
+            // Original total that needed review = still unmatched + matched by user + flagged
+            const originalTotal = s.count + sideCounts.matched + sideCounts.flagged;
+            const originalAmount = s.amount + sideCounts.matchedAmount + sideCounts.flaggedAmount;
+            return (
+              <button
+                key={s.key}
+                onClick={() => { setSide(s.key); setSearchQuery(""); }}
+                className={cn(
+                  "p-5 text-left transition-colors rounded-xl",
+                  isActive ? "bg-card border border-[#E5E3DC]/50 shadow-sm" : "hover:bg-background"
+                )}
+              >
+                {/* Title */}
+                <h3 className="text-sm font-semibold text-[#1A1200] mb-3">{s.label}</h3>
+
+                {/* Hero: count + amount of original total */}
+                <div className="flex items-baseline justify-between mb-1">
+                  <p className={cn("text-3xl font-bold tabular-nums", s.count > 0 ? "text-[#B45309]" : "text-[#166534]")}>{s.count}</p>
+                  <p className={cn("text-base font-bold tabular-nums", s.count > 0 ? "text-[#B45309]" : "text-[#1A1200]")}>{formatCurrency(originalAmount)}</p>
+                </div>
+                <div className="flex items-baseline justify-between mb-4">
+                  <p className="text-xs text-muted-foreground">{s.count > 0 ? "Not matched" : "All matched"}</p>
+                  <p className="text-[10px] text-muted-foreground">of {originalTotal} {s.key === 'bank' ? 'bank' : 'fuel'} transactions</p>
+                </div>
+
+                {/* Destination counts: Matched by user | To investigate */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className={cn("rounded-lg p-2.5", isActive ? "bg-section" : "bg-white dark:bg-card")}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Matched by {userName}</p>
+                    <p className={cn("text-lg font-bold tabular-nums", sideCounts.matched > 0 ? "text-[#166534]" : "")}>{sideCounts.matched}</p>
+                    <p className="text-[10px] tabular-nums text-muted-foreground">{sideCounts.matchedAmount > 0 ? formatCurrency(sideCounts.matchedAmount) : "\u2014"}</p>
+                  </div>
+                  <div className={cn("rounded-lg p-2.5", isActive ? "bg-section" : "bg-white dark:bg-card")}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">To Investigate</p>
+                    <p className={cn("text-lg font-bold tabular-nums", sideCounts.flagged > 0 ? "text-[#B45309]" : "")}>{sideCounts.flagged}</p>
+                    <p className="text-[10px] tabular-nums text-muted-foreground">{sideCounts.flaggedAmount > 0 ? formatCurrency(sideCounts.flaggedAmount) : "\u2014"}</p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+      {/* Transaction list for selected side */}
+      {totalUnresolved === 0 && flaggedTransactions.length === 0 ? (
+        <div className="bg-card rounded-xl p-8">
+          <div className="flex flex-col items-center justify-center text-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-[#DCFCE7] flex items-center justify-center">
+              <Check className="h-6 w-6 text-[#166534]" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[#1A1200]">Review Complete</h3>
+              <p className="text-sm text-muted-foreground mt-1">All {side === 'fuel' ? 'fuel' : 'bank'} transactions have been reviewed.</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-section rounded-xl p-4 space-y-3">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by amount, description, reference, or date..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-card"
+            />
+            {searchQuery && (
+              <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearchQuery("")}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+
+          {searchQuery && filteredTransactions.length === 0 ? (
+            <div className="py-6 text-center">
+              <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No transactions match "{searchQuery}"</p>
+              <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>Clear search</Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredTransactions.map(item => {
+                const txn = item.transaction;
+                const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
+                return (
+                  <div
+                    key={txn.id}
+                    className="bg-card flex items-center justify-between p-3 border border-[#E5E3DC]/50 rounded-lg cursor-pointer hover:border-foreground/20"
+                    onClick={() => openModal(txn.id)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="tabular-nums font-bold">{formatCurrency(txn.amount)}</span>
+                        <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
+                        {txn.transactionTime && (
+                          <span className="text-sm text-muted-foreground flex items-center gap-0.5">
+                            <Clock className="h-3 w-3" />{txn.transactionTime}
+                          </span>
+                        )}
+                      </div>
+                      {txn.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{txn.description}</p>}
+                      {item.insights.length > 0 && (
+                        <p className="text-xs text-[#B45309] mt-0.5">{item.insights[0].message}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 ml-2">
+                      <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      </div>{/* Close beige container */}
+
+      {/* Bulk Action Confirmation */}
+      <AlertDialog open={!!pendingBulkAction} onOpenChange={(open) => !open && setPendingBulkAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingBulkAction?.type === 'confirm' && 'Confirm All Quick Wins'}
+              {pendingBulkAction?.type === 'flag' && 'Flag All for Investigation'}
+              {pendingBulkAction?.type === 'dismiss' && 'Dismiss All Low Value'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingBulkAction?.type === 'confirm' && `This will confirm ${pendingBulkAction.count} matches.`}
+              {pendingBulkAction?.type === 'flag' && `This will flag ${pendingBulkAction.count} transactions for investigation.`}
+              {pendingBulkAction?.type === 'dismiss' && `This will dismiss ${pendingBulkAction.count} low-value transactions.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { pendingBulkAction?.action(); setPendingBulkAction(null); }}>
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Case Modal */}
+      <InvestigateModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        items={modalItems}
+        initialIndex={modalInitialIndex}
+        periodId={periodId}
+        matchingRules={matchingRules}
+        onResolved={() => {}}
+        side={side}
+      />
+    </div>
+  );
+}

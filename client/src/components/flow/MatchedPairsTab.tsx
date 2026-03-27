@@ -51,6 +51,16 @@ interface MatchedPair {
     pump: string | null;
     referenceNumber: string | null;
   } | null;
+  fuelItems?: {
+    id: string;
+    transactionDate: string;
+    transactionTime: string | null;
+    amount: string;
+    description: string | null;
+    attendant: string | null;
+    pump: string | null;
+    referenceNumber: string | null;
+  }[];
 }
 
 const formatRand = (amount: string | number) => {
@@ -58,10 +68,16 @@ const formatRand = (amount: string | number) => {
   return "R " + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-function getMatchLabel(matchType: string, userName: string): string {
+function getMatchLabel(matchType: string, userName: string, description?: string | null): string {
   if (matchType === "auto_exact" || matchType === "auto_exact_review") return "Lekana (Exact)";
   if (matchType.startsWith("auto")) return "Lekana (Rules)";
-  if (matchType === "excluded") return "Excluded";
+  if (matchType === "excluded") {
+    const desc = (description || "").toLowerCase();
+    if (desc.includes("declined")) return "Declined";
+    if (desc.includes("cancelled") || desc.includes("canceled")) return "Cancelled";
+    if (desc.includes("reversed")) return "Reversed";
+    return "Excluded";
+  }
   if (matchType === "linked") return `${userName} (With reason)`;
   return `${userName} (Confirmed)`;
 }
@@ -174,88 +190,120 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
 
   return (
     <div>
-      {/* Category summary cards */}
-      <div className="flex gap-2 flex-wrap">
-        {([
-          ["all", "All", pairs.length + unmatchedCount],
-          ["exact", "Lekana (Exact)", exactCount],
-          ["rules", "Lekana (Rules)", rulesCount],
-          ["confirmed", `${userName} (Confirmed)`, confirmedCount],
-          ["reason", `${userName} (With reason)`, reasonCount],
-          ["excluded", "Excluded", excludedCount],
-        ] as const).map(([value, label, count]) => (
-          <button
-            key={value}
-            onClick={() => { setTypeFilter(typeFilter === value ? "all" : value); setPage(0); }}
-            className={cn(
-              "rounded-lg p-2.5 text-left transition-colors border flex-1 min-w-0 min-h-[72px] flex flex-col justify-end",
-              typeFilter === value
-                ? "border-[#B8860B]/30 bg-[#FEF9C3] dark:bg-amber-950/30"
-                : "border-[#E5E3DC]/50 bg-[#FAFAF6] dark:bg-muted/30 hover:border-[#B8860B]/20"
-            )}
-          >
-            {(() => {
-              const match = label.match(/^(.+?)\s*\((.+)\)$/);
-              return match ? (
-                <>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{match[1]}</p>
-                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground/50">{match[2]}</p>
-                </>
-              ) : (
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</p>
-              );
-            })()}
-            <p className={cn("text-lg font-semibold tabular-nums mt-0.5", typeFilter === value && "text-[#B45309]")}>{count}</p>
-          </button>
-        ))}
-        {/* Unmatched card — navigates to investigate */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setLocation(`/investigate?periodId=${periodId}`)}
-          style={{ cursor: 'pointer' }}
-          className={cn(
-            "rounded-lg p-2.5 text-left transition-colors border flex-1 min-w-0 min-h-[72px] flex flex-col justify-end",
-            unmatchedCount > 0
-              ? "border-[#B45309]/20 bg-[#FEF9C3]/50 hover:bg-[#FEF9C3]"
-              : "border-[#E5E3DC]/50 bg-[#FAFAF6] dark:bg-muted/30"
-          )}
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Unmatched</p>
-          <p className={cn("text-lg font-semibold tabular-nums mt-0.5", unmatchedCount > 0 && "text-[#B45309]")}>{unmatchedCount}</p>
+      {/* Category summary — segmented card */}
+      <div className="rounded-xl bg-section dark:bg-muted/30 p-4 mb-6 border border-[#E5E3DC]/50 dark:border-border">
+        <div className="flex divide-x divide-border/50 items-end">
+          {([
+            ["all", "All", null, pairs.length + unmatchedCount],
+            ["exact", "Lekana", "Exact", exactCount],
+            ["rules", "Lekana", "Rules", rulesCount],
+            ["confirmed", userName, "Confirmed", confirmedCount],
+            ["reason", userName, "With reason", reasonCount],
+            ["excluded", "Excluded", null, excludedCount],
+            ["unmatched", "Review", null, unmatchedCount],
+          ] as [string, string, string | null, number][]).map(([value, label, sublabel, count]) => {
+            const isUnmatched = value === "unmatched";
+            const isActive = !isUnmatched && typeFilter === value;
+            return (
+              <button
+                key={value}
+                onClick={() => {
+                  if (isUnmatched && unmatchedCount > 0) {
+                    setLocation(`/investigate?periodId=${periodId}`);
+                  } else if (!isUnmatched) {
+                    setTypeFilter(typeFilter === value ? "all" : value);
+                    setPage(0);
+                  }
+                }}
+                className={cn(
+                  "flex-1 py-2 px-2 text-center transition-colors rounded-lg",
+                  isActive && "bg-[#F5C400]/75",
+                  !isActive && !isUnmatched && "hover:bg-white/50",
+                  isUnmatched && unmatchedCount > 0 && "hover:bg-[#F5C400]/30 cursor-pointer",
+                  isUnmatched && unmatchedCount === 0 && "cursor-default"
+                )}
+              >
+                <p className={cn("text-[10px] font-semibold uppercase tracking-wider", isActive ? "text-black/50" : "text-muted-foreground/70")}>{label}</p>
+                {sublabel && <p className={cn("text-[10px] uppercase tracking-wider", isActive ? "text-black/60" : "text-muted-foreground/50")}>{sublabel}</p>}
+                <p className={cn(
+                  "text-lg font-bold tabular-nums mt-0.5",
+                  isActive && "text-[#1A1200]",
+                  !isActive && isUnmatched && unmatchedCount > 0 && "text-[#B45309]"
+                )}>{count}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search + legend — inside segmented card */}
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/30">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by amount, description, card, attendant..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(0); }}
+              className="pl-9 h-8 text-sm bg-white dark:bg-card"
+            />
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Match Types</p>
+                {legendItems.map(([label, desc]) => (
+                  <div key={label} className="flex gap-2">
+                    <Badge variant="outline" className="text-[11px] px-1.5 py-0 shrink-0 h-5">{label}</Badge>
+                    <span className="text-xs text-muted-foreground">{desc}</span>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
-      {/* Search + legend */}
-      <div className="flex items-center gap-2 mt-5" style={{ marginBottom: '4rem' }}>
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by amount, description, card, attendant..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(0); }}
-            className="pl-9 h-8 text-sm"
-          />
-        </div>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground">
-              <HelpCircle className="h-4 w-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-80">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Match Types</p>
-              {legendItems.map(([label, desc]) => (
-                <div key={label} className="flex gap-2">
-                  <Badge variant="outline" className="text-[11px] px-1.5 py-0 shrink-0 h-5">{label}</Badge>
-                  <span className="text-xs text-muted-foreground">{desc}</span>
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
+      {/* Context card explaining current filter */}
+      {typeFilter !== "all" && (() => {
+        const contexts: Record<string, { title: string; description: string }> = {
+          exact: {
+            title: "Exact matches by lekana",
+            description: "These transactions matched perfectly — same amount, same date. No human review needed.",
+          },
+          rules: {
+            title: "Rule-based matches by lekana",
+            description: "These were matched using your configured tolerance and date window. The amounts or dates were close enough to count as a match, but not identical.",
+          },
+          confirmed: {
+            title: `Confirmed by ${userName}`,
+            description: "You manually reviewed these and confirmed they belong together.",
+          },
+          reason: {
+            title: `Matched by ${userName} with a reason`,
+            description: "You matched these and documented why — for example, a tip or an overfill that explains the difference.",
+          },
+          excluded: {
+            title: "Excluded from matching",
+            description: "Your bank flagged these as declined, cancelled, or reversed — the payment didn't go through. They're kept here for your records but weren't included in the reconciliation.",
+          },
+          unmatched: {
+            title: "Unmatched transactions",
+            description: "These bank transactions had no matching fuel record. Head to the Review tab to work through them.",
+          },
+        };
+        const ctx = contexts[typeFilter];
+        if (!ctx) return null;
+        return (
+          <div className="rounded-lg bg-section border border-[#E5E3DC]/50 p-3 mb-4">
+            <p className="text-sm font-medium text-[#1A1200]">{ctx.title}</p>
+            <p className="text-xs text-muted-foreground mt-1">{ctx.description}</p>
+          </div>
+        );
+      })()}
 
       {/* Count + pagination info */}
       <div className="flex items-center justify-between px-3 mb-2">
@@ -274,10 +322,12 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
       <div className="space-y-2">
         {paged.map(p => {
           const bankAmt = parseFloat(p.bankTransaction.amount);
-          const fuelAmt = p.fuelTransaction ? parseFloat(p.fuelTransaction.amount) : 0;
+          const fuelAmt = p.fuelItems && p.fuelItems.length > 1
+            ? p.fuelItems.reduce((s, i) => s + parseFloat(i.amount), 0)
+            : p.fuelTransaction ? parseFloat(p.fuelTransaction.amount) : 0;
           const diff = p.fuelTransaction ? Math.abs(bankAmt - fuelAmt) : 0;
           const confidence = p.match.matchConfidence ? parseFloat(p.match.matchConfidence) : null;
-          const matchLabel = getMatchLabel(p.match.matchType, userName);
+          const matchLabel = getMatchLabel(p.match.matchType, userName, p.bankTransaction.description);
           const excluded = p.match.matchType === "excluded";
 
           return (
@@ -287,7 +337,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                 "rounded-lg border p-3 grid gap-4",
                 excluded
                   ? "border-muted bg-muted/20 grid-cols-[1fr_auto]"
-                  : "border-[#E5E3DC] bg-[#FAFAF6] dark:bg-muted/30 grid-cols-[1fr_auto_1fr]"
+                  : "border-[#E5E3DC] bg-section dark:bg-muted/30 grid-cols-[1fr_auto_1fr]"
               )}
             >
               {/* Left — Bank */}
@@ -299,13 +349,17 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                   {p.bankTransaction.transactionTime && ` ${p.bankTransaction.transactionTime}`}
                   {p.bankTransaction.description && ` \u2022 ${p.bankTransaction.description}`}
                 </p>
-                {p.bankTransaction.cardNumber && (
-                  <p className="text-xs text-muted-foreground">{p.bankTransaction.cardNumber}</p>
+                {(p.bankTransaction.cardNumber || p.bankTransaction.referenceNumber) && (
+                  <p className="text-xs text-muted-foreground">
+                    {p.bankTransaction.referenceNumber && <span>Ref: {p.bankTransaction.referenceNumber}</span>}
+                    {p.bankTransaction.referenceNumber && p.bankTransaction.cardNumber && ' \u2022 '}
+                    {p.bankTransaction.cardNumber}
+                  </p>
                 )}
               </div>
 
               {/* Middle — Match info */}
-              <div className="flex flex-col items-center justify-center gap-1.5 min-w-[140px]">
+              <div className="flex flex-col items-center justify-center gap-1.5 min-w-[140px] -my-3 py-3 px-3 bg-card">
                 <Badge variant="outline" className={cn("text-xs px-2 py-0.5", excluded && "text-muted-foreground")}>
                   {matchLabel}
                 </Badge>
@@ -332,9 +386,12 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
               </div>
 
               {/* Right — Fuel */}
-              {p.fuelTransaction && (
+              {p.fuelTransaction && !p.fuelItems && (
                 <div className="min-w-0 space-y-0.5 text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Fuel</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    Fuel
+                    {p.fuelTransaction.referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelTransaction.referenceNumber}</span>}
+                  </p>
                   <p className="text-sm font-semibold tabular-nums">{formatRand(fuelAmt)}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {p.fuelTransaction.transactionDate}
@@ -344,6 +401,31 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                   {p.fuelTransaction.pump && (
                     <p className="text-xs text-muted-foreground">Pump {p.fuelTransaction.pump}</p>
                   )}
+                </div>
+              )}
+              {/* Right — Fuel (invoice group: multiple items) */}
+              {p.fuelItems && p.fuelItems.length > 1 && (
+                <div className="min-w-0 text-right space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    Fuel · {p.fuelItems.length} items
+                    {p.fuelItems[0].referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelItems[0].referenceNumber}</span>}
+                  </p>
+                  {p.fuelItems.map((item, idx) => (
+                    <div key={item.id} className={cn("space-y-0.5", idx > 0 && "pt-1.5 border-t border-[#E5E3DC]/30")}>
+                      <p className="text-sm font-semibold tabular-nums">{formatRand(item.amount)}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {item.transactionDate}
+                        {item.transactionTime && ` ${item.transactionTime}`}
+                        {item.attendant && ` \u2022 ${item.attendant}`}
+                      </p>
+                      {item.pump && (
+                        <p className="text-xs text-muted-foreground">Pump {item.pump}</p>
+                      )}
+                    </div>
+                  ))}
+                  <p className="text-xs font-medium text-muted-foreground pt-1 border-t border-[#E5E3DC]/30 tabular-nums">
+                    Total: {formatRand(p.fuelItems.reduce((s, i) => s + parseFloat(i.amount), 0))}
+                  </p>
                 </div>
               )}
             </div>

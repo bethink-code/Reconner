@@ -99,13 +99,15 @@ interface ConfigureMatchingStepProps {
   onStartMatching: () => void;
   onBack: () => void;
   isMatching: boolean;
+  stepColor?: string;
 }
 
 export function ConfigureMatchingStep({
   periodId,
   onStartMatching,
   onBack,
-  isMatching
+  isMatching,
+  stepColor
 }: ConfigureMatchingStepProps) {
   const { toast } = useToast();
 
@@ -190,17 +192,15 @@ export function ConfigureMatchingStep({
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <Card data-testid="card-configure-matching">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+      <div className="bg-section rounded-2xl p-8" data-testid="card-configure-matching">
+        <div className="text-center mb-6">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <Settings className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle>Configure Matching</CardTitle>
-          <CardDescription>
-            How strict should we be when matching transactions?
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+          <h2 className="text-2xl font-semibold tracking-tight">Configure Matching</h2>
+          <p className="text-sm text-muted-foreground mt-1">How strict should we be when matching transactions?</p>
+        </div>
+        <div className="space-y-6">
           <div className="grid grid-cols-3 gap-3">
             {PRESETS.map((preset) => {
               const Icon = preset.icon;
@@ -212,17 +212,20 @@ export function ConfigureMatchingStep({
                   type="button"
                   onClick={() => handlePresetSelect(preset.id)}
                   className={cn(
-                    "relative flex flex-col items-center p-4 rounded-lg border-2 transition-all text-center",
+                    "relative flex flex-col items-center p-4 rounded-xl transition-all text-center",
                     isSelected
-                      ? "border-primary bg-primary/5"
-                      : "border-muted hover:border-primary/50"
+                      ? "bg-card shadow-sm"
+                      : "bg-transparent border border-border/50 hover:bg-card/50"
                   )}
                   data-testid={`preset-${preset.id}`}
                 >
                   {isSelected && (
-                    <div className="absolute top-2 right-2">
-                      <Check className="h-4 w-4 text-primary" />
-                    </div>
+                    <>
+                      <div className="absolute top-2 right-2">
+                        <Check className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="absolute -bottom-0.5 left-4 right-4 h-0.5 rounded-full" style={stepColor ? { backgroundColor: stepColor } : undefined} />
+                    </>
                   )}
                   <Icon className={cn(
                     "h-6 w-6 mb-2",
@@ -269,7 +272,7 @@ export function ConfigureMatchingStep({
 
           {/* Data Coverage Preview */}
           {verSummary && (
-            <div className="rounded-lg bg-[#FAFAF6] dark:bg-muted/30 p-4 space-y-2">
+            <div className="rounded-lg bg-section dark:bg-muted/30 p-4 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Data Coverage</p>
               {period && (
                 <div className="flex justify-between text-xs">
@@ -426,8 +429,8 @@ export function ConfigureMatchingStep({
               {isMatching ? "Matching..." : "Start Reconciliation"}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

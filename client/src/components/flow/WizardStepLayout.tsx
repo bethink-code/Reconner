@@ -1,4 +1,3 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LucideIcon } from "lucide-react";
 
@@ -20,16 +19,18 @@ export function WizardStepLayout({
   navigationSection,
 }: WizardStepLayoutProps) {
   return (
-    <Card className="max-w-2xl mx-auto" data-testid="wizard-step-card">
-      <CardHeader className="text-center pb-4">
-        <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+    <div className="max-w-2xl mx-auto bg-section rounded-2xl p-8" data-testid="wizard-step-card">
+      {/* Header */}
+      <div className="text-center pb-6">
+        <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
           <Icon className="h-6 w-6 text-primary" />
         </div>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      
-      <CardContent className="space-y-6">
+        <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
+        <p className="text-sm text-muted-foreground mt-1">{description}</p>
+      </div>
+
+      {/* Content */}
+      <div className="space-y-6">
         {statusSection && (
           <>
             <div className="space-y-3" data-testid="status-section">
@@ -41,11 +42,11 @@ export function WizardStepLayout({
             <Separator />
           </>
         )}
-        
+
         <div className="space-y-4" data-testid="actions-section">
           {actionsSection}
         </div>
-        
+
         {navigationSection && (
           <>
             <Separator />
@@ -54,7 +55,7 @@ export function WizardStepLayout({
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -1331,15 +1331,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (fuelDates.length > 0 && bankDates.length > 0) {
         const maxFuelDay = toDateOnly(Math.max(...fuelDates));
         const minFuelDay = toDateOnly(Math.min(...fuelDates));
+        const dateBufferMs = rules.dateWindowDays * 86400000;
 
-        // Find bank transactions outside fuel date range (comparing date-only, ignoring time)
+        // Find bank transactions outside fuel date range + date window buffer (comparing date-only, ignoring time)
         unmatchableBankTransactions = bankTransactions.filter(t => {
           if (!t.transactionDate) return false;
           const bankTime = new Date(t.transactionDate).getTime();
           if (isNaN(bankTime)) return false;
           const bankDay = toDateOnly(bankTime);
-          // Bank date is after fuel data ends OR before fuel data starts
-          return bankDay > maxFuelDay || bankDay < minFuelDay;
+          // Bank date is after fuel data ends + buffer OR before fuel data starts - buffer
+          return bankDay > maxFuelDay + dateBufferMs || bankDay < minFuelDay - dateBufferMs;
         });
         
         if (unmatchableBankTransactions.length > 0) {
@@ -1698,15 +1699,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const txMap = new Map(allTransactions.map(t => [t.id, t]));
 
       // Match records (auto + manual matches)
+      // Build a map of matchId → all fuel transactions in that match (for invoice grouping)
+      const fuelByMatchId = new Map<string, typeof allTransactions>();
+      for (const t of allTransactions) {
+        if (t.matchId && t.sourceType === 'fuel') {
+          if (!fuelByMatchId.has(t.matchId)) fuelByMatchId.set(t.matchId, []);
+          fuelByMatchId.get(t.matchId)!.push(t);
+        }
+      }
+
       const matchedTxIds = new Set<string>();
       const details = matchRecords
         .map(m => {
           matchedTxIds.add(m.bankTransactionId);
           matchedTxIds.add(m.fuelTransactionId);
+          const allFuelItems = fuelByMatchId.get(m.id) || [];
+          // Mark all fuel items as matched
+          for (const f of allFuelItems) matchedTxIds.add(f.id);
           return {
             match: m,
             bankTransaction: txMap.get(m.bankTransactionId),
             fuelTransaction: txMap.get(m.fuelTransactionId),
+            // Include all fuel items when invoice grouping produced multiple items
+            fuelItems: allFuelItems.length > 1 ? allFuelItems : undefined,
           };
         })
         .filter(d => d.bankTransaction && d.fuelTransaction);

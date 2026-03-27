@@ -95,7 +95,7 @@ export default function Landing() {
 
             <a
               href="/api/login"
-              className="w-full flex items-center justify-center gap-2.5 bg-[#F4F4F0] text-[#1A1200] border border-[#E5E3DC] rounded-lg px-4 py-3 font-medium text-sm hover:bg-[#ECEAE6] transition-colors"
+              className="w-full flex items-center justify-center gap-2.5 bg-background text-[#1A1200] border border-[#E5E3DC] rounded-lg px-4 py-3 font-medium text-sm hover:bg-[#ECEAE6] transition-colors"
               data-testid="button-login"
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -133,7 +133,7 @@ export default function Landing() {
                   placeholder="Your name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className={`bg-[#F4F4F0] border ${errors.name ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                  className={`bg-background border ${errors.name ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
                 />
                 {errors.name && <span className="text-[11px] text-red-600">Please enter your name</span>}
               </div>
@@ -147,7 +147,7 @@ export default function Landing() {
                   placeholder="you@yourcompany.co.za"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={`bg-[#F4F4F0] border ${errors.email ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                  className={`bg-background border ${errors.email ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
                 />
                 {errors.email && <span className="text-[11px] text-red-600">Please enter a valid email address</span>}
               </div>
@@ -161,7 +161,7 @@ export default function Landing() {
                   placeholder="+27 82 000 0000"
                   value={formData.cell}
                   onChange={(e) => setFormData({ ...formData, cell: e.target.value })}
-                  className={`bg-[#F4F4F0] border ${errors.cell ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                  className={`bg-background border ${errors.cell ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
                 />
                 {errors.cell && <span className="text-[11px] text-red-600">Please enter your cell number</span>}
               </div>
@@ -192,7 +192,7 @@ export default function Landing() {
         ) : (
           <div key="success" className="w-full bg-white rounded-xl px-8 py-8" style={{ animation: "fadeSlideIn 0.2s ease-out" }}>
             <div className="flex flex-col items-center text-center gap-3 py-3">
-              <div className="w-11 h-11 rounded-full bg-[#F4F4F0] flex items-center justify-center">
+              <div className="w-11 h-11 rounded-full bg-background flex items-center justify-center">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M3 10.5L8 15.5L17 5.5" stroke="#1A1200" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>

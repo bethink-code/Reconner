@@ -46,6 +46,7 @@ interface InvestigateModalProps {
   matchingRules?: MatchingRulesConfig;
   onResolved: () => void;
   hideInvestigateButton?: boolean;
+  side?: 'bank' | 'fuel';
 }
 
 const formatCurrency = (amount: string | number) => {
@@ -81,6 +82,7 @@ export function InvestigateModal({
   matchingRules,
   onResolved,
   hideInvestigateButton,
+  side = 'bank',
 }: InvestigateModalProps) {
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -143,10 +145,10 @@ export function InvestigateModal({
 
   const invalidateAndAdvance = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions", "unmatched", "fuel"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "verification-summary"] });
     onResolved();
     onOpenChange(false);
   };
@@ -177,8 +179,10 @@ export function InvestigateModal({
     });
   };
 
-  const handleLink = (fuelTxn: Transaction) => {
-    createMatchMutation.mutate({ bankId: txn.id, fuelId: fuelTxn.id });
+  const handleLink = (candidateTxn: Transaction) => {
+    const bankId = side === 'fuel' ? candidateTxn.id : txn.id;
+    const fuelId = side === 'fuel' ? txn.id : candidateTxn.id;
+    createMatchMutation.mutate({ bankId, fuelId });
   };
 
   const isPending = resolveMutation.isPending || createMatchMutation.isPending;
@@ -198,9 +202,9 @@ export function InvestigateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden [--button-outline:#E5E3DC]" hideCloseButton>
+      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden bg-card [--button-outline:#E5E3DC]" hideCloseButton>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E3DC] bg-[#FAFAF6]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E3DC]">
           <p className="text-sm text-muted-foreground">
             Case <span className="font-semibold text-[#1A1200]">{currentIndex + 1} of {total}</span>
             {" — "}
@@ -228,11 +232,11 @@ export function InvestigateModal({
             </p>
           </div>
 
-          {/* Finding box — warm background card */}
-          <div className="rounded-xl border border-[#E5E3DC] overflow-hidden mb-6 bg-[#FAFAF6]">
+          {/* Finding box */}
+          <div className="rounded-xl border border-[#E5E3DC]/50 overflow-hidden mb-6">
             {/* Insight finding */}
             {item.insights.length > 0 && (
-              <div className="px-5 py-4 space-y-2">
+              <div className="px-5 py-4 space-y-2 bg-[#FEF9C3]/40">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[#B45309]">Finding</p>
                 {item.insights.map((insight, i) => (
                   <div key={i}>
@@ -254,7 +258,7 @@ export function InvestigateModal({
 
             {/* Matching rules — plain language */}
             {matchingRules && (
-              <div className="px-5 py-3 border-t border-[#E5E3DC]/60">
+              <div className="px-5 py-3 border-t border-[#E5E3DC]/40 bg-section">
                 <p className="text-xs text-muted-foreground">
                   Current matching settings: {matchingRules.dateWindowDays} day date window, R{Number(matchingRules.amountTolerance).toFixed(0)} amount tolerance, {matchingRules.timeWindowMinutes} min time window, and {matchingRules.minimumConfidence}% minimum confidence.
                 </p>
@@ -263,7 +267,7 @@ export function InvestigateModal({
 
             {/* Best match */}
             {item.bestMatch && (
-              <div className="px-5 py-4 border-t border-[#E5E3DC]/60">
+              <div className="px-5 py-4 border-t border-[#E5E3DC]/40 bg-[#DCFCE7]/30">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-[#166534] mb-1">Best Match</p>
@@ -306,7 +310,7 @@ export function InvestigateModal({
 
             {/* Other potential matches */}
             {item.potentialMatches.length > 1 && (
-              <div className="px-5 py-3 border-t border-[#E5E3DC]/60">
+              <div className="px-5 py-3 border-t border-[#E5E3DC]/40">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">Other Matches</p>
                 <div className="space-y-2">
                   {item.potentialMatches.slice(1, 4).map((match) => (
@@ -340,7 +344,7 @@ export function InvestigateModal({
 
             {/* Nearest by amount (when no best match) */}
             {!item.bestMatch && item.nearestByAmount.length > 0 && (
-              <div className="px-5 py-4 border-t border-[#E5E3DC]/60">
+              <div className="px-5 py-4 border-t border-[#E5E3DC]/40">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[#B45309] mb-3">Nearest by Amount</p>
                 <div className="space-y-3">
                   {item.nearestByAmount.slice(0, 3).map((match) => (
@@ -377,7 +381,7 @@ export function InvestigateModal({
           <div className="mb-4">
             <p className="text-sm font-semibold text-[#1A1200] mb-2">Reason</p>
             <Select value={selectedReason} onValueChange={setSelectedReason}>
-              <SelectTrigger className="border-[#E5E3DC] bg-[#FAFAF6]">
+              <SelectTrigger className="border-[#E5E3DC]">
                 <SelectValue placeholder="Select reason" />
               </SelectTrigger>
               <SelectContent>
@@ -397,13 +401,13 @@ export function InvestigateModal({
               value={resolutionNotes}
               onChange={(e) => setResolutionNotes(e.target.value)}
               placeholder="Add a note..."
-              className="min-h-[80px] resize-none border-[#E5E3DC] bg-[#FAFAF6]"
+              className="min-h-[80px] resize-none border-[#E5E3DC]"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E3DC] bg-[#FAFAF6]">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E3DC]">
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
@@ -454,7 +458,7 @@ export function InvestigateModal({
               className="bg-[#1A1200] text-[#F5EDE6] hover:bg-[#2A2218]"
             >
               {isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              Resolve
+              Match
             </Button>
           </div>
         </div>

@@ -279,6 +279,10 @@ var RESOLUTION_REASONS = [
   { value: "different_merchant", label: "Different merchant account" },
   { value: "refund_reversal", label: "Refund/reversal" },
   { value: "bank_fee", label: "Bank fee/charge" },
+  { value: "not_yet_settled", label: "Not yet settled at bank" },
+  { value: "grouped_invoice", label: "Part of grouped invoice" },
+  { value: "declined_at_bank", label: "Declined at bank" },
+  { value: "wrong_payment_type", label: "Wrong payment type recorded" },
   { value: "other", label: "Other" }
 ];
 
@@ -4449,12 +4453,13 @@ async function registerRoutes(app2) {
       if (fuelDates.length > 0 && bankDates.length > 0) {
         const maxFuelDay = toDateOnly(Math.max(...fuelDates));
         const minFuelDay = toDateOnly(Math.min(...fuelDates));
+        const dateBufferMs = rules.dateWindowDays * 864e5;
         unmatchableBankTransactions = bankTransactions.filter((t) => {
           if (!t.transactionDate) return false;
           const bankTime = new Date(t.transactionDate).getTime();
           if (isNaN(bankTime)) return false;
           const bankDay = toDateOnly(bankTime);
-          return bankDay > maxFuelDay || bankDay < minFuelDay;
+          return bankDay > maxFuelDay + dateBufferMs || bankDay < minFuelDay - dateBufferMs;
         });
         if (unmatchableBankTransactions.length > 0) {
           const maxFuelDateStr = new Date(maxFuelDay).toISOString().split("T")[0];
@@ -4698,14 +4703,25 @@ async function registerRoutes(app2) {
         storage.getResolutionsByPeriod(req.params.periodId)
       ]);
       const txMap = new Map(allTransactions.map((t) => [t.id, t]));
+      const fuelByMatchId = /* @__PURE__ */ new Map();
+      for (const t of allTransactions) {
+        if (t.matchId && t.sourceType === "fuel") {
+          if (!fuelByMatchId.has(t.matchId)) fuelByMatchId.set(t.matchId, []);
+          fuelByMatchId.get(t.matchId).push(t);
+        }
+      }
       const matchedTxIds = /* @__PURE__ */ new Set();
       const details = matchRecords.map((m) => {
         matchedTxIds.add(m.bankTransactionId);
         matchedTxIds.add(m.fuelTransactionId);
+        const allFuelItems = fuelByMatchId.get(m.id) || [];
+        for (const f of allFuelItems) matchedTxIds.add(f.id);
         return {
           match: m,
           bankTransaction: txMap.get(m.bankTransactionId),
-          fuelTransaction: txMap.get(m.fuelTransactionId)
+          fuelTransaction: txMap.get(m.fuelTransactionId),
+          // Include all fuel items when invoice grouping produced multiple items
+          fuelItems: allFuelItems.length > 1 ? allFuelItems : void 0
         };
       }).filter((d) => d.bankTransaction && d.fuelTransaction);
       for (const r of resolutions) {

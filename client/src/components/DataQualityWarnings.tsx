@@ -281,7 +281,7 @@ function IssueCard({
             </div>
 
             {explanation.userAction !== 'none' && explanation.userActionText && (
-              <Alert className="border-[#E5E3DC] bg-[#FAFAF6] dark:border-[#2A2218] dark:bg-[#1A1200]/10">
+              <Alert className="border-[#E5E3DC] bg-section dark:border-[#2A2218] dark:bg-[#1A1200]/10">
                 <Info className="h-4 w-4 text-[#1A1200] dark:text-[#F0EAE0]" />
                 <AlertDescription className="text-[#1A1200] dark:text-[#F0EAE0] text-sm">
                   <strong>Your action:</strong> {explanation.userActionText}
@@ -397,7 +397,7 @@ function ColumnMappingTip({ report, onUseSuggestedMapping }: {
   if (!hasColumnShift) return null;
 
   return (
-    <Alert className="mb-4 border-[#E5E3DC] bg-[#FAFAF6] dark:border-[#2A2218] dark:bg-[#1A1200]/10" data-testid="alert-column-tip">
+    <Alert className="mb-4 border-[#E5E3DC] bg-section dark:border-[#2A2218] dark:bg-[#1A1200]/10" data-testid="alert-column-tip">
       <TableProperties className="h-4 w-4 text-[#1A1200] dark:text-[#F0EAE0]" />
       <AlertTitle className="text-[#1A1200] dark:text-[#F0EAE0]">Tip for Column Mapping</AlertTitle>
       <AlertDescription className="text-[#1A1200] dark:text-[#F0EAE0]">

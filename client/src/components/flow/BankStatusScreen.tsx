@@ -23,6 +23,7 @@ interface BankStatusScreenProps {
   onContinue: () => void;
   onBack: () => void;
   isRemoving?: boolean;
+  stepColor?: string;
 }
 
 const STANDARD_BANKS = ["FNB", "ABSA", "Standard Bank", "Nedbank"];
@@ -56,7 +57,7 @@ export function BankStatusScreen({
       {bankFiles.map((file) => (
         <div
           key={file.id}
-          className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
+          className="flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-card"
           data-testid={`status-bank-file-${file.id}`}
         >
           <CheckCircle2 className="h-5 w-5 text-[#166534] dark:text-emerald-400 shrink-0" />

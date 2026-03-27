@@ -327,7 +327,7 @@ export default function ReconciliationFlow() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen flex flex-col bg-background">
       <header className="border-b bg-card sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center gap-4">
@@ -365,9 +365,9 @@ export default function ReconciliationFlow() {
         </div>
       </div>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <main className="flex-1 px-4 sm:px-6 py-8">
         {isAutoMatching ? (
-          <Card className="max-w-2xl mx-auto">
+          <Card className="max-w-2xl mx-auto bg-section">
             <CardHeader className="text-center">
               <CardTitle>Matching Transactions</CardTitle>
               <CardDescription>
@@ -386,7 +386,7 @@ export default function ReconciliationFlow() {
                   </div>
                   <div className="rounded-lg bg-muted/50 p-3">
                     <p className="text-2xl font-semibold">{txCounts.fuel}</p>
-                    <p className="text-xs text-muted-foreground">Fuel records</p>
+                    <p className="text-xs text-muted-foreground">Fuel card transactions</p>
                   </div>
                 </div>
               )}
@@ -396,7 +396,7 @@ export default function ReconciliationFlow() {
             </CardContent>
           </Card>
         ) : matchResult ? (
-          <Card className="max-w-2xl mx-auto">
+          <Card className="max-w-2xl mx-auto bg-section">
             <CardHeader className="text-center">
               <div className="mx-auto mb-4 flex items-center justify-center">
                 <Check className="h-5 w-5 text-[#1A1200]" />
@@ -421,7 +421,7 @@ export default function ReconciliationFlow() {
 
               {/* Fuel sales breakdown */}
               {verSummary && (
-                <div className="rounded-xl bg-[#FAFAF6] dark:bg-muted/30 p-4">
+                <div className="rounded-xl bg-section dark:bg-muted/30 p-4">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">Period Fuel Sales</p>
                   <div className="flex divide-x divide-border/50">
                     {[
@@ -446,7 +446,7 @@ export default function ReconciliationFlow() {
                   "rounded-lg p-3",
                   matchResult.matchesCreated > 0
                     ? "bg-[#DCFCE7] dark:bg-emerald-950/30"
-                    : "bg-[#FAFAF6] dark:bg-muted/30"
+                    : "bg-section dark:bg-muted/30"
                 )}>
                   <p className={cn(
                     "text-2xl font-semibold",
@@ -495,6 +495,7 @@ export default function ReconciliationFlow() {
                 periodId={periodId}
                 existingFile={files.find((f) => f.sourceType === "fuel")}
                 onComplete={handleFuelComplete}
+                stepColor={STEP_CANVAS_COLORS[currentStep]}
               />
             )}
 
@@ -507,6 +508,7 @@ export default function ReconciliationFlow() {
                 onContinue={handleContinueToMatching}
                 onBack={() => setCurrentStep("fuel")}
                 isRemoving={deleteFileMutation.isPending}
+                stepColor={STEP_CANVAS_COLORS[currentStep]}
               />
             )}
 
@@ -516,6 +518,7 @@ export default function ReconciliationFlow() {
                 bankName={currentBankName}
                 existingFile={replacingFileId ? files.find(f => f.id === replacingFileId) : undefined}
                 onBack={() => setBankSubStep("status")}
+                stepColor={STEP_CANVAS_COLORS[currentStep]}
               />
             )}
 
@@ -528,6 +531,7 @@ export default function ReconciliationFlow() {
                   setBankSubStep("status");
                 }}
                 isMatching={autoMatchMutation.isPending}
+                stepColor={STEP_CANVAS_COLORS[currentStep]}
               />
             )}
 
@@ -537,11 +541,18 @@ export default function ReconciliationFlow() {
                 onRerunMatching={handleRerunMatching}
                 onAddFuelData={handleAddFuelData}
                 onAddBankData={handleAddBankData}
+                stepColor={STEP_CANVAS_COLORS[currentStep]}
               />
             )}
           </>
         )}
       </main>
+
+      <footer className="bg-footer text-white/70">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 text-center text-sm">
+          lekana · a Bethink product
+        </div>
+      </footer>
     </div>
   );
 }

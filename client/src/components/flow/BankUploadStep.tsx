@@ -38,6 +38,7 @@ interface BankUploadStepProps {
   bankName: string;
   existingFile?: UploadedFile;
   onBack: () => void;
+  stepColor?: string;
 }
 
 type SubStep = "upload" | "quality" | "mapping";
@@ -260,17 +261,15 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
   if (subStep === "mapping" && suggestedMappings) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
-        <Card data-testid="card-column-mapping">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="bg-section rounded-2xl p-6" data-testid="card-column-mapping">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
               <Columns className="h-5 w-5 text-primary" />
               Confirm Column Mapping
-            </CardTitle>
-            <CardDescription>
-              We detected these columns from your {bankName} statement. Review and adjust if needed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">We detected these columns from your {bankName} statement. Review and adjust if needed.</p>
+          </div>
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {mappedFields.length} mapped, {ignoredCount} ignored
@@ -366,8 +365,8 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
                 )}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -375,23 +374,21 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
   if (subStep === "quality" && qualityReport) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
-        <Card data-testid="card-quality-check">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="bg-section rounded-2xl p-6" data-testid="card-quality-check">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
               Checking Your File
-            </CardTitle>
-            <CardDescription>{currentFile?.fileName}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DataQualityWarnings
-              report={qualityReport}
-              fileName={currentFile?.fileName || ""}
-              onContinue={handleQualityContinue}
-              isProcessing={processMutation.isPending}
-            />
-          </CardContent>
-        </Card>
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">{currentFile?.fileName}</p>
+          </div>
+          <DataQualityWarnings
+            report={qualityReport}
+            fileName={currentFile?.fileName || ""}
+            onContinue={handleQualityContinue}
+            isProcessing={processMutation.isPending}
+          />
+        </div>
         
         <div className="flex justify-start">
           <Button 
@@ -408,17 +405,15 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
 
   return (
     <div className="space-y-6">
-      <Card className="max-w-2xl mx-auto" data-testid="card-bank-upload">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+      <div className="bg-section rounded-2xl max-w-2xl mx-auto p-8" data-testid="card-bank-upload">
+        <div className="text-center mb-6">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <Building2 className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle>Upload {bankName} Statement</CardTitle>
-          <CardDescription>
-            Upload your {bankName} bank statement to verify against your fuel records.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          <h2 className="text-2xl font-semibold tracking-tight">Upload {bankName} Statement</h2>
+          <p className="text-sm text-muted-foreground mt-1">Upload your {bankName} bank statement to verify against your fuel records.</p>
+        </div>
+        <div className="space-y-4">
           {uploadMutation.isPending ? (
             <div className="space-y-4 p-8">
               <div className="text-center">
@@ -476,15 +471,15 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
             </div>
           )}
 
-          <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-start gap-2 p-3 bg-card rounded-lg">
             <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
               Download your merchant statement from your bank's online portal.
               Make sure it includes the date, amount, and reference for each transaction.
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
       
       <div className="max-w-2xl mx-auto">
         <Button 

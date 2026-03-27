@@ -15,6 +15,8 @@ export default {
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
         border: "hsl(var(--border) / <alpha-value>)",
+        section: "hsl(var(--section) / <alpha-value>)",
+        footer: "hsl(var(--footer) / <alpha-value>)",
         input: "hsl(var(--input) / <alpha-value>)",
         card: {
           DEFAULT: "hsl(var(--card) / <alpha-value>)",

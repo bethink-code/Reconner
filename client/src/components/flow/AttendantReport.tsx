@@ -106,7 +106,7 @@ export function AttendantReport({
       {sorted.map(row => (
         <div
           key={row.attendant}
-          className="rounded-lg bg-[#FAFAF6] dark:bg-muted/30 p-3"
+          className="rounded-lg bg-section dark:bg-muted/30 p-3"
         >
           {/* Name + verified amount */}
           <div className="flex items-center justify-between mb-1.5">

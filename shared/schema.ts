@@ -304,5 +304,9 @@ export const RESOLUTION_REASONS = [
   { value: "different_merchant", label: "Different merchant account" },
   { value: "refund_reversal", label: "Refund/reversal" },
   { value: "bank_fee", label: "Bank fee/charge" },
+  { value: "not_yet_settled", label: "Not yet settled at bank" },
+  { value: "grouped_invoice", label: "Part of grouped invoice" },
+  { value: "declined_at_bank", label: "Declined at bank" },
+  { value: "wrong_payment_type", label: "Wrong payment type recorded" },
   { value: "other", label: "Other" },
 ] as const;

@@ -40,6 +40,7 @@ interface FuelUploadStepProps {
   periodId: string;
   existingFile?: UploadedFile;
   onComplete: () => void;
+  stepColor?: string;
 }
 
 type SubStep = "upload" | "quality" | "mapping" | "complete";
@@ -270,19 +271,17 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
 
   if (subStep === "complete") {
     return (
-      <Card className="max-w-2xl mx-auto" data-testid="card-fuel-complete">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+      <div className="bg-section rounded-2xl max-w-2xl mx-auto p-8" data-testid="card-fuel-complete">
+        <div className="text-center mb-6">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <Check className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle>Fuel Data Ready</CardTitle>
-          <CardDescription>
-            Your fuel transactions have been imported successfully.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          <h2 className="text-2xl font-semibold tracking-tight">Fuel Data Ready</h2>
+          <p className="text-sm text-muted-foreground mt-1">Your fuel transactions have been imported successfully.</p>
+        </div>
+        <div className="space-y-4">
           {currentFile && (
-            <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center gap-3 p-3 bg-card rounded-lg">
               <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{currentFile.fileName}</p>
@@ -290,8 +289,8 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
                   {currentFile.rowCount?.toLocaleString()} transactions imported
                 </p>
               </div>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={() => setSubStep("upload")}
                 data-testid="button-replace-fuel"
@@ -301,34 +300,32 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
               </Button>
             </div>
           )}
-          
-          <Button 
-            className="w-full" 
+
+          <Button
+            className="w-full"
             onClick={onComplete}
             data-testid="button-continue-to-bank"
           >
             Continue to Bank Data
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   if (subStep === "mapping" && suggestedMappings) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
-        <Card data-testid="card-column-mapping">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="bg-section rounded-2xl p-6" data-testid="card-column-mapping">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
               <Columns className="h-5 w-5 text-primary" />
               Confirm Column Mapping
-            </CardTitle>
-            <CardDescription>
-              We detected these columns from your file. Review and adjust if needed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">We detected these columns from your file. Review and adjust if needed.</p>
+          </div>
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {mappedFields.length} mapped, {ignoredCount} ignored
@@ -424,8 +421,8 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
                 )}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -433,23 +430,21 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
   if (subStep === "quality" && qualityReport) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
-        <Card data-testid="card-quality-check">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="bg-section rounded-2xl p-6" data-testid="card-quality-check">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
               <Fuel className="h-5 w-5 text-primary" />
               Checking Your File
-            </CardTitle>
-            <CardDescription>{currentFile?.fileName}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DataQualityWarnings
-              report={qualityReport}
-              fileName={currentFile?.fileName || ""}
-              onContinue={handleQualityContinue}
-              isProcessing={processMutation.isPending}
-            />
-          </CardContent>
-        </Card>
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">{currentFile?.fileName}</p>
+          </div>
+          <DataQualityWarnings
+            report={qualityReport}
+            fileName={currentFile?.fileName || ""}
+            onContinue={handleQualityContinue}
+            isProcessing={processMutation.isPending}
+          />
+        </div>
         
         <div className="flex justify-start">
           <Button 
@@ -465,18 +460,18 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
   }
 
   return (
-    <Card className="max-w-2xl mx-auto" data-testid="card-fuel-upload">
-      <CardHeader className="text-center">
-        <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+    <div className="bg-section rounded-2xl max-w-2xl mx-auto p-8" data-testid="card-fuel-upload">
+      <div className="text-center mb-6">
+        <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
           <Fuel className="h-6 w-6 text-primary" />
         </div>
-        <CardTitle>Upload Fuel Data</CardTitle>
-        <CardDescription>
+        <h2 className="text-2xl font-semibold tracking-tight">Upload Fuel Data</h2>
+        <p className="text-sm text-muted-foreground mt-1">
           Upload your fuel transactions first — this is your source of truth.
           We'll match your bank transactions against these records.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+      <div className="space-y-4">
         {uploadMutation.isPending ? (
           <div className="space-y-4 p-8">
             <div className="text-center">
@@ -534,14 +529,15 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
           </div>
         )}
 
-        <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
+        <div className="flex items-start gap-2 p-3 bg-card rounded-lg">
           <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
           <p className="text-xs text-muted-foreground">
             Export your daily transaction report from your fuel management system.
             Make sure it includes the date, amount, and payment type for each sale.
+            For best results, include fuel data for 3 days before and after your bank statement period.
           </p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

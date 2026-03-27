@@ -119,7 +119,7 @@ export default function Convert() {
   const previewRows = result?.rows.slice(0, 50) ?? [];
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0]">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-white border-b border-[#E5E3DC] px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center gap-4">
@@ -240,7 +240,7 @@ export default function Convert() {
             <div className="bg-white rounded-xl border border-[#E5E3DC] overflow-hidden mb-4">
               <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-[#F4F4F0] sticky top-0">
+                  <thead className="bg-background sticky top-0">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-[#1A1200]/60 w-10">#</th>
                       {result.headers.map((h, i) => (
@@ -252,7 +252,7 @@ export default function Convert() {
                   </thead>
                   <tbody>
                     {previewRows.map((row, i) => (
-                      <tr key={i} className="border-t border-[#E5E3DC]/50 hover:bg-[#F4F4F0]/50">
+                      <tr key={i} className="border-t border-[#E5E3DC]/50 hover:bg-background/50">
                         <td className="px-3 py-2 text-xs text-[#1A1200]/30">{i + 1}</td>
                         {result.headers.map((h, j) => (
                           <td key={j} className="px-3 py-2 text-[#1A1200] whitespace-nowrap max-w-[200px] truncate">
@@ -265,7 +265,7 @@ export default function Convert() {
                 </table>
               </div>
               {result.rowCount > 50 && (
-                <div className="px-4 py-2 bg-[#F4F4F0] text-xs text-[#1A1200]/50 text-center border-t border-[#E5E3DC]">
+                <div className="px-4 py-2 bg-background text-xs text-[#1A1200]/50 text-center border-t border-[#E5E3DC]">
                   Showing 50 of {result.rowCount} rows. Download for full data.
                 </div>
               )}
@@ -291,7 +291,7 @@ export default function Convert() {
               {state === "preview" && result.confidence !== undefined && result.confidence >= 60 && result.aiAvailable && (
                 <button
                   onClick={handleAiExtract}
-                  className="inline-flex items-center gap-2 bg-transparent text-[#1A1200] border border-[#E5E3DC] px-4 py-2.5 rounded-lg text-sm hover:bg-[#F4F4F0] transition-colors"
+                  className="inline-flex items-center gap-2 bg-transparent text-[#1A1200] border border-[#E5E3DC] px-4 py-2.5 rounded-lg text-sm hover:bg-background transition-colors"
                 >
                   <Sparkles className="w-4 h-4" />
                   Try AI extraction

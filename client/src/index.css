@@ -23,13 +23,15 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  /* Page & surface */
-  --background: 50 8% 95%;       /* #F4F4F0 — warm off-white page bg */
+  /* Page & surface — 3-layer hierarchy */
+  --background: 48 8% 92%;       /* #EFEFE8 — page bg */
   --foreground: 47 100% 5%;      /* #1A1200 — dark brown-black */
   --border: 45 6% 88%;           /* #E5E3DC — warm border */
-  --card: 0 0% 100%;             /* #FFFFFF — card fill */
+  --section: 48 8% 96%;          /* #F7F7F4 — section containers */
+  --card: 0 0% 100%;             /* #FFFFFF — card/UI elements */
   --card-foreground: 47 100% 5%;
   --card-border: 0 0% 100%;      /* transparent — bg separation replaces borders */
+  --footer: 0 0% 24%;            /* #3C3C3C — footer */
 
   /* Sidebar */
   --sidebar: 50 8% 94%;
@@ -46,11 +48,12 @@
   --popover-foreground: 47 100% 5%;
   --popover-border: 45 6% 88%;
 
-  /* Semantic */
-  --primary: 47 100% 5%;          /* #1A1200 — primary buttons are dark */
-  --primary-foreground: 30 30% 93%; /* #F5EDE6 — warm off-white on dark */
-  --secondary: 50 8% 90%;
-  --secondary-foreground: 47 100% 5%;
+  /* Buttons — 4 tiers */
+  --primary: 18 78% 51%;           /* #E8601C — burnt orange */
+  --primary-foreground: 0 0% 100%; /* white text on primary */
+  --secondary: 0 0% 100%;          /* #FFFFFF — white bg */
+  --secondary-foreground: 0 0% 24%; /* #3C3C3C — dark text */
+  --secondary-border: 0 0% 92%;    /* #EBEBEB */
   --muted: 50 8% 92%;
   --muted-foreground: 47 6% 42%;
   --accent: 48 100% 48%;          /* #F5C400 — Sunshine yellow */
@@ -122,9 +125,11 @@
   --background: 35 30% 6%;        /* Very dark warm brown */
   --foreground: 40 12% 90%;       /* Warm off-white text */
   --border: 35 12% 18%;
-  --card: 35 20% 10%;             /* Slightly lighter than bg */
+  --section: 35 20% 10%;          /* Section containers — dark mode */
+  --card: 35 20% 13%;             /* Slightly lighter than section */
   --card-foreground: 40 12% 90%;
   --card-border: 35 12% 16%;
+  --footer: 0 0% 10%;             /* Footer — dark mode */
 
   --sidebar: 35 18% 12%;
   --sidebar-foreground: 40 12% 90%;

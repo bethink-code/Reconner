@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronLeft, ChevronRight, Link2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import { cn } from "@/lib/utils";
 import { formatRand, formatDate } from "@/lib/format";
 import { RESOLUTION_REASONS } from "@shared/schema";
@@ -49,6 +50,7 @@ export function InvestigateModal({
   side = 'bank',
 }: InvestigateModalProps) {
   const { toast } = useToast();
+  const invalidateAll = useInvalidateReconciliation(periodId);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [selectedReason, setSelectedReason] = useState("");
   const [resolutionNotes, setResolutionNotes] = useState("");
@@ -131,11 +133,7 @@ export function InvestigateModal({
   });
 
   const invalidateAndAdvance = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "verification-summary"] });
+    invalidateAll();
     onResolved();
     onOpenChange(false);
   };

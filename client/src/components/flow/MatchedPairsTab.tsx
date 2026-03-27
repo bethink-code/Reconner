@@ -23,7 +23,8 @@ import { Unlink, Search, ChevronLeft, ChevronRight, HelpCircle, ExternalLink, Lo
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import { cn } from "@/lib/utils";
 import { formatRand } from "@/lib/format";
 
@@ -100,15 +101,15 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
     enabled: !!periodId,
   });
 
+  const invalidateAll = useInvalidateReconciliation(periodId);
+
   const unmatchMutation = useMutation({
     mutationFn: async (matchId: string) => {
       return await apiRequest("DELETE", `/api/matches/${matchId}`);
     },
     onSuccess: () => {
       toast({ title: "Match removed", description: "Both transactions are now unmatched and available for re-matching." });
-      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
+      invalidateAll();
       setPendingUnmatch(null);
     },
     onError: (error: Error) => {

@@ -19,14 +19,13 @@ import {
   Search,
   X,
   Check,
-  ChevronRight,
-  Clock,
   ArrowRight,
   Building2,
   Fuel,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import { cn } from "@/lib/utils";
 import { formatRand, formatDate } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,6 +33,7 @@ import type { Transaction, TransactionResolution, MatchingRulesConfig } from "@s
 import { CATEGORY_LABELS } from "@/lib/reconciliation-types";
 import type { PaginatedResponse, PotentialMatch, TransactionInsight, CategorizedTransaction } from "@/lib/reconciliation-types";
 import { InvestigateModal } from "./InvestigateModal";
+import { TransactionRow } from "./TransactionRow";
 
 const LOW_VALUE_THRESHOLD = 50;
 
@@ -339,13 +339,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   };
 
   // ── Mutations ──
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "verification-summary"] });
-  };
+  const invalidateAll = useInvalidateReconciliation(periodId);
 
   const createMatchMutation = useMutation({
     mutationFn: async ({ primaryId, candidateId }: { primaryId: string; candidateId: string }) => {
@@ -518,38 +512,18 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
           ) : (
             <div className="space-y-2">
               {filteredTransactions.map(item => {
-                const txn = item.transaction;
                 const isResolved = item.category === 'resolved';
                 const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
                 return (
-                  <div
-                    key={txn.id}
-                    className={cn(
-                      "bg-card flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:border-foreground/20",
-                      isResolved ? "border-[#166534]/20 opacity-75" : "border-[#E5E3DC]/50"
-                    )}
-                    onClick={() => openModal(txn.id)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={cn("tabular-nums font-bold", isResolved && "text-muted-foreground")}>{formatRand(txn.amount)}</span>
-                        <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
-                        {txn.transactionTime && (
-                          <span className="text-sm text-muted-foreground flex items-center gap-0.5">
-                            <Clock className="h-3 w-3" />{txn.transactionTime}
-                          </span>
-                        )}
-                      </div>
-                      {txn.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{txn.description}</p>}
-                      {!isResolved && item.insights.length > 0 && (
-                        <p className="text-xs text-[#B45309] mt-0.5">{item.insights[0].message}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 ml-2">
-                      <Badge variant="outline" className={cn("text-xs", isResolved && "text-[#166534] border-[#166534]/30")}>{categoryLabel}</Badge>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </div>
+                  <TransactionRow
+                    key={item.transaction.id}
+                    transaction={item.transaction}
+                    onClick={() => openModal(item.transaction.id)}
+                    dimmed={isResolved}
+                    badge={<Badge variant="outline" className={cn("text-xs", isResolved && "text-[#166534] border-[#166534]/30")}>{categoryLabel}</Badge>}
+                    subtitle={!isResolved && item.insights.length > 0 ? item.insights[0].message : undefined}
+                    subtitleColor={!isResolved && item.insights.length > 0 ? "text-[#B45309]" : undefined}
+                  />
                 );
               })}
             </div>

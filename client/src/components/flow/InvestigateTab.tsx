@@ -5,13 +5,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Check,
-  ChevronRight,
-  Clock,
   Download,
 } from "lucide-react";
-import { formatRand, formatDate } from "@/lib/format";
+import { formatRand } from "@/lib/format";
 import type { TransactionResolution } from "@shared/schema";
 import type { PaginatedResponse } from "@/lib/reconciliation-types";
+import { TransactionRow } from "./TransactionRow";
 
 interface InvestigateTabProps {
   periodId: string;
@@ -164,29 +163,12 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
           </div>
           <div className="space-y-2">
             {flaggedBank.map(({ transaction: txn, resolution }) => (
-              <Card key={txn.id} className="hover:border-foreground/20 transition-colors">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base tabular-nums font-bold">{formatRand(parseFloat(txn.amount))}</span>
-                        <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
-                        {txn.transactionTime && (
-                          <span className="text-sm text-muted-foreground flex items-center gap-0.5">
-                            <Clock className="h-3 w-3" />{txn.transactionTime}
-                          </span>
-                        )}
-                        {txn.sourceName && <span className="text-sm text-muted-foreground">· {txn.sourceName}</span>}
-                      </div>
-                      {txn.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{txn.description}</p>}
-                      {resolution?.notes && (
-                        <p className="text-xs text-[#B45309] mt-1">{resolution.notes}</p>
-                      )}
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-                  </div>
-                </CardContent>
-              </Card>
+              <TransactionRow
+                key={txn.id}
+                transaction={txn}
+                subtitle={resolution?.notes || undefined}
+                subtitleColor="text-[#B45309]"
+              />
             ))}
           </div>
         </div>
@@ -201,28 +183,12 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
           </div>
           <div className="space-y-2">
             {flaggedFuel.map(({ transaction: txn, resolution }) => (
-              <Card key={txn.id} className="hover:border-foreground/20 transition-colors">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base tabular-nums font-bold">{formatRand(parseFloat(txn.amount))}</span>
-                        <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
-                        {txn.transactionTime && (
-                          <span className="text-sm text-muted-foreground flex items-center gap-0.5">
-                            <Clock className="h-3 w-3" />{txn.transactionTime}
-                          </span>
-                        )}
-                      </div>
-                      {txn.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{txn.description}</p>}
-                      {resolution?.notes && (
-                        <p className="text-xs text-[#B45309] mt-1">{resolution.notes}</p>
-                      )}
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-                  </div>
-                </CardContent>
-              </Card>
+              <TransactionRow
+                key={txn.id}
+                transaction={txn}
+                subtitle={resolution?.notes || undefined}
+                subtitleColor="text-[#B45309]"
+              />
             ))}
           </div>
         </div>

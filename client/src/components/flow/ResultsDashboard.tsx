@@ -13,50 +13,12 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRand } from "@/lib/format";
 import type { MatchingRulesConfig, TransactionResolution } from "@shared/schema";
+import type { PeriodSummary } from "@/lib/reconciliation-types";
+import { deriveSummaryStats } from "@/lib/reconciliation-utils";
 import { MatchedPairsTab } from "./MatchedPairsTab";
 import { ReviewTab } from "./ReviewTab";
 import { InvestigateTab } from "./InvestigateTab";
 import { InsightsTab } from "./InsightsTab";
-
-interface PeriodSummary {
-  totalTransactions: number;
-  matchedTransactions: number;
-  matchedPairs: number;
-  unmatchedTransactions: number;
-  matchRate: number;
-  totalFuelAmount: number;
-  totalBankAmount: number;
-  discrepancy: number;
-  fuelTransactions: number;
-  bankTransactions: number;
-  cardFuelTransactions: number;
-  cashFuelTransactions: number;
-  cardFuelAmount: number;
-  cashFuelAmount: number;
-  debtorFuelTransactions: number;
-  debtorFuelAmount: number;
-  unmatchedBankTransactions: number;
-  unmatchedBankAmount: number;
-  unmatchedCardTransactions: number;
-  unmatchedCardAmount: number;
-  unmatchableBankTransactions?: number;
-  unmatchableBankAmount?: number;
-  excludedBankTransactions?: number;
-  excludedBankAmount?: number;
-  matchedBankAmount: number;
-  matchedFuelAmount: number;
-  resolvedBankTransactions?: number;
-  scopedCardCount: number;
-  scopedCardAmount: number;
-  scopedMatchedCount: number;
-  scopedMatchedAmount: number;
-  scopedUnmatchedCount: number;
-  scopedUnmatchedAmount: number;
-  fuelDateRange?: { min: string; max: string };
-  bankDateRange?: { min: string; max: string };
-  bankCoverageRange?: { min: string; max: string };
-  perBankBreakdown?: { bankName: string; approvedCount: number; approvedAmount: number; declinedCount: number; declinedAmount: number; cancelledCount: number; cancelledAmount: number; totalCount: number; totalAmount: number }[];
-}
 
 interface ResultsDashboardProps {
   periodId: string;
@@ -109,12 +71,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   }
 
   // ── Calculations ──
-  const unmatchableBank = summary.unmatchableBankTransactions || 0;
-  const excludedBank = summary.excludedBankTransactions || 0;
-  const matchableBankTotal = summary.bankTransactions - unmatchableBank - excludedBank;
-  const unmatchedBank = summary.unmatchedBankTransactions;
-  const bankMatchPct = matchableBankTotal > 0 ? Math.round((summary.matchedPairs / matchableBankTotal) * 100) : 0;
-  const unmatchedFuelCount = summary.cardFuelTransactions - summary.debtorFuelTransactions - summary.matchedPairs;
+  const { unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, bankMatchPct, unmatchedFuelCount } = deriveSummaryStats(summary);
 
   // Badge counts — subtract resolved/flagged transactions from unmatched totals
   const resolvedCount = resolutions?.filter(r => r.resolutionType !== 'flagged').length || 0;

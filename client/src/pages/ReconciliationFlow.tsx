@@ -5,7 +5,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Loader2, Check } from "lucide-react";
 import { ReconciliationStepper, STEP_CANVAS_COLORS, type ReconciliationStep, type StepEligibility } from "@/components/ReconciliationStepper";
 import { useToast } from "@/hooks/use-toast";
@@ -421,7 +420,7 @@ export default function ReconciliationFlow() {
 
               {/* Fuel sales breakdown */}
               {verSummary && (
-                <div className="rounded-xl bg-section dark:bg-muted/30 p-4">
+                <div className="rounded-xl bg-section p-4">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">Period Fuel Sales</p>
                   <div className="flex divide-x divide-border/50">
                     {[
@@ -446,7 +445,7 @@ export default function ReconciliationFlow() {
                   "rounded-lg p-3",
                   matchResult.matchesCreated > 0
                     ? "bg-[#DCFCE7] dark:bg-emerald-950/30"
-                    : "bg-section dark:bg-muted/30"
+                    : "bg-section"
                 )}>
                   <p className={cn(
                     "text-2xl font-semibold",

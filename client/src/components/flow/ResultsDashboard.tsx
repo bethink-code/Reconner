@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatRand } from "@/lib/format";
 import type { MatchingRulesConfig, TransactionResolution } from "@shared/schema";
 import { MatchedPairsTab } from "./MatchedPairsTab";
 import { ReviewTab } from "./ReviewTab";
@@ -98,9 +99,6 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
     enabled: !!periodId,
   });
 
-  const formatRandExact = (amount: number) =>
-    "R " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   if (isLoading || !summary) {
     return (
       <div className="space-y-4 max-w-2xl mx-auto">
@@ -168,9 +166,9 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
           <div className="bg-section rounded-2xl p-6 space-y-6">
             <div className="grid grid-cols-4 gap-3">
               {([
-                { key: "transactions", label: "01 · Transactions", desc: "How did matching go?", value: `${bankMatchPct}%`, sub: `${summary.matchedPairs} matched · ${formatRandExact(summary.matchedBankAmount)}`, context: `of ${matchableBankTotal} transactions · ${formatRandExact(summary.totalBankAmount)}`, action: "View all transactions", hasIssue: false },
-                { key: "review", side: "bank" as const, label: "02 · Review Bank", desc: "Bank money with no fuel explanation", value: String(unmatchedBank), sub: formatRandExact(summary.unmatchedBankAmount || 0), context: `of ${matchableBankTotal} totalling ${formatRandExact(summary.totalBankAmount)}`, action: "Review bank side", hasIssue: unmatchedBank > 0 },
-                { key: "review", side: "fuel" as const, label: "03 · Review Fuel", desc: "Fuel dispensed, no bank payment", value: String(Math.max(0, unmatchedFuelCount)), sub: formatRandExact(summary.unmatchedCardAmount || 0), context: `of ${summary.cardFuelTransactions - summary.debtorFuelTransactions} totalling ${formatRandExact(summary.cardFuelAmount - summary.debtorFuelAmount)}`, action: "Review fuel side", hasIssue: unmatchedFuelCount > 0 },
+                { key: "transactions", label: "01 · Transactions", desc: "How did matching go?", value: `${bankMatchPct}%`, sub: `${summary.matchedPairs} matched · ${formatRand(summary.matchedBankAmount)}`, context: `of ${matchableBankTotal} transactions · ${formatRand(summary.totalBankAmount)}`, action: "View all transactions", hasIssue: false },
+                { key: "review", side: "bank" as const, label: "02 · Review Bank", desc: "Bank money with no fuel explanation", value: String(unmatchedBank), sub: formatRand(summary.unmatchedBankAmount || 0), context: `of ${matchableBankTotal} totalling ${formatRand(summary.totalBankAmount)}`, action: "Review bank side", hasIssue: unmatchedBank > 0 },
+                { key: "review", side: "fuel" as const, label: "03 · Review Fuel", desc: "Fuel dispensed, no bank payment", value: String(Math.max(0, unmatchedFuelCount)), sub: formatRand(summary.unmatchedCardAmount || 0), context: `of ${summary.cardFuelTransactions - summary.debtorFuelTransactions} totalling ${formatRand(summary.cardFuelAmount - summary.debtorFuelAmount)}`, action: "Review fuel side", hasIssue: unmatchedFuelCount > 0 },
                 { key: "investigate", label: "04 · Investigate", desc: "Your real-world follow-up list", value: String(flaggedCount), sub: flaggedCount === 0 ? "nothing to investigate yet" : "items flagged", context: "", action: "View investigate list", hasIssue: flaggedCount > 0 },
               ] as const).map((card, idx) => (
                 <InfoCard
@@ -213,7 +211,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                   <div key={seg.key} className="flex-1 py-2 px-3 text-center">
                     <InfoCardLabel>{seg.label}</InfoCardLabel>
                     <p className="text-base font-semibold tabular-nums">{seg.count}</p>
-                    <p className="text-sm text-muted-foreground tabular-nums">{formatRandExact(seg.amount)}</p>
+                    <p className="text-sm text-muted-foreground tabular-nums">{formatRand(seg.amount)}</p>
                   </div>
                 ))}
               </InfoCardContent>

@@ -12,30 +12,11 @@ import { ChevronLeft, ChevronRight, Link2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { formatRand, formatDate } from "@/lib/format";
 import { RESOLUTION_REASONS } from "@shared/schema";
 import type { Transaction, MatchingRulesConfig } from "@shared/schema";
-
-interface PotentialMatch {
-  transaction: Transaction;
-  confidence: number;
-  timeDiff: string;
-  amountDiff: number;
-}
-
-interface TransactionInsight {
-  type: 'possible_tip' | 'overfill' | 'duplicate_charge' | 'no_fuel_record';
-  message: string;
-  detail?: string;
-}
-
-interface CategorizedTransaction {
-  transaction: Transaction;
-  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value' | 'resolved';
-  bestMatch?: PotentialMatch;
-  potentialMatches: PotentialMatch[];
-  nearestByAmount: PotentialMatch[];
-  insights: TransactionInsight[];
-}
+import { CATEGORY_LABELS } from "@/lib/reconciliation-types";
+import type { CategorizedTransaction } from "@/lib/reconciliation-types";
 
 interface InvestigateModalProps {
   open: boolean;
@@ -48,23 +29,6 @@ interface InvestigateModalProps {
   hideInvestigateButton?: boolean;
   side?: 'bank' | 'fuel';
 }
-
-const formatCurrency = (amount: string | number) => {
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return "R " + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-const formatDate = (dateStr: string) => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  quick_win: "Quick win",
-  investigate: "Needs investigation",
-  no_match: "No match found",
-  low_value: "Low value",
-};
 
 const INSIGHT_REASON_MAP: Record<string, string> = {
   possible_tip: "possible_tip",
@@ -245,7 +209,7 @@ export function InvestigateModal({
         <div className="px-6 py-6 max-h-[65vh] overflow-y-auto">
           {/* Transaction summary — hero section */}
           <div className="mb-6">
-            <p className="text-3xl font-bold tabular-nums text-[#1A1200]">{formatCurrency(txn.amount)}</p>
+            <p className="text-3xl font-bold tabular-nums text-[#1A1200]">{formatRand(txn.amount)}</p>
             <p className="text-sm text-muted-foreground mt-2">
               <span className="font-medium text-[#1A1200]">{txn.description || txn.sourceName || "Unknown"}</span>
               {" · "}
@@ -295,7 +259,7 @@ export function InvestigateModal({
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-[#166534] mb-1">Best Match</p>
                     <p className="text-base font-bold tabular-nums text-[#1A1200]">
-                      {formatCurrency(item.bestMatch.transaction.amount)}
+                      {formatRand(item.bestMatch.transaction.amount)}
                       {(() => {
                         const bankAmt = parseFloat(item.transaction.amount) || 0;
                         const fuelAmt = parseFloat(item.bestMatch!.transaction.amount) || 0;
@@ -339,11 +303,11 @@ export function InvestigateModal({
                   {item.potentialMatches.slice(1, 4).map((match) => (
                     <div key={match.transaction.id} className="flex items-center justify-between">
                       <div>
-                        <span className="text-sm tabular-nums font-semibold">{formatCurrency(match.transaction.amount)}</span>
+                        <span className="text-sm tabular-nums font-semibold">{formatRand(match.transaction.amount)}</span>
                         <span className="text-xs text-muted-foreground ml-2">
                           {formatDate(match.transaction.transactionDate)}
                           {match.transaction.transactionTime && ` ${match.transaction.transactionTime}`}
-                          {` · diff ${formatCurrency(match.amountDiff)}`}
+                          {` · diff ${formatRand(match.amountDiff)}`}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -373,11 +337,11 @@ export function InvestigateModal({
                   {item.nearestByAmount.slice(0, 3).map((match) => (
                     <div key={match.transaction.id} className="flex items-center justify-between">
                       <div>
-                        <span className="text-sm tabular-nums font-semibold">{formatCurrency(match.transaction.amount)}</span>
+                        <span className="text-sm tabular-nums font-semibold">{formatRand(match.transaction.amount)}</span>
                         <span className="text-xs text-muted-foreground ml-2">
                           {formatDate(match.transaction.transactionDate)}
                           {match.transaction.transactionTime && ` ${match.transaction.transactionTime}`}
-                          {` · diff ${formatCurrency(match.amountDiff)} · ${match.timeDiff}`}
+                          {` · diff ${formatRand(match.amountDiff)} · ${match.timeDiff}`}
                         </span>
                       </div>
                       <Button

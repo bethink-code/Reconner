@@ -272,7 +272,7 @@ export function ConfigureMatchingStep({
 
           {/* Data Coverage Preview */}
           {verSummary && (
-            <div className="rounded-lg bg-section dark:bg-muted/30 p-4 space-y-2">
+            <div className="rounded-lg bg-section p-4 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Data Coverage</p>
               {period && (
                 <div className="flex justify-between text-xs">

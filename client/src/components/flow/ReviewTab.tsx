@@ -28,49 +28,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { formatRand, formatDate } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
 import type { Transaction, TransactionResolution, MatchingRulesConfig } from "@shared/schema";
+import { CATEGORY_LABELS } from "@/lib/reconciliation-types";
+import type { PaginatedResponse, PotentialMatch, TransactionInsight, CategorizedTransaction } from "@/lib/reconciliation-types";
 import { InvestigateModal } from "./InvestigateModal";
 
 const LOW_VALUE_THRESHOLD = 50;
-
-const CATEGORY_LABELS: Record<string, string> = {
-  quick_win: "Quick win",
-  investigate: "Needs review",
-  no_match: "No match",
-  low_value: "Low value",
-  resolved: "Matched",
-};
-
-interface PaginatedResponse {
-  transactions: Transaction[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
-interface PotentialMatch {
-  transaction: Transaction;
-  confidence: number;
-  timeDiff: string;
-  amountDiff: number;
-}
-
-interface TransactionInsight {
-  type: 'possible_tip' | 'overfill' | 'duplicate_charge' | 'no_fuel_record';
-  message: string;
-  detail?: string;
-}
-
-interface CategorizedTransaction {
-  transaction: Transaction;
-  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value' | 'resolved';
-  bestMatch?: PotentialMatch;
-  potentialMatches: PotentialMatch[];
-  nearestByAmount: PotentialMatch[];
-  insights: TransactionInsight[];
-}
 
 interface ReviewTabProps {
   periodId: string;
@@ -429,17 +394,6 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     onError: (error: Error) => { toast({ title: "Failed to flag", description: error.message, variant: "destructive" }); },
   });
 
-  // ── Helpers ──
-  const formatCurrency = (amount: string | number) => {
-    const num = typeof amount === "string" ? parseFloat(amount) : amount;
-    return "R " + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
-  };
-
   // ── Landing counts ──
   const bankUnmatchedCount = unmatchedData?.transactions?.filter(t => !resolvedIds.has(t.id)).length || 0;
   const bankUnmatchedAmount = unmatchedData?.transactions?.filter(t => !resolvedIds.has(t.id)).reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
@@ -450,33 +404,6 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const fuelUnmatchedAmount = fuelData?.transactions?.filter(t => !resolvedIds.has(t.id)).reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
   const fuelTotalCount = fuelData?.total || 0;
   const fuelTotalAmount = fuelData?.transactions?.reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
-
-  // Flagged counts per side (approximate — flagged resolutions don't store side, but we can check against the transaction lists)
-  const bankFlaggedIds = useMemo(() => {
-    if (!resolutions || !unmatchedData) return new Set<string>();
-    const flagIds = new Set(resolutions.filter(r => r.resolutionType === 'flagged').map(r => r.transactionId));
-    // We can't easily determine side from resolutions alone, so count all flagged for now
-    return flagIds;
-  }, [resolutions, unmatchedData]);
-
-  const fuelFlaggedIds = bankFlaggedIds; // Same set — shown on both sides until we refine
-
-  // Count resolution types for the "Review Complete" state
-  const resolutionCounts = useMemo(() => {
-    const counts = { linked: 0, reviewed: 0, dismissed: 0, flagged: 0, total: 0 };
-    if (!resolutions) return counts;
-    resolutions.forEach(r => {
-      counts.total++;
-      if (r.resolutionType === 'linked') counts.linked++;
-      else if (r.resolutionType === 'reviewed') counts.reviewed++;
-      else if (r.resolutionType === 'dismissed') counts.dismissed++;
-      else if (r.resolutionType === 'flagged') counts.flagged++;
-    });
-    return counts;
-  }, [resolutions]);
-
-  const catAmount = categorizedTransactions.reduce((sum, t) => sum + (parseFloat(t.transaction.amount) || 0), 0);
-  const flagAmount = flaggedTransactions.reduce((sum, f) => sum + (parseFloat(f.transaction.amount) || 0), 0);
 
   if (unmatchedLoading || !fuelData || !unmatchedData) {
     return (
@@ -489,12 +416,6 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   // ═══════════════════════════════════════════════════════════
   //  SINGLE SCREEN — Summary cards + filtered list
   // ═══════════════════════════════════════════════════════════
-  const sideLabel = side === 'fuel' ? 'fuel card sales with no bank payment' : 'bank transactions with no fuel match';
-  const sideCount = side === 'bank' ? bankUnmatchedCount : fuelUnmatchedCount;
-  const sideAmount = side === 'bank' ? bankUnmatchedAmount : fuelUnmatchedAmount;
-  const sideTotalCount = side === 'bank' ? bankTotalCount : fuelTotalCount;
-  const sideTotalAmount = side === 'bank' ? bankTotalAmount : fuelTotalAmount;
-
   return (
     <div className="mx-auto space-y-4">
       {/* Header */}
@@ -532,7 +453,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                 {/* Hero: count + amount of original total */}
                 <div className="flex items-baseline justify-between mb-1">
                   <p className={cn("text-3xl font-bold tabular-nums", s.count > 0 ? "text-[#B45309]" : "text-[#166534]")}>{s.count}</p>
-                  <p className={cn("text-base font-bold tabular-nums", s.count > 0 ? "text-[#B45309]" : "text-[#1A1200]")}>{formatCurrency(originalAmount)}</p>
+                  <p className={cn("text-base font-bold tabular-nums", s.count > 0 ? "text-[#B45309]" : "text-[#1A1200]")}>{formatRand(originalAmount)}</p>
                 </div>
                 <div className="flex items-baseline justify-between mb-4">
                   <p className="text-xs text-muted-foreground">{s.count > 0 ? "Not matched" : "All matched"}</p>
@@ -544,12 +465,12 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   <div className={cn("rounded-lg p-2.5", isActive ? "bg-section" : "bg-white dark:bg-card")}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Matched by {userName}</p>
                     <p className={cn("text-lg font-bold tabular-nums", sideCounts.matched > 0 ? "text-[#166534]" : "")}>{sideCounts.matched}</p>
-                    <p className={cn("text-sm tabular-nums font-medium", sideCounts.matched > 0 ? "text-[#166534]" : "text-muted-foreground")}>{sideCounts.matchedAmount > 0 ? formatCurrency(sideCounts.matchedAmount) : "\u2014"}</p>
+                    <p className={cn("text-sm tabular-nums font-medium", sideCounts.matched > 0 ? "text-[#166534]" : "text-muted-foreground")}>{sideCounts.matchedAmount > 0 ? formatRand(sideCounts.matchedAmount) : "\u2014"}</p>
                   </div>
                   <div className={cn("rounded-lg p-2.5", isActive ? "bg-section" : "bg-white dark:bg-card")}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">To Investigate</p>
                     <p className={cn("text-lg font-bold tabular-nums", sideCounts.flagged > 0 ? "text-[#B45309]" : "")}>{sideCounts.flagged}</p>
-                    <p className={cn("text-sm tabular-nums font-medium", sideCounts.flagged > 0 ? "text-[#B45309]" : "text-muted-foreground")}>{sideCounts.flaggedAmount > 0 ? formatCurrency(sideCounts.flaggedAmount) : "\u2014"}</p>
+                    <p className={cn("text-sm tabular-nums font-medium", sideCounts.flagged > 0 ? "text-[#B45309]" : "text-muted-foreground")}>{sideCounts.flaggedAmount > 0 ? formatRand(sideCounts.flaggedAmount) : "\u2014"}</p>
                   </div>
                 </div>
               </button>
@@ -611,7 +532,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={cn("tabular-nums font-bold", isResolved && "text-muted-foreground")}>{formatCurrency(txn.amount)}</span>
+                        <span className={cn("tabular-nums font-bold", isResolved && "text-muted-foreground")}>{formatRand(txn.amount)}</span>
                         <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
                         {txn.transactionTime && (
                           <span className="text-sm text-muted-foreground flex items-center gap-0.5">

@@ -13,10 +13,10 @@ import {
   BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatRand } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { getBankColor } from "@/lib/bankColors";
 import { AttendantReport, type AttendantSummaryRow } from "./AttendantReport";
-import type { MatchingRulesConfig } from "@shared/schema";
 
 interface BankAccountRange {
   fileId: string;
@@ -97,9 +97,6 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
     queryKey: ["/api/periods", periodId, "attendant-summary"],
     enabled: !!periodId && view === 'attendants',
   });
-
-  const formatRandExact = (amount: number) =>
-    "R " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   if (isLoading || !summary) {
     return (
@@ -261,7 +258,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
                 <YAxis type="category" dataKey="name" hide />
                 <Tooltip content={({ payload }) => {
                   if (!payload?.length) return null;
-                  return (<div className="bg-card border border-border rounded-lg px-2 py-1 text-xs shadow-sm">{payload.map(p => (<div key={p.name} className="flex gap-2"><span style={{ color: p.color }}>{p.name}</span><span className="tabular-nums">{formatRandExact(p.value as number)}</span></div>))}</div>);
+                  return (<div className="bg-card border border-border rounded-lg px-2 py-1 text-xs shadow-sm">{payload.map(p => (<div key={p.name} className="flex gap-2"><span style={{ color: p.color }}>{p.name}</span><span className="tabular-nums">{formatRand(p.value as number)}</span></div>))}</div>);
                 }} />
                 <Bar dataKey="card" name="Card" stackId="a" fill="#C05A2A" radius={[4, 0, 0, 4]} />
                 <Bar dataKey="debtor" name="Debtor" stackId="a" fill="#B45309" />
@@ -275,10 +272,10 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
             </div>
           </div>
           <div className="space-y-0.5">
-            <DetailRow label="Card" count={cardOnly} amount={formatRandExact(cardOnlyAmount)} />
-            {summary.debtorFuelTransactions > 0 && <DetailRow label="Debtor / Account" count={summary.debtorFuelTransactions} amount={formatRandExact(summary.debtorFuelAmount)} />}
-            <DetailRow label="Cash" count={summary.cashFuelTransactions} amount={formatRandExact(summary.cashFuelAmount)} />
-            <DetailRow label="Total" count={summary.fuelTransactions} amount={formatRandExact(summary.totalFuelAmount)} bold />
+            <DetailRow label="Card" count={cardOnly} amount={formatRand(cardOnlyAmount)} />
+            {summary.debtorFuelTransactions > 0 && <DetailRow label="Debtor / Account" count={summary.debtorFuelTransactions} amount={formatRand(summary.debtorFuelAmount)} />}
+            <DetailRow label="Cash" count={summary.cashFuelTransactions} amount={formatRand(summary.cashFuelAmount)} />
+            <DetailRow label="Total" count={summary.fuelTransactions} amount={formatRand(summary.totalFuelAmount)} bold />
           </div>
         </DetailCard>
 
@@ -292,7 +289,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
                   <YAxis type="category" hide />
                   <Tooltip content={({ payload }) => {
                     if (!payload?.length) return null;
-                    return (<div className="bg-card border border-border rounded-lg px-2 py-1 text-xs shadow-sm">{payload.map(p => (<div key={p.name} className="flex gap-2"><span style={{ color: p.color }}>{p.name}</span><span className="tabular-nums">{formatRandExact(p.value as number)}</span></div>))}</div>);
+                    return (<div className="bg-card border border-border rounded-lg px-2 py-1 text-xs shadow-sm">{payload.map(p => (<div key={p.name} className="flex gap-2"><span style={{ color: p.color }}>{p.name}</span><span className="tabular-nums">{formatRand(p.value as number)}</span></div>))}</div>);
                   }} />
                   {banks.map((b, i) => (
                     <Bar key={b.bankName} dataKey={b.bankName} name={b.bankName} stackId="a" fill={getBankColor(b.bankName)} radius={[i === 0 ? 4 : 0, i === banks.length - 1 ? 4 : 0, i === banks.length - 1 ? 4 : 0, i === 0 ? 4 : 0]} />
@@ -306,7 +303,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
           )}
           <div className="space-y-0.5">
             <DetailRow label="Matchable" count={matchableBankTotal} />
-            {(summary.unmatchableBankTransactions || 0) > 0 && <DetailRow label="Outside date range" count={summary.unmatchableBankTransactions || 0} amount={formatRandExact(outsideRangeAmt)} />}
+            {(summary.unmatchableBankTransactions || 0) > 0 && <DetailRow label="Outside date range" count={summary.unmatchableBankTransactions || 0} amount={formatRand(outsideRangeAmt)} />}
             {(summary.excludedBankTransactions || 0) > 0 && <DetailRow label="Excluded (declined/reversed)" count={summary.excludedBankTransactions || 0} />}
             <DetailRow label="Total" count={summary.bankTransactions} bold />
           </div>
@@ -377,25 +374,25 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
         {/* Financial Reconciliation */}
         <DetailCard title="Financial Reconciliation">
           <div className="space-y-0.5">
-            <DetailRow label="Fuel card sales" amount={formatRandExact(summary.cardFuelAmount)} />
-            <DetailRow label="Bank approved amount" amount={formatRandExact(bankApprovedAmount)} />
-            <DetailRow label="File surplus / shortfall" amount={formatRandExact(fileSurplus)} highlight={fileSurplus !== 0} />
+            <DetailRow label="Fuel card sales" amount={formatRand(summary.cardFuelAmount)} />
+            <DetailRow label="Bank approved amount" amount={formatRand(bankApprovedAmount)} />
+            <DetailRow label="File surplus / shortfall" amount={formatRand(fileSurplus)} highlight={fileSurplus !== 0} />
           </div>
           <div className="space-y-0.5 mt-3 pt-3 border-t border-[#E5E3DC]/50">
-            <DetailRow label="Matched bank amount" amount={formatRandExact(summary.matchedBankAmount)} />
-            <DetailRow label="Corresponding fuel amount" amount={formatRandExact(summary.matchedFuelAmount)} />
-            <DetailRow label="Matched surplus / shortfall" amount={formatRandExact(matchedSurplus)} highlight={matchedSurplus !== 0} />
-            {unmatchedBankAmt > 0 && <DetailRow label="Unmatched bank amount" amount={formatRandExact(unmatchedBankAmt)} />}
+            <DetailRow label="Matched bank amount" amount={formatRand(summary.matchedBankAmount)} />
+            <DetailRow label="Corresponding fuel amount" amount={formatRand(summary.matchedFuelAmount)} />
+            <DetailRow label="Matched surplus / shortfall" amount={formatRand(matchedSurplus)} highlight={matchedSurplus !== 0} />
+            {unmatchedBankAmt > 0 && <DetailRow label="Unmatched bank amount" amount={formatRand(unmatchedBankAmt)} />}
           </div>
           <div className="space-y-0.5 mt-3 pt-3 border-t border-[#E5E3DC]/50">
-            <DetailRow label="Unmatched fuel card" amount={formatRandExact(unmatchedFuelCardAmount)} />
-            <DetailRow label="Total fuel card reconciled" amount={formatRandExact(totalFuelCardReconciled)} />
+            <DetailRow label="Unmatched fuel card" amount={formatRand(unmatchedFuelCardAmount)} />
+            <DetailRow label="Total fuel card reconciled" amount={formatRand(totalFuelCardReconciled)} />
           </div>
-          <div className="mt-3 pt-2 bg-section dark:bg-muted/50 -mx-4 px-4 pb-2 rounded-b-xl">
-            <DetailRow label="Reconciliation surplus / shortfall" amount={formatRandExact(reconSurplus)} bold highlight={reconSurplus !== 0} />
+          <div className="mt-3 pt-2 bg-section -mx-4 px-4 pb-2 rounded-b-xl">
+            <DetailRow label="Reconciliation surplus / shortfall" amount={formatRand(reconSurplus)} bold highlight={reconSurplus !== 0} />
           </div>
           {(summary.excludedBankAmount || 0) > 0 && (
-            <div className="mt-2"><DetailRow label="Excluded bank amount" amount={formatRandExact(summary.excludedBankAmount || 0)} muted /></div>
+            <div className="mt-2"><DetailRow label="Excluded bank amount" amount={formatRand(summary.excludedBankAmount || 0)} muted /></div>
           )}
         </DetailCard>
       </div>
@@ -412,7 +409,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
         <AttendantReport
           data={attendantData}
           isLoading={attendantLoading}
-          formatRandExact={formatRandExact}
+          formatRandExact={formatRand}
           periodId={periodId}
           bankCoverageRange={summary.bankCoverageRange}
           unmatchedBankCount={unmatchedBank}
@@ -459,8 +456,8 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
                       </tr>
                       <tr>
                         <td className="py-0.5 pr-2 text-xs text-muted-foreground">Amount</td>
-                        {banks.map(b => (<td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums text-xs text-muted-foreground">{b.declinedAmount ? formatRandExact(b.declinedAmount) : '-'}</td>))}
-                        <td className="text-right pl-1 py-0.5 tabular-nums text-xs text-muted-foreground">{formatRandExact(totals.declinedAmount)}</td>
+                        {banks.map(b => (<td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums text-xs text-muted-foreground">{b.declinedAmount ? formatRand(b.declinedAmount) : '-'}</td>))}
+                        <td className="text-right pl-1 py-0.5 tabular-nums text-xs text-muted-foreground">{formatRand(totals.declinedAmount)}</td>
                       </tr>
                     </>
                   )}
@@ -473,8 +470,8 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
                       </tr>
                       <tr>
                         <td className="py-0.5 pr-2 text-xs text-muted-foreground">Amount</td>
-                        {banks.map(b => (<td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums text-xs text-muted-foreground">{b.cancelledAmount ? formatRandExact(b.cancelledAmount) : '-'}</td>))}
-                        <td className="text-right pl-1 py-0.5 tabular-nums text-xs text-muted-foreground">{formatRandExact(totals.cancelledAmount)}</td>
+                        {banks.map(b => (<td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums text-xs text-muted-foreground">{b.cancelledAmount ? formatRand(b.cancelledAmount) : '-'}</td>))}
+                        <td className="text-right pl-1 py-0.5 tabular-nums text-xs text-muted-foreground">{formatRand(totals.cancelledAmount)}</td>
                       </tr>
                     </>
                   )}
@@ -494,7 +491,7 @@ export function InsightsTab({ periodId }: InsightsTabProps) {
 
 function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl bg-section dark:bg-muted/30 p-4">
+    <div className="rounded-xl bg-section p-4">
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">{title}</h3>
       {children}
     </div>

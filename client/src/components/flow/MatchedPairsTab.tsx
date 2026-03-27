@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { formatRand } from "@/lib/format";
 
 interface MatchedPair {
   match: {
@@ -63,11 +64,6 @@ interface MatchedPair {
     referenceNumber: string | null;
   }[];
 }
-
-const formatRand = (amount: string | number) => {
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return "R " + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
 
 function getMatchLabel(matchType: string, userName: string, description?: string | null): string {
   if (matchType === "auto_exact" || matchType === "auto_exact_review") return "Lekana (Exact)";

@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Check,
@@ -10,16 +9,9 @@ import {
   Clock,
   Download,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { Transaction, TransactionResolution } from "@shared/schema";
-
-interface PaginatedResponse {
-  transactions: Transaction[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+import { formatRand, formatDate } from "@/lib/format";
+import type { TransactionResolution } from "@shared/schema";
+import type { PaginatedResponse } from "@/lib/reconciliation-types";
 
 interface InvestigateTabProps {
   periodId: string;
@@ -94,14 +86,6 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
   const bankAmount = flaggedBank.reduce((s, f) => s + parseFloat(f.transaction.amount), 0);
   const fuelAmount = flaggedFuel.reduce((s, f) => s + parseFloat(f.transaction.amount), 0);
 
-  const formatCurrency = (amount: number) =>
-    "R " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
-  };
-
   if (resLoading) {
     return (
       <div className="space-y-4 mx-auto">
@@ -158,7 +142,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
         <div>
           <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Investigate</h2>
           <p className="text-sm text-muted-foreground">
-            {totalCount} item{totalCount !== 1 ? 's' : ''} across both sides · {formatCurrency(totalAmount)} total · work through these offline
+            {totalCount} item{totalCount !== 1 ? 's' : ''} across both sides · {formatRand(totalAmount)} total · work through these offline
           </p>
         </div>
         <div className="flex gap-2">
@@ -176,7 +160,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-[#1A1200]">Unmatched bank <span className="text-muted-foreground font-normal">{flaggedBank.length} items</span></h3>
-            <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatCurrency(bankAmount)}</span>
+            <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatRand(bankAmount)}</span>
           </div>
           <div className="space-y-2">
             {flaggedBank.map(({ transaction: txn, resolution }) => (
@@ -185,7 +169,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base tabular-nums font-bold">{formatCurrency(parseFloat(txn.amount))}</span>
+                        <span className="text-base tabular-nums font-bold">{formatRand(parseFloat(txn.amount))}</span>
                         <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
                         {txn.transactionTime && (
                           <span className="text-sm text-muted-foreground flex items-center gap-0.5">
@@ -213,7 +197,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-[#1A1200]">Unmatched fuel <span className="text-muted-foreground font-normal">{flaggedFuel.length} items</span></h3>
-            <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatCurrency(fuelAmount)}</span>
+            <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatRand(fuelAmount)}</span>
           </div>
           <div className="space-y-2">
             {flaggedFuel.map(({ transaction: txn, resolution }) => (
@@ -222,7 +206,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base tabular-nums font-bold">{formatCurrency(parseFloat(txn.amount))}</span>
+                        <span className="text-base tabular-nums font-bold">{formatRand(parseFloat(txn.amount))}</span>
                         <span className="text-sm text-muted-foreground">{formatDate(txn.transactionDate)}</span>
                         {txn.transactionTime && (
                           <span className="text-sm text-muted-foreground flex items-center gap-0.5">

@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { getBankColor } from "@/lib/bankColors";
+import { cn } from "@/lib/utils";
 
 interface AttendantBankBreakdown {
   bankName: string;

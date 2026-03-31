@@ -476,15 +476,14 @@ export class DataNormalizer {
   static isCardPayment(value: string): boolean {
     if (!value) return false;
     const lower = String(value).toLowerCase().trim();
+    // Debtors/account/fleet are their own category — NOT card
+    if (lower.includes('debtor') || lower.includes('account') || lower.includes('fleet')) return false;
     return lower === 'card' ||
            lower.includes('credit') ||
            lower.includes('debit') ||
            lower.includes('visa') ||
            lower.includes('mastercard') ||
-           lower.includes('card') ||
-           lower.includes('debtor') ||
-           lower.includes('account') ||
-           lower.includes('fleet');
+           lower.includes('card');
   }
 
   // Check if payment type is strictly cash (not processed through terminal)

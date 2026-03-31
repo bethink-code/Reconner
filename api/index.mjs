@@ -868,13 +868,22 @@ var DatabaseStorage = class {
   async getVerificationSummary(periodId) {
     const result = await pool.query(`
       WITH fuel_stats AS (
-        SELECT 
+        SELECT
           COUNT(*) as total_fuel,
           COALESCE(SUM(amount::numeric), 0) as total_fuel_amount,
           COUNT(CASE WHEN is_card_transaction = 'yes' THEN 1 END) as card_transactions,
           COALESCE(SUM(CASE WHEN is_card_transaction = 'yes' THEN amount::numeric ELSE 0 END), 0) as card_amount,
           COUNT(CASE WHEN is_card_transaction = 'no' THEN 1 END) as cash_transactions,
           COALESCE(SUM(CASE WHEN is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_amount,
+          -- Matchable invoices: distinct reference numbers for card txns (grouped), plus individual card txns without reference
+          (SELECT COUNT(DISTINCT reference_number) FROM transactions
+           WHERE period_id = $1 AND source_type = 'fuel' AND is_card_transaction = 'yes'
+             AND reference_number IS NOT NULL AND reference_number != '')
+          +
+          (SELECT COUNT(*) FROM transactions
+           WHERE period_id = $1 AND source_type = 'fuel' AND is_card_transaction = 'yes'
+             AND (reference_number IS NULL OR reference_number = ''))
+          as matchable_invoices,
           MIN(transaction_date) as fuel_earliest,
           MAX(transaction_date) as fuel_latest
         FROM transactions
@@ -1014,6 +1023,7 @@ var DatabaseStorage = class {
     const cardAmount = parseFloat(row.card_amount || "0");
     const cashAmount = parseFloat(row.cash_amount || "0");
     const cardTransactions = parseInt(row.card_transactions || "0");
+    const matchableInvoices = parseInt(row.matchable_invoices || "0");
     const cashTransactions = parseInt(row.cash_transactions || "0");
     const totalBankAmount = parseFloat(row.total_bank_amount || "0");
     const totalBankTransactions = parseInt(row.total_bank || "0");
@@ -1121,6 +1131,7 @@ var DatabaseStorage = class {
           totalSales: totalFuelAmount,
           cardSales: cardAmount,
           cardTransactions,
+          matchableInvoices,
           cashSales: cashAmount,
           cashTransactions
         },
@@ -1728,7 +1739,8 @@ var DataNormalizer = class {
   static isCardPayment(value) {
     if (!value) return false;
     const lower = String(value).toLowerCase().trim();
-    return lower === "card" || lower.includes("credit") || lower.includes("debit") || lower.includes("visa") || lower.includes("mastercard") || lower.includes("card") || lower.includes("debtor") || lower.includes("account") || lower.includes("fleet");
+    if (lower.includes("debtor") || lower.includes("account") || lower.includes("fleet")) return false;
+    return lower === "card" || lower.includes("credit") || lower.includes("debit") || lower.includes("visa") || lower.includes("mastercard") || lower.includes("card");
   }
   // Check if payment type is strictly cash (not processed through terminal)
   static isCashPayment(value) {

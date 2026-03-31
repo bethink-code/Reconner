@@ -82,7 +82,7 @@ export default function ReconciliationFlow() {
           const summary = await summaryRes.json();
           setTxCounts({
             bank: summary.overview?.bankStatements?.totalTransactions || 0,
-            fuel: summary.overview?.fuelSystem?.cardTransactions || 0,
+            fuel: summary.overview?.fuelSystem?.matchableInvoices || summary.overview?.fuelSystem?.cardTransactions || 0,
           });
         }
       } catch { /* non-critical */ }

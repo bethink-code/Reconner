@@ -735,27 +735,37 @@ var DatabaseStorage = class {
           AND source_type LIKE 'bank%'
           AND match_status NOT IN ('unmatchable', 'excluded')
       ),
-      is_card_or_debtor AS (
-        -- Card and debtor fuel transactions (not cash)
+      is_card_only AS (
+        -- Card fuel transactions (not debtor, not cash)
         SELECT id FROM transactions
         WHERE period_id = $1 AND source_type = 'fuel'
-          AND (is_card_transaction = 'yes' OR LOWER(payment_type) LIKE '%debtor%'
-               OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+          AND is_card_transaction = 'yes'
+          AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+      ),
+      is_debtor AS (
+        -- Debtor/account/fleet fuel transactions
+        SELECT id FROM transactions
+        WHERE period_id = $1 AND source_type = 'fuel'
+          AND (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
       )
       SELECT
         COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown') AS attendant,
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status = 'matched'
+        -- Card-only matched/unmatched (for accountability)
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN 1 END)::int AS matched_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status = 'matched'
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS matched_amount,
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status != 'matched'
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN 1 END)::int AS unmatched_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status != 'matched'
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS unmatched_amount,
+        -- Debtor matched/unmatched (shown separately)
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN 1 END)::int AS debtor_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN t.amount::numeric ELSE 0 END), 0) AS debtor_amount,
         COUNT(*)::int AS total_count,
         COALESCE(SUM(t.amount::numeric), 0) AS total_amount
       FROM transactions t
@@ -831,6 +841,8 @@ var DatabaseStorage = class {
         matchedBankAmount,
         unmatchedCount: parseInt(row.unmatched_count || "0"),
         unmatchedAmount: parseFloat(row.unmatched_amount || "0"),
+        debtorCount: parseInt(row.debtor_count || "0"),
+        debtorAmount: parseFloat(row.debtor_amount || "0"),
         declinedCount: declined.count,
         declinedAmount: declined.amount,
         banks,

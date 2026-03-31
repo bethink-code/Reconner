@@ -15,6 +15,8 @@ export interface AttendantSummaryRow {
   matchedBankAmount: number;
   unmatchedCount: number;
   unmatchedAmount: number;
+  debtorCount: number;
+  debtorAmount: number;
   declinedCount: number;
   declinedAmount: number;
   banks: AttendantBankBreakdown[];
@@ -219,6 +221,17 @@ export function AttendantReport({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Debtor transactions for this attendant */}
+          {row.debtorCount > 0 && (
+            <div className="flex items-center justify-between text-xs pl-3 mt-1 pt-1 border-t border-[#E5E3DC]/50">
+              <span className="text-muted-foreground">Debtor / Account</span>
+              <div className="flex items-center gap-3">
+                <span className="tabular-nums text-muted-foreground w-6 text-right">{row.debtorCount}</span>
+                <span className="tabular-nums text-muted-foreground text-right min-w-[90px]">{formatRandExact(row.debtorAmount)}</span>
+              </div>
             </div>
           )}
 

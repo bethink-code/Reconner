@@ -148,7 +148,7 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
           <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}>
             <Download className="h-4 w-4 mr-2" />Download all
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export?type=investigate`, '_blank')}>
+          <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, '_blank')}>
             <Download className="h-4 w-4 mr-2" />Download investigate list
           </Button>
         </div>

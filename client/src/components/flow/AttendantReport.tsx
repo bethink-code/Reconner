@@ -14,6 +14,8 @@ export interface AttendantSummaryRow {
   matchedBankAmount: number;
   unmatchedCount: number;
   unmatchedAmount: number;
+  declinedCount: number;
+  declinedAmount: number;
   banks: AttendantBankBreakdown[];
   totalCount: number;
   totalAmount: number;
@@ -27,6 +29,8 @@ interface AttendantReportProps {
   bankCoverageRange?: { min: string; max: string };
   unmatchedBankCount?: number;
   unmatchedBankAmount?: number;
+  totalDeclinedCount?: number;
+  totalDeclinedAmount?: number;
   onInvestigate?: () => void;
 }
 
@@ -42,6 +46,8 @@ export function AttendantReport({
   bankCoverageRange,
   unmatchedBankCount,
   unmatchedBankAmount,
+  totalDeclinedCount,
+  totalDeclinedAmount,
   onInvestigate,
 }: AttendantReportProps) {
   if (isLoading) {
@@ -94,6 +100,42 @@ export function AttendantReport({
         )}
       </p>
 
+      {/* Unattributable bank transactions — shown first */}
+      {(unmatchedBankCount ?? 0) > 0 && (
+        <div className="rounded-lg bg-section border border-[#E5E3DC] p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#B45309]">
+                {unmatchedBankCount} unmatched bank transaction{unmatchedBankCount !== 1 ? "s" : ""}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatRandExact(unmatchedBankAmount || 0)} — could not be attributed to any attendant
+              </p>
+            </div>
+            {onInvestigate && (
+              <button
+                onClick={onInvestigate}
+                className="text-xs font-medium text-[#B45309] hover:underline"
+              >
+                Investigate
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Declined bank transactions summary */}
+      {(totalDeclinedCount ?? 0) > 0 && (
+        <div className="rounded-lg bg-section border border-[#E5E3DC] p-3">
+          <p className="text-sm font-semibold text-muted-foreground">
+            {totalDeclinedCount} declined transaction{totalDeclinedCount !== 1 ? "s" : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {formatRandExact(totalDeclinedAmount || 0)} — declined at point of sale
+          </p>
+        </div>
+      )}
+
       {/* Grand total header */}
       <div className="flex items-center justify-between text-xs px-1 pb-1 border-b border-[#E5E3DC]">
         <span className="text-muted-foreground font-medium">
@@ -108,7 +150,7 @@ export function AttendantReport({
           key={row.attendant}
           className="rounded-lg bg-section p-3"
         >
-          {/* Name + verified amount */}
+          {/* Name + verified count */}
           <div className="flex items-center justify-between mb-1.5">
             <div>
               <span className="text-sm font-semibold">{row.attendant}</span>
@@ -116,14 +158,21 @@ export function AttendantReport({
                 {row.matchedCount} verified sale{row.matchedCount !== 1 ? "s" : ""}
               </span>
             </div>
-            <span className="text-sm font-semibold tabular-nums text-[#166534] dark:text-emerald-400">
-              {formatRandExact(row.matchedBankAmount)}
-            </span>
+          </div>
+
+          {/* Verified amounts — fuel and bank side by side */}
+          <div className="flex items-center justify-between text-[13px] mb-1">
+            <span className="text-muted-foreground">Verified amount (Fuel)</span>
+            <span className="tabular-nums font-medium">{formatRandExact(row.matchedAmount)}</span>
+          </div>
+          <div className="flex items-center justify-between text-[13px]">
+            <span className="text-muted-foreground">Verified amount (Bank)</span>
+            <span className="tabular-nums font-medium text-[#166534]">{formatRandExact(row.matchedBankAmount)}</span>
           </div>
 
           {/* Bank breakdown */}
           {row.banks.length > 0 && (
-            <div className="space-y-0.5 text-xs">
+            <div className="space-y-0.5 text-xs mt-1 pt-1 border-t border-[#E5E3DC]/50">
               {row.banks.map(bank => (
                 <div key={bank.bankName} className="flex items-center justify-between pl-3">
                   <span className="text-muted-foreground flex items-center gap-1.5">
@@ -145,7 +194,18 @@ export function AttendantReport({
               <span className="text-muted-foreground">Unmatched card sales</span>
               <div className="flex items-center gap-3">
                 <span className="tabular-nums text-muted-foreground w-6 text-right">{row.unmatchedCount}</span>
-                <span className="tabular-nums text-muted-foreground text-right min-w-[90px]">{formatRandExact(row.unmatchedAmount)}</span>
+                <span className="tabular-nums text-[#B45309] text-right min-w-[90px]">{formatRandExact(row.unmatchedAmount)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Declined transactions for this attendant */}
+          {row.declinedCount > 0 && (
+            <div className="flex items-center justify-between text-xs pl-3 mt-1 pt-1 border-t border-[#E5E3DC]/50">
+              <span className="text-muted-foreground">Declined transactions</span>
+              <div className="flex items-center gap-3">
+                <span className="tabular-nums text-muted-foreground w-6 text-right">{row.declinedCount}</span>
+                <span className="tabular-nums text-muted-foreground text-right min-w-[90px]">{formatRandExact(row.declinedAmount)}</span>
               </div>
             </div>
           )}
@@ -170,29 +230,6 @@ export function AttendantReport({
         </div>
       )}
 
-      {/* Unattributable bank transactions */}
-      {(unmatchedBankCount ?? 0) > 0 && (
-        <div className="rounded-lg bg-[#FEF9C3] dark:bg-amber-950/30 p-3 mt-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-[#B45309]">
-                {unmatchedBankCount} unmatched bank transaction{unmatchedBankCount !== 1 ? "s" : ""}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatRandExact(unmatchedBankAmount || 0)} — could not be attributed to any attendant
-              </p>
-            </div>
-            {onInvestigate && (
-              <button
-                onClick={onInvestigate}
-                className="text-xs font-medium text-[#B45309] hover:underline"
-              >
-                Investigate
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

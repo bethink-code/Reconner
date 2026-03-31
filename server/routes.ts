@@ -1996,6 +1996,264 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Declined transaction analysis
+  app.get("/api/periods/:periodId/decline-analysis", isAuthenticated, async (req: any, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+
+      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      const bankTxns = transactions.filter(t => t.sourceType?.startsWith('bank'));
+      const fuelTxns = transactions.filter(t => t.sourceType === 'fuel');
+      const excluded = bankTxns.filter(t => t.matchStatus === 'excluded');
+      const approved = bankTxns.filter(t => t.matchStatus !== 'excluded' && t.matchStatus !== 'unmatchable');
+
+      // Track which approved transactions have been claimed by a resubmission
+      const claimedApprovals = new Set<string>();
+
+      // Classify each excluded transaction
+      const analysed = excluded.map(tx => {
+        const desc = (tx.description || '').toLowerCase();
+        const type = desc.includes('declined') ? 'Declined'
+          : desc.includes('cancel') || desc.includes('revers') ? 'Cancelled / Reversed'
+          : 'Excluded';
+        const cleanDesc = tx.description?.replace(/\s*\[Excluded:.*?\]/g, '').trim() || '';
+        const amt = parseFloat(tx.amount);
+        const card = tx.cardNumber || '';
+        const date = tx.transactionDate;
+
+        // Resubmission matching is done in a second pass (below)
+        // Determine note and financial impact
+        let note = '';
+        let recoveredAmount = 0;
+        let isRecovered = false;
+
+        // Find attendant/cashier from nearest fuel transaction
+        const nearestFuel = (() => {
+          if (!tx.transactionTime) return null;
+          const txMin = parseInt(tx.transactionTime.split(':')[0]) * 60 + parseInt(tx.transactionTime.split(':')[1] || '0');
+          let best: typeof fuelTxns[0] | null = null;
+          let bestDiff = Infinity;
+          for (const f of fuelTxns) {
+            if (f.transactionDate !== date || !f.transactionTime) continue;
+            // Prefer same card number if available
+            if (card && f.cardNumber === card) { best = f; break; }
+            const fMin = parseInt(f.transactionTime.split(':')[0]) * 60 + parseInt(f.transactionTime.split(':')[1] || '0');
+            const diff = Math.abs(fMin - txMin);
+            if (diff < bestDiff && diff <= 30) { bestDiff = diff; best = f; }
+          }
+          return best;
+        })();
+
+        return {
+          id: tx.id,
+          date,
+          time: tx.transactionTime || '',
+          amount: amt,
+          bank: tx.sourceName || tx.sourceType,
+          cardNumber: card,
+          description: cleanDesc,
+          type,
+          note,
+          recoveredAmount,
+          isRecovered,
+          resubmittedTxId: null as string | null,
+          attendant: nearestFuel?.attendant || null,
+          cashier: nearestFuel?.cashier || null,
+        };
+      });
+
+      // Second pass: match approvals to nearest preceding decline (by time)
+      // Each approval can only cover one decline
+      const toMinutes = (t: string) => {
+        const parts = t.split(':');
+        return parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
+      };
+      for (const appr of approved) {
+        if (!appr.cardNumber || claimedApprovals.has(appr.id)) continue;
+        const apprTime = appr.transactionTime ? toMinutes(appr.transactionTime) : null;
+        // Find all unclaimed declines for same card + date
+        const candidates = analysed.filter(d =>
+          !d.isRecovered && d.cardNumber === appr.cardNumber && d.date === appr.transactionDate
+        );
+        if (candidates.length === 0) continue;
+        // Pick the closest decline BEFORE the approval
+        let best: typeof candidates[0] | null = null;
+        let bestDiff = Infinity;
+        for (const c of candidates) {
+          if (apprTime !== null && c.time) {
+            const cTime = toMinutes(c.time);
+            if (cTime <= apprTime) {
+              const diff = apprTime - cTime;
+              if (diff < bestDiff) { bestDiff = diff; best = c; }
+            }
+          }
+        }
+        // If no preceding decline, pick the closest overall
+        if (!best) {
+          for (const c of candidates) {
+            if (apprTime !== null && c.time) {
+              const diff = Math.abs(toMinutes(c.time) - apprTime);
+              if (diff < bestDiff) { bestDiff = diff; best = c; }
+            }
+          }
+        }
+        if (best) {
+          const apprAmt = parseFloat(appr.amount);
+          const shortfall = best.amount - apprAmt;
+          if (shortfall > 0.50) {
+            // Partial recovery — amount went through for less
+            best.note = `partial resubmission at ${appr.transactionTime || 'unknown'} — shortfall ${shortfall.toFixed(2)}`;
+            best.recoveredAmount = apprAmt;
+            best.isRecovered = false; // NOT fully recovered
+          } else {
+            best.note = `resubmitted at ${appr.transactionTime || 'unknown'}`;
+            best.recoveredAmount = apprAmt;
+            best.isRecovered = true;
+          }
+          best.resubmittedTxId = appr.id;
+          claimedApprovals.add(appr.id);
+        }
+      }
+
+      // Suspicious patterns
+      const suspicious: { pattern: string; severity: 'high' | 'medium' | 'low'; detail: string; cardNumber: string; amount: number; shortfall: number; attendant: string | null }[] = [];
+
+      // Helper: find attendant for a decline by looking at fuel transactions near the same time
+      const findAttendant = (d: { date: string; time: string; cardNumber: string }) => {
+        // First try: fuel transaction with same card number on same date
+        const byCard = fuelTxns.find(f => f.cardNumber === d.cardNumber && f.transactionDate === d.date);
+        if (byCard?.attendant) return byCard.attendant;
+        // Second try: nearest fuel transaction by time on same date
+        if (!d.time) return null;
+        const dMin = parseInt(d.time.split(':')[0]) * 60 + parseInt(d.time.split(':')[1] || '0');
+        let nearest: typeof fuelTxns[0] | null = null;
+        let nearestDiff = Infinity;
+        for (const f of fuelTxns) {
+          if (f.transactionDate !== d.date || !f.transactionTime) continue;
+          const fMin = parseInt(f.transactionTime.split(':')[0]) * 60 + parseInt(f.transactionTime.split(':')[1] || '0');
+          const diff = Math.abs(fMin - dMin);
+          if (diff < nearestDiff && diff <= 30) { nearestDiff = diff; nearest = f; }
+        }
+        return nearest?.attendant || null;
+      };
+
+      // Group declines by card
+      const declinesByCard = new Map<string, typeof analysed>();
+      for (const d of analysed) {
+        if (!d.cardNumber) continue;
+        if (!declinesByCard.has(d.cardNumber)) declinesByCard.set(d.cardNumber, []);
+        declinesByCard.get(d.cardNumber)!.push(d);
+      }
+
+      for (const [card, declines] of declinesByCard) {
+        // Pattern: repeated decline attempts (3+ on same card)
+        if (declines.length >= 3) {
+          const att = findAttendant(declines[0]);
+          suspicious.push({
+            pattern: 'Repeated decline attempts',
+            severity: 'high',
+            detail: `Card ${card} was declined ${declines.length} times on ${declines[0].date}`,
+            cardNumber: card,
+            amount: declines.reduce((s, d) => s + d.amount, 0),
+            shortfall: 0,
+            attendant: att,
+          });
+        }
+
+        // Pattern: declined then lower approved amount (partial payment)
+        for (const d of declines) {
+          if (d.isRecovered) continue;
+          const laterApproved = approved.find(a =>
+            a.cardNumber === card && a.transactionDate === d.date
+            && parseFloat(a.amount) < d.amount
+            && a.transactionTime && d.time && a.transactionTime > d.time
+          );
+          if (laterApproved) {
+            const shortfall = d.amount - parseFloat(laterApproved.amount);
+            const att = findAttendant(d);
+            suspicious.push({
+              pattern: 'Declined then lower amount approved',
+              severity: 'high',
+              detail: `Card ${card}: declined R${d.amount.toFixed(2)}, then approved R${parseFloat(laterApproved.amount).toFixed(2)} (shortfall R${shortfall.toFixed(2)})`,
+              cardNumber: card,
+              amount: d.amount,
+              shortfall,
+              attendant: att,
+            });
+          }
+        }
+      }
+
+      // Pattern: declined card, then cash payment at similar time (within 30 min)
+      for (const d of analysed) {
+        if (d.isRecovered || !d.time) continue;
+        const dMinutes = parseInt(d.time.split(':')[0]) * 60 + parseInt(d.time.split(':')[1] || '0');
+        const cashNearby = fuelTxns.filter(f => {
+          if (f.isCardTransaction !== 'no' || f.transactionDate !== d.date || !f.transactionTime) return false;
+          const fMinutes = parseInt(f.transactionTime.split(':')[0]) * 60 + parseInt(f.transactionTime.split(':')[1] || '0');
+          return fMinutes > dMinutes && (fMinutes - dMinutes) <= 5;
+        });
+        for (const cash of cashNearby) {
+          const cashAmt = parseFloat(cash.amount);
+          if (cashAmt > 0 && cashAmt >= d.amount * 0.5 && cashAmt < d.amount) {
+            suspicious.push({
+              pattern: 'Declined then cash payment',
+              severity: 'medium',
+              detail: `Card ${d.cardNumber} declined R${d.amount.toFixed(2)} at ${d.time}, cash R${cashAmt.toFixed(2)} at ${cash.transactionTime} by ${cash.attendant || 'Unknown'} (shortfall R${(d.amount - cashAmt).toFixed(2)})`,
+              cardNumber: d.cardNumber,
+              amount: d.amount,
+              shortfall: d.amount - cashAmt,
+              attendant: cash.attendant || null,
+            });
+          }
+        }
+      }
+
+      // Pattern: late-night declines (22:00-05:00)
+      const lateNight = analysed.filter(d => {
+        if (!d.time) return false;
+        const hour = parseInt(d.time.split(':')[0]);
+        return hour >= 22 || hour < 5;
+      });
+      if (lateNight.length > 0) {
+        suspicious.push({
+          pattern: 'Late-night declines',
+          severity: 'low',
+          detail: `${lateNight.length} decline${lateNight.length !== 1 ? 's' : ''} between 22:00–05:00`,
+          cardNumber: '',
+          amount: lateNight.reduce((s, d) => s + d.amount, 0),
+          shortfall: 0,
+          attendant: null,
+        });
+      }
+
+      // Summary
+      const totalDeclined = analysed.length;
+      const resubmittedCount = analysed.filter(d => d.isRecovered).length;
+      const unrecovered = analysed.filter(d => !d.isRecovered);
+      const netUnrecoveredAmount = unrecovered.reduce((s, d) => s + d.amount, 0);
+
+      res.json({
+        summary: {
+          totalDeclined,
+          resubmittedCount,
+          unrecoveredCount: unrecovered.length,
+          netUnrecoveredAmount,
+          totalDeclinedAmount: analysed.reduce((s, d) => s + d.amount, 0),
+        },
+        transactions: analysed,
+        suspicious: suspicious.sort((a, b) => {
+          const sev = { high: 0, medium: 1, low: 2 };
+          return sev[a.severity] - sev[b.severity];
+        }),
+      });
+    } catch (error) {
+      console.error("Error analysing declines:", error);
+      res.status(500).json({ error: "Failed to analyse declined transactions" });
+    }
+  });
+
   // Bulk confirm matches (quick wins)
   app.post("/api/matches/bulk-confirm", isAuthenticated, async (req: any, res) => {
     try {
@@ -2086,10 +2344,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
 
-      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      const matchesData = await storage.getMatchesByPeriod(req.params.periodId);
-      const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
-      const attendantSummary = await storage.getAttendantSummary(req.params.periodId);
+      const [transactions, matchesData, resolutions, attendantSummary, matchingRules] = await Promise.all([
+        storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getMatchesByPeriod(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId),
+        storage.getAttendantSummary(req.params.periodId),
+        storage.getMatchingRules(req.params.periodId),
+      ]);
 
       // Build lookup maps
       const matchMap = new Map<string, typeof matchesData[0]>();
@@ -2099,6 +2360,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const resolutionMap = new Map(resolutions.map(r => [r.transactionId, r]));
       const txMap = new Map(transactions.map(t => [t.id, t]));
+
+      // Build fuel items by matchId for invoice grouping
+      const fuelByMatchId = new Map<string, typeof transactions>();
+      for (const t of transactions) {
+        if (t.matchId && t.sourceType === 'fuel') {
+          if (!fuelByMatchId.has(t.matchId)) fuelByMatchId.set(t.matchId, []);
+          fuelByMatchId.get(t.matchId)!.push(t);
+        }
+      }
 
       const bankTxns = transactions.filter(t => t.sourceType?.startsWith('bank'));
       const fuelTxns = transactions.filter(t => t.sourceType === 'fuel');
@@ -2116,9 +2386,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         t.paymentType?.toLowerCase().includes('debtor') ||
         t.paymentType?.toLowerCase().includes('account') ||
         t.paymentType?.toLowerCase().includes('fleet');
-      const debtorFuel = fuelTxns.filter(t => t.isCardTransaction === 'yes' && isDebtor(t));
+      // Debtors identified by payment_type regardless of is_card_transaction flag
+      const debtorFuel = fuelTxns.filter(t => isDebtor(t));
       const cardOnlyFuel = fuelTxns.filter(t => t.isCardTransaction === 'yes' && !isDebtor(t));
-      const cashFuel = fuelTxns.filter(t => t.isCardTransaction === 'no');
+      const cashFuel = fuelTxns.filter(t => t.isCardTransaction === 'no' && !isDebtor(t));
 
       const sumAmount = (txns: typeof fuelTxns) => txns.reduce((s, t) => s + parseFloat(t.amount), 0);
 
@@ -2130,18 +2401,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const unmatchedBankAmount = sumAmount(unmatchedBank);
       const excludedBankAmount = sumAmount(excludedBank);
 
-      // Corresponding fuel amounts for matched pairs
+      // Corresponding fuel amounts for matched pairs (sum ALL grouped fuel items per match)
       const matchedFuelAmount = matchesData.reduce((s, m) => {
+        const allFuelItems = fuelByMatchId.get(m.id) || [];
+        if (allFuelItems.length > 0) {
+          return s + allFuelItems.reduce((fs, f) => fs + parseFloat(f.amount), 0);
+        }
         const fuel = txMap.get(m.fuelTransactionId);
         return s + (fuel ? parseFloat(fuel.amount) : 0);
       }, 0);
 
       const cardFuelAmount = sumAmount(fuelTxns.filter(t => t.isCardTransaction === 'yes'));
+      // Card-only excludes debtors — debtors are their own category (like cash)
+      const cardOnlyFuelAmount = cardOnlyAmount;
       const bankApprovedAmount = matchedBankAmount + unmatchedBankAmount;
-      // File Surplus: negative = fuel exceeds bank (shortfall from bank side)
-      const fileSurplus = bankApprovedAmount - cardFuelAmount;
+      // File Surplus uses card-only (no debtors) — debtors aren't expected to have bank matches
+      const fileSurplus = bankApprovedAmount - cardOnlyFuelAmount;
       const matchedSurplus = matchedBankAmount - matchedFuelAmount;
-      const unmatchedFuelCard = fuelTxns.filter(t => t.isCardTransaction === 'yes' && t.matchStatus !== 'matched' && parseFloat(t.amount) > 0);
+      // Unmatched fuel card excludes debtors
+      const unmatchedFuelCard = fuelTxns.filter(t => t.isCardTransaction === 'yes' && !isDebtor(t) && t.matchStatus !== 'matched' && parseFloat(t.amount) > 0);
       const unmatchedFuelCardAmount = sumAmount(unmatchedFuelCard);
       const totalFuelCardReconciled = matchedFuelAmount + unmatchedFuelCardAmount;
       // Recon Surplus = Unmatched Fuel Card + File Surplus/Shortfall
@@ -2226,59 +2504,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Resolution counts for review progress
+      const linkedResolutions = resolutions.filter(r => r.resolutionType === 'linked').length;
+      const flaggedResolutions = resolutions.filter(r => r.resolutionType === 'flagged').length;
+      const dismissedResolutions = resolutions.filter(r => r.resolutionType === 'dismissed').length;
+      const totalReviewActions = linkedResolutions + flaggedResolutions + dismissedResolutions;
+
       summaryRows.push(
         { Metric: '' },
         { Metric: 'MATCHING' },
         { Metric: '  Matched', Count: matchedBank.length },
         { Metric: '  Match Rate', Count: `${matchRate}%` },
         { Metric: '  Unmatched Bank', Count: unmatchedBank.length },
+      );
+
+      // Matching rules
+      if (matchingRules) {
+        summaryRows.push(
+          { Metric: '' },
+          { Metric: 'MATCHING RULES' },
+          { Metric: '  Amount Tolerance', Count: `±R ${Number(matchingRules.amountTolerance).toFixed(2)}` },
+          { Metric: '  Date Window', Count: `${matchingRules.dateWindowDays} day${matchingRules.dateWindowDays !== 1 ? 's' : ''}` },
+          { Metric: '  Time Window', Count: `${matchingRules.timeWindowMinutes} min` },
+          { Metric: '  Min Confidence', Count: `${matchingRules.minimumConfidence}%` },
+          { Metric: '  Auto-Match Threshold', Count: `${matchingRules.autoMatchThreshold}%` },
+          { Metric: '  Invoice Grouping', Count: matchingRules.groupByInvoice ? 'On' : 'Off' },
+          { Metric: '  Card Required', Count: matchingRules.requireCardMatch ? 'Yes' : 'No' },
+        );
+      }
+
+      // Review progress
+      summaryRows.push(
         { Metric: '' },
-        { Metric: 'FINANCIAL RECONCILIATION', Count: '', Amount: 'Amount' },
-        { Metric: '  Fuel Card Sales Amount', Amount: fmt(cardFuelAmount) },
+        { Metric: 'REVIEW PROGRESS' },
+        { Metric: '  Matched by user', Count: linkedResolutions },
+        { Metric: '  Flagged for investigation', Count: flaggedResolutions },
+        { Metric: '  Dismissed (low value)', Count: dismissedResolutions },
+        { Metric: '  Total review actions', Count: totalReviewActions },
+        { Metric: '  Unresolved bank', Count: unmatchedBank.filter(t => !resolutionMap.has(t.id)).length },
+        { Metric: '  Unresolved fuel', Count: unmatchedFuelCard.filter(t => !resolutionMap.has(t.id)).length },
+      );
+
+      // Card Sales Reconciliation — top-level gap
+      const analysisTotal = fmt(matchedSurplus - unmatchedFuelCardAmount + unmatchedBankAmount);
+
+      summaryRows.push(
+        { Metric: '' },
+        { Metric: 'CARD SALES RECONCILIATION', Count: '', Amount: 'Amount' },
+        { Metric: '  Fuel Card Sales Amount', Amount: fmt(cardOnlyFuelAmount) },
         { Metric: '  Bank Approved Amount', Amount: fmt(bankApprovedAmount) },
-        { Metric: '  File Surplus / Shortfall', Amount: fmt(fileSurplus) },
+        { Metric: '  Surplus / Shortfall', Amount: fmt(fileSurplus) },
         { Metric: '' },
-        { Metric: '  Matched Bank Amount', Amount: fmt(matchedBankAmount) },
-        { Metric: '  Corresponding Fuel Amount', Amount: fmt(matchedFuelAmount) },
-        { Metric: '  Matched Surplus / Shortfall', Amount: fmt(matchedSurplus) },
-        { Metric: '  Unmatched Bank Amount', Amount: unmatchedBankAmount > 0 ? fmt(unmatchedBankAmount) : '-' },
+        { Metric: 'SURPLUS / SHORTFALL ANALYSIS' },
         { Metric: '' },
-        { Metric: '  Unmatched Fuel Card', Amount: fmt(unmatchedFuelCardAmount) },
-        { Metric: '  Total Fuel Card Reconciled', Amount: fmt(totalFuelCardReconciled) },
-        { Metric: '  Reconciliation Surplus / Shortfall', Amount: fmt(reconSurplus) },
+        { Metric: '  Decimal matching error:' },
+        { Metric: '    Matched fuel amount', Amount: fmt(matchedFuelAmount) },
+        { Metric: '    Matched bank amount', Amount: fmt(matchedBankAmount) },
+        { Metric: '    Decimal error', Amount: fmt(matchedSurplus) },
+        { Metric: '' },
+        { Metric: '  Fuel attendant error:' },
+        { Metric: '    Unmatched fuel card transactions', Amount: fmt(unmatchedFuelCardAmount) },
+        { Metric: '' },
+        { Metric: '  Unmatched bank transactions', Amount: unmatchedBankAmount > 0 ? fmt(unmatchedBankAmount) : '-' },
+        { Metric: '' },
+        { Metric: '  Total Surplus / Shortfall', Amount: analysisTotal },
         { Metric: '' },
         { Metric: '  Excluded Bank Amount', Amount: fmt(excludedBankAmount) },
       );
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
 
-      // Sheet 2: Matched pairs
+      // Sheet 2: Matched pairs (with invoice grouping support)
+      const matchTypeLabel = (mt: string) =>
+        mt === 'auto_exact' || mt === 'auto_exact_review' ? 'Lekana (Exact)'
+        : mt === 'auto_rules' || mt === 'auto_rules_review' || mt === 'auto' || mt === 'auto_review' ? 'Lekana (Rules)'
+        : mt === 'user_confirmed' || mt === 'manual' ? 'User (Confirmed)'
+        : mt === 'linked' ? 'User (With reason)'
+        : mt || 'Lekana (Rules)';
+
       const matchedRows = matchesData.map(m => {
         const bank = txMap.get(m.bankTransactionId);
         const fuel = txMap.get(m.fuelTransactionId);
+        const allFuelItems = fuelByMatchId.get(m.id) || [];
         const bankAmt = bank ? parseFloat(bank.amount) : 0;
-        const fuelAmt = fuel ? parseFloat(fuel.amount) : 0;
+        // Sum all grouped fuel items (falls back to single fuel tx)
+        const fuelAmt = allFuelItems.length > 0
+          ? allFuelItems.reduce((s, f) => s + parseFloat(f.amount), 0)
+          : (fuel ? parseFloat(fuel.amount) : 0);
         return {
           'Date': bank?.transactionDate || fuel?.transactionDate || '',
           'Bank Time': bank?.transactionTime || '',
           'Fuel Time': fuel?.transactionTime || '',
           'Bank Amount': bankAmt,
           'Fuel Amount': fuelAmt,
+          'Fuel Items': allFuelItems.length > 1 ? allFuelItems.length : 1,
           'Difference': Math.round((bankAmt - fuelAmt) * 100) / 100,
           'Bank Source': bank?.sourceName || '',
           'Bank Description': bank?.description || '',
-          'Fuel Description': fuel?.description || '',
+          'Fuel Description': allFuelItems.length > 1
+            ? allFuelItems.map(f => `${f.description || ''} (${parseFloat(f.amount).toFixed(2)})`).join('; ')
+            : (fuel?.description || ''),
           'Card Number': bank?.cardNumber || '',
           'Payment Type': fuel?.paymentType || '',
           'Attendant': fuel?.attendant || '',
           'Cashier': fuel?.cashier || '',
           'Pump': fuel?.pump || '',
           'Confidence': m.matchConfidence ? `${m.matchConfidence}%` : '',
-          'Match Type': m.matchType === 'auto_exact' || m.matchType === 'auto_exact_review' ? 'Lekana (Exact)'
-            : m.matchType === 'auto_rules' || m.matchType === 'auto_rules_review' ? 'Lekana (Rules)'
-            : m.matchType === 'auto' ? 'Lekana (Rules)' : m.matchType === 'auto_review' ? 'Lekana (Rules)'
-            : m.matchType === 'user_confirmed' || m.matchType === 'manual' ? 'User (Confirmed)'
-            : m.matchType === 'linked' ? 'User (With reason)'
-            : m.matchType || 'Lekana (Rules)',
+          'Match Type': matchTypeLabel(m.matchType),
         };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchedRows), 'Matched');
@@ -2300,16 +2631,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unmatchedRows), 'Unmatched');
 
-      // Sheet 4: Excluded (reversed/declined/cancelled)
+      // Sheet 4: Excluded (reversed/declined/cancelled) — with type classification per bank
       if (excludedBank.length > 0) {
         const excludedRows = excludedBank.map(t => {
           const reason = t.description?.match(/\[Excluded: (.+?)\]/)?.[1] || 'Excluded';
           const cleanDesc = t.description?.replace(/\s*\[Excluded:.*?\]/g, '').trim() || '';
+          const descLower = (t.description || '').toLowerCase();
+          const type = descLower.includes('declined') ? 'Declined'
+            : descLower.includes('cancel') || descLower.includes('revers') ? 'Cancelled / Reversed'
+            : 'Excluded';
           return {
             'Date': t.transactionDate,
             'Time': t.transactionTime || '',
             'Amount': parseFloat(t.amount),
             'Bank': t.sourceName || t.sourceType,
+            'Type': type,
             'Card Number': t.cardNumber || '',
             'Description': cleanDesc,
             'Reason': reason,
@@ -2355,18 +2691,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sheet 7: Unmatched Fuel (card transactions without a bank match)
       const unmatchedFuel = fuelTxns.filter(t => t.isCardTransaction === 'yes' && t.matchStatus !== 'matched');
       if (unmatchedFuel.length > 0) {
-        const unmatchedFuelRows: Record<string, any>[] = unmatchedFuel.map(t => ({
-          'Date': t.transactionDate,
-          'Time': t.transactionTime || '',
-          'Amount': parseFloat(t.amount),
-          'Payment Type': t.paymentType || '',
-          'Card Number': t.cardNumber || '',
-          'Reference': t.referenceNumber || '',
-          'Attendant': t.attendant || '',
-          'Cashier': t.cashier || '',
-          'Pump': t.pump || '',
-          'Description': t.description || '',
-        }));
+        const unmatchedFuelRows: Record<string, any>[] = unmatchedFuel.map(t => {
+          const resolution = resolutionMap.get(t.id);
+          return {
+            'Date': t.transactionDate,
+            'Time': t.transactionTime || '',
+            'Amount': parseFloat(t.amount),
+            'Payment Type': t.paymentType || '',
+            'Card Number': t.cardNumber || '',
+            'Reference': t.referenceNumber || '',
+            'Attendant': t.attendant || '',
+            'Cashier': t.cashier || '',
+            'Pump': t.pump || '',
+            'Description': t.description || '',
+            'Resolution': resolution ? resolution.resolutionType : 'unresolved',
+            'Reason': resolution?.reason || '',
+            'Notes': resolution?.notes || '',
+          };
+        });
 
         // Per-attendant summary
         const attendantTotals = new Map<string, number>();
@@ -2405,6 +2747,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             'Verified Amount (Bank)': fmt(att.matchedBankAmount),
             'Unmatched Card Sales': att.unmatchedCount > 0 ? att.unmatchedCount : '',
             'Unmatched Amount': att.unmatchedCount > 0 ? fmt(att.unmatchedAmount) : '',
+            'Declined': att.declinedCount > 0 ? att.declinedCount : '',
+            'Declined Amount': att.declinedCount > 0 ? fmt(att.declinedAmount) : '',
           });
 
           // Bank breakdown per attendant

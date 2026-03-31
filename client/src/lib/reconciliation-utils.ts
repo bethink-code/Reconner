@@ -6,11 +6,13 @@ export function deriveSummaryStats(summary: PeriodSummary) {
   const matchableBankTotal = summary.bankTransactions - unmatchableBank - excludedBank;
   const unmatchedBank = summary.unmatchedBankTransactions;
   const bankMatchPct = matchableBankTotal > 0 ? Math.round((summary.matchedPairs / matchableBankTotal) * 100) : 0;
-  const unmatchedFuelCount = summary.cardFuelTransactions - summary.debtorFuelTransactions - summary.matchedPairs;
-  const cardOnly = summary.cardFuelTransactions - summary.debtorFuelTransactions;
-  const cardOnlyAmount = summary.cardFuelAmount - summary.debtorFuelAmount;
+  // cardFuelTransactions/Amount already excludes debtors (handled in SQL)
+  const unmatchedFuelCount = summary.cardFuelTransactions - summary.matchedPairs;
+  const cardOnly = summary.cardFuelTransactions;
+  const cardOnlyAmount = summary.cardFuelAmount;
   const bankApprovedAmount = summary.matchedBankAmount + (summary.unmatchedBankAmount || 0);
-  const fileSurplus = bankApprovedAmount - summary.cardFuelAmount;
+  // Financial reconciliation uses card-only (no debtors) — debtors aren't expected to have bank matches
+  const fileSurplus = bankApprovedAmount - cardOnlyAmount;
   const matchedSurplus = summary.matchedBankAmount - summary.matchedFuelAmount;
   const unmatchedBankAmt = summary.unmatchedBankAmount || 0;
   const unmatchedFuelCardAmount = summary.unmatchedCardAmount || 0;

@@ -139,13 +139,13 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(p =>
-        p.bankTransaction.amount.includes(q) ||
-        p.fuelTransaction.amount.includes(q) ||
-        (p.bankTransaction.description?.toLowerCase().includes(q)) ||
-        (p.bankTransaction.cardNumber?.toLowerCase().includes(q)) ||
-        (p.fuelTransaction.attendant?.toLowerCase().includes(q)) ||
-        (p.fuelTransaction.referenceNumber?.toLowerCase().includes(q)) ||
-        (p.bankTransaction.referenceNumber?.toLowerCase().includes(q))
+        p.bankTransaction?.amount.includes(q) ||
+        p.fuelTransaction?.amount.includes(q) ||
+        (p.bankTransaction?.description?.toLowerCase().includes(q)) ||
+        (p.bankTransaction?.cardNumber?.toLowerCase().includes(q)) ||
+        (p.fuelTransaction?.attendant?.toLowerCase().includes(q)) ||
+        (p.fuelTransaction?.referenceNumber?.toLowerCase().includes(q)) ||
+        (p.bankTransaction?.referenceNumber?.toLowerCase().includes(q))
       );
     }
     return result;

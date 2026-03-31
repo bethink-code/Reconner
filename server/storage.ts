@@ -114,6 +114,8 @@ export interface AttendantSummaryRow {
   matchedBankAmount: number;
   unmatchedCount: number;
   unmatchedAmount: number;
+  declinedCount: number;
+  declinedAmount: number;
   banks: AttendantBankBreakdown[];
   totalCount: number;
   totalAmount: number;
@@ -555,20 +557,32 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN source_type = 'fuel' THEN amount::numeric ELSE 0 END), 0) as total_fuel_amount,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
           
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' THEN 1 END) as card_fuel_transactions,
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' THEN 1 END) as cash_fuel_transactions,
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN 1 END) as unknown_fuel_transactions,
-          
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' THEN amount::numeric ELSE 0 END), 0) as card_fuel_amount,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_fuel_amount,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
-
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (
+          -- Debtors identified by payment_type regardless of is_card_transaction flag
+          COUNT(CASE WHEN source_type = 'fuel' AND (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
           ) THEN 1 END) as debtor_fuel_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
           ) THEN amount::numeric ELSE 0 END), 0) as debtor_fuel_amount,
+
+          -- Card = is_card_transaction='yes' excluding debtors
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND NOT (
+            LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
+          ) THEN 1 END) as card_fuel_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND NOT (
+            LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
+          ) THEN amount::numeric ELSE 0 END), 0) as card_fuel_amount,
+
+          -- Cash = is_card_transaction='no' excluding debtors
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' AND NOT (
+            LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
+          ) THEN 1 END) as cash_fuel_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' AND NOT (
+            LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
+          ) THEN amount::numeric ELSE 0 END), 0) as cash_fuel_amount,
+
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN 1 END) as unknown_fuel_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
 
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN 1 END) as matched_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
@@ -583,8 +597,12 @@ export class DatabaseStorage implements IStorage {
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN 1 END) as resolved_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
           
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN 1 END) as unmatched_card_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0
+            AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+          THEN 1 END) as unmatched_card_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched' AND amount::numeric > 0
+            AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+          THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
           -- Fuel card transactions scoped to bank coverage dates
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes'
@@ -616,21 +634,27 @@ export class DatabaseStorage implements IStorage {
       match_stats AS (
         SELECT
           COUNT(*) as matched_pairs,
-          COALESCE(SUM(t_fuel.amount::numeric), 0) as matched_fuel_amount,
+          -- Sum ALL fuel items per match (not just the primary), for invoice grouping
+          COALESCE((
+            SELECT SUM(t.amount::numeric)
+            FROM transactions t
+            WHERE t.source_type = 'fuel'
+              AND t.match_id IN (SELECT id FROM matches WHERE period_id = $1)
+          ), 0) as matched_fuel_amount,
           COUNT(CASE WHEN ABS(
-            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') -
             TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
           ) = 0 THEN 1 END) as matches_same_day,
           COUNT(CASE WHEN ABS(
-            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') -
             TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
           ) = 1 THEN 1 END) as matches_1_day,
           COUNT(CASE WHEN ABS(
-            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') -
             TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
           ) = 2 THEN 1 END) as matches_2_day,
           COUNT(CASE WHEN ABS(
-            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') - 
+            TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') -
             TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
           ) >= 3 THEN 1 END) as matches_3_day
         FROM matches m
@@ -769,7 +793,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]> {
-    // Query 1: Per-attendant verified card sales (via matches table) + unmatched card sales
+    // Query 1: Per-attendant verified card sales + unmatched (card + debtor)
     // Scoped to bank coverage dates
     const result = await pool.query(`
       WITH bank_coverage AS (
@@ -780,19 +804,26 @@ export class DatabaseStorage implements IStorage {
         WHERE period_id = $1
           AND source_type LIKE 'bank%'
           AND match_status NOT IN ('unmatchable', 'excluded')
+      ),
+      is_card_or_debtor AS (
+        -- Card and debtor fuel transactions (not cash)
+        SELECT id FROM transactions
+        WHERE period_id = $1 AND source_type = 'fuel'
+          AND (is_card_transaction = 'yes' OR LOWER(payment_type) LIKE '%debtor%'
+               OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
       )
       SELECT
         COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown') AS attendant,
-        COUNT(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status = 'matched'
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status = 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN 1 END)::int AS matched_count,
-        COALESCE(SUM(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status = 'matched'
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status = 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS matched_amount,
-        COUNT(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status != 'matched'
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status != 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN 1 END)::int AS unmatched_count,
-        COALESCE(SUM(CASE WHEN t.is_card_transaction = 'yes' AND t.match_status != 'matched'
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_or_debtor) AND t.match_status != 'matched'
                     AND t.transaction_date >= bc.min_date
                     AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS unmatched_amount,
         COUNT(*)::int AS total_count,
@@ -821,6 +852,31 @@ export class DatabaseStorage implements IStorage {
       ORDER BY count DESC
     `, [periodId]);
 
+    // Query 3: Per-attendant declined transactions — link via card number
+    const declinedBreakdown = await pool.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(fuel_match.attendant), ''), 'Unknown') AS attendant,
+        COUNT(*)::int AS declined_count,
+        COALESCE(SUM(b.amount::numeric), 0) AS declined_amount
+      FROM transactions b
+      LEFT JOIN LATERAL (
+        SELECT DISTINCT ON (t.card_number) t.attendant
+        FROM transactions t
+        WHERE t.period_id = $1
+          AND t.source_type = 'fuel'
+          AND t.card_number IS NOT NULL
+          AND t.card_number != ''
+          AND t.card_number = b.card_number
+        ORDER BY t.card_number, t.transaction_date DESC
+        LIMIT 1
+      ) fuel_match ON true
+      WHERE b.period_id = $1
+        AND b.source_type LIKE 'bank%'
+        AND b.match_status = 'excluded'
+        AND LOWER(b.description) LIKE '%declined%'
+      GROUP BY COALESCE(NULLIF(TRIM(fuel_match.attendant), ''), 'Unknown')
+    `, [periodId]);
+
     // Build bank breakdown lookup: attendant → banks[]
     const banksByAttendant: Record<string, AttendantBankBreakdown[]> = {};
     for (const row of bankBreakdown.rows) {
@@ -833,10 +889,20 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
+    // Build declined lookup: attendant → { count, amount }
+    const declinedByAttendant: Record<string, { count: number; amount: number }> = {};
+    for (const row of declinedBreakdown.rows) {
+      declinedByAttendant[row.attendant] = {
+        count: parseInt(row.declined_count || '0'),
+        amount: parseFloat(row.declined_amount || '0'),
+      };
+    }
+
     return result.rows.map(row => {
       const matchedCount = parseInt(row.matched_count || '0');
       const banks = banksByAttendant[row.attendant] || [];
       const matchedBankAmount = banks.reduce((sum, b) => sum + b.amount, 0);
+      const declined = declinedByAttendant[row.attendant] || { count: 0, amount: 0 };
       return {
         attendant: row.attendant,
         matchedCount,
@@ -844,6 +910,8 @@ export class DatabaseStorage implements IStorage {
         matchedBankAmount,
         unmatchedCount: parseInt(row.unmatched_count || '0'),
         unmatchedAmount: parseFloat(row.unmatched_amount || '0'),
+        declinedCount: declined.count,
+        declinedAmount: declined.amount,
         banks,
         totalCount: parseInt(row.total_count || '0'),
         totalAmount: parseFloat(row.total_amount || '0'),

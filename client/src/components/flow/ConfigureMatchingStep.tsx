@@ -7,14 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { 
-  Settings, 
+  Settings,
   Zap,
   ArrowLeft,
   ChevronDown,
   Check,
   Shield,
   Scale,
-  Target
+  Target,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -271,52 +273,100 @@ export function ConfigureMatchingStep({
           </div>
 
           {/* Data Coverage Preview */}
-          {verSummary && (
-            <div className="rounded-lg bg-section p-4 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Data Coverage</p>
-              {period && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Period</span>
-                  <span className="font-medium">{period.startDate} to {period.endDate}</span>
-                </div>
-              )}
-              {verSummary.coverageAnalysis?.fuelDateRange && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Fuel data</span>
-                  <span className="font-medium">
-                    {verSummary.coverageAnalysis.fuelDateRange.earliest} to {verSummary.coverageAnalysis.fuelDateRange.latest}
-                    <span className="text-muted-foreground ml-1">({verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions} txns)</span>
-                  </span>
-                </div>
-              )}
-              {verSummary.overview.bankStatements.sources.map((src, i) => (
-                <div key={i} className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">{src.name}</span>
-                  <span className="font-medium">
-                    {verSummary.overview.bankStatements.dateRange.earliest} to {verSummary.overview.bankStatements.dateRange.latest}
-                    <span className="text-muted-foreground ml-1">({src.transactions} txns)</span>
-                  </span>
-                </div>
-              ))}
-              {(() => {
-                const fuelRange = verSummary.coverageAnalysis?.fuelDateRange;
-                const bankRange = verSummary.overview.bankStatements.dateRange;
-                if (fuelRange && bankRange?.earliest && bankRange?.latest) {
-                  const hasOverlap = bankRange.earliest <= fuelRange.latest && bankRange.latest >= fuelRange.earliest;
-                  if (!hasOverlap) {
-                    return (
-                      <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-2 mt-2">
-                        <p className="text-xs font-medium text-red-700 dark:text-red-400">
-                          Date ranges don't overlap — matching will likely produce 0 results. Check your uploaded files.
-                        </p>
-                      </div>
-                    );
+          {verSummary && (() => {
+            const fuelRange = verSummary.coverageAnalysis?.fuelDateRange;
+            const periodStart = period?.startDate;
+            const periodEnd = period?.endDate;
+
+            // Determine coverage status for a date range against the period dates
+            const getCoverageStatus = (earliest: string, latest: string) => {
+              if (!periodStart || !periodEnd) return 'unknown';
+              const hasOverlap = earliest <= periodEnd && latest >= periodStart;
+              if (!hasOverlap) return 'miss';
+              const covers = earliest <= periodStart && latest >= periodEnd;
+              return covers ? 'match' : 'overlap';
+            };
+
+            const StatusIcon = ({ status }: { status: string }) => {
+              if (status === 'match') return <span className="w-2 h-2 rounded-full bg-[#166534] inline-block" />;
+              if (status === 'overlap') return <span className="w-2 h-2 rounded-full bg-[#B45309] inline-block" />;
+              if (status === 'miss') return <span className="w-2 h-2 rounded-full bg-[#B91C1C] inline-block" />;
+              return null;
+            };
+
+            const statusLabel = (status: string) => {
+              if (status === 'match') return 'Covers fuel period';
+              if (status === 'overlap') return 'Partial overlap';
+              if (status === 'miss') return 'No overlap';
+              return '';
+            };
+
+            return (
+              <div className="rounded-lg bg-section p-4 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Data Coverage</p>
+                {period && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Period</span>
+                    <span className="font-medium">{periodStart} to {periodEnd}</span>
+                  </div>
+                )}
+                {fuelRange && (() => {
+                  const fuelStatus = getCoverageStatus(fuelRange.earliest, fuelRange.latest);
+                  return (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Fuel data</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        {fuelRange.earliest} to {fuelRange.latest}
+                        <span className="text-muted-foreground">({verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions} txns)</span>
+                        <StatusIcon status={fuelStatus} />
+                      </span>
+                    </div>
+                  );
+                })()}
+                {verSummary.overview.bankStatements.sources.map((src, i) => {
+                  const bankRange = verSummary.overview.bankStatements.dateRange;
+                  const status = bankRange?.earliest && bankRange?.latest
+                    ? getCoverageStatus(bankRange.earliest, bankRange.latest)
+                    : 'unknown';
+                  return (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{src.name}</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        {bankRange?.earliest} to {bankRange?.latest}
+                        <span className="text-muted-foreground">({src.transactions} txns)</span>
+                        <StatusIcon status={status} />
+                      </span>
+                    </div>
+                  );
+                })}
+                {(() => {
+                  const bankRange = verSummary.overview.bankStatements.dateRange;
+                  if (fuelRange && bankRange?.earliest && bankRange?.latest) {
+                    const status = getCoverageStatus(bankRange.earliest, bankRange.latest);
+                    if (status === 'miss') {
+                      return (
+                        <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-2 mt-2">
+                          <p className="text-xs font-medium text-red-700 dark:text-red-400">
+                            Date ranges don't overlap — matching will likely produce 0 results. Check your uploaded files.
+                          </p>
+                        </div>
+                      );
+                    }
+                    if (status === 'overlap') {
+                      return (
+                        <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 mt-2">
+                          <p className="text-xs font-medium text-[#B45309]">
+                            Bank data only partially covers the fuel period — some transactions may not find matches.
+                          </p>
+                        </div>
+                      );
+                    }
                   }
-                }
-                return null;
-              })()}
-            </div>
-          )}
+                  return null;
+                })()}
+              </div>
+            );
+          })()}
 
           <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
             <CollapsibleTrigger asChild>

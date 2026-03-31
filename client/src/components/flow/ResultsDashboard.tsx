@@ -9,6 +9,7 @@ import {
   Settings,
   ChevronRight,
   ArrowRight,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRand } from "@/lib/format";
@@ -38,6 +39,7 @@ interface Period {
 export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: ResultsDashboardProps) {
   const [activeTab, setActiveTab] = useState("summary");
   const [reviewSide, setReviewSide] = useState<'bank' | 'fuel'>('bank');
+  const [insightsView, setInsightsView] = useState<'landing' | 'detail' | 'attendants' | 'declined'>('landing');
   const [rulesExpanded, setRulesExpanded] = useState(false);
 
   const { data: summary, isLoading } = useQuery<PeriodSummary>({
@@ -71,7 +73,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   }
 
   // ── Calculations ──
-  const { unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, bankMatchPct, unmatchedFuelCount } = deriveSummaryStats(summary);
+  const { unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, bankMatchPct, unmatchedFuelCount, cardOnlyAmount, bankApprovedAmount, fileSurplus } = deriveSummaryStats(summary);
 
   // Badge counts — subtract resolved/flagged transactions from unmatched totals
   const resolvedCount = resolutions?.filter(r => r.resolutionType !== 'flagged').length || 0;
@@ -102,7 +104,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                 flaggedCount > 0 ? "bg-[#B45309] text-white" : "bg-muted text-muted-foreground"
               )}>{flaggedCount}</span>
             </TabsTrigger>
-            <TabsTrigger value="insights" className={tabTriggerClass}>Insights</TabsTrigger>
+            <TabsTrigger value="insights" className={tabTriggerClass} onClick={() => setInsightsView('landing')}>Insights</TabsTrigger>
           </TabsList>
           <Button
             variant="ghost"
@@ -120,49 +122,124 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
             SUMMARY TAB — 4 action cards
         ════════════════════════════════════════════════════════════ */}
         <TabsContent value="summary" className="mt-0 max-w-4xl mx-auto">
-          <div className="bg-section rounded-2xl p-6 space-y-6">
-            <div className="grid grid-cols-4 gap-3">
-              {([
-                { key: "transactions", label: "01 · Transactions", desc: "How did matching go?", value: `${bankMatchPct}%`, sub: `${summary.matchedPairs} matched · ${formatRand(summary.matchedBankAmount)}`, context: `of ${matchableBankTotal} transactions · ${formatRand(summary.totalBankAmount)}`, action: "View all transactions", hasIssue: false },
-                { key: "review", side: "bank" as const, label: "02 · Review Bank", desc: "Bank money with no fuel explanation", value: String(unmatchedBank), sub: formatRand(summary.unmatchedBankAmount || 0), context: `of ${matchableBankTotal} totalling ${formatRand(summary.totalBankAmount)}`, action: "Review bank side", hasIssue: unmatchedBank > 0 },
-                { key: "review", side: "fuel" as const, label: "03 · Review Fuel", desc: "Fuel dispensed, no bank payment", value: String(Math.max(0, unmatchedFuelCount)), sub: formatRand(summary.unmatchedCardAmount || 0), context: `of ${summary.cardFuelTransactions - summary.debtorFuelTransactions} totalling ${formatRand(summary.cardFuelAmount - summary.debtorFuelAmount)}`, action: "Review fuel side", hasIssue: unmatchedFuelCount > 0 },
-                { key: "investigate", label: "04 · Investigate", desc: "Your real-world follow-up list", value: String(flaggedCount), sub: flaggedCount === 0 ? "nothing to investigate yet" : "items flagged", context: "", action: "View investigate list", hasIssue: flaggedCount > 0 },
-              ] as const).map((card, idx) => (
-                <InfoCard
-                  key={idx}
-                  className="cursor-pointer hover:bg-card/80 transition-colors text-center flex flex-col"
-                  onClick={() => { setActiveTab(card.key); if ('side' in card && card.side) setReviewSide(card.side); }}
-                >
-                  {/* Header — fixed height so all cards align */}
-                  <div className="min-h-[3.5rem]">
-                    <InfoCardLabel>{card.label}</InfoCardLabel>
-                    <p className="text-sm font-medium text-muted-foreground">{card.desc}</p>
+          <div className="bg-section rounded-2xl p-6 space-y-5">
+
+            {/* Row 1: Match health ring + Review actions */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* Match Health */}
+              <InfoCard className="flex flex-col items-center justify-center py-5 cursor-pointer hover:bg-card/80 transition-colors" onClick={() => setActiveTab('transactions')}>
+                <div className="relative w-24 h-24 mb-3">
+                  <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                    <circle cx="50" cy="50" r="42" fill="none" stroke="#E5E3DC" strokeWidth="8" />
+                    <circle cx="50" cy="50" r="42" fill="none"
+                      stroke={bankMatchPct >= 80 ? "#166534" : bankMatchPct >= 60 ? "#B45309" : "#B91C1C"}
+                      strokeWidth="8" strokeLinecap="round"
+                      strokeDasharray={`${bankMatchPct * 2.639} ${263.9 - bankMatchPct * 2.639}`} />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className={cn("text-2xl font-bold tabular-nums", bankMatchPct >= 80 ? "text-[#166534]" : bankMatchPct >= 60 ? "text-[#B45309]" : "text-[#B91C1C]")}>{bankMatchPct}%</span>
                   </div>
-                  {/* Content — fixed height, vertically centered */}
-                  <div className="border-t border-border/30 mt-3 pt-3 h-[6rem]">
-                    <p className={cn("text-3xl font-bold tabular-nums", card.hasIssue ? "text-[#B45309]" : idx === 0 ? (bankMatchPct >= 60 ? "text-[#166534]" : "text-[#B91C1C]") : "text-[#166534]")}>
-                      {card.value}
-                      {idx === 0 && bankMatchPct >= 90 && <span className="text-[#166534] ml-1 text-lg">✓</span>}
-                    </p>
-                    <p className="text-xs font-medium mt-0.5">{card.sub}</p>
-                    {card.context && <p className="text-[10px] text-muted-foreground mt-1">{card.context}</p>}
+                </div>
+                <p className="text-sm font-semibold">Match Rate</p>
+                <p className="text-xs text-muted-foreground">{summary.matchedPairs} of {matchableBankTotal} matched</p>
+                <InfoCardAction className="mt-2 justify-center">View transactions <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
+
+              {/* Review Bank */}
+              <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col" onClick={() => { setActiveTab('review'); setReviewSide('bank'); }}>
+                <InfoCardLabel>Review Bank</InfoCardLabel>
+                <p className="text-xs text-muted-foreground mt-0.5">Money received with no pump record</p>
+                <div className="flex-1 flex items-center gap-3 mt-3">
+                  <span className={cn("text-3xl font-bold tabular-nums", unmatchedBank > 0 ? "text-[#B45309]" : "text-[#166534]")}>{unmatchedBank}</span>
+                  <div>
+                    <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedBankAmount || 0)}</p>
+                    <p className="text-xs text-muted-foreground">of {matchableBankTotal} bank transactions</p>
                   </div>
-                  {/* Action — pinned to bottom */}
-                  <div className="border-t border-border/30 pt-3">
-                    <InfoCardAction className="justify-center">{card.action} <ArrowRight className="h-3 w-3" /></InfoCardAction>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full h-1.5 rounded-full bg-[#E5E3DC] mt-3">
+                  <div className="h-full rounded-full bg-[#166534]" style={{ width: `${matchableBankTotal > 0 ? ((matchableBankTotal - unmatchedBank) / matchableBankTotal) * 100 : 100}%` }} />
+                </div>
+                <InfoCardAction className="mt-2">Review bank side <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
+
+              {/* Review Fuel */}
+              <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col" onClick={() => { setActiveTab('review'); setReviewSide('fuel'); }}>
+                <InfoCardLabel>Review Fuel</InfoCardLabel>
+                <p className="text-xs text-muted-foreground mt-0.5">Fuel pumped, no payment received</p>
+                <div className="flex-1 flex items-center gap-3 mt-3">
+                  <span className={cn("text-3xl font-bold tabular-nums", unmatchedFuelCount > 0 ? "text-[#B45309]" : "text-[#166534]")}>{Math.max(0, unmatchedFuelCount)}</span>
+                  <div>
+                    <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedCardAmount || 0)}</p>
+                    <p className="text-xs text-muted-foreground">of {summary.cardFuelTransactions} card transactions</p>
                   </div>
-                </InfoCard>
-              ))}
+                </div>
+                {/* Progress bar */}
+                <div className="w-full h-1.5 rounded-full bg-[#E5E3DC] mt-3">
+                  <div className="h-full rounded-full bg-[#166534]" style={{ width: `${summary.cardFuelTransactions > 0 ? ((summary.cardFuelTransactions - Math.max(0, unmatchedFuelCount)) / summary.cardFuelTransactions) * 100 : 100}%` }} />
+                </div>
+                <InfoCardAction className="mt-2">Review fuel side <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
             </div>
 
-          {/* Period Fuel Sales */}
-          <InfoCard>
+            {/* Row 2: Reconciliation + Declined + Investigate */}
+            <div className={cn("grid gap-4", excludedBank > 0 ? "grid-cols-3" : "grid-cols-2")}>
+              {/* Reconciliation */}
+              <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => { setInsightsView('detail'); setActiveTab('insights'); }}>
+                <InfoCardLabel>Reconciliation</InfoCardLabel>
+                {/* Visual bar: fuel vs bank */}
+                <div className="mt-3 space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Fuel card sales</span>
+                    <span className="tabular-nums font-medium text-foreground">{formatRand(cardOnlyAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Bank approved</span>
+                    <span className="tabular-nums font-medium text-foreground">{formatRand(bankApprovedAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs mt-1 pt-1 border-t border-border/30">
+                    <span className="font-medium">Surplus / Shortfall</span>
+                    <span className={cn("tabular-nums font-bold", fileSurplus !== 0 ? "text-[#B45309]" : "text-[#166534]")}>{formatRand(fileSurplus)}</span>
+                  </div>
+                </div>
+                <InfoCardAction className="mt-3">View analysis <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
+
+              {/* Declined */}
+              {excludedBank > 0 && (
+                <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => { setInsightsView('declined'); setActiveTab('insights'); }}>
+                  <InfoCardLabel>Declined</InfoCardLabel>
+                  <div className="flex items-center gap-3 mt-3">
+                    <AlertTriangle className="h-8 w-8 text-[#B45309]" />
+                    <div>
+                      <p className="text-2xl font-bold tabular-nums text-[#B45309]">{excludedBank}</p>
+                      <p className="text-xs text-muted-foreground">declined / cancelled</p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums mt-2">{formatRand(summary.excludedBankAmount || 0)}</p>
+                  <InfoCardAction className="mt-2">View report <ArrowRight className="h-3 w-3" /></InfoCardAction>
+                </InfoCard>
+              )}
+
+              {/* Investigate */}
+              <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => setActiveTab('investigate')}>
+                <InfoCardLabel>Investigate</InfoCardLabel>
+                <div className="flex items-center gap-3 mt-3">
+                  <span className={cn("text-2xl font-bold tabular-nums", flaggedCount > 0 ? "text-[#B45309]" : "text-[#166534]")}>{flaggedCount}</span>
+                  <p className="text-xs text-muted-foreground">{flaggedCount === 0 ? "nothing to investigate yet" : "items flagged for follow-up"}</p>
+                </div>
+                <InfoCardAction className="mt-auto pt-3">View investigate list <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
+            </div>
+
+            {/* Row 3: Period Fuel Sales */}
+            <InfoCard>
               <InfoCardLabel className="mb-3">Period Fuel Sales</InfoCardLabel>
               <InfoCardContent className="flex divide-x divide-border/50">
                 {[
                   { key: "all", label: "All", count: summary.fuelTransactions, amount: summary.totalFuelAmount },
-                  { key: "card", label: "Card", count: summary.cardFuelTransactions - summary.debtorFuelTransactions, amount: summary.cardFuelAmount - summary.debtorFuelAmount },
-                  ...(summary.debtorFuelTransactions > 0 ? [{ key: "debtor", label: "Card (Debtor)", count: summary.debtorFuelTransactions, amount: summary.debtorFuelAmount }] : []),
+                  { key: "card", label: "Card", count: summary.cardFuelTransactions, amount: summary.cardFuelAmount },
+                  ...(summary.debtorFuelTransactions > 0 ? [{ key: "debtor", label: "Debtor / Account", count: summary.debtorFuelTransactions, amount: summary.debtorFuelAmount }] : []),
                   { key: "cash", label: "Cash", count: summary.cashFuelTransactions, amount: summary.cashFuelAmount },
                 ].map(seg => (
                   <div key={seg.key} className="flex-1 py-2 px-3 text-center">
@@ -174,8 +251,8 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
               </InfoCardContent>
             </InfoCard>
 
-          {/* Matching Rules */}
-          <InfoCard className="py-3 px-4 cursor-pointer" onClick={() => setRulesExpanded(!rulesExpanded)}>
+            {/* Row 4: Matching Rules (collapsible) */}
+            <InfoCard className="py-3 px-4 cursor-pointer" onClick={() => setRulesExpanded(!rulesExpanded)}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Settings className="h-4 w-4" />
@@ -200,7 +277,8 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                 </InfoCardContent>
               )}
             </InfoCard>
-          </div>{/* close single section */}
+
+          </div>
         </TabsContent>
 
         {/* ════════════════════════════════════════════════════════════
@@ -219,7 +297,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
         </TabsContent>
 
         <TabsContent value="insights" className="mt-0 max-w-4xl mx-auto">
-          <InsightsTab periodId={periodId} />
+          <InsightsTab periodId={periodId} initialView={insightsView} key={insightsView} />
         </TabsContent>
     </Tabs>
   );
@@ -228,7 +306,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
 function RuleValue({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</p>
       <p className="text-sm tabular-nums">{value}</p>
     </div>
   );

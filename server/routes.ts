@@ -2619,9 +2619,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchedRows), 'Matched');
 
-      // Sheet 3: Unmatched bank transactions
+      // Sheet 3: Unmatched bank transactions — with attendant/cashier from nearest fuel tx
       const unmatchedRows = unmatchedBank.map(t => {
         const resolution = resolutionMap.get(t.id);
+        // Find attendant via card number or nearest fuel transaction by time
+        let attendant = '';
+        let cashier = '';
+        if (t.cardNumber) {
+          const byCard = fuelTxns.find(f => f.cardNumber === t.cardNumber && f.transactionDate === t.transactionDate);
+          if (byCard) { attendant = byCard.attendant || ''; cashier = byCard.cashier || ''; }
+        }
+        if (!attendant && t.transactionTime) {
+          const tMin = parseInt(t.transactionTime.split(':')[0]) * 60 + parseInt(t.transactionTime.split(':')[1] || '0');
+          let best: typeof fuelTxns[0] | null = null;
+          let bestDiff = Infinity;
+          for (const f of fuelTxns) {
+            if (f.transactionDate !== t.transactionDate || !f.transactionTime) continue;
+            const fMin = parseInt(f.transactionTime.split(':')[0]) * 60 + parseInt(f.transactionTime.split(':')[1] || '0');
+            const diff = Math.abs(fMin - tMin);
+            if (diff < bestDiff && diff <= 30) { bestDiff = diff; best = f; }
+          }
+          if (best) { attendant = best.attendant || ''; cashier = best.cashier || ''; }
+        }
         return {
           'Date': t.transactionDate,
           'Time': t.transactionTime || '',
@@ -2629,6 +2648,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Bank': t.sourceName || t.sourceType,
           'Card Number': t.cardNumber || '',
           'Description': t.description || '',
+          'Attendant': attendant,
+          'Cashier': cashier,
           'Resolution': resolution ? resolution.resolutionType : 'unresolved',
           'Reason': resolution?.reason || '',
           'Notes': resolution?.notes || '',

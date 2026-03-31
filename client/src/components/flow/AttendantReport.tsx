@@ -89,7 +89,11 @@ export function AttendantReport({
 
   // Grand totals
   const totalVerifiedCount = sorted.reduce((sum, r) => sum + r.matchedCount, 0);
+  const totalVerifiedFuelAmount = sorted.reduce((sum, r) => sum + r.matchedAmount, 0);
   const totalVerifiedBankAmount = sorted.reduce((sum, r) => sum + r.matchedBankAmount, 0);
+  const totalUnmatchedCount = data.reduce((sum, r) => sum + r.unmatchedCount, 0);
+  const totalUnmatchedAmount = data.reduce((sum, r) => sum + r.unmatchedAmount, 0);
+  const totalDecimalError = totalVerifiedBankAmount - totalVerifiedFuelAmount;
 
   return (
     <div className="space-y-3">
@@ -100,7 +104,27 @@ export function AttendantReport({
         )}
       </p>
 
-      {/* Unattributable bank transactions — shown first */}
+      {/* Attendant accountability summary */}
+      <div className="rounded-lg bg-section p-4 space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">Attendant Accountability</p>
+        <div className="flex items-center justify-between text-[13px]">
+          <span>Verified card sales</span>
+          <span className="tabular-nums font-medium text-[#166534]">{formatRandExact(totalVerifiedBankAmount)}</span>
+        </div>
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-muted-foreground">Decimal error (fuel vs bank)</span>
+          <span className={cn("tabular-nums font-medium", totalDecimalError !== 0 ? "text-[#B45309]" : "")}>{formatRandExact(totalDecimalError)}</span>
+        </div>
+        <div className="flex items-center justify-between text-[13px] pt-1 border-t border-[#E5E3DC]/50">
+          <span>Unmatched card sales</span>
+          <span className={cn("tabular-nums font-bold", totalUnmatchedAmount > 0 ? "text-[#B45309]" : "")}>{formatRandExact(totalUnmatchedAmount)}</span>
+        </div>
+        <div className="text-xs text-muted-foreground pt-1">
+          {totalUnmatchedCount} transaction{totalUnmatchedCount !== 1 ? "s" : ""} across {data.filter(a => a.unmatchedCount > 0).length} attendant{data.filter(a => a.unmatchedCount > 0).length !== 1 ? "s" : ""} — fuel dispensed with no bank payment
+        </div>
+      </div>
+
+      {/* Unattributable bank transactions */}
       {(unmatchedBankCount ?? 0) > 0 && (
         <div className="rounded-lg bg-section border border-[#E5E3DC] p-3">
           <div className="flex items-center justify-between">

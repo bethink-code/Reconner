@@ -63,6 +63,14 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
     enabled: !!periodId,
   });
 
+  // Decline analysis for net unrecovered amount
+  const { data: declineData } = useQuery<{
+    summary: { totalDeclined: number; resubmittedCount: number; unrecoveredCount: number; netUnrecoveredAmount: number };
+  }>({
+    queryKey: ["/api/periods", periodId, "decline-analysis"],
+    enabled: !!periodId && (summary?.excludedBankTransactions || 0) > 0,
+  });
+
   if (isLoading || !summary) {
     return (
       <div className="space-y-4 max-w-2xl mx-auto">
@@ -212,11 +220,12 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                   <div className="flex items-center gap-3 mt-3">
                     <AlertTriangle className="h-8 w-8 text-[#B45309]" />
                     <div>
-                      <p className="text-2xl font-bold tabular-nums text-[#B45309]">{excludedBank}</p>
-                      <p className="text-xs text-muted-foreground">declined / cancelled</p>
+                      <p className="text-2xl font-bold tabular-nums text-[#B45309]">{declineData?.summary.unrecoveredCount ?? excludedBank}</p>
+                      <p className="text-xs text-muted-foreground">unrecovered</p>
                     </div>
                   </div>
-                  <p className="text-sm font-semibold tabular-nums mt-2">{formatRand(summary.excludedBankAmount || 0)}</p>
+                  <p className="text-sm font-semibold tabular-nums text-[#B45309] mt-2">{formatRand(declineData?.summary.netUnrecoveredAmount ?? (summary.excludedBankAmount || 0))}</p>
+                  <p className="text-xs text-muted-foreground">{excludedBank} total declined · {declineData?.summary.resubmittedCount ?? 0} resubmitted</p>
                   <InfoCardAction className="mt-2">View report <ArrowRight className="h-3 w-3" /></InfoCardAction>
                 </InfoCard>
               )}

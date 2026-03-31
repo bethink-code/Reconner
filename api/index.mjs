@@ -5552,6 +5552,33 @@ async function registerRoutes(app2) {
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(matchedRows), "Matched");
       const unmatchedRows = unmatchedBank.map((t) => {
         const resolution = resolutionMap.get(t.id);
+        let attendant = "";
+        let cashier = "";
+        if (t.cardNumber) {
+          const byCard = fuelTxns.find((f) => f.cardNumber === t.cardNumber && f.transactionDate === t.transactionDate);
+          if (byCard) {
+            attendant = byCard.attendant || "";
+            cashier = byCard.cashier || "";
+          }
+        }
+        if (!attendant && t.transactionTime) {
+          const tMin = parseInt(t.transactionTime.split(":")[0]) * 60 + parseInt(t.transactionTime.split(":")[1] || "0");
+          let best = null;
+          let bestDiff = Infinity;
+          for (const f of fuelTxns) {
+            if (f.transactionDate !== t.transactionDate || !f.transactionTime) continue;
+            const fMin = parseInt(f.transactionTime.split(":")[0]) * 60 + parseInt(f.transactionTime.split(":")[1] || "0");
+            const diff = Math.abs(fMin - tMin);
+            if (diff < bestDiff && diff <= 30) {
+              bestDiff = diff;
+              best = f;
+            }
+          }
+          if (best) {
+            attendant = best.attendant || "";
+            cashier = best.cashier || "";
+          }
+        }
         return {
           "Date": t.transactionDate,
           "Time": t.transactionTime || "",
@@ -5559,6 +5586,8 @@ async function registerRoutes(app2) {
           "Bank": t.sourceName || t.sourceType,
           "Card Number": t.cardNumber || "",
           "Description": t.description || "",
+          "Attendant": attendant,
+          "Cashier": cashier,
           "Resolution": resolution ? resolution.resolutionType : "unresolved",
           "Reason": resolution?.reason || "",
           "Notes": resolution?.notes || ""

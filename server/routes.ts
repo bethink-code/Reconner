@@ -1280,10 +1280,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
       
       // Filter fuel transactions to ONLY confirmed card transactions for reconciliation
-      // Cash and unknown transactions are excluded from matching but kept for reporting
-      const fuelTransactions = transactions.filter(t => 
-        t.sourceType === 'fuel' && 
+      // Cash, unknown, and debtor/account/fleet are excluded from matching but kept for reporting
+      const isDebtorTx = (t: typeof transactions[0]) =>
+        t.paymentType?.toLowerCase().includes('debtor') ||
+        t.paymentType?.toLowerCase().includes('account') ||
+        t.paymentType?.toLowerCase().includes('fleet');
+      const fuelTransactions = transactions.filter(t =>
+        t.sourceType === 'fuel' &&
         t.isCardTransaction === 'yes' &&
+        !isDebtorTx(t) &&
         t.matchStatus === 'unmatched'
       );
       

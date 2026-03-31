@@ -876,12 +876,15 @@ var DatabaseStorage = class {
           COUNT(CASE WHEN is_card_transaction = 'no' THEN 1 END) as cash_transactions,
           COALESCE(SUM(CASE WHEN is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_amount,
           -- Matchable invoices: distinct reference numbers for card txns (grouped), plus individual card txns without reference
+          -- Excludes debtors/account/fleet by payment_type (belt-and-suspenders with isCardTransaction)
           (SELECT COUNT(DISTINCT reference_number) FROM transactions
            WHERE period_id = $1 AND source_type = 'fuel' AND is_card_transaction = 'yes'
+             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
              AND reference_number IS NOT NULL AND reference_number != '')
           +
           (SELECT COUNT(*) FROM transactions
            WHERE period_id = $1 AND source_type = 'fuel' AND is_card_transaction = 'yes'
+             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
              AND (reference_number IS NULL OR reference_number = ''))
           as matchable_invoices,
           MIN(transaction_date) as fuel_earliest,
@@ -4505,8 +4508,9 @@ async function registerRoutes(app2) {
       await storage.resetMatchesByPeriod(req.params.periodId);
       const rules = await storage.getMatchingRules(req.params.periodId);
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
+      const isDebtorTx = (t) => t.paymentType?.toLowerCase().includes("debtor") || t.paymentType?.toLowerCase().includes("account") || t.paymentType?.toLowerCase().includes("fleet");
       const fuelTransactions = transactions2.filter(
-        (t) => t.sourceType === "fuel" && t.isCardTransaction === "yes" && t.matchStatus === "unmatched"
+        (t) => t.sourceType === "fuel" && t.isCardTransaction === "yes" && !isDebtorTx(t) && t.matchStatus === "unmatched"
       );
       const bankTransactions = transactions2.filter(
         (t) => t.sourceType && t.sourceType.startsWith("bank") && t.matchStatus === "unmatched"

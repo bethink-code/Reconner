@@ -968,12 +968,15 @@ export class DatabaseStorage implements IStorage {
           COUNT(CASE WHEN is_card_transaction = 'no' THEN 1 END) as cash_transactions,
           COALESCE(SUM(CASE WHEN is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_amount,
           -- Matchable invoices: distinct reference numbers for card txns (grouped), plus individual card txns without reference
+          -- Excludes debtors/account/fleet by payment_type (belt-and-suspenders with isCardTransaction)
           (SELECT COUNT(DISTINCT reference_number) FROM transactions
            WHERE period_id = $1 AND source_type = 'fuel' AND is_card_transaction = 'yes'
+             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
              AND reference_number IS NOT NULL AND reference_number != '')
           +
           (SELECT COUNT(*) FROM transactions
            WHERE period_id = $1 AND source_type = 'fuel' AND is_card_transaction = 'yes'
+             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
              AND (reference_number IS NULL OR reference_number = ''))
           as matchable_invoices,
           MIN(transaction_date) as fuel_earliest,

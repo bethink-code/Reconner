@@ -540,14 +540,10 @@ export class DatabaseStorage implements IStorage {
 
   async getPeriodSummary(periodId: string): Promise<PeriodSummary> {
     const result = await pool.query(`
-      WITH bank_coverage AS (
-        SELECT
-          MIN(transaction_date) AS min_date,
-          MAX(transaction_date) AS max_date
-        FROM transactions
-        WHERE period_id = $1
-          AND source_type LIKE 'bank%'
-          AND match_status NOT IN ('unmatchable', 'excluded')
+      WITH period_dates AS (
+        SELECT start_date AS min_date, end_date AS max_date
+        FROM reconciliation_periods
+        WHERE id = $1
       ),
       tx_stats AS (
         SELECT
@@ -606,22 +602,22 @@ export class DatabaseStorage implements IStorage {
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
-          -- Fuel card transactions scoped to bank coverage dates
+          -- Fuel card transactions scoped to period dates (period is master)
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes'
-                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN 1 END) as scoped_card_count,
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as scoped_card_count,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes'
-                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_card_amount,
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_card_amount,
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
-                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN 1 END) as scoped_matched_count,
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as scoped_matched_count,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
-                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_matched_amount,
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_matched_amount,
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched'
-                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN 1 END) as scoped_unmatched_count,
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as scoped_unmatched_count,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched'
-                     AND transaction_date >= bc.min_date AND transaction_date <= bc.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_unmatched_amount,
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_unmatched_amount,
 
-          bc.min_date as bank_coverage_min,
-          bc.max_date as bank_coverage_max,
+          pd.min_date as period_start,
+          pd.max_date as period_end,
 
           MIN(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_date_min,
           MAX(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_date_max,
@@ -629,9 +625,9 @@ export class DatabaseStorage implements IStorage {
           MAX(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_date_max
 
         FROM transactions
-        CROSS JOIN bank_coverage bc
+        CROSS JOIN period_dates pd
         WHERE period_id = $1
-        GROUP BY bc.min_date, bc.max_date
+        GROUP BY pd.min_date, pd.max_date
       ),
       match_stats AS (
         SELECT
@@ -753,9 +749,9 @@ export class DatabaseStorage implements IStorage {
         min: row.bank_date_min,
         max: row.bank_date_max,
       } : undefined,
-      bankCoverageRange: row.bank_coverage_min && row.bank_coverage_max ? {
-        min: row.bank_coverage_min,
-        max: row.bank_coverage_max,
+      bankCoverageRange: row.period_start && row.period_end ? {
+        min: row.period_start,
+        max: row.period_end,
       } : undefined,
       bankAccountRanges: await this.getBankAccountCoverageRanges(periodId),
       perBankBreakdown: await this.getPerBankBreakdown(periodId),
@@ -796,54 +792,46 @@ export class DatabaseStorage implements IStorage {
 
   async getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]> {
     // Query 1: Per-attendant verified card sales + unmatched (card + debtor)
-    // Scoped to bank coverage dates
+    // Scoped to period dates (period is master)
     const result = await pool.query(`
-      WITH bank_coverage AS (
-        SELECT
-          MIN(transaction_date) AS min_date,
-          MAX(transaction_date) AS max_date
-        FROM transactions
-        WHERE period_id = $1
-          AND source_type LIKE 'bank%'
-          AND match_status NOT IN ('unmatchable', 'excluded')
+      WITH period_dates AS (
+        SELECT start_date AS min_date, end_date AS max_date
+        FROM reconciliation_periods
+        WHERE id = $1
       ),
       is_card_only AS (
-        -- Card fuel transactions (not debtor, not cash)
-        SELECT id FROM transactions
-        WHERE period_id = $1 AND source_type = 'fuel'
-          AND is_card_transaction = 'yes'
-          AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+        -- Card fuel transactions (not debtor, not cash) within period
+        SELECT t.id FROM transactions t
+        CROSS JOIN period_dates pd
+        WHERE t.period_id = $1 AND t.source_type = 'fuel'
+          AND t.is_card_transaction = 'yes'
+          AND NOT (LOWER(t.payment_type) LIKE '%debtor%' OR LOWER(t.payment_type) LIKE '%account%' OR LOWER(t.payment_type) LIKE '%fleet%')
+          AND t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date
       ),
       is_debtor AS (
-        -- Debtor/account/fleet fuel transactions
-        SELECT id FROM transactions
-        WHERE period_id = $1 AND source_type = 'fuel'
-          AND (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+        -- Debtor/account/fleet fuel transactions within period
+        SELECT t.id FROM transactions t
+        CROSS JOIN period_dates pd
+        WHERE t.period_id = $1 AND t.source_type = 'fuel'
+          AND (LOWER(t.payment_type) LIKE '%debtor%' OR LOWER(t.payment_type) LIKE '%account%' OR LOWER(t.payment_type) LIKE '%fleet%')
+          AND t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date
       )
       SELECT
         COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown') AS attendant,
         -- Card-only matched/unmatched (for accountability)
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched'
-                    AND t.transaction_date >= bc.min_date
-                    AND t.transaction_date <= bc.max_date THEN 1 END)::int AS matched_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched'
-                    AND t.transaction_date >= bc.min_date
-                    AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS matched_amount,
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched'
-                    AND t.transaction_date >= bc.min_date
-                    AND t.transaction_date <= bc.max_date THEN 1 END)::int AS unmatched_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched'
-                    AND t.transaction_date >= bc.min_date
-                    AND t.transaction_date <= bc.max_date THEN t.amount::numeric ELSE 0 END), 0) AS unmatched_amount,
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched' THEN 1 END)::int AS matched_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched' THEN t.amount::numeric ELSE 0 END), 0) AS matched_amount,
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched' THEN 1 END)::int AS unmatched_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched' THEN t.amount::numeric ELSE 0 END), 0) AS unmatched_amount,
         -- Debtor matched/unmatched (shown separately)
         COUNT(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN 1 END)::int AS debtor_count,
         COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN t.amount::numeric ELSE 0 END), 0) AS debtor_amount,
-        COUNT(*)::int AS total_count,
-        COALESCE(SUM(t.amount::numeric), 0) AS total_amount
+        COUNT(CASE WHEN t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date THEN 1 END)::int AS total_count,
+        COALESCE(SUM(CASE WHEN t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date THEN t.amount::numeric ELSE 0 END), 0) AS total_amount
       FROM transactions t
-      CROSS JOIN bank_coverage bc
+      CROSS JOIN period_dates pd
       WHERE t.period_id = $1 AND t.source_type = 'fuel'
-      GROUP BY COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown')
+      GROUP BY COALESCE(NULLIF(TRIM(t.attendant), ''), 'Unknown'), pd.min_date, pd.max_date
       ORDER BY matched_count DESC, attendant ASC
     `, [periodId]);
 

@@ -1278,29 +1278,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rules = await storage.getMatchingRules(req.params.periodId);
 
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      
-      // Filter fuel transactions to ONLY confirmed card transactions for reconciliation
+
+      // *** PERIOD IS MASTER — fuel scoped to period dates ***
+      const periodStartDay = new Date(period.startDate + 'T00:00:00').getTime();
+      const periodEndDay = new Date(period.endDate + 'T00:00:00').getTime();
+      const dateBufferMs = rules.dateWindowDays * 86400000;
+
+      // Helper to get date-only (midnight) from a timestamp
+      const toDateOnly = (d: number) => {
+        const dt = new Date(d);
+        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+      };
+
+      // Filter fuel transactions to ONLY confirmed card transactions within the period
       // Cash, unknown, and debtor/account/fleet are excluded from matching but kept for reporting
       const isDebtorTx = (t: typeof transactions[0]) =>
         t.paymentType?.toLowerCase().includes('debtor') ||
         t.paymentType?.toLowerCase().includes('account') ||
         t.paymentType?.toLowerCase().includes('fleet');
-      const fuelTransactions = transactions.filter(t =>
-        t.sourceType === 'fuel' &&
-        t.isCardTransaction === 'yes' &&
-        !isDebtorTx(t) &&
-        t.matchStatus === 'unmatched'
-      );
-      
-      // All bank transactions are card by definition (from merchant portals)
-      const bankTransactions = transactions.filter(t => 
-        t.sourceType && 
+      const fuelTransactions = transactions.filter(t => {
+        if (t.sourceType !== 'fuel' || t.isCardTransaction !== 'yes' || isDebtorTx(t) || t.matchStatus !== 'unmatched') return false;
+        // Scope to period dates
+        if (!t.transactionDate) return false;
+        const day = toDateOnly(new Date(t.transactionDate).getTime());
+        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
+      });
+
+      // All bank transactions — NOT scoped to period. The user may upload a wider
+      // range so that weekend/holiday settlements outside the period still match.
+      const bankTransactions = transactions.filter(t =>
+        t.sourceType &&
         t.sourceType.startsWith('bank') &&
         t.matchStatus === 'unmatched'
       );
-      
 
-      console.log(`[AUTO-MATCH] Period: ${period.name}, Fuel txns: ${fuelTransactions.length}, Bank txns: ${bankTransactions.length}`);
+
+      console.log(`[AUTO-MATCH] Period: ${period.name} (${period.startDate} to ${period.endDate}), Fuel txns: ${fuelTransactions.length}, Bank txns: ${bankTransactions.length}`);
       if (fuelTransactions.length > 0) {
         const fuelDateSet = new Set(fuelTransactions.map(t => t.transactionDate?.substring(0, 10)));
         console.log(`[AUTO-MATCH] Fuel dates: ${[...fuelDateSet].sort().join(', ')}`);
@@ -1311,54 +1324,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // *** DATE RANGE VALIDATION ***
-      // Detect bank transactions that cannot be matched because no fuel data exists for those dates
-      const fuelDates = fuelTransactions
-        .map(t => t.transactionDate)
-        .filter(d => d && d.trim())
-        .map(d => new Date(d!).getTime())
-        .filter(d => !isNaN(d));
-      
-      const bankDates = bankTransactions
-        .map(t => t.transactionDate)
-        .filter(d => d && d.trim())
-        .map(d => new Date(d!).getTime())
-        .filter(d => !isNaN(d));
-
+      // Bank transactions outside the period range + date window buffer cannot match any fuel record.
+      // Bank can be up to dateWindowDays AFTER period end (settlement lag) or 1 day BEFORE period start (timezone).
       let unmatchableBankTransactions: typeof bankTransactions = [];
       let dateRangeWarning = '';
-      
-      // Helper to get date-only (midnight) from a timestamp
-      const toDateOnly = (d: number) => {
-        const dt = new Date(d);
-        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
-      };
 
-      if (fuelDates.length > 0 && bankDates.length > 0) {
-        const maxFuelDay = toDateOnly(Math.max(...fuelDates));
-        const minFuelDay = toDateOnly(Math.min(...fuelDates));
-        const dateBufferMs = rules.dateWindowDays * 86400000;
+      unmatchableBankTransactions = bankTransactions.filter(t => {
+        if (!t.transactionDate) return false;
+        const bankTime = new Date(t.transactionDate).getTime();
+        if (isNaN(bankTime)) return false;
+        const bankDay = toDateOnly(bankTime);
+        // Bank is too far after period end OR too far before period start
+        return bankDay > periodEndDay + dateBufferMs || bankDay < periodStartDay - 86400000;
+      });
 
-        // Find bank transactions outside fuel date range + date window buffer (comparing date-only, ignoring time)
-        unmatchableBankTransactions = bankTransactions.filter(t => {
-          if (!t.transactionDate) return false;
-          const bankTime = new Date(t.transactionDate).getTime();
-          if (isNaN(bankTime)) return false;
-          const bankDay = toDateOnly(bankTime);
-          // Bank date is after fuel data ends + buffer OR before fuel data starts - buffer
-          return bankDay > maxFuelDay + dateBufferMs || bankDay < minFuelDay - dateBufferMs;
-        });
-        
-        if (unmatchableBankTransactions.length > 0) {
-          const maxFuelDateStr = new Date(maxFuelDay).toISOString().split('T')[0];
-          const minFuelDateStr = new Date(minFuelDay).toISOString().split('T')[0];
-          dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside your fuel data date range (${minFuelDateStr} to ${maxFuelDateStr}) and cannot be matched.`;
-          // Mark these as unmatchable in bulk
-          await storage.updateTransactionsBatch(
-            unmatchableBankTransactions.map(tx => ({ id: tx.id, data: { matchStatus: 'unmatchable', matchId: null } }))
-          );
-        }
+      if (unmatchableBankTransactions.length > 0) {
+        dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside the period date range (${period.startDate} to ${period.endDate}) + ${rules.dateWindowDays}-day window and cannot be matched.`;
+        // Mark these as unmatchable in bulk
+        await storage.updateTransactionsBatch(
+          unmatchableBankTransactions.map(tx => ({ id: tx.id, data: { matchStatus: 'unmatchable', matchId: null } }))
+        );
       }
-      
+
       // Filter out unmatchable transactions for matching
       const matchableBankTransactions = bankTransactions.filter(
         t => !unmatchableBankTransactions.includes(t)

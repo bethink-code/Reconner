@@ -6,8 +6,8 @@ export function deriveSummaryStats(summary: PeriodSummary) {
   const matchableBankTotal = summary.bankTransactions - unmatchableBank - excludedBank;
   const unmatchedBank = summary.unmatchedBankTransactions;
   const bankMatchPct = matchableBankTotal > 0 ? Math.round((summary.matchedPairs / matchableBankTotal) * 100) : 0;
-  // cardFuelTransactions/Amount already excludes debtors (handled in SQL)
-  const unmatchedFuelCount = summary.cardFuelTransactions - summary.matchedPairs;
+  // Use the actual unmatched count from SQL — not derived from cardFuel - matched
+  const unmatchedFuelCount = summary.unmatchedCardTransactions;
   const cardOnly = summary.cardFuelTransactions;
   const cardOnlyAmount = summary.cardFuelAmount;
   const bankApprovedAmount = summary.matchedBankAmount + (summary.unmatchedBankAmount || 0);

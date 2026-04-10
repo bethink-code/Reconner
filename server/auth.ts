@@ -8,13 +8,25 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { db } from "./db";
-import { auditLogs } from "../shared/schema";
+import { auditLogs, users as usersTable } from "../shared/schema";
+import type { OrgRole } from "../shared/schema";
+import { eq } from "drizzle-orm";
+
+// Hardcoded Lekana platform staff. Anyone in this list is auto-flagged as platform
+// owner on login (regardless of which environment they land in). Add new staff here
+// only — never remove without confirming the user is actually leaving.
+const PLATFORM_OWNER_EMAILS = new Set<string>([
+  "garth@bethink.co.za",
+]);
 
 interface SessionUser {
   claims: Record<string, string | number | undefined>;
   access_token: string;
   refresh_token?: string;
   expires_at?: number;
+  currentOrgId?: string;
+  currentOrgRole?: OrgRole;
+  currentPropertyId?: string;
 }
 
 const getOidcConfig = memoize(
@@ -82,13 +94,46 @@ function updateUserSession(
 }
 
 async function upsertUser(claims: Record<string, string | number | undefined>) {
-  await storage.upsertUser({
-    id: claims["sub"],
-    email: claims["email"],
-    firstName: claims["given_name"],
-    lastName: claims["family_name"],
-    profileImageUrl: claims["picture"],
+  const dbUser = await storage.upsertUser({
+    id: claims["sub"] as string,
+    email: claims["email"] as string,
+    firstName: claims["given_name"] as string,
+    lastName: claims["family_name"] as string,
+    profileImageUrl: claims["picture"] as string,
   });
+  // Auto-flag Lekana platform staff. Cheap to re-apply on every login — keeps
+  // the flag in sync if the hardcoded list ever changes.
+  const email = String(claims["email"] || "").toLowerCase();
+  if (PLATFORM_OWNER_EMAILS.has(email) && (!dbUser.isPlatformOwner || !dbUser.isAdmin)) {
+    await db.update(usersTable)
+      .set({ isPlatformOwner: true, isAdmin: true, updatedAt: new Date() })
+      .where(eq(usersTable.id, dbUser.id));
+    return { ...dbUser, isPlatformOwner: true, isAdmin: true };
+  }
+  return dbUser;
+}
+
+// Pick an initial org for a freshly-authed user. Redeems any pending invite,
+// joins the user as a member, then returns { orgId, role } to seed the session.
+async function resolveInitialOrg(userId: string, email: string): Promise<{ orgId: string; role: OrgRole } | null> {
+  // Existing memberships first
+  const memberships = await storage.getUserOrganizations(userId);
+  if (memberships.length > 0) {
+    const first = memberships[0];
+    return { orgId: first.organization.id, role: first.role };
+  }
+
+  // No memberships — check for an invite to redeem
+  const invite = await storage.getInvitedUserByEmail(email);
+  if (invite && invite.organizationId) {
+    const role = (invite.role as OrgRole) || "viewer";
+    await storage.addOrganizationMember(invite.organizationId, userId, role);
+    // Invite consumed: delete it so it can't be used twice
+    await storage.removeInvite(invite.id);
+    return { orgId: invite.organizationId, role };
+  }
+
+  return null;
 }
 
 export async function setupAuth(app: Express) {
@@ -115,9 +160,21 @@ export async function setupAuth(app: Express) {
       const claims = tokens.claims() as Record<string, string | number | undefined>;
       const email = String(claims.email || "").toLowerCase();
 
-      // Invite-only: check if this email is in the invited_users table
+      // Allowed in if EITHER: there's an open invite OR the user already exists
+      // with at least one org membership (returning users must never be locked out
+      // by an invite cleanup).
       const isInvited = await storage.isEmailInvited(email);
+      let isExistingMember = false;
       if (!isInvited) {
+        const sub = String(claims.sub || "");
+        const existingById = sub ? await storage.getUser(sub) : undefined;
+        const candidate = existingById; // upsertUser handles email-based merging on insert
+        if (candidate) {
+          const memberships = await storage.getUserOrganizations(candidate.id);
+          isExistingMember = memberships.length > 0;
+        }
+      }
+      if (!isInvited && !isExistingMember) {
         console.log(`[AUTH] Login blocked for uninvited email: ${email}`);
         // Log directly since there's no req.user at this point
         try {
@@ -138,7 +195,18 @@ export async function setupAuth(app: Express) {
 
       const user = {} as SessionUser;
       updateUserSession(user, tokens);
-      await upsertUser(claims);
+      const dbUser = await upsertUser(claims);
+      // Seed currentOrgId on the session so middleware can scope queries
+      const initialOrg = await resolveInitialOrg(dbUser.id, email);
+      if (initialOrg) {
+        user.currentOrgId = initialOrg.orgId;
+        user.currentOrgRole = initialOrg.role;
+        // Default to first property in the org so the dashboard has something to show
+        const props = await storage.getPropertiesByOrg(initialOrg.orgId);
+        if (props.length > 0) {
+          user.currentPropertyId = props[0].id;
+        }
+      }
       verified(null, user);
     };
 
@@ -212,6 +280,76 @@ export async function setupAuth(app: Express) {
     });
   });
 }
+
+// Resolves the current org context for the request. Must run AFTER isAuthenticated.
+// Sets req.orgId and req.orgRole. Errors with 403 if user has no org membership at all.
+//
+// Auto-recovers from archived orgs/properties: if the session points at a stale entity,
+// it falls back to the first active one rather than serving stale data.
+export const requireOrg: RequestHandler = async (req, res, next) => {
+  const user = req.user as SessionUser | undefined;
+  if (!user?.claims?.sub) return res.status(401).json({ error: "Unauthorized" });
+
+  // Helper: load all *active* memberships for this user
+  const loadActiveMemberships = () => storage.getUserOrganizations(user.claims.sub as string);
+
+  // 1. Verify the session's currentOrgId still resolves to an active membership.
+  let needsReseed = !user.currentOrgId;
+  if (user.currentOrgId) {
+    const role = await storage.getUserRoleInOrg(user.claims.sub as string, user.currentOrgId);
+    const org = await storage.getOrganization(user.currentOrgId);
+    if (!role || !org || org.status !== "active") {
+      needsReseed = true;
+    } else {
+      user.currentOrgRole = role;
+    }
+  }
+
+  if (needsReseed) {
+    const memberships = await loadActiveMemberships();
+    if (memberships.length === 0) {
+      return res.status(403).json({ error: "no_organization", message: "You are not a member of any active organization" });
+    }
+    user.currentOrgId = memberships[0].organization.id;
+    user.currentOrgRole = memberships[0].role;
+    user.currentPropertyId = undefined; // force property re-seed below
+  }
+
+  // 2. Verify currentPropertyId is still valid (belongs to current org and active)
+  if (user.currentPropertyId) {
+    const prop = await storage.getProperty(user.currentPropertyId);
+    if (!prop || prop.organizationId !== user.currentOrgId || prop.status !== "active") {
+      user.currentPropertyId = undefined;
+    }
+  }
+  if (!user.currentPropertyId) {
+    const props = await storage.getPropertiesByOrg(user.currentOrgId!);
+    user.currentPropertyId = props[0]?.id;
+  }
+
+  (req as any).orgId = user.currentOrgId;
+  (req as any).orgRole = user.currentOrgRole;
+  (req as any).propertyId = user.currentPropertyId;
+  next();
+};
+
+// Block viewers from mutation endpoints. Must run AFTER requireOrg.
+export const requireWriter: RequestHandler = (req, res, next) => {
+  const role = (req as any).orgRole as OrgRole | undefined;
+  if (role !== "owner" && role !== "admin") {
+    return res.status(403).json({ error: "read_only", message: "Your role does not permit this action" });
+  }
+  next();
+};
+
+// Block non-owners from owner-only endpoints (e.g. delete org, change billing)
+export const requireOrgOwner: RequestHandler = (req, res, next) => {
+  const role = (req as any).orgRole as OrgRole | undefined;
+  if (role !== "owner") {
+    return res.status(403).json({ error: "owner_only", message: "Only org owners can perform this action" });
+  }
+  next();
+};
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as SessionUser | undefined;

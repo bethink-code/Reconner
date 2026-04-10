@@ -22,6 +22,8 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   isAdmin: boolean("is_admin").default(false),
+  // Platform owner = Lekana staff. Can belong to multiple orgs and switch between them.
+  isPlatformOwner: boolean("is_platform_owner").notNull().default(false),
   termsAcceptedAt: timestamp("terms_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -30,18 +32,76 @@ export const users = pgTable("users", {
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
+// Organizations — each customer (e.g. "Desert Trading") is one org. All business data is scoped to an org.
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: varchar("slug").notNull().unique(),
+  // Billing fields (populated later, kept here so future invoicing has a stable home)
+  billingEmail: varchar("billing_email"),
+  billingAddress: text("billing_address"),
+  vatNumber: varchar("vat_number"),
+  status: text("status").notNull().default("active"), // 'active', 'suspended'
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = typeof organizations.$inferInsert;
+
+// Membership: user ↔ org with role. Regular users have one row. Platform owner may have many.
+export const organizationMembers = pgTable("organization_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("viewer"), // 'owner' | 'admin' | 'viewer'
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_org_members_org_id").on(table.organizationId),
+  index("IDX_org_members_user_id").on(table.userId),
+]);
+
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+export type InsertOrganizationMember = typeof organizationMembers.$inferInsert;
+
+export const ORG_ROLES = ["owner", "admin", "viewer"] as const;
+export type OrgRole = typeof ORG_ROLES[number];
+
+// Properties — physical sites within an organization. Most petrol-station owners run multiple stations.
+// One period currently belongs to one property; cross-property roll-ups are a future feature.
+export const properties = pgTable("properties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  code: varchar("code"), // Optional short code, e.g. "DT-01"
+  address: text("address"),
+  status: text("status").notNull().default("active"), // 'active' | 'archived'
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_properties_org_id").on(table.organizationId),
+]);
+
+export type Property = typeof properties.$inferSelect;
+export type InsertProperty = typeof properties.$inferInsert;
+
 // Reconciliation Period
 export const reconciliationPeriods = pgTable("reconciliation_periods", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").references(() => properties.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
   startDate: text("start_date").notNull(),
   endDate: text("end_date").notNull(),
   status: text("status").notNull().default("in_progress"),
-  userId: varchar("user_id").references(() => users.id),
+  userId: varchar("user_id").references(() => users.id), // creator (kept for audit/history)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_periods_org_id").on(table.organizationId),
+  index("IDX_periods_property_id").on(table.propertyId),
+]);
 
 export const insertReconciliationPeriodSchema = createInsertSchema(reconciliationPeriods).omit({
   id: true,
@@ -233,6 +293,7 @@ export type TransactionResolution = typeof transactionResolutions.$inferSelect;
 // Audit Logs — tracks security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "set null" }),
   userId: varchar("user_id").references(() => users.id),
   userEmail: text("user_email"),
   action: text("action").notNull(), // e.g. 'period.delete', 'file.upload', 'auth.login_failed'
@@ -246,18 +307,23 @@ export const auditLogs = pgTable("audit_logs", {
   index("IDX_audit_logs_user_id").on(table.userId),
   index("IDX_audit_logs_action").on(table.action),
   index("IDX_audit_logs_created_at").on(table.createdAt),
+  index("IDX_audit_logs_org_id").on(table.organizationId),
 ]);
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
-// Invited Users — only these emails can log in
+// Invited Users — only these emails can log in. Each invite is scoped to an org with a role.
 export const invitedUsers = pgTable("invited_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").notNull().unique(),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("viewer"), // 'owner' | 'admin' | 'viewer'
   invitedBy: varchar("invited_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_invited_users_org_id").on(table.organizationId),
+]);
 
 export type InvitedUser = typeof invitedUsers.$inferSelect;
 export type InsertInvitedUser = typeof invitedUsers.$inferInsert;
@@ -274,9 +340,10 @@ export const accessRequests = pgTable("access_requests", {
 
 export type AccessRequest = typeof accessRequests.$inferSelect;
 
-// AI Usage tracking for billing
+// AI Usage tracking for billing — tracked per user AND per org so invoices can roll up to org.
 export const aiUsage = pgTable("ai_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "set null" }),
   userId: varchar("user_id").references(() => users.id),
   userEmail: text("user_email"),
   action: text("action").notNull(), // e.g. 'convert.ai_extract'
@@ -288,6 +355,7 @@ export const aiUsage = pgTable("ai_usage", {
 }, (table) => [
   index("IDX_ai_usage_user_id").on(table.userId),
   index("IDX_ai_usage_created_at").on(table.createdAt),
+  index("IDX_ai_usage_org_id").on(table.organizationId),
 ]);
 
 export type AiUsageRecord = typeof aiUsage.$inferSelect;

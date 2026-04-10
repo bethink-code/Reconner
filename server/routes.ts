@@ -7,7 +7,7 @@ import { pool } from "./db";
 import { fileParser, DataNormalizer, SOURCE_PRESETS, detectAndExcludeReversals } from "./fileParser";
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
-import { setupAuth, isAuthenticated } from "./auth";
+import { setupAuth, isAuthenticated, requireOrg, requireWriter, requireOrgOwner } from "./auth";
 import { audit, queryAuditLogs } from "./auditLog";
 import { computeConfidenceScore, extractTablesWithAI } from "./pdfAiExtractor";
 import rateLimit from "express-rate-limit";
@@ -17,9 +17,11 @@ import {
   insertTransactionSchema,
   insertMatchSchema,
   matchingRulesConfigSchema,
+  ORG_ROLES,
   type User,
   type ReconciliationPeriod,
-  type UploadedFile
+  type UploadedFile,
+  type OrgRole
 } from "../shared/schema";
 import { z } from "zod";
 
@@ -41,7 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
   await setupAuth(app);
 
-  // Auth endpoint to get current user
+  // Auth endpoint to get current user — now also returns org memberships and current org context
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       if (!req.user?.claims?.sub) {
@@ -52,10 +54,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      res.json(user);
+      const memberships = await storage.getUserOrganizations(userId);
+      // If session has no current org but user has memberships, default to first
+      if (!req.user.currentOrgId && memberships.length > 0) {
+        req.user.currentOrgId = memberships[0].organization.id;
+        req.user.currentOrgRole = memberships[0].role;
+      }
+      const currentOrgId = req.user.currentOrgId || null;
+      const currentOrgRole = req.user.currentOrgRole || null;
+      const currentOrg = currentOrgId
+        ? memberships.find(m => m.organization.id === currentOrgId)?.organization || null
+        : null;
+      // Properties for the current org. Auto-pick the first one if session is empty.
+      const orgProperties = currentOrgId ? await storage.getPropertiesByOrg(currentOrgId) : [];
+      if (currentOrgId && !req.user.currentPropertyId && orgProperties.length > 0) {
+        req.user.currentPropertyId = orgProperties[0].id;
+      }
+      const currentPropertyId = req.user.currentPropertyId || null;
+      const currentProperty = currentPropertyId
+        ? orgProperties.find(p => p.id === currentPropertyId) || null
+        : null;
+      res.json({
+        ...user,
+        organizations: memberships.map(m => ({ ...m.organization, role: m.role })),
+        currentOrg,
+        currentOrgId,
+        currentOrgRole,
+        properties: orgProperties,
+        currentProperty,
+        currentPropertyId,
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Switch active organization (platform owner only, or any user with multiple memberships)
+  app.post('/api/me/switch-org', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const { organizationId } = req.body || {};
+      if (!organizationId) return res.status(400).json({ error: "organizationId required" });
+      const role = await storage.getUserRoleInOrg(userId, organizationId);
+      if (!role) return res.status(403).json({ error: "Not a member of that organization" });
+      req.user.currentOrgId = organizationId;
+      req.user.currentOrgRole = role;
+      // Reset property to first one in the new org
+      const props = await storage.getPropertiesByOrg(organizationId);
+      req.user.currentPropertyId = props[0]?.id;
+      const org = await storage.getOrganization(organizationId);
+      audit(req, { action: "org.switch", resourceType: "organization", resourceId: organizationId });
+      res.json({ success: true, organization: org, role, currentPropertyId: req.user.currentPropertyId });
+    } catch (error) {
+      console.error("Error switching org:", error);
+      res.status(500).json({ error: "Failed to switch organization" });
+    }
+  });
+
+  // Switch active property (within current org)
+  app.post('/api/me/switch-property', isAuthenticated, async (req: any, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      const { propertyId } = req.body || {};
+      if (!propertyId) return res.status(400).json({ error: "propertyId required" });
+      const prop = await storage.getProperty(propertyId);
+      if (!prop || prop.organizationId !== ctx.orgId) {
+        return res.status(403).json({ error: "Property does not belong to current organization" });
+      }
+      req.user.currentPropertyId = propertyId;
+      audit(req, { action: "property.switch", resourceType: "property", resourceId: propertyId });
+      res.json({ success: true, property: prop });
+    } catch (error) {
+      console.error("Error switching property:", error);
+      res.status(500).json({ error: "Failed to switch property" });
+    }
+  });
+
+  // ----- PROPERTIES -----
+  // List properties in current org. Any member can list.
+  // Pass ?includeArchived=true to also return archived properties (admin view).
+  app.get('/api/properties', isAuthenticated, async (req: any, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      const includeArchived = req.query.includeArchived === "true";
+      const props = await storage.getPropertiesByOrg(ctx.orgId, includeArchived);
+      res.json(props);
+    } catch (error) {
+      console.error("Error fetching properties:", error);
+      res.status(500).json({ error: "Failed to fetch properties" });
+    }
+  });
+
+  app.post('/api/properties', isAuthenticated, async (req: any, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const { name, code, address } = req.body || {};
+      if (!name) return res.status(400).json({ error: "name required" });
+      const prop = await storage.createProperty({ organizationId: ctx.orgId, name, code, address });
+      audit(req, { action: "property.create", resourceType: "property", resourceId: prop.id, detail: name });
+      res.json(prop);
+    } catch (error) {
+      console.error("Error creating property:", error);
+      res.status(500).json({ error: "Failed to create property" });
+    }
+  });
+
+  app.patch('/api/properties/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const prop = await storage.getProperty(req.params.id);
+      if (!prop) return res.status(404).json({ error: "Not found" });
+      if (prop.organizationId !== ctx.orgId) return res.status(403).json({ error: "Access denied" });
+      const { name, code, address, status } = req.body || {};
+      const updated = await storage.updateProperty(req.params.id, { name, code, address, status });
+      audit(req, { action: "property.update", resourceType: "property", resourceId: req.params.id });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating property:", error);
+      res.status(500).json({ error: "Failed to update property" });
+    }
+  });
+
+  // Archive property (soft delete). Owner or admin can archive — periods stay intact,
+  // the property just disappears from the switcher and default lists.
+  app.delete('/api/properties/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const prop = await storage.getProperty(req.params.id);
+      if (!prop) return res.status(404).json({ error: "Not found" });
+      if (prop.organizationId !== ctx.orgId) return res.status(403).json({ error: "Access denied" });
+      await storage.updateProperty(req.params.id, { status: "archived" });
+      audit(req, { action: "property.archive", resourceType: "property", resourceId: req.params.id });
+      res.json({ success: true, archived: true });
+    } catch (error) {
+      console.error("Error archiving property:", error);
+      res.status(500).json({ error: "Failed to archive property" });
+    }
+  });
+
+  // Restore archived property
+  app.post('/api/properties/:id/restore', isAuthenticated, async (req: any, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const prop = await storage.getProperty(req.params.id);
+      if (!prop) return res.status(404).json({ error: "Not found" });
+      if (prop.organizationId !== ctx.orgId) return res.status(403).json({ error: "Access denied" });
+      await storage.updateProperty(req.params.id, { status: "active" });
+      audit(req, { action: "property.restore", resourceType: "property", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error restoring property:", error);
+      res.status(500).json({ error: "Failed to restore property" });
     }
   });
 
@@ -91,32 +251,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
-  // Ownership helpers — return the entity if the caller owns it, or null after sending 403/404
-  async function assertPeriodOwner(periodId: string, req: any, res: any): Promise<ReconciliationPeriod | null> {
+  // Resolves the current org for a request. Falls back to loading membership if session is empty.
+  // Returns null and sends 403 if the user has no org or no access to their session org.
+  async function resolveOrgContext(req: any, res: any): Promise<{ orgId: string; role: OrgRole } | null> {
+    const userId = req.user?.claims?.sub;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return null;
+    }
+    let orgId: string | undefined = req.user?.currentOrgId;
+    let role: OrgRole | undefined = req.user?.currentOrgRole;
+    if (!orgId) {
+      const memberships = await storage.getUserOrganizations(userId);
+      if (memberships.length === 0) {
+        res.status(403).json({ error: "no_organization" });
+        return null;
+      }
+      orgId = memberships[0].organization.id;
+      role = memberships[0].role;
+      req.user.currentOrgId = orgId;
+      req.user.currentOrgRole = role;
+    } else {
+      // Re-verify against DB; user could have been removed from org
+      const verified = await storage.getUserRoleInOrg(userId, orgId);
+      if (!verified) {
+        res.status(403).json({ error: "org_access_revoked" });
+        return null;
+      }
+      role = verified;
+      req.user.currentOrgRole = role;
+    }
+    return { orgId: orgId!, role: role! };
+  }
+
+  // Ownership helpers — return the entity if the caller's current org owns it, else 403/404.
+  // The `mode` flag enforces role: 'read' allows viewer, 'write' requires owner/admin.
+  async function assertPeriodAccess(
+    periodId: string,
+    req: any,
+    res: any,
+    mode: "read" | "write" = "read",
+  ): Promise<ReconciliationPeriod | null> {
+    const ctx = await resolveOrgContext(req, res);
+    if (!ctx) return null;
     const period = await storage.getPeriod(periodId);
     if (!period) {
       res.status(404).json({ error: "Period not found" });
       return null;
     }
-    const userId = req.user?.claims?.sub;
-    if (period.userId && period.userId !== userId) {
-      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: `Owner: ${period.userId}` });
+    if (period.organizationId !== ctx.orgId) {
+      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: `Org mismatch: ${period.organizationId}` });
       res.status(403).json({ error: "Access denied" });
+      return null;
+    }
+    if (mode === "write" && ctx.role === "viewer") {
+      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: "viewer attempted write" });
+      res.status(403).json({ error: "read_only", message: "Your role does not permit this action" });
       return null;
     }
     return period;
   }
 
-  async function assertFileOwner(fileId: string, req: any, res: any): Promise<UploadedFile | null> {
+  // Backwards-compat aliases used throughout this file
+  const assertPeriodOwner = (periodId: string, req: any, res: any) => assertPeriodAccess(periodId, req, res, "read");
+  const assertPeriodWrite = (periodId: string, req: any, res: any) => assertPeriodAccess(periodId, req, res, "write");
+
+  async function assertFileOwner(fileId: string, req: any, res: any, mode: "read" | "write" = "read"): Promise<UploadedFile | null> {
     const file = await storage.getFile(fileId);
     if (!file) {
       res.status(404).json({ error: "File not found" });
       return null;
     }
-    const period = await assertPeriodOwner(file.periodId, req, res);
+    const period = await assertPeriodAccess(file.periodId, req, res, mode);
     if (!period) return null;
     return file;
   }
+  const assertFileWrite = (fileId: string, req: any, res: any) => assertFileOwner(fileId, req, res, "write");
 
   // Admin routes - get all users
   app.get('/api/admin/users', isAuthenticated, isAdmin, async (req, res) => {
@@ -154,10 +364,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin invite management
-  app.get('/api/admin/invites', isAuthenticated, isAdmin, async (req, res) => {
+  // Admin invite management — scoped per org. Platform owner can pass any orgId.
+  // Org admin/owner can only invite into their current org.
+  app.get('/api/admin/invites', isAuthenticated, async (req: any, res) => {
     try {
-      const invites = await storage.getInvitedUsers();
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const orgIdFilter = req.query.organizationId as string | undefined;
+      // Platform owner sees all invites if no filter; otherwise filter by query
+      if (me?.isPlatformOwner) {
+        const invites = await storage.getInvitedUsers(orgIdFilter);
+        return res.json(invites);
+      }
+      // Otherwise must be admin/owner of an org and only sees their org's invites
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const invites = await storage.getInvitedUsers(ctx.orgId);
       res.json(invites);
     } catch (error) {
       console.error("Error fetching invites:", error);
@@ -165,28 +390,226 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/invites', isAuthenticated, isAdmin, async (req: any, res) => {
+  app.post('/api/admin/invites', isAuthenticated, async (req: any, res) => {
     try {
-      const { email } = req.body;
+      const { email, organizationId, role } = req.body;
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: "Email is required" });
       }
+      if (!organizationId) {
+        return res.status(400).json({ error: "organizationId is required" });
+      }
+      const inviteRole: OrgRole = (role && ORG_ROLES.includes(role) ? role : "viewer") as OrgRole;
       const trimmed = email.trim().toLowerCase();
       if (!trimmed.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
         return res.status(400).json({ error: "Invalid email address" });
       }
-      // Check if already invited
+
+      // Authorisation: must be platform owner OR owner/admin of the target org
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const myRole = await storage.getUserRoleInOrg(userId, organizationId);
+        allowed = myRole === "owner" || myRole === "admin";
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Not allowed to invite to this organization" });
+      }
+
       const isAlready = await storage.isEmailInvited(trimmed);
       if (isAlready) {
         return res.status(409).json({ error: "This email is already invited" });
       }
-      const userId = req.user?.claims?.sub;
-      const invited = await storage.inviteUser(trimmed, userId);
-      audit(req, { action: "invite.create", resourceType: "invite", resourceId: invited.id, detail: trimmed });
+      const invited = await storage.inviteUser(trimmed, organizationId, inviteRole, userId);
+      audit(req, { action: "invite.create", resourceType: "invite", resourceId: invited.id, detail: `${trimmed} → ${organizationId} (${inviteRole})` });
       res.json(invited);
     } catch (error) {
       console.error("Error creating invite:", error);
       res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+
+  // ----- ORGANIZATION MANAGEMENT -----
+  // List organizations. Platform owner sees all; everyone else sees only their orgs.
+  // Pass ?includeArchived=true to include archived orgs (admin view only).
+  app.get('/api/organizations', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const includeArchived = req.query.includeArchived === "true";
+      if (me?.isPlatformOwner) {
+        const orgs = await storage.getOrganizations(includeArchived);
+        return res.json(orgs);
+      }
+      // Non-platform-owners only ever see their own active memberships
+      const memberships = await storage.getUserOrganizations(userId);
+      res.json(memberships.map(m => ({ ...m.organization, role: m.role })));
+    } catch (error) {
+      console.error("Error fetching organizations:", error);
+      res.status(500).json({ error: "Failed to fetch organizations" });
+    }
+  });
+
+  // Create organization — platform owner only.
+  app.post('/api/organizations', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can create organizations" });
+      }
+      const { name, slug, billingEmail, billingAddress, vatNumber } = req.body;
+      if (!name || !slug) return res.status(400).json({ error: "name and slug required" });
+      if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "slug must be lowercase alphanumeric with hyphens" });
+      const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber });
+      // Auto-add the platform owner as admin so they can manage it
+      await storage.addOrganizationMember(org.id, userId, "admin");
+      // Auto-create a default "Main" property so the org has somewhere to put periods immediately
+      await storage.createProperty({ organizationId: org.id, name: "Main", code: null, address: null });
+      audit(req, { action: "org.create", resourceType: "organization", resourceId: org.id, detail: name });
+      res.json(org);
+    } catch (error: any) {
+      if (error?.code === '23505') return res.status(409).json({ error: "An organization with that slug already exists" });
+      console.error("Error creating organization:", error);
+      res.status(500).json({ error: "Failed to create organization" });
+    }
+  });
+
+  // Get a single org (must be member or platform owner)
+  app.get('/api/organizations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ error: "Not found" });
+      if (!me?.isPlatformOwner) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        if (!role) return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(org);
+    } catch (error) {
+      console.error("Error fetching organization:", error);
+      res.status(500).json({ error: "Failed to fetch organization" });
+    }
+  });
+
+  // Update org (owner or platform owner). Used for billing details, name changes.
+  app.patch('/api/organizations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can update" });
+      const { name, billingEmail, billingAddress, vatNumber, status } = req.body;
+      const updated = await storage.updateOrganization(req.params.id, { name, billingEmail, billingAddress, vatNumber, status });
+      audit(req, { action: "org.update", resourceType: "organization", resourceId: req.params.id });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating organization:", error);
+      res.status(500).json({ error: "Failed to update organization" });
+    }
+  });
+
+  // Archive org (soft delete) — platform owner only. Data and history are preserved;
+  // the org just becomes invisible from switchers and default lists.
+  // No hard-delete endpoint exists by design — losing years of reconciliation data on
+  // a single click is too dangerous. Restore is an explicit action.
+  app.delete('/api/organizations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can archive organizations" });
+      }
+      await storage.updateOrganization(req.params.id, { status: "archived" });
+      audit(req, { action: "org.archive", resourceType: "organization", resourceId: req.params.id });
+      res.json({ success: true, archived: true });
+    } catch (error) {
+      console.error("Error archiving organization:", error);
+      res.status(500).json({ error: "Failed to archive organization" });
+    }
+  });
+
+  // Restore archived org — platform owner only.
+  app.post('/api/organizations/:id/restore', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can restore organizations" });
+      }
+      await storage.updateOrganization(req.params.id, { status: "active" });
+      audit(req, { action: "org.restore", resourceType: "organization", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error restoring organization:", error);
+      res.status(500).json({ error: "Failed to restore organization" });
+    }
+  });
+
+  // List members of an org
+  app.get('/api/organizations/:id/members', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = !!role;
+      }
+      if (!allowed) return res.status(403).json({ error: "Access denied" });
+      const members = await storage.getOrganizationMembers(req.params.id);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching members:", error);
+      res.status(500).json({ error: "Failed to fetch members" });
+    }
+  });
+
+  // Update member role (owner or platform owner)
+  app.patch('/api/organizations/:id/members/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can change roles" });
+      const { role } = req.body;
+      if (!ORG_ROLES.includes(role)) return res.status(400).json({ error: "Invalid role" });
+      const updated = await storage.updateOrganizationMemberRole(req.params.id, req.params.userId, role);
+      audit(req, { action: "org.member.role_changed", resourceType: "organization", resourceId: req.params.id, detail: `${req.params.userId} → ${role}` });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating member role:", error);
+      res.status(500).json({ error: "Failed to update member role" });
+    }
+  });
+
+  // Remove member (owner or platform owner)
+  app.delete('/api/organizations/:id/members/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can remove members" });
+      await storage.removeOrganizationMember(req.params.id, req.params.userId);
+      audit(req, { action: "org.member.removed", resourceType: "organization", resourceId: req.params.id, detail: req.params.userId });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing member:", error);
+      res.status(500).json({ error: "Failed to remove member" });
     }
   });
 
@@ -234,20 +657,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/admin/access-requests/:id', isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const { status } = req.body;
+      const { status, organizationId, role } = req.body;
       if (!status || !['approved', 'declined'].includes(status)) {
         return res.status(400).json({ error: "Status must be 'approved' or 'declined'" });
+      }
+      if (status === 'approved' && !organizationId) {
+        return res.status(400).json({ error: "organizationId required when approving" });
       }
       const updated = await storage.updateAccessRequestStatus(req.params.id, status);
       if (!updated) {
         return res.status(404).json({ error: "Request not found" });
       }
-      // Auto-invite on approval
+      // Auto-invite on approval — must be assigned to a specific org
       if (status === 'approved') {
         const isAlready = await storage.isEmailInvited(updated.email);
         if (!isAlready) {
           const userId = req.user?.claims?.sub;
-          await storage.inviteUser(updated.email, userId);
+          const inviteRole: OrgRole = (role && ORG_ROLES.includes(role) ? role : "viewer") as OrgRole;
+          await storage.inviteUser(updated.email, organizationId, inviteRole, userId);
         }
       }
       audit(req, { action: `access_request.${status}`, resourceType: "access_request", resourceId: req.params.id, detail: updated.email });
@@ -420,15 +847,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         detail: `${result.rowCount} rows | ${usage.inputTokens} in / ${usage.outputTokens} out | $${usage.estimatedCostUsd}`,
       });
 
-      // Log to usage table for billing
+      // Log to usage table for billing — tracked per user AND per org so invoicing can roll up
       try {
         const rawSub = req.user?.claims?.sub;
         const userId = rawSub != null ? String(rawSub) : undefined;
         const userEmail = req.user?.claims?.email || req.user?.email;
+        const orgId = req.user?.currentOrgId || null;
         await pool.query(
-          `INSERT INTO ai_usage (user_id, user_email, action, model, input_tokens, output_tokens, estimated_cost_usd)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [userId, userEmail, "convert.ai_extract", usage.model, usage.inputTokens, usage.outputTokens, usage.estimatedCostUsd]
+          `INSERT INTO ai_usage (user_id, user_email, organization_id, action, model, input_tokens, output_tokens, estimated_cost_usd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [userId, userEmail, orgId, "convert.ai_extract", usage.model, usage.inputTokens, usage.outputTokens, usage.estimatedCostUsd]
         );
       } catch (e) {
         console.error("Failed to log AI usage:", e);
@@ -444,9 +872,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/periods", isAuthenticated, async (req: any, res) => {
     try {
-      const rawSub = req.user?.claims?.sub;
-      const userId = rawSub != null ? String(rawSub) : undefined;
-      const periods = await storage.getPeriods(userId);
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      // Filter by current property if one is set in the session.
+      // ?propertyId=all bypasses the filter (for org-wide views).
+      const queryProperty = req.query.propertyId as string | undefined;
+      let propertyId: string | undefined = req.user?.currentPropertyId;
+      if (queryProperty === "all") propertyId = undefined;
+      else if (queryProperty) propertyId = queryProperty;
+      const periods = await storage.getPeriods(ctx.orgId, propertyId);
       res.json(periods);
     } catch (error) {
       console.error("Error fetching periods:", error);
@@ -467,9 +901,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/periods", isAuthenticated, async (req: any, res) => {
     try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") {
+        return res.status(403).json({ error: "read_only" });
+      }
       const userId = req.user?.claims?.sub;
       const validated = insertReconciliationPeriodSchema.parse(req.body);
-      const period = await storage.createPeriod({ ...validated, userId });
+      // Property is required: use body.propertyId, fall back to session, then 400.
+      const propertyId: string | undefined = (req.body?.propertyId as string | undefined) || req.user?.currentPropertyId;
+      if (!propertyId) {
+        return res.status(400).json({ error: "propertyId required — pick a property first" });
+      }
+      // Verify the property belongs to the current org
+      const prop = await storage.getProperty(propertyId);
+      if (!prop || prop.organizationId !== ctx.orgId) {
+        return res.status(403).json({ error: "Property does not belong to current organization" });
+      }
+      const period = await storage.createPeriod({ ...validated, userId, organizationId: ctx.orgId, propertyId });
+      audit(req, { action: "period.create", resourceType: "period", resourceId: period.id, detail: `property=${propertyId}` });
       res.json(period);
     } catch (error) {
       console.error("Error creating period:", error);
@@ -479,7 +929,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/periods/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.id, req, res);
+      const period = await assertPeriodWrite(req.params.id, req, res);
       if (!period) return;
       const partialSchema = insertReconciliationPeriodSchema.partial();
       const validated = partialSchema.parse(req.body);
@@ -496,7 +946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/periods/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.id, req, res);
+      const period = await assertPeriodWrite(req.params.id, req, res);
       if (!period) return;
       await storage.deletePeriod(req.params.id);
       audit(req, { action: "period.delete", resourceType: "period", resourceId: req.params.id, detail: period.name });
@@ -521,7 +971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/periods/:periodId/files/upload", isAuthenticated, upload.single("file"), async (req: any, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
 
       if (!req.file) {
@@ -909,7 +1359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedMapping = columnMappingSchema.parse(req.body.columnMapping);
 
-      const file = await assertFileOwner(req.params.fileId, req, res);
+      const file = await assertFileWrite(req.params.fileId, req, res);
       if (!file) return;
 
       // Check for duplicate mappings (same field mapped to multiple columns)
@@ -959,7 +1409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Alias route for periods-based URL pattern used by the flow components
   app.post("/api/periods/:periodId/files/:fileId/process", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
 
       const file = await storage.getFile(req.params.fileId);
@@ -1096,7 +1546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/files/:fileId", isAuthenticated, async (req: any, res) => {
     try {
-      const file = await assertFileOwner(req.params.fileId, req, res);
+      const file = await assertFileWrite(req.params.fileId, req, res);
       if (!file) return;
       await storage.deleteMatchesByFile(file.id);
       await storage.deleteTransactionsByFile(file.id);
@@ -1179,7 +1629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/periods/:periodId/matching-rules", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       const validatedRules = matchingRulesConfigSchema.parse(req.body);
       const saved = await storage.saveMatchingRules(req.params.periodId, validatedRules);
@@ -1269,7 +1719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       // Reset previous matches so re-running always gives accurate totals
       await storage.resetMatchesByPeriod(req.params.periodId);
@@ -1621,7 +2071,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const matchInput = insertMatchSchema.omit({ matchType: true, matchConfidence: true }).parse(req.body);
 
-      const period = await assertPeriodOwner(matchInput.periodId, req, res);
+      const period = await assertPeriodWrite(matchInput.periodId, req, res);
       if (!period) return;
 
       const match = await storage.createMatch({
@@ -1654,10 +2104,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Match not found" });
       }
 
-      const period = await assertPeriodOwner(match.periodId, req, res);
+      const period = await assertPeriodWrite(match.periodId, req, res);
       if (!period) return;
 
-      await storage.updateTransaction(match.fuelTransactionId, { 
+      await storage.updateTransaction(match.fuelTransactionId, {
         matchStatus: 'unmatched',
         matchId: null 
       });
@@ -1848,7 +2298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
 
       const resolution = await storage.createResolution({
@@ -1889,7 +2339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
 
       const resolutions = [];
@@ -1931,7 +2381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
 
       const resolutions = [];
@@ -1966,6 +2416,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete resolution for a single transaction (unmatch)
   app.delete("/api/resolutions/:transactionId", isAuthenticated, async (req: any, res) => {
     try {
+      const tx = await storage.getTransaction(req.params.transactionId);
+      if (!tx) return res.status(404).json({ error: "Transaction not found" });
+      const period = await assertPeriodWrite(tx.periodId, req, res);
+      if (!period) return;
       const count = await storage.deleteResolutionByTransaction(req.params.transactionId);
       if (count === 0) return res.status(404).json({ error: "No resolution found" });
       res.json({ success: true, count });
@@ -1978,7 +2432,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Clear all resolutions for a period (undo)
   app.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req: any, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       const count = await storage.clearResolutionsByPeriod(req.params.periodId);
       res.json({ success: true, count });
@@ -2256,7 +2710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
 
       const createdMatches = [];

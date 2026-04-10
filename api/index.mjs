@@ -15610,9 +15610,9 @@ var require_pdf = __commonJS({
                 }
               }
               function copyCtxState(sourceCtx, destCtx) {
-                var properties = ["strokeStyle", "fillStyle", "fillRule", "globalAlpha", "lineWidth", "lineCap", "lineJoin", "miterLimit", "globalCompositeOperation", "font"];
-                for (var i = 0, ii = properties.length; i < ii; i++) {
-                  var property = properties[i];
+                var properties2 = ["strokeStyle", "fillStyle", "fillRule", "globalAlpha", "lineWidth", "lineCap", "lineJoin", "miterLimit", "globalCompositeOperation", "font"];
+                for (var i = 0, ii = properties2.length; i < ii; i++) {
+                  var property = properties2[i];
                   if (sourceCtx[property] !== void 0) {
                     destCtx[property] = sourceCtx[property];
                   }
@@ -17206,7 +17206,7 @@ var require_pdf = __commonJS({
                   }
                 }, {
                   key: "markPointProps",
-                  value: function markPointProps(tag, properties) {
+                  value: function markPointProps(tag, properties2) {
                   }
                 }, {
                   key: "beginMarkedContent",
@@ -17217,10 +17217,10 @@ var require_pdf = __commonJS({
                   }
                 }, {
                   key: "beginMarkedContentProps",
-                  value: function beginMarkedContentProps(tag, properties) {
+                  value: function beginMarkedContentProps(tag, properties2) {
                     if (tag === "OC") {
                       this.markedContentStack.push({
-                        visible: this.optionalContentConfig.isVisible(properties)
+                        visible: this.optionalContentConfig.isVisible(properties2)
                       });
                     } else {
                       this.markedContentStack.push({
@@ -27668,6 +27668,7 @@ import multer from "multer";
 // shared/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
+  ORG_ROLES: () => ORG_ROLES,
   RESOLUTION_REASONS: () => RESOLUTION_REASONS,
   accessRequests: () => accessRequests,
   aiUsage: () => aiUsage,
@@ -27682,6 +27683,9 @@ __export(schema_exports, {
   matches: () => matches,
   matchingRules: () => matchingRules,
   matchingRulesConfigSchema: () => matchingRulesConfigSchema,
+  organizationMembers: () => organizationMembers,
+  organizations: () => organizations,
+  properties: () => properties,
   reconciliationPeriods: () => reconciliationPeriods,
   sessions: () => sessions,
   transactionResolutions: () => transactionResolutions,
@@ -27709,21 +27713,68 @@ var users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   isAdmin: boolean("is_admin").default(false),
+  // Platform owner = Lekana staff. Can belong to multiple orgs and switch between them.
+  isPlatformOwner: boolean("is_platform_owner").notNull().default(false),
   termsAcceptedAt: timestamp("terms_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 });
+var organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: varchar("slug").notNull().unique(),
+  // Billing fields (populated later, kept here so future invoicing has a stable home)
+  billingEmail: varchar("billing_email"),
+  billingAddress: text("billing_address"),
+  vatNumber: varchar("vat_number"),
+  status: text("status").notNull().default("active"),
+  // 'active', 'suspended'
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+var organizationMembers = pgTable("organization_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("viewer"),
+  // 'owner' | 'admin' | 'viewer'
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("IDX_org_members_org_id").on(table.organizationId),
+  index("IDX_org_members_user_id").on(table.userId)
+]);
+var ORG_ROLES = ["owner", "admin", "viewer"];
+var properties = pgTable("properties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  code: varchar("code"),
+  // Optional short code, e.g. "DT-01"
+  address: text("address"),
+  status: text("status").notNull().default("active"),
+  // 'active' | 'archived'
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  index("IDX_properties_org_id").on(table.organizationId)
+]);
 var reconciliationPeriods = pgTable("reconciliation_periods", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").references(() => properties.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
   startDate: text("start_date").notNull(),
   endDate: text("end_date").notNull(),
   status: text("status").notNull().default("in_progress"),
   userId: varchar("user_id").references(() => users.id),
+  // creator (kept for audit/history)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
-});
+}, (table) => [
+  index("IDX_periods_org_id").on(table.organizationId),
+  index("IDX_periods_property_id").on(table.propertyId)
+]);
 var insertReconciliationPeriodSchema = createInsertSchema(reconciliationPeriods).omit({
   id: true,
   createdAt: true,
@@ -27869,6 +27920,7 @@ var insertTransactionResolutionSchema = createInsertSchema(transactionResolution
 });
 var auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "set null" }),
   userId: varchar("user_id").references(() => users.id),
   userEmail: text("user_email"),
   action: text("action").notNull(),
@@ -27885,14 +27937,20 @@ var auditLogs = pgTable("audit_logs", {
 }, (table) => [
   index("IDX_audit_logs_user_id").on(table.userId),
   index("IDX_audit_logs_action").on(table.action),
-  index("IDX_audit_logs_created_at").on(table.createdAt)
+  index("IDX_audit_logs_created_at").on(table.createdAt),
+  index("IDX_audit_logs_org_id").on(table.organizationId)
 ]);
 var invitedUsers = pgTable("invited_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").notNull().unique(),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("viewer"),
+  // 'owner' | 'admin' | 'viewer'
   invitedBy: varchar("invited_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => [
+  index("IDX_invited_users_org_id").on(table.organizationId)
+]);
 var accessRequests = pgTable("access_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -27904,6 +27962,7 @@ var accessRequests = pgTable("access_requests", {
 });
 var aiUsage = pgTable("ai_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "set null" }),
   userId: varchar("user_id").references(() => users.id),
   userEmail: text("user_email"),
   action: text("action").notNull(),
@@ -27915,7 +27974,8 @@ var aiUsage = pgTable("ai_usage", {
   createdAt: timestamp("created_at").defaultNow()
 }, (table) => [
   index("IDX_ai_usage_user_id").on(table.userId),
-  index("IDX_ai_usage_created_at").on(table.createdAt)
+  index("IDX_ai_usage_created_at").on(table.createdAt),
+  index("IDX_ai_usage_org_id").on(table.organizationId)
 ]);
 var RESOLUTION_REASONS = [
   { value: "attendant_overfill", label: "Attendant error / overfill" },
@@ -27984,11 +28044,96 @@ var DatabaseStorage = class {
     const [updated] = await db.update(users).set({ termsAcceptedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, userId)).returning();
     return updated || void 0;
   }
-  async getPeriods(userId) {
-    if (userId) {
-      return await db.select().from(reconciliationPeriods).where(eq(reconciliationPeriods.userId, userId)).orderBy(desc(reconciliationPeriods.createdAt));
+  async getPeriods(orgId, propertyId) {
+    if (propertyId) {
+      return await db.select().from(reconciliationPeriods).where(and(
+        eq(reconciliationPeriods.organizationId, orgId),
+        eq(reconciliationPeriods.propertyId, propertyId)
+      )).orderBy(desc(reconciliationPeriods.createdAt));
     }
-    return await db.select().from(reconciliationPeriods).orderBy(desc(reconciliationPeriods.createdAt));
+    return await db.select().from(reconciliationPeriods).where(eq(reconciliationPeriods.organizationId, orgId)).orderBy(desc(reconciliationPeriods.createdAt));
+  }
+  // Properties — filters out archived by default (e.g. for switcher and dashboard).
+  // Pass includeArchived=true for the Admin "Archived" section.
+  async getPropertiesByOrg(orgId, includeArchived = false) {
+    if (includeArchived) {
+      return await db.select().from(properties).where(eq(properties.organizationId, orgId)).orderBy(properties.name);
+    }
+    return await db.select().from(properties).where(and(
+      eq(properties.organizationId, orgId),
+      eq(properties.status, "active")
+    )).orderBy(properties.name);
+  }
+  async getProperty(id) {
+    const [row] = await db.select().from(properties).where(eq(properties.id, id));
+    return row || void 0;
+  }
+  async createProperty(data) {
+    const [row] = await db.insert(properties).values(data).returning();
+    return row;
+  }
+  async updateProperty(id, data) {
+    const [updated] = await db.update(properties).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq(properties.id, id)).returning();
+    return updated || void 0;
+  }
+  async deleteProperty(id) {
+    await db.delete(properties).where(eq(properties.id, id));
+  }
+  // Organizations
+  async getOrganizations(includeArchived = false) {
+    if (includeArchived) {
+      return await db.select().from(organizations).orderBy(desc(organizations.createdAt));
+    }
+    return await db.select().from(organizations).where(eq(organizations.status, "active")).orderBy(desc(organizations.createdAt));
+  }
+  async getOrganization(id) {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org || void 0;
+  }
+  async createOrganization(data) {
+    const [org] = await db.insert(organizations).values(data).returning();
+    return org;
+  }
+  async updateOrganization(id, data) {
+    const [updated] = await db.update(organizations).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq(organizations.id, id)).returning();
+    return updated || void 0;
+  }
+  async deleteOrganization(id) {
+    await db.delete(organizations).where(eq(organizations.id, id));
+  }
+  // Organization members. Filters out archived orgs by default — users should never
+  // see (or be able to switch to) an archived org.
+  async getUserOrganizations(userId) {
+    const rows = await db.select({
+      member: organizationMembers,
+      org: organizations
+    }).from(organizationMembers).innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id)).where(and(
+      eq(organizationMembers.userId, userId),
+      eq(organizations.status, "active")
+    )).orderBy(organizations.name);
+    return rows.map((r) => ({ organization: r.org, role: r.member.role }));
+  }
+  async getOrganizationMembers(orgId) {
+    const rows = await db.select({
+      member: organizationMembers,
+      user: users
+    }).from(organizationMembers).innerJoin(users, eq(organizationMembers.userId, users.id)).where(eq(organizationMembers.organizationId, orgId)).orderBy(users.email);
+    return rows.map((r) => ({ ...r.member, user: r.user }));
+  }
+  async addOrganizationMember(orgId, userId, role) {
+    const [member] = await db.insert(organizationMembers).values({ organizationId: orgId, userId, role }).returning();
+    return member;
+  }
+  async updateOrganizationMemberRole(orgId, userId, role) {
+    const [updated] = await db.update(organizationMembers).set({ role }).where(and(eq(organizationMembers.organizationId, orgId), eq(organizationMembers.userId, userId))).returning();
+    return updated || void 0;
+  }
+  async removeOrganizationMember(orgId, userId) {
+    await db.delete(organizationMembers).where(and(eq(organizationMembers.organizationId, orgId), eq(organizationMembers.userId, userId)));
+  }
+  async getUserRoleInOrg(userId, orgId) {
+    const [row] = await db.select({ role: organizationMembers.role }).from(organizationMembers).where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.organizationId, orgId))).limit(1);
+    return row?.role || void 0;
   }
   async getPeriod(id) {
     const [period] = await db.select().from(reconciliationPeriods).where(eq(reconciliationPeriods.id, id));
@@ -28951,16 +29096,23 @@ var DatabaseStorage = class {
     const resolutions = await db.select({ transactionId: transactionResolutions.transactionId }).from(transactionResolutions).where(eq(transactionResolutions.periodId, periodId));
     return resolutions.map((r) => r.transactionId);
   }
-  // Invite management
+  // Invite management — invites are now scoped to a specific org with a role.
+  async getInvitedUserByEmail(email) {
+    const [row] = await db.select().from(invitedUsers).where(eq(invitedUsers.email, email.toLowerCase())).limit(1);
+    return row || void 0;
+  }
   async isEmailInvited(email) {
     const result = await db.select({ id: invitedUsers.id }).from(invitedUsers).where(eq(invitedUsers.email, email.toLowerCase())).limit(1);
     return result.length > 0;
   }
-  async getInvitedUsers() {
+  async getInvitedUsers(orgId) {
+    if (orgId) {
+      return await db.select().from(invitedUsers).where(eq(invitedUsers.organizationId, orgId)).orderBy(desc(invitedUsers.createdAt));
+    }
     return await db.select().from(invitedUsers).orderBy(desc(invitedUsers.createdAt));
   }
-  async inviteUser(email, invitedById) {
-    const [invited] = await db.insert(invitedUsers).values({ email: email.toLowerCase(), invitedBy: invitedById }).returning();
+  async inviteUser(email, orgId, role, invitedById) {
+    const [invited] = await db.insert(invitedUsers).values({ email: email.toLowerCase(), organizationId: orgId, role, invitedBy: invitedById }).returning();
     return invited;
   }
   async removeInvite(id) {
@@ -30772,6 +30924,10 @@ import passport from "passport";
 import session from "express-session";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
+import { eq as eq2 } from "drizzle-orm";
+var PLATFORM_OWNER_EMAILS = /* @__PURE__ */ new Set([
+  "garth@bethink.co.za"
+]);
 var getOidcConfig = memoize(
   async () => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -30830,13 +30986,34 @@ function updateUserSession(user, tokens) {
   user.expires_at = user.claims?.exp;
 }
 async function upsertUser(claims) {
-  await storage.upsertUser({
+  const dbUser = await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
     firstName: claims["given_name"],
     lastName: claims["family_name"],
     profileImageUrl: claims["picture"]
   });
+  const email = String(claims["email"] || "").toLowerCase();
+  if (PLATFORM_OWNER_EMAILS.has(email) && (!dbUser.isPlatformOwner || !dbUser.isAdmin)) {
+    await db.update(users).set({ isPlatformOwner: true, isAdmin: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq2(users.id, dbUser.id));
+    return { ...dbUser, isPlatformOwner: true, isAdmin: true };
+  }
+  return dbUser;
+}
+async function resolveInitialOrg(userId, email) {
+  const memberships = await storage.getUserOrganizations(userId);
+  if (memberships.length > 0) {
+    const first = memberships[0];
+    return { orgId: first.organization.id, role: first.role };
+  }
+  const invite = await storage.getInvitedUserByEmail(email);
+  if (invite && invite.organizationId) {
+    const role = invite.role || "viewer";
+    await storage.addOrganizationMember(invite.organizationId, userId, role);
+    await storage.removeInvite(invite.id);
+    return { orgId: invite.organizationId, role };
+  }
+  return null;
 }
 async function setupAuth(app2) {
   app2.set("trust proxy", 1);
@@ -30854,7 +31031,17 @@ async function setupAuth(app2) {
       const claims = tokens.claims();
       const email = String(claims.email || "").toLowerCase();
       const isInvited = await storage.isEmailInvited(email);
+      let isExistingMember = false;
       if (!isInvited) {
+        const sub = String(claims.sub || "");
+        const existingById = sub ? await storage.getUser(sub) : void 0;
+        const candidate = existingById;
+        if (candidate) {
+          const memberships = await storage.getUserOrganizations(candidate.id);
+          isExistingMember = memberships.length > 0;
+        }
+      }
+      if (!isInvited && !isExistingMember) {
         console.log(`[AUTH] Login blocked for uninvited email: ${email}`);
         try {
           await db.insert(auditLogs).values({
@@ -30873,7 +31060,16 @@ async function setupAuth(app2) {
       }
       const user = {};
       updateUserSession(user, tokens);
-      await upsertUser(claims);
+      const dbUser = await upsertUser(claims);
+      const initialOrg = await resolveInitialOrg(dbUser.id, email);
+      if (initialOrg) {
+        user.currentOrgId = initialOrg.orgId;
+        user.currentOrgRole = initialOrg.role;
+        const props = await storage.getPropertiesByOrg(initialOrg.orgId);
+        if (props.length > 0) {
+          user.currentPropertyId = props[0].id;
+        }
+      }
       verified(null, user);
     };
     const strategy = new Strategy(
@@ -30969,15 +31165,17 @@ var isAuthenticated = async (req, res, next) => {
 };
 
 // server/auditLog.ts
-import { desc as desc2, eq as eq2, and as and2, gte, lte, sql as sql3 } from "drizzle-orm";
+import { desc as desc2, eq as eq3, and as and2, gte, lte, sql as sql3 } from "drizzle-orm";
 async function audit(req, entry) {
   try {
     const userId = req.user?.claims?.sub || null;
     const userEmail = req.user?.claims?.email || null;
     const ipAddress = req.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || null;
+    const organizationId = req.user?.currentOrgId || req.orgId || null;
     await db.insert(auditLogs).values({
       userId,
       userEmail,
+      organizationId,
       action: entry.action,
       resourceType: entry.resourceType || null,
       resourceId: entry.resourceId || null,
@@ -30991,10 +31189,10 @@ async function audit(req, entry) {
 }
 async function queryAuditLogs(filters) {
   const conditions = [];
-  if (filters.userId) conditions.push(eq2(auditLogs.userId, filters.userId));
-  if (filters.action) conditions.push(eq2(auditLogs.action, filters.action));
-  if (filters.resourceType) conditions.push(eq2(auditLogs.resourceType, filters.resourceType));
-  if (filters.outcome) conditions.push(eq2(auditLogs.outcome, filters.outcome));
+  if (filters.userId) conditions.push(eq3(auditLogs.userId, filters.userId));
+  if (filters.action) conditions.push(eq3(auditLogs.action, filters.action));
+  if (filters.resourceType) conditions.push(eq3(auditLogs.resourceType, filters.resourceType));
+  if (filters.outcome) conditions.push(eq3(auditLogs.outcome, filters.outcome));
   if (filters.from) conditions.push(gte(auditLogs.createdAt, new Date(filters.from)));
   if (filters.to) conditions.push(lte(auditLogs.createdAt, new Date(filters.to)));
   const limit = Math.min(filters.limit || 100, 500);
@@ -31181,10 +31379,146 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      res.json(user);
+      const memberships = await storage.getUserOrganizations(userId);
+      if (!req.user.currentOrgId && memberships.length > 0) {
+        req.user.currentOrgId = memberships[0].organization.id;
+        req.user.currentOrgRole = memberships[0].role;
+      }
+      const currentOrgId = req.user.currentOrgId || null;
+      const currentOrgRole = req.user.currentOrgRole || null;
+      const currentOrg = currentOrgId ? memberships.find((m) => m.organization.id === currentOrgId)?.organization || null : null;
+      const orgProperties = currentOrgId ? await storage.getPropertiesByOrg(currentOrgId) : [];
+      if (currentOrgId && !req.user.currentPropertyId && orgProperties.length > 0) {
+        req.user.currentPropertyId = orgProperties[0].id;
+      }
+      const currentPropertyId = req.user.currentPropertyId || null;
+      const currentProperty = currentPropertyId ? orgProperties.find((p) => p.id === currentPropertyId) || null : null;
+      res.json({
+        ...user,
+        organizations: memberships.map((m) => ({ ...m.organization, role: m.role })),
+        currentOrg,
+        currentOrgId,
+        currentOrgRole,
+        properties: orgProperties,
+        currentProperty,
+        currentPropertyId
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+  app2.post("/api/me/switch-org", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const { organizationId } = req.body || {};
+      if (!organizationId) return res.status(400).json({ error: "organizationId required" });
+      const role = await storage.getUserRoleInOrg(userId, organizationId);
+      if (!role) return res.status(403).json({ error: "Not a member of that organization" });
+      req.user.currentOrgId = organizationId;
+      req.user.currentOrgRole = role;
+      const props = await storage.getPropertiesByOrg(organizationId);
+      req.user.currentPropertyId = props[0]?.id;
+      const org = await storage.getOrganization(organizationId);
+      audit(req, { action: "org.switch", resourceType: "organization", resourceId: organizationId });
+      res.json({ success: true, organization: org, role, currentPropertyId: req.user.currentPropertyId });
+    } catch (error) {
+      console.error("Error switching org:", error);
+      res.status(500).json({ error: "Failed to switch organization" });
+    }
+  });
+  app2.post("/api/me/switch-property", isAuthenticated, async (req, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      const { propertyId } = req.body || {};
+      if (!propertyId) return res.status(400).json({ error: "propertyId required" });
+      const prop = await storage.getProperty(propertyId);
+      if (!prop || prop.organizationId !== ctx.orgId) {
+        return res.status(403).json({ error: "Property does not belong to current organization" });
+      }
+      req.user.currentPropertyId = propertyId;
+      audit(req, { action: "property.switch", resourceType: "property", resourceId: propertyId });
+      res.json({ success: true, property: prop });
+    } catch (error) {
+      console.error("Error switching property:", error);
+      res.status(500).json({ error: "Failed to switch property" });
+    }
+  });
+  app2.get("/api/properties", isAuthenticated, async (req, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      const includeArchived = req.query.includeArchived === "true";
+      const props = await storage.getPropertiesByOrg(ctx.orgId, includeArchived);
+      res.json(props);
+    } catch (error) {
+      console.error("Error fetching properties:", error);
+      res.status(500).json({ error: "Failed to fetch properties" });
+    }
+  });
+  app2.post("/api/properties", isAuthenticated, async (req, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const { name, code, address } = req.body || {};
+      if (!name) return res.status(400).json({ error: "name required" });
+      const prop = await storage.createProperty({ organizationId: ctx.orgId, name, code, address });
+      audit(req, { action: "property.create", resourceType: "property", resourceId: prop.id, detail: name });
+      res.json(prop);
+    } catch (error) {
+      console.error("Error creating property:", error);
+      res.status(500).json({ error: "Failed to create property" });
+    }
+  });
+  app2.patch("/api/properties/:id", isAuthenticated, async (req, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const prop = await storage.getProperty(req.params.id);
+      if (!prop) return res.status(404).json({ error: "Not found" });
+      if (prop.organizationId !== ctx.orgId) return res.status(403).json({ error: "Access denied" });
+      const { name, code, address, status } = req.body || {};
+      const updated = await storage.updateProperty(req.params.id, { name, code, address, status });
+      audit(req, { action: "property.update", resourceType: "property", resourceId: req.params.id });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating property:", error);
+      res.status(500).json({ error: "Failed to update property" });
+    }
+  });
+  app2.delete("/api/properties/:id", isAuthenticated, async (req, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const prop = await storage.getProperty(req.params.id);
+      if (!prop) return res.status(404).json({ error: "Not found" });
+      if (prop.organizationId !== ctx.orgId) return res.status(403).json({ error: "Access denied" });
+      await storage.updateProperty(req.params.id, { status: "archived" });
+      audit(req, { action: "property.archive", resourceType: "property", resourceId: req.params.id });
+      res.json({ success: true, archived: true });
+    } catch (error) {
+      console.error("Error archiving property:", error);
+      res.status(500).json({ error: "Failed to archive property" });
+    }
+  });
+  app2.post("/api/properties/:id/restore", isAuthenticated, async (req, res) => {
+    try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") return res.status(403).json({ error: "read_only" });
+      const prop = await storage.getProperty(req.params.id);
+      if (!prop) return res.status(404).json({ error: "Not found" });
+      if (prop.organizationId !== ctx.orgId) return res.status(403).json({ error: "Access denied" });
+      await storage.updateProperty(req.params.id, { status: "active" });
+      audit(req, { action: "property.restore", resourceType: "property", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error restoring property:", error);
+      res.status(500).json({ error: "Failed to restore property" });
     }
   });
   app2.post("/api/user/accept-terms", isAuthenticated, async (req, res) => {
@@ -31215,30 +31549,68 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Internal server error" });
     }
   };
-  async function assertPeriodOwner(periodId, req, res) {
+  async function resolveOrgContext(req, res) {
+    const userId = req.user?.claims?.sub;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return null;
+    }
+    let orgId = req.user?.currentOrgId;
+    let role = req.user?.currentOrgRole;
+    if (!orgId) {
+      const memberships = await storage.getUserOrganizations(userId);
+      if (memberships.length === 0) {
+        res.status(403).json({ error: "no_organization" });
+        return null;
+      }
+      orgId = memberships[0].organization.id;
+      role = memberships[0].role;
+      req.user.currentOrgId = orgId;
+      req.user.currentOrgRole = role;
+    } else {
+      const verified = await storage.getUserRoleInOrg(userId, orgId);
+      if (!verified) {
+        res.status(403).json({ error: "org_access_revoked" });
+        return null;
+      }
+      role = verified;
+      req.user.currentOrgRole = role;
+    }
+    return { orgId, role };
+  }
+  async function assertPeriodAccess(periodId, req, res, mode = "read") {
+    const ctx = await resolveOrgContext(req, res);
+    if (!ctx) return null;
     const period = await storage.getPeriod(periodId);
     if (!period) {
       res.status(404).json({ error: "Period not found" });
       return null;
     }
-    const userId = req.user?.claims?.sub;
-    if (period.userId && period.userId !== userId) {
-      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: `Owner: ${period.userId}` });
+    if (period.organizationId !== ctx.orgId) {
+      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: `Org mismatch: ${period.organizationId}` });
       res.status(403).json({ error: "Access denied" });
+      return null;
+    }
+    if (mode === "write" && ctx.role === "viewer") {
+      audit(req, { action: "access.denied", resourceType: "period", resourceId: periodId, outcome: "denied", detail: "viewer attempted write" });
+      res.status(403).json({ error: "read_only", message: "Your role does not permit this action" });
       return null;
     }
     return period;
   }
-  async function assertFileOwner(fileId, req, res) {
+  const assertPeriodOwner = (periodId, req, res) => assertPeriodAccess(periodId, req, res, "read");
+  const assertPeriodWrite = (periodId, req, res) => assertPeriodAccess(periodId, req, res, "write");
+  async function assertFileOwner(fileId, req, res, mode = "read") {
     const file = await storage.getFile(fileId);
     if (!file) {
       res.status(404).json({ error: "File not found" });
       return null;
     }
-    const period = await assertPeriodOwner(file.periodId, req, res);
+    const period = await assertPeriodAccess(file.periodId, req, res, mode);
     if (!period) return null;
     return file;
   }
+  const assertFileWrite = (fileId, req, res) => assertFileOwner(fileId, req, res, "write");
   app2.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const users2 = await storage.getAllUsers();
@@ -31268,36 +31640,218 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to update user" });
     }
   });
-  app2.get("/api/admin/invites", isAuthenticated, isAdmin, async (req, res) => {
+  app2.get("/api/admin/invites", isAuthenticated, async (req, res) => {
     try {
-      const invites = await storage.getInvitedUsers();
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const orgIdFilter = req.query.organizationId;
+      if (me?.isPlatformOwner) {
+        const invites2 = await storage.getInvitedUsers(orgIdFilter);
+        return res.json(invites2);
+      }
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const invites = await storage.getInvitedUsers(ctx.orgId);
       res.json(invites);
     } catch (error) {
       console.error("Error fetching invites:", error);
       res.status(500).json({ error: "Failed to fetch invites" });
     }
   });
-  app2.post("/api/admin/invites", isAuthenticated, isAdmin, async (req, res) => {
+  app2.post("/api/admin/invites", isAuthenticated, async (req, res) => {
     try {
-      const { email } = req.body;
+      const { email, organizationId, role } = req.body;
       if (!email || typeof email !== "string") {
         return res.status(400).json({ error: "Email is required" });
       }
+      if (!organizationId) {
+        return res.status(400).json({ error: "organizationId is required" });
+      }
+      const inviteRole = role && ORG_ROLES.includes(role) ? role : "viewer";
       const trimmed = email.trim().toLowerCase();
       if (!trimmed.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
         return res.status(400).json({ error: "Invalid email address" });
+      }
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const myRole = await storage.getUserRoleInOrg(userId, organizationId);
+        allowed = myRole === "owner" || myRole === "admin";
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Not allowed to invite to this organization" });
       }
       const isAlready = await storage.isEmailInvited(trimmed);
       if (isAlready) {
         return res.status(409).json({ error: "This email is already invited" });
       }
-      const userId = req.user?.claims?.sub;
-      const invited = await storage.inviteUser(trimmed, userId);
-      audit(req, { action: "invite.create", resourceType: "invite", resourceId: invited.id, detail: trimmed });
+      const invited = await storage.inviteUser(trimmed, organizationId, inviteRole, userId);
+      audit(req, { action: "invite.create", resourceType: "invite", resourceId: invited.id, detail: `${trimmed} \u2192 ${organizationId} (${inviteRole})` });
       res.json(invited);
     } catch (error) {
       console.error("Error creating invite:", error);
       res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+  app2.get("/api/organizations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const includeArchived = req.query.includeArchived === "true";
+      if (me?.isPlatformOwner) {
+        const orgs = await storage.getOrganizations(includeArchived);
+        return res.json(orgs);
+      }
+      const memberships = await storage.getUserOrganizations(userId);
+      res.json(memberships.map((m) => ({ ...m.organization, role: m.role })));
+    } catch (error) {
+      console.error("Error fetching organizations:", error);
+      res.status(500).json({ error: "Failed to fetch organizations" });
+    }
+  });
+  app2.post("/api/organizations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can create organizations" });
+      }
+      const { name, slug, billingEmail, billingAddress, vatNumber } = req.body;
+      if (!name || !slug) return res.status(400).json({ error: "name and slug required" });
+      if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "slug must be lowercase alphanumeric with hyphens" });
+      const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber });
+      await storage.addOrganizationMember(org.id, userId, "admin");
+      await storage.createProperty({ organizationId: org.id, name: "Main", code: null, address: null });
+      audit(req, { action: "org.create", resourceType: "organization", resourceId: org.id, detail: name });
+      res.json(org);
+    } catch (error) {
+      if (error?.code === "23505") return res.status(409).json({ error: "An organization with that slug already exists" });
+      console.error("Error creating organization:", error);
+      res.status(500).json({ error: "Failed to create organization" });
+    }
+  });
+  app2.get("/api/organizations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ error: "Not found" });
+      if (!me?.isPlatformOwner) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        if (!role) return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(org);
+    } catch (error) {
+      console.error("Error fetching organization:", error);
+      res.status(500).json({ error: "Failed to fetch organization" });
+    }
+  });
+  app2.patch("/api/organizations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can update" });
+      const { name, billingEmail, billingAddress, vatNumber, status } = req.body;
+      const updated = await storage.updateOrganization(req.params.id, { name, billingEmail, billingAddress, vatNumber, status });
+      audit(req, { action: "org.update", resourceType: "organization", resourceId: req.params.id });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating organization:", error);
+      res.status(500).json({ error: "Failed to update organization" });
+    }
+  });
+  app2.delete("/api/organizations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can archive organizations" });
+      }
+      await storage.updateOrganization(req.params.id, { status: "archived" });
+      audit(req, { action: "org.archive", resourceType: "organization", resourceId: req.params.id });
+      res.json({ success: true, archived: true });
+    } catch (error) {
+      console.error("Error archiving organization:", error);
+      res.status(500).json({ error: "Failed to archive organization" });
+    }
+  });
+  app2.post("/api/organizations/:id/restore", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can restore organizations" });
+      }
+      await storage.updateOrganization(req.params.id, { status: "active" });
+      audit(req, { action: "org.restore", resourceType: "organization", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error restoring organization:", error);
+      res.status(500).json({ error: "Failed to restore organization" });
+    }
+  });
+  app2.get("/api/organizations/:id/members", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = !!role;
+      }
+      if (!allowed) return res.status(403).json({ error: "Access denied" });
+      const members = await storage.getOrganizationMembers(req.params.id);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching members:", error);
+      res.status(500).json({ error: "Failed to fetch members" });
+    }
+  });
+  app2.patch("/api/organizations/:id/members/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role2 = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role2 === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can change roles" });
+      const { role } = req.body;
+      if (!ORG_ROLES.includes(role)) return res.status(400).json({ error: "Invalid role" });
+      const updated = await storage.updateOrganizationMemberRole(req.params.id, req.params.userId, role);
+      audit(req, { action: "org.member.role_changed", resourceType: "organization", resourceId: req.params.id, detail: `${req.params.userId} \u2192 ${role}` });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating member role:", error);
+      res.status(500).json({ error: "Failed to update member role" });
+    }
+  });
+  app2.delete("/api/organizations/:id/members/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can remove members" });
+      await storage.removeOrganizationMember(req.params.id, req.params.userId);
+      audit(req, { action: "org.member.removed", resourceType: "organization", resourceId: req.params.id, detail: req.params.userId });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing member:", error);
+      res.status(500).json({ error: "Failed to remove member" });
     }
   });
   app2.delete("/api/admin/invites/:id", isAuthenticated, isAdmin, async (req, res) => {
@@ -31339,9 +31893,12 @@ async function registerRoutes(app2) {
   });
   app2.patch("/api/admin/access-requests/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const { status } = req.body;
+      const { status, organizationId, role } = req.body;
       if (!status || !["approved", "declined"].includes(status)) {
         return res.status(400).json({ error: "Status must be 'approved' or 'declined'" });
+      }
+      if (status === "approved" && !organizationId) {
+        return res.status(400).json({ error: "organizationId required when approving" });
       }
       const updated = await storage.updateAccessRequestStatus(req.params.id, status);
       if (!updated) {
@@ -31351,7 +31908,8 @@ async function registerRoutes(app2) {
         const isAlready = await storage.isEmailInvited(updated.email);
         if (!isAlready) {
           const userId = req.user?.claims?.sub;
-          await storage.inviteUser(updated.email, userId);
+          const inviteRole = role && ORG_ROLES.includes(role) ? role : "viewer";
+          await storage.inviteUser(updated.email, organizationId, inviteRole, userId);
         }
       }
       audit(req, { action: `access_request.${status}`, resourceType: "access_request", resourceId: req.params.id, detail: updated.email });
@@ -31493,10 +32051,11 @@ async function registerRoutes(app2) {
         const rawSub = req.user?.claims?.sub;
         const userId = rawSub != null ? String(rawSub) : void 0;
         const userEmail = req.user?.claims?.email || req.user?.email;
+        const orgId = req.user?.currentOrgId || null;
         await pool.query(
-          `INSERT INTO ai_usage (user_id, user_email, action, model, input_tokens, output_tokens, estimated_cost_usd)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [userId, userEmail, "convert.ai_extract", usage.model, usage.inputTokens, usage.outputTokens, usage.estimatedCostUsd]
+          `INSERT INTO ai_usage (user_id, user_email, organization_id, action, model, input_tokens, output_tokens, estimated_cost_usd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [userId, userEmail, orgId, "convert.ai_extract", usage.model, usage.inputTokens, usage.outputTokens, usage.estimatedCostUsd]
         );
       } catch (e) {
         console.error("Failed to log AI usage:", e);
@@ -31510,9 +32069,13 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/periods", isAuthenticated, async (req, res) => {
     try {
-      const rawSub = req.user?.claims?.sub;
-      const userId = rawSub != null ? String(rawSub) : void 0;
-      const periods = await storage.getPeriods(userId);
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      const queryProperty = req.query.propertyId;
+      let propertyId = req.user?.currentPropertyId;
+      if (queryProperty === "all") propertyId = void 0;
+      else if (queryProperty) propertyId = queryProperty;
+      const periods = await storage.getPeriods(ctx.orgId, propertyId);
       res.json(periods);
     } catch (error) {
       console.error("Error fetching periods:", error);
@@ -31531,9 +32094,23 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/periods", isAuthenticated, async (req, res) => {
     try {
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") {
+        return res.status(403).json({ error: "read_only" });
+      }
       const userId = req.user?.claims?.sub;
       const validated = insertReconciliationPeriodSchema.parse(req.body);
-      const period = await storage.createPeriod({ ...validated, userId });
+      const propertyId = req.body?.propertyId || req.user?.currentPropertyId;
+      if (!propertyId) {
+        return res.status(400).json({ error: "propertyId required \u2014 pick a property first" });
+      }
+      const prop = await storage.getProperty(propertyId);
+      if (!prop || prop.organizationId !== ctx.orgId) {
+        return res.status(403).json({ error: "Property does not belong to current organization" });
+      }
+      const period = await storage.createPeriod({ ...validated, userId, organizationId: ctx.orgId, propertyId });
+      audit(req, { action: "period.create", resourceType: "period", resourceId: period.id, detail: `property=${propertyId}` });
       res.json(period);
     } catch (error) {
       console.error("Error creating period:", error);
@@ -31542,7 +32119,7 @@ async function registerRoutes(app2) {
   });
   app2.patch("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.id, req, res);
+      const period = await assertPeriodWrite(req.params.id, req, res);
       if (!period) return;
       const partialSchema = insertReconciliationPeriodSchema.partial();
       const validated = partialSchema.parse(req.body);
@@ -31558,7 +32135,7 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/periods/:id", isAuthenticated, async (req, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.id, req, res);
+      const period = await assertPeriodWrite(req.params.id, req, res);
       if (!period) return;
       await storage.deletePeriod(req.params.id);
       audit(req, { action: "period.delete", resourceType: "period", resourceId: req.params.id, detail: period.name });
@@ -31581,7 +32158,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/periods/:periodId/files/upload", isAuthenticated, upload.single("file"), async (req, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
@@ -31876,7 +32453,7 @@ async function registerRoutes(app2) {
   app2.post("/api/files/:fileId/column-mapping", isAuthenticated, async (req, res) => {
     try {
       const validatedMapping = columnMappingSchema.parse(req.body.columnMapping);
-      const file = await assertFileOwner(req.params.fileId, req, res);
+      const file = await assertFileWrite(req.params.fileId, req, res);
       if (!file) return;
       const mappedFields = {};
       const duplicates = [];
@@ -31916,7 +32493,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/periods/:periodId/files/:fileId/process", isAuthenticated, async (req, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       const file = await storage.getFile(req.params.fileId);
       if (!file) {
@@ -32025,7 +32602,7 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/files/:fileId", isAuthenticated, async (req, res) => {
     try {
-      const file = await assertFileOwner(req.params.fileId, req, res);
+      const file = await assertFileWrite(req.params.fileId, req, res);
       if (!file) return;
       await storage.deleteMatchesByFile(file.id);
       await storage.deleteTransactionsByFile(file.id);
@@ -32092,7 +32669,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/periods/:periodId/matching-rules", isAuthenticated, async (req, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       const validatedRules = matchingRulesConfigSchema.parse(req.body);
       const saved = await storage.saveMatchingRules(req.params.periodId, validatedRules);
@@ -32152,7 +32729,7 @@ async function registerRoutes(app2) {
   }
   app2.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       await storage.resetMatchesByPeriod(req.params.periodId);
       const rules = await storage.getMatchingRules(req.params.periodId);
@@ -32375,7 +32952,7 @@ async function registerRoutes(app2) {
   app2.post("/api/matches/manual", isAuthenticated, async (req, res) => {
     try {
       const matchInput = insertMatchSchema.omit({ matchType: true, matchConfidence: true }).parse(req.body);
-      const period = await assertPeriodOwner(matchInput.periodId, req, res);
+      const period = await assertPeriodWrite(matchInput.periodId, req, res);
       if (!period) return;
       const match = await storage.createMatch({
         ...matchInput,
@@ -32403,7 +32980,7 @@ async function registerRoutes(app2) {
       if (!match) {
         return res.status(404).json({ error: "Match not found" });
       }
-      const period = await assertPeriodOwner(match.periodId, req, res);
+      const period = await assertPeriodWrite(match.periodId, req, res);
       if (!period) return;
       await storage.updateTransaction(match.fuelTransactionId, {
         matchStatus: "unmatched",
@@ -32565,7 +33142,7 @@ async function registerRoutes(app2) {
       if (!transactionId || !periodId || !resolutionType) {
         return res.status(400).json({ error: "Missing required fields" });
       }
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
       const resolution = await storage.createResolution({
         transactionId,
@@ -32598,7 +33175,7 @@ async function registerRoutes(app2) {
       if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
       const resolutions = [];
       for (const transactionId of transactionIds) {
@@ -32633,7 +33210,7 @@ async function registerRoutes(app2) {
       if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
       const resolutions = [];
       for (const transactionId of transactionIds) {
@@ -32663,6 +33240,10 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/resolutions/:transactionId", isAuthenticated, async (req, res) => {
     try {
+      const tx = await storage.getTransaction(req.params.transactionId);
+      if (!tx) return res.status(404).json({ error: "Transaction not found" });
+      const period = await assertPeriodWrite(tx.periodId, req, res);
+      if (!period) return;
       const count = await storage.deleteResolutionByTransaction(req.params.transactionId);
       if (count === 0) return res.status(404).json({ error: "No resolution found" });
       res.json({ success: true, count });
@@ -32673,7 +33254,7 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
     try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
       const count = await storage.clearResolutionsByPeriod(req.params.periodId);
       res.json({ success: true, count });
@@ -32918,7 +33499,7 @@ async function registerRoutes(app2) {
       if (!matches2 || !Array.isArray(matches2) || !periodId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
-      const period = await assertPeriodOwner(periodId, req, res);
+      const period = await assertPeriodWrite(periodId, req, res);
       if (!period) return;
       const createdMatches = [];
       for (const { bankId, fuelId } of matches2) {

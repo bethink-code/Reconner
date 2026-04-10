@@ -1,5 +1,5 @@
-import { 
-  type User, 
+import {
+  type User,
   type UpsertUser,
   type ReconciliationPeriod,
   type InsertReconciliationPeriod,
@@ -16,6 +16,12 @@ import {
   type InsertTransactionResolution,
   type InvitedUser,
   type AccessRequest,
+  type Organization,
+  type InsertOrganization,
+  type OrganizationMember,
+  type OrgRole,
+  type Property,
+  type InsertProperty,
   users,
   reconciliationPeriods,
   uploadedFiles,
@@ -24,7 +30,10 @@ import {
   matchingRules,
   transactionResolutions,
   invitedUsers,
-  accessRequests
+  accessRequests,
+  organizations,
+  organizationMembers,
+  properties
 } from "../shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -189,13 +198,40 @@ export interface VerificationSummary {
   };
 }
 
+export interface UserOrgMembership {
+  organization: Organization;
+  role: OrgRole;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   setUserAdmin(id: string, isAdmin: boolean): Promise<User | undefined>;
-  
-  getPeriods(userId?: string): Promise<ReconciliationPeriod[]>;
+
+  // Organizations
+  getOrganizations(includeArchived?: boolean): Promise<Organization[]>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  createOrganization(data: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: string, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
+  deleteOrganization(id: string): Promise<void>;
+
+  // Organization members
+  getUserOrganizations(userId: string): Promise<UserOrgMembership[]>;
+  getOrganizationMembers(orgId: string): Promise<(OrganizationMember & { user: User })[]>;
+  addOrganizationMember(orgId: string, userId: string, role: OrgRole): Promise<OrganizationMember>;
+  updateOrganizationMemberRole(orgId: string, userId: string, role: OrgRole): Promise<OrganizationMember | undefined>;
+  removeOrganizationMember(orgId: string, userId: string): Promise<void>;
+  getUserRoleInOrg(userId: string, orgId: string): Promise<OrgRole | undefined>;
+
+  // Properties
+  getPropertiesByOrg(orgId: string, includeArchived?: boolean): Promise<Property[]>;
+  getProperty(id: string): Promise<Property | undefined>;
+  createProperty(data: InsertProperty): Promise<Property>;
+  updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property | undefined>;
+  deleteProperty(id: string): Promise<void>;
+
+  getPeriods(orgId: string, propertyId?: string): Promise<ReconciliationPeriod[]>;
   getPeriod(id: string): Promise<ReconciliationPeriod | undefined>;
   createPeriod(period: InsertReconciliationPeriod): Promise<ReconciliationPeriod>;
   updatePeriod(id: string, data: Partial<InsertReconciliationPeriod>): Promise<ReconciliationPeriod | undefined>;
@@ -298,13 +334,145 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async getPeriods(userId?: string): Promise<ReconciliationPeriod[]> {
-    if (userId) {
+  async getPeriods(orgId: string, propertyId?: string): Promise<ReconciliationPeriod[]> {
+    if (propertyId) {
       return await db.select().from(reconciliationPeriods)
-        .where(eq(reconciliationPeriods.userId, userId))
+        .where(and(
+          eq(reconciliationPeriods.organizationId, orgId),
+          eq(reconciliationPeriods.propertyId, propertyId),
+        ))
         .orderBy(desc(reconciliationPeriods.createdAt));
     }
-    return await db.select().from(reconciliationPeriods).orderBy(desc(reconciliationPeriods.createdAt));
+    return await db.select().from(reconciliationPeriods)
+      .where(eq(reconciliationPeriods.organizationId, orgId))
+      .orderBy(desc(reconciliationPeriods.createdAt));
+  }
+
+  // Properties — filters out archived by default (e.g. for switcher and dashboard).
+  // Pass includeArchived=true for the Admin "Archived" section.
+  async getPropertiesByOrg(orgId: string, includeArchived: boolean = false): Promise<Property[]> {
+    if (includeArchived) {
+      return await db.select().from(properties)
+        .where(eq(properties.organizationId, orgId))
+        .orderBy(properties.name);
+    }
+    return await db.select().from(properties)
+      .where(and(
+        eq(properties.organizationId, orgId),
+        eq(properties.status, "active"),
+      ))
+      .orderBy(properties.name);
+  }
+
+  async getProperty(id: string): Promise<Property | undefined> {
+    const [row] = await db.select().from(properties).where(eq(properties.id, id));
+    return row || undefined;
+  }
+
+  async createProperty(data: InsertProperty): Promise<Property> {
+    const [row] = await db.insert(properties).values(data).returning();
+    return row;
+  }
+
+  async updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property | undefined> {
+    const [updated] = await db.update(properties)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(properties.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteProperty(id: string): Promise<void> {
+    await db.delete(properties).where(eq(properties.id, id));
+  }
+
+  // Organizations
+  async getOrganizations(includeArchived: boolean = false): Promise<Organization[]> {
+    if (includeArchived) {
+      return await db.select().from(organizations).orderBy(desc(organizations.createdAt));
+    }
+    return await db.select().from(organizations)
+      .where(eq(organizations.status, "active"))
+      .orderBy(desc(organizations.createdAt));
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org || undefined;
+  }
+
+  async createOrganization(data: InsertOrganization): Promise<Organization> {
+    const [org] = await db.insert(organizations).values(data).returning();
+    return org;
+  }
+
+  async updateOrganization(id: string, data: Partial<InsertOrganization>): Promise<Organization | undefined> {
+    const [updated] = await db.update(organizations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(organizations.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  // Organization members. Filters out archived orgs by default — users should never
+  // see (or be able to switch to) an archived org.
+  async getUserOrganizations(userId: string): Promise<UserOrgMembership[]> {
+    const rows = await db.select({
+      member: organizationMembers,
+      org: organizations,
+    })
+      .from(organizationMembers)
+      .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
+      .where(and(
+        eq(organizationMembers.userId, userId),
+        eq(organizations.status, "active"),
+      ))
+      .orderBy(organizations.name);
+    return rows.map(r => ({ organization: r.org, role: r.member.role as OrgRole }));
+  }
+
+  async getOrganizationMembers(orgId: string): Promise<(OrganizationMember & { user: User })[]> {
+    const rows = await db.select({
+      member: organizationMembers,
+      user: users,
+    })
+      .from(organizationMembers)
+      .innerJoin(users, eq(organizationMembers.userId, users.id))
+      .where(eq(organizationMembers.organizationId, orgId))
+      .orderBy(users.email);
+    return rows.map(r => ({ ...r.member, user: r.user }));
+  }
+
+  async addOrganizationMember(orgId: string, userId: string, role: OrgRole): Promise<OrganizationMember> {
+    const [member] = await db.insert(organizationMembers)
+      .values({ organizationId: orgId, userId, role })
+      .returning();
+    return member;
+  }
+
+  async updateOrganizationMemberRole(orgId: string, userId: string, role: OrgRole): Promise<OrganizationMember | undefined> {
+    const [updated] = await db.update(organizationMembers)
+      .set({ role })
+      .where(and(eq(organizationMembers.organizationId, orgId), eq(organizationMembers.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async removeOrganizationMember(orgId: string, userId: string): Promise<void> {
+    await db.delete(organizationMembers)
+      .where(and(eq(organizationMembers.organizationId, orgId), eq(organizationMembers.userId, userId)));
+  }
+
+  async getUserRoleInOrg(userId: string, orgId: string): Promise<OrgRole | undefined> {
+    const [row] = await db.select({ role: organizationMembers.role })
+      .from(organizationMembers)
+      .where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.organizationId, orgId)))
+      .limit(1);
+    return (row?.role as OrgRole) || undefined;
   }
 
   async getPeriod(id: string): Promise<ReconciliationPeriod | undefined> {
@@ -1462,7 +1630,15 @@ export class DatabaseStorage implements IStorage {
     return resolutions.map(r => r.transactionId);
   }
 
-  // Invite management
+  // Invite management — invites are now scoped to a specific org with a role.
+  async getInvitedUserByEmail(email: string): Promise<InvitedUser | undefined> {
+    const [row] = await db.select()
+      .from(invitedUsers)
+      .where(eq(invitedUsers.email, email.toLowerCase()))
+      .limit(1);
+    return row || undefined;
+  }
+
   async isEmailInvited(email: string): Promise<boolean> {
     const result = await db.select({ id: invitedUsers.id })
       .from(invitedUsers)
@@ -1471,13 +1647,18 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  async getInvitedUsers(): Promise<InvitedUser[]> {
+  async getInvitedUsers(orgId?: string): Promise<InvitedUser[]> {
+    if (orgId) {
+      return await db.select().from(invitedUsers)
+        .where(eq(invitedUsers.organizationId, orgId))
+        .orderBy(desc(invitedUsers.createdAt));
+    }
     return await db.select().from(invitedUsers).orderBy(desc(invitedUsers.createdAt));
   }
 
-  async inviteUser(email: string, invitedById: string): Promise<InvitedUser> {
+  async inviteUser(email: string, orgId: string, role: OrgRole, invitedById: string): Promise<InvitedUser> {
     const [invited] = await db.insert(invitedUsers)
-      .values({ email: email.toLowerCase(), invitedBy: invitedById })
+      .values({ email: email.toLowerCase(), organizationId: orgId, role, invitedBy: invitedById })
       .returning();
     return invited;
   }

@@ -8,8 +8,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Loader2, Check } from "lucide-react";
 import { ReconciliationStepper, STEP_CANVAS_COLORS, type ReconciliationStep, type StepEligibility } from "@/components/ReconciliationStepper";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ReconciliationPeriod, UploadedFile } from "@shared/schema";
+import { Eye } from "lucide-react";
 
 import { FuelUploadStep } from "@/components/flow/FuelUploadStep";
 import { BankUploadStep } from "@/components/flow/BankUploadStep";
@@ -23,6 +25,7 @@ export default function ReconciliationFlow() {
   const [, setLocation] = useLocation();
   const [match, params] = useRoute("/flow/:periodId");
   const { toast } = useToast();
+  const { isViewer } = useAuth();
   
   const [currentStep, setCurrentStep] = useState<ReconciliationStep>("fuel");
   const [completedSteps, setCompletedSteps] = useState<ReconciliationStep[]>([]);
@@ -327,6 +330,12 @@ export default function ReconciliationFlow() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      {isViewer && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-sm py-2 px-4 text-center" data-testid="viewer-banner">
+          <Eye className="h-4 w-4 inline mr-2" />
+          Viewer mode — you can browse but not change anything
+        </div>
+      )}
       <header className="border-b bg-card sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center gap-4">

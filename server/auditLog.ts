@@ -23,9 +23,12 @@ export async function audit(req: any, entry: AuditEntry): Promise<void> {
       || req.socket?.remoteAddress
       || null;
 
+    const organizationId = req.user?.currentOrgId || (req as any).orgId || null;
+
     await db.insert(auditLogs).values({
       userId,
       userEmail,
+      organizationId,
       action: entry.action,
       resourceType: entry.resourceType || null,
       resourceId: entry.resourceId || null,

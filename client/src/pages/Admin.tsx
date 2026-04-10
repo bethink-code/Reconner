@@ -7,11 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { User, AuditLog, InvitedUser, AccessRequest } from "@shared/schema";
+import type { User, AuditLog, InvitedUser, AccessRequest, Organization, OrgRole, Property } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
+import { Building2, MapPin } from "lucide-react";
 
 const ACTION_LABELS: Record<string, string> = {
   "access.denied": "Access Denied",
@@ -54,13 +57,28 @@ function formatDate(dateStr: string | Date | null) {
 export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security" | "ai-usage">("users");
+  const { user: currentUser, isPlatformOwner, currentOrgId, canWrite } = useAuth();
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security" | "ai-usage" | "organizations" | "properties">("users");
   const [auditPage, setAuditPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteOrgId, setInviteOrgId] = useState<string>("");
+  const [inviteRole, setInviteRole] = useState<OrgRole>("viewer");
+  const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "" });
+  const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "" });
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "" });
   const AUDIT_LIMIT = 50;
+
+  // Organizations — for invite picker and Organizations tab
+  // Platform owners get the full list including archived; everyone else only sees their active memberships.
+  const { data: allOrganizations = [] } = useQuery<(Organization & { role?: OrgRole })[]>({
+    queryKey: [isPlatformOwner ? "/api/organizations?includeArchived=true" : "/api/organizations"],
+    retry: false,
+  });
+  const organizations = allOrganizations.filter(o => (o as any).status !== "archived");
+  const archivedOrganizations = allOrganizations.filter(o => (o as any).status === "archived");
 
   const { data: users, isLoading, error } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
@@ -74,16 +92,114 @@ export default function Admin() {
   });
 
   const inviteMutation = useMutation({
-    mutationFn: async (email: string) => {
-      return await apiRequest("POST", "/api/admin/invites", { email });
+    mutationFn: async (payload: { email: string; organizationId: string; role: OrgRole }) => {
+      return await apiRequest("POST", "/api/admin/invites", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
       setInviteEmail("");
-      toast({ title: "Invite sent", description: "User has been invited to Lekana." });
+      toast({ title: "Invite sent", description: "User has been invited to the organization." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message || "Failed to invite user", variant: "destructive" });
+    },
+  });
+
+  const createOrgMutation = useMutation({
+    mutationFn: async (payload: { name: string; slug: string; billingEmail?: string }) => {
+      return await apiRequest("POST", "/api/organizations", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      setNewOrgForm({ name: "", slug: "", billingEmail: "" });
+      toast({ title: "Organization created" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to create organization", variant: "destructive" });
+    },
+  });
+
+  const archiveOrgMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/organizations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast({ title: "Organization archived", description: "All data preserved. Restore from the Archived section." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to archive", variant: "destructive" });
+    },
+  });
+
+  const restoreOrgMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("POST", `/api/organizations/${id}/restore`),
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast({ title: "Organization restored" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to restore", variant: "destructive" });
+    },
+  });
+
+  // Properties for the current org — Admin view shows BOTH active and archived
+  const { data: allProperties = [] } = useQuery<Property[]>({
+    queryKey: ["/api/properties?includeArchived=true"],
+    enabled: !!currentOrgId,
+    retry: false,
+  });
+  const properties = allProperties.filter(p => p.status === "active");
+  const archivedProperties = allProperties.filter(p => p.status === "archived");
+
+  const createPropertyMutation = useMutation({
+    mutationFn: async (payload: { name: string; code?: string; address?: string }) => {
+      return await apiRequest("POST", "/api/properties", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setNewPropertyForm({ name: "", code: "", address: "" });
+      toast({ title: "Property created" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to create property", variant: "destructive" });
+    },
+  });
+
+  const archivePropertyMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/properties/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({ title: "Property archived", description: "All periods and data are preserved. Restore from the Archived section." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to archive property", variant: "destructive" });
+    },
+  });
+
+  const restorePropertyMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("POST", `/api/properties/${id}/restore`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({ title: "Property restored" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to restore property", variant: "destructive" });
+    },
+  });
+
+  const updatePropertyMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { name: string; code?: string; address?: string } }) =>
+      apiRequest("PATCH", `/api/properties/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setEditingProperty(null);
+      toast({ title: "Property updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to update property", variant: "destructive" });
     },
   });
 
@@ -250,6 +366,26 @@ export default function Admin() {
 
         {/* Tab switcher */}
         <div className="flex gap-2 border-b pb-2">
+          {isPlatformOwner && (
+            <Button
+              variant={activeTab === "organizations" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("organizations")}
+              data-testid="tab-organizations"
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              Organizations
+            </Button>
+          )}
+          <Button
+            variant={activeTab === "properties" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("properties")}
+            data-testid="tab-properties"
+          >
+            <MapPin className="h-4 w-4 mr-2" />
+            Properties
+          </Button>
           <Button
             variant={activeTab === "users" ? "default" : "ghost"}
             size="sm"
@@ -302,6 +438,278 @@ export default function Admin() {
             AI Costs
           </Button>
         </div>
+
+        {/* Organizations tab — platform owner only */}
+        {activeTab === "organizations" && isPlatformOwner && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Organizations
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newOrgForm.name && newOrgForm.slug) {
+                    createOrgMutation.mutate(newOrgForm);
+                  }
+                }}
+                className="space-y-3 p-4 rounded-lg border bg-section"
+                data-testid="form-create-org"
+              >
+                <p className="text-sm font-medium">Create new organization</p>
+                <div className="flex flex-col md:flex-row gap-2">
+                  <Input
+                    placeholder="Organization name (e.g. Desert Trading)"
+                    value={newOrgForm.name}
+                    onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") })}
+                    className="flex-1"
+                  />
+                  <Input
+                    placeholder="slug"
+                    value={newOrgForm.slug}
+                    onChange={(e) => setNewOrgForm({ ...newOrgForm, slug: e.target.value })}
+                    className="md:w-[180px]"
+                  />
+                  <Input
+                    type="email"
+                    placeholder="Billing email (optional)"
+                    value={newOrgForm.billingEmail}
+                    onChange={(e) => setNewOrgForm({ ...newOrgForm, billingEmail: e.target.value })}
+                    className="md:w-[220px]"
+                  />
+                  <Button type="submit" disabled={createOrgMutation.isPending || !newOrgForm.name || !newOrgForm.slug}>
+                    {createOrgMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
+                  </Button>
+                </div>
+              </form>
+
+              {organizations.length > 0 ? (
+                <div className="space-y-2">
+                  {organizations.map((org) => (
+                    <div
+                      key={org.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      data-testid={`row-org-${org.slug}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">{org.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {org.slug}
+                            {org.billingEmail && ` · ${org.billingEmail}`}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm(`Archive ${org.name}? All data is preserved and the org can be restored later.`)) {
+                            archiveOrgMutation.mutate(org.id);
+                          }
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Archive (data preserved)"
+                        data-testid={`button-archive-org-${org.slug}`}
+                      >
+                        <Archive className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No organizations yet — create one above.
+                </div>
+              )}
+
+              {archivedOrganizations.length > 0 && (
+                <div className="space-y-2 pt-4 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Archived</p>
+                  {archivedOrganizations.map((org) => (
+                    <div
+                      key={org.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-dashed bg-card opacity-60"
+                      data-testid={`row-archived-org-${org.slug}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Archive className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">{org.name}</p>
+                          <p className="text-xs text-muted-foreground">{org.slug}</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => restoreOrgMutation.mutate(org.id)}
+                        disabled={restoreOrgMutation.isPending}
+                        className="text-muted-foreground hover:text-foreground"
+                        data-testid={`button-restore-org-${org.slug}`}
+                      >
+                        <ArchiveRestore className="h-4 w-4 mr-1" />
+                        Restore
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Properties tab — visible to all org admins for the current org */}
+        {activeTab === "properties" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Properties (sites)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {canWrite && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (newPropertyForm.name) {
+                      createPropertyMutation.mutate({
+                        name: newPropertyForm.name,
+                        code: newPropertyForm.code || undefined,
+                        address: newPropertyForm.address || undefined,
+                      });
+                    }
+                  }}
+                  className="space-y-3 p-4 rounded-lg border bg-section"
+                  data-testid="form-create-property"
+                >
+                  <p className="text-sm font-medium">Add a property</p>
+                  <div className="flex flex-col md:flex-row gap-2">
+                    <Input
+                      placeholder="Site name (e.g. Engen Mossel Bay)"
+                      value={newPropertyForm.name}
+                      onChange={(e) => setNewPropertyForm({ ...newPropertyForm, name: e.target.value })}
+                      className="flex-1"
+                    />
+                    <Input
+                      placeholder="Code (optional, e.g. DT-01)"
+                      value={newPropertyForm.code}
+                      onChange={(e) => setNewPropertyForm({ ...newPropertyForm, code: e.target.value })}
+                      className="md:w-[180px]"
+                    />
+                    <Input
+                      placeholder="Address (optional)"
+                      value={newPropertyForm.address}
+                      onChange={(e) => setNewPropertyForm({ ...newPropertyForm, address: e.target.value })}
+                      className="md:w-[260px]"
+                    />
+                    <Button type="submit" disabled={createPropertyMutation.isPending || !newPropertyForm.name}>
+                      {createPropertyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {properties.length > 0 ? (
+                <div className="space-y-2">
+                  {properties.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      data-testid={`row-property-${p.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">
+                            {p.name}
+                            {p.code && <span className="text-xs text-muted-foreground ml-2">({p.code})</span>}
+                          </p>
+                          {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
+                        </div>
+                      </div>
+                      {canWrite && (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingProperty(p);
+                              setEditPropertyForm({ name: p.name, code: p.code || "", address: p.address || "" });
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                            data-testid={`button-edit-property-${p.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm(`Archive ${p.name}? Periods and data are kept and can be restored later.`)) {
+                                archivePropertyMutation.mutate(p.id);
+                              }
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                            title="Archive (data preserved)"
+                            data-testid={`button-archive-property-${p.id}`}
+                          >
+                            <Archive className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No properties yet — add your first site above.
+                </div>
+              )}
+
+              {archivedProperties.length > 0 && (
+                <div className="space-y-2 pt-4 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Archived</p>
+                  {archivedProperties.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-dashed bg-card opacity-60"
+                      data-testid={`row-archived-property-${p.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Archive className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">
+                            {p.name}
+                            {p.code && <span className="text-xs text-muted-foreground ml-2">({p.code})</span>}
+                          </p>
+                          {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
+                        </div>
+                      </div>
+                      {canWrite && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => restorePropertyMutation.mutate(p.id)}
+                          disabled={restorePropertyMutation.isPending}
+                          className="text-muted-foreground hover:text-foreground"
+                          data-testid={`button-restore-property-${p.id}`}
+                        >
+                          <ArchiveRestore className="h-4 w-4 mr-1" />
+                          Restore
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Users tab */}
         {activeTab === "users" && (
@@ -550,37 +958,71 @@ export default function Admin() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Invite form */}
+              {/* Invite form — must pick org + role */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (inviteEmail.trim()) inviteMutation.mutate(inviteEmail.trim());
+                  const orgId = inviteOrgId || currentOrgId || "";
+                  if (!orgId) {
+                    toast({ title: "Pick an organization first", variant: "destructive" });
+                    return;
+                  }
+                  if (inviteEmail.trim()) {
+                    inviteMutation.mutate({ email: inviteEmail.trim(), organizationId: orgId, role: inviteRole });
+                  }
                 }}
-                className="flex gap-2"
+                className="space-y-3"
               >
-                <div className="relative flex-1">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    placeholder="name@gmail.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="pl-9"
-                  />
+                <div className="flex flex-col md:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="email"
+                      placeholder="name@gmail.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={inviteOrgId || currentOrgId || ""} onValueChange={(v) => setInviteOrgId(v)}>
+                    <SelectTrigger className="md:w-[220px]">
+                      <SelectValue placeholder="Select organization" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {organizations.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as OrgRole)}>
+                    <SelectTrigger className="md:w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="submit"
+                    disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                  >
+                    {inviteMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Invite
+                      </>
+                    )}
+                  </Button>
                 </div>
-                <Button
-                  type="submit"
-                  disabled={inviteMutation.isPending || !inviteEmail.trim()}
-                >
-                  {inviteMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Invite
-                    </>
-                  )}
-                </Button>
+                {organizations.length === 0 && (
+                  <p className="text-xs text-amber-700">
+                    No organizations exist yet. Create one in the Organizations tab first.
+                  </p>
+                )}
               </form>
 
               {/* Invite list */}
@@ -933,6 +1375,67 @@ export default function Admin() {
           </div>
         )}
       </div>
+
+      {/* Edit Property Dialog */}
+      <Dialog open={!!editingProperty} onOpenChange={(open) => !open && setEditingProperty(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Property</DialogTitle>
+            <DialogDescription>Update site name, code, or address.</DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!editingProperty || !editPropertyForm.name) return;
+              updatePropertyMutation.mutate({
+                id: editingProperty.id,
+                data: {
+                  name: editPropertyForm.name,
+                  code: editPropertyForm.code || undefined,
+                  address: editPropertyForm.address || undefined,
+                },
+              });
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="edit-property-name">Name *</Label>
+              <Input
+                id="edit-property-name"
+                value={editPropertyForm.name}
+                onChange={(e) => setEditPropertyForm({ ...editPropertyForm, name: e.target.value })}
+                required
+                data-testid="input-edit-property-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-property-code">Code</Label>
+              <Input
+                id="edit-property-code"
+                placeholder="e.g. DT-01"
+                value={editPropertyForm.code}
+                onChange={(e) => setEditPropertyForm({ ...editPropertyForm, code: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-property-address">Address</Label>
+              <Input
+                id="edit-property-address"
+                value={editPropertyForm.address}
+                onChange={(e) => setEditPropertyForm({ ...editPropertyForm, address: e.target.value })}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingProperty(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updatePropertyMutation.isPending || !editPropertyForm.name}>
+                {updatePropertyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

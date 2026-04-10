@@ -49,6 +49,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { ReconciliationPeriod, AccessRequest } from "@shared/schema";
 import PreAlphaModal from "@/components/PreAlphaModal";
+import { OrgSwitcher } from "@/components/OrgSwitcher";
+import { PropertySwitcher } from "@/components/PropertySwitcher";
 
 interface DisplayPeriod {
   id: string;
@@ -60,7 +62,7 @@ interface DisplayPeriod {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, canWrite, isViewer, currentPropertyId, currentProperty, properties } = useAuth();
   const { toast } = useToast();
   const [deleteTarget, setDeleteTarget] = useState<DisplayPeriod | null>(null);
   const [editTarget, setEditTarget] = useState<ReconciliationPeriod | null>(null);
@@ -68,7 +70,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "", description: "", startDate: "", endDate: "" });
+  const [createForm, setCreateForm] = useState({ name: "", description: "", startDate: "", endDate: "", propertyId: "" });
   const [templateSourceId, setTemplateSourceId] = useState<string | null>(null);
   const [showPreAlpha, setShowPreAlpha] = useState(false);
 
@@ -125,7 +127,7 @@ export default function Dashboard() {
     onSuccess: (period) => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
       setShowCreateDialog(false);
-      setCreateForm({ name: "", description: "", startDate: "", endDate: "" });
+      setCreateForm({ name: "", description: "", startDate: "", endDate: "", propertyId: currentPropertyId || "" });
       setTemplateSourceId(null);
       const msg = templateSourceId
         ? `${period.name} created with matching rules from previous period.`
@@ -209,6 +211,11 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      {isViewer && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-sm py-2 px-4 text-center">
+          Viewer mode — read-only access. Contact your administrator for write access.
+        </div>
+      )}
       {/* Header */}
       <header className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -228,14 +235,18 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center gap-4">
+              <OrgSwitcher />
+              <PropertySwitcher />
               <Button variant="outline" onClick={() => setLocation("/convert")} className="text-sm">
                 <FileBarChart className="h-4 w-4 mr-2" />
                 PDF Converter
               </Button>
-              <Button data-testid="button-create-period" onClick={() => { setTemplateSourceId(null); setCreateForm({ name: "", description: "", startDate: "", endDate: "" }); setShowCreateDialog(true); }}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Reconciliation
-              </Button>
+              {canWrite && (
+                <Button data-testid="button-create-period" onClick={() => { setTemplateSourceId(null); setCreateForm({ name: "", description: "", startDate: "", endDate: "", propertyId: currentPropertyId || "" }); setShowCreateDialog(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Reconciliation
+                </Button>
+              )}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -560,8 +571,35 @@ export default function Dashboard() {
           <form onSubmit={(e) => {
             e.preventDefault();
             if (createDateError) return;
+            if (!createForm.propertyId) {
+              toast({ title: "Pick a property", description: "Choose which site this period is for", variant: "destructive" });
+              return;
+            }
             createMutation.mutate({ ...createForm, sourceId: templateSourceId });
           }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="create-property">Property *</Label>
+              <Select
+                value={createForm.propertyId}
+                onValueChange={(v) => setCreateForm(prev => ({ ...prev, propertyId: v }))}
+              >
+                <SelectTrigger id="create-property" data-testid="select-property">
+                  <SelectValue placeholder="Select a property" />
+                </SelectTrigger>
+                <SelectContent>
+                  {properties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}{p.code ? ` (${p.code})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {properties.length === 0 && (
+                <p className="text-xs text-amber-700">
+                  No properties yet. Add one in Admin → Properties first.
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="create-name">Period Name *</Label>
               <Input

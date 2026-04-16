@@ -19,7 +19,7 @@ await build({
   external: [...external, "canvas"],
   // createRequire so bundled CJS code can use require() in the ESM output
   banner: {
-    js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url);`,
+    js: `import { createRequire } from 'module'; import { fileURLToPath as __fileURLToPath } from 'url'; import { dirname as __pathDirname } from 'path'; const require = createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __pathDirname(__filename);`,
   },
 });
 

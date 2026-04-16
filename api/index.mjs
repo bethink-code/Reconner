@@ -28311,11 +28311,15 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN source_type = 'fuel'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as total_fuel_amount,
 
-          -- Bank counts scoped to PERIOD DATES (same as fuel \u2014 date window is for matching only)
-          COUNT(CASE WHEN source_type LIKE 'bank%'
-                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as bank_transactions,
-          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%'
-                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
+          -- Bank counts: period dates OR matched (settlement lag matches count toward this period)
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND (
+            (transaction_date >= dw.min_date AND transaction_date <= dw.max_date)
+            OR match_status = 'matched'
+          ) THEN 1 END) as bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (
+            (transaction_date >= dw.min_date AND transaction_date <= dw.max_date)
+            OR match_status = 'matched'
+          ) THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
 
           -- Debtors scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND (
@@ -28346,11 +28350,9 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
 
-          -- Bank match stats scoped to period dates
-          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched'
-                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_bank_transactions,
-          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched'
-                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
+          -- Matched bank: count all matched regardless of date (the match validated the date window)
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN 1 END) as matched_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_card_fuel,
 
@@ -28363,6 +28365,7 @@ var DatabaseStorage = class {
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as unmatchable_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
+          -- Excluded/resolved: only count within period dates (declined bank from other days isn't this period's problem)
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as excluded_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'
@@ -28382,10 +28385,11 @@ var DatabaseStorage = class {
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
-          -- Matched + total counts: both fuel and bank scoped to period dates
-          COUNT(CASE WHEN match_status = 'matched'
-            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
-          THEN 1 END) as matched_transactions,
+          -- Matched: fuel scoped to period dates, bank any date (settlement lag matches count)
+          COUNT(CASE WHEN match_status = 'matched' AND (
+            (source_type = 'fuel' AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date)
+            OR source_type LIKE 'bank%'
+          ) THEN 1 END) as matched_transactions,
 
           dw.min_date as period_start,
           dw.max_date as period_end,

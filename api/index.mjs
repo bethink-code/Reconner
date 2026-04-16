@@ -29855,7 +29855,7 @@ function detectAndExcludeDuplicates(transactions2) {
   for (let i = 0; i < transactions2.length; i++) {
     if (transactions2[i].matchStatus === "excluded") continue;
     const rrn = findColumnRawValue(transactions2[i].rawData || {}, RRN_COLUMNS);
-    if (!rrn || rrn.length < 4 || PLACEHOLDER_RRNS.has(rrn)) continue;
+    if (!rrn || rrn.length < 8 || PLACEHOLDER_RRNS.has(rrn)) continue;
     if (!byRRN.has(rrn)) byRRN.set(rrn, []);
     byRRN.get(rrn).push(i);
   }
@@ -29876,11 +29876,14 @@ function detectAndExcludeDuplicates(transactions2) {
       }
     }
     stats.duplicateGroups++;
+    const keptAmount = transactions2[bestIdx].amount;
+    const keptDate = transactions2[bestIdx].transactionDate;
     for (const idx of indices) {
       if (idx === bestIdx) continue;
       transactions2[idx].matchStatus = "excluded";
       transactions2[idx].description = (transactions2[idx].description || "") + " [Excluded: Duplicate RRN]";
       stats.duplicatesExcluded++;
+      console.log(`[DEDUP] Excluded duplicate: RRN=${findColumnRawValue(transactions2[idx].rawData || {}, RRN_COLUMNS)}, amount=${transactions2[idx].amount}, date=${transactions2[idx].transactionDate} (kept: amount=${keptAmount}, date=${keptDate})`);
     }
   }
   return stats;

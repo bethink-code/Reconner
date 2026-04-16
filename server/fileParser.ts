@@ -806,7 +806,9 @@ export function detectAndExcludeDuplicates(
   for (let i = 0; i < transactions.length; i++) {
     if (transactions[i].matchStatus === 'excluded') continue;
     const rrn = findColumnRawValue(transactions[i].rawData || {}, RRN_COLUMNS);
-    if (!rrn || rrn.length < 4 || PLACEHOLDER_RRNS.has(rrn)) continue;
+    // Real card network RRNs are typically 12 digits; short values (4-6 chars)
+    // are likely sequence numbers or batch IDs that collide across unrelated txns
+    if (!rrn || rrn.length < 8 || PLACEHOLDER_RRNS.has(rrn)) continue;
     if (!byRRN.has(rrn)) byRRN.set(rrn, []);
     byRRN.get(rrn)!.push(i);
   }
@@ -836,12 +838,15 @@ export function detectAndExcludeDuplicates(
 
     // Exclude all except the most complete row
     stats.duplicateGroups++;
+    const keptAmount = transactions[bestIdx].amount;
+    const keptDate = transactions[bestIdx].transactionDate;
     for (const idx of indices) {
       if (idx === bestIdx) continue;
       transactions[idx].matchStatus = 'excluded';
       transactions[idx].description =
         (transactions[idx].description || '') + ' [Excluded: Duplicate RRN]';
       stats.duplicatesExcluded++;
+      console.log(`[DEDUP] Excluded duplicate: RRN=${findColumnRawValue(transactions[idx].rawData || {}, RRN_COLUMNS)}, amount=${transactions[idx].amount}, date=${transactions[idx].transactionDate} (kept: amount=${keptAmount}, date=${keptDate})`);
     }
   }
 

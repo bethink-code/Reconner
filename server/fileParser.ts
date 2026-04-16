@@ -1090,62 +1090,61 @@ export class FileParser {
       throw new Error('PDF file is empty or unreadable');
     }
 
-    const allTextItems: { text: string; x: number; y: number; width: number }[] = [];
-    
+    // ── Step 1: Extract text items per page (each page has its own Y-coordinates) ──
+    type TextItem = { text: string; x: number; y: number; width: number };
+    const pageRows: TextItem[][] = []; // one row-group per page, then flattened
+
+    const yTolerance = 3;
+
     for (const page of data.pages) {
-      if (page.content) {
-        for (const item of page.content) {
-          if (item.str && item.str.trim()) {
-            allTextItems.push({
-              text: item.str.trim(),
-              x: item.x,
-              y: item.y,
-              width: item.width,
-            });
+      if (!page.content) continue;
+
+      const items: TextItem[] = [];
+      for (const item of page.content) {
+        if (item.str && item.str.trim()) {
+          items.push({ text: item.str.trim(), x: item.x, y: item.y, width: item.width });
+        }
+      }
+
+      // Group items into rows by Y-position WITHIN this page
+      const rowsByY = new Map<number, TextItem[]>();
+      for (const item of items) {
+        let foundRow = false;
+        for (const [existingY, rowItems] of rowsByY.entries()) {
+          if (Math.abs(existingY - item.y) < yTolerance) {
+            rowItems.push(item);
+            foundRow = true;
+            break;
           }
         }
+        if (!foundRow) {
+          rowsByY.set(item.y, [item]);
+        }
+      }
+
+      // Sort rows top-to-bottom, items left-to-right
+      const sorted = Array.from(rowsByY.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([, rowItems]) => rowItems.sort((a, b) => a.x - b.x));
+
+      for (const row of sorted) {
+        pageRows.push(row);
       }
     }
 
-    if (allTextItems.length === 0) {
+    if (pageRows.length === 0) {
       throw new Error('No text found in PDF');
     }
 
-    const rowsByY = new Map<number, { text: string; x: number; width: number }[]>();
-    const yTolerance = 3;
-
-    for (const item of allTextItems) {
-      let foundRow = false;
-      const entries = Array.from(rowsByY.entries());
-      for (const [existingY, items] of entries) {
-        if (Math.abs(existingY - item.y) < yTolerance) {
-          items.push({ text: item.text, x: item.x, width: item.width });
-          foundRow = true;
-          break;
-        }
-      }
-      if (!foundRow) {
-        rowsByY.set(item.y, [{ text: item.text, x: item.x, width: item.width }]);
-      }
-    }
-
-    const sortedRowsWithCoords = Array.from(rowsByY.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([_, items]) => items.sort((a, b) => a.x - b.x));
-
-    if (sortedRowsWithCoords.length < 1) {
-      throw new Error('No data rows detected in PDF');
-    }
-
+    // ── Step 2: Detect column grid from first 10 rows ──
     const allXPositions = new Set<number>();
-    for (const row of sortedRowsWithCoords.slice(0, Math.min(10, sortedRowsWithCoords.length))) {
+    for (const row of pageRows.slice(0, Math.min(10, pageRows.length))) {
       for (const item of row) {
         allXPositions.add(Math.round(item.x));
       }
     }
 
     const sortedXPositions = Array.from(allXPositions).sort((a, b) => a - b);
-    
     const columnXRanges: Array<{ min: number; max: number; index: number }> = [];
     let currentGroup: number[] = [];
     const xGapThreshold = 15;
@@ -1191,10 +1190,11 @@ export class FileParser {
       return columnXRanges.length - 1;
     }
 
+    // ── Step 3: Convert to structured rows ──
     const numColumns = columnXRanges.length;
     const structuredRows: string[][] = [];
 
-    for (const rowItems of sortedRowsWithCoords) {
+    for (const rowItems of pageRows) {
       const row = new Array(numColumns).fill('');
       for (const item of rowItems) {
         const colIndex = getColumnIndex(Math.round(item.x));
@@ -1211,21 +1211,77 @@ export class FileParser {
       throw new Error('No table structure detected in PDF');
     }
 
-    const headers = structuredRows[0].map((h, i) => h || `Column ${i + 1}`);
-    const dataRows = structuredRows.slice(1);
+    // ── Step 4: Smart header detection ──
+    // Find the row that looks most like column headers (text-heavy, not dates/amounts)
+    const datePattern = /\d{1,4}[\/\-\.]\d{1,2}([\/\-\.]\d{1,4})?/;
+    const amountPattern = /^[R$€£]?\s*-?\d[\d\s,]*[.,]\d{2}$/;
+    const timePattern = /^\d{1,2}:\d{2}/;
 
-    const rows = dataRows.map(row => {
+    let headerRowIndex = 0;
+    let bestHeaderScore = -1;
+
+    for (let i = 0; i < Math.min(structuredRows.length, 15); i++) {
+      const row = structuredRows[i];
+      const filledCells = row.filter(c => c.trim() !== '').length;
+      // Skip sparse rows (titles, page numbers)
+      if (filledCells < Math.max(3, numColumns * 0.4)) continue;
+
+      let textCells = 0;
+      for (const cell of row) {
+        const val = cell.trim();
+        if (!val) continue;
+        // It's a "header-like" cell if it's text, not a date/time/amount/number
+        const isDate = datePattern.test(val);
+        const isAmount = amountPattern.test(val);
+        const isTime = timePattern.test(val);
+        const isPureNumber = /^\d+$/.test(val);
+        if (!isDate && !isAmount && !isTime && !isPureNumber) {
+          textCells++;
+        }
+      }
+
+      // Score: ratio of text cells to filled cells, weighted by fill count
+      const score = (textCells / filledCells) * filledCells;
+      if (score > bestHeaderScore) {
+        bestHeaderScore = score;
+        headerRowIndex = i;
+      }
+    }
+
+    const headers = structuredRows[headerRowIndex].map((h, i) => h.trim() || `Column ${i + 1}`);
+
+    // ── Step 5: Filter out header repeats and metadata rows ──
+    const headerFingerprint = headers.join('|').toLowerCase();
+
+    const dataRows: Record<string, any>[] = [];
+    for (let i = 0; i < structuredRows.length; i++) {
+      if (i === headerRowIndex) continue;
+
+      const row = structuredRows[i];
+      // Skip rows that match the header row (page-break repeats)
+      const rowFingerprint = row.map(c => c.trim()).join('|').toLowerCase();
+      if (rowFingerprint === headerFingerprint) continue;
+
+      // Skip sparse rows with only 1 filled cell (titles like "Transaction History")
+      const filledCells = row.filter(c => c.trim() !== '').length;
+      if (filledCells <= 1) continue;
+
+      // Skip page break patterns
+      const allText = row.join(' ');
+      if (/^page\s+\d+/i.test(allText.trim())) continue;
+      if (/^total/i.test(allText.trim())) continue;
+
       const obj: Record<string, any> = {};
       headers.forEach((header, index) => {
         obj[header] = (row[index] || '').trim();
       });
-      return obj;
-    });
+      dataRows.push(obj);
+    }
 
     return {
       headers,
-      rows,
-      rowCount: rows.length,
+      rows: dataRows,
+      rowCount: dataRows.length,
     };
   }
 

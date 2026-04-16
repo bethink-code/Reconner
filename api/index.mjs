@@ -30001,46 +30001,40 @@ var FileParser = class {
     if (!data.pages || data.pages.length === 0) {
       throw new Error("PDF file is empty or unreadable");
     }
-    const allTextItems = [];
+    const pageRows = [];
+    const yTolerance = 3;
     for (const page of data.pages) {
-      if (page.content) {
-        for (const item of page.content) {
-          if (item.str && item.str.trim()) {
-            allTextItems.push({
-              text: item.str.trim(),
-              x: item.x,
-              y: item.y,
-              width: item.width
-            });
+      if (!page.content) continue;
+      const items = [];
+      for (const item of page.content) {
+        if (item.str && item.str.trim()) {
+          items.push({ text: item.str.trim(), x: item.x, y: item.y, width: item.width });
+        }
+      }
+      const rowsByY = /* @__PURE__ */ new Map();
+      for (const item of items) {
+        let foundRow = false;
+        for (const [existingY, rowItems] of rowsByY.entries()) {
+          if (Math.abs(existingY - item.y) < yTolerance) {
+            rowItems.push(item);
+            foundRow = true;
+            break;
           }
         }
-      }
-    }
-    if (allTextItems.length === 0) {
-      throw new Error("No text found in PDF");
-    }
-    const rowsByY = /* @__PURE__ */ new Map();
-    const yTolerance = 3;
-    for (const item of allTextItems) {
-      let foundRow = false;
-      const entries = Array.from(rowsByY.entries());
-      for (const [existingY, items] of entries) {
-        if (Math.abs(existingY - item.y) < yTolerance) {
-          items.push({ text: item.text, x: item.x, width: item.width });
-          foundRow = true;
-          break;
+        if (!foundRow) {
+          rowsByY.set(item.y, [item]);
         }
       }
-      if (!foundRow) {
-        rowsByY.set(item.y, [{ text: item.text, x: item.x, width: item.width }]);
+      const sorted = Array.from(rowsByY.entries()).sort((a, b) => a[0] - b[0]).map(([, rowItems]) => rowItems.sort((a, b) => a.x - b.x));
+      for (const row of sorted) {
+        pageRows.push(row);
       }
     }
-    const sortedRowsWithCoords = Array.from(rowsByY.entries()).sort((a, b) => a[0] - b[0]).map(([_, items]) => items.sort((a, b) => a.x - b.x));
-    if (sortedRowsWithCoords.length < 1) {
-      throw new Error("No data rows detected in PDF");
+    if (pageRows.length === 0) {
+      throw new Error("No text found in PDF");
     }
     const allXPositions = /* @__PURE__ */ new Set();
-    for (const row of sortedRowsWithCoords.slice(0, Math.min(10, sortedRowsWithCoords.length))) {
+    for (const row of pageRows.slice(0, Math.min(10, pageRows.length))) {
       for (const item of row) {
         allXPositions.add(Math.round(item.x));
       }
@@ -30090,7 +30084,7 @@ var FileParser = class {
     }
     const numColumns = columnXRanges.length;
     const structuredRows = [];
-    for (const rowItems of sortedRowsWithCoords) {
+    for (const rowItems of pageRows) {
       const row = new Array(numColumns).fill("");
       for (const item of rowItems) {
         const colIndex = getColumnIndex(Math.round(item.x));
@@ -30105,19 +30099,56 @@ var FileParser = class {
     if (structuredRows.length === 0) {
       throw new Error("No table structure detected in PDF");
     }
-    const headers = structuredRows[0].map((h, i) => h || `Column ${i + 1}`);
-    const dataRows = structuredRows.slice(1);
-    const rows = dataRows.map((row) => {
+    const datePattern = /\d{1,4}[\/\-\.]\d{1,2}([\/\-\.]\d{1,4})?/;
+    const amountPattern = /^[R$€£]?\s*-?\d[\d\s,]*[.,]\d{2}$/;
+    const timePattern = /^\d{1,2}:\d{2}/;
+    let headerRowIndex = 0;
+    let bestHeaderScore = -1;
+    for (let i = 0; i < Math.min(structuredRows.length, 15); i++) {
+      const row = structuredRows[i];
+      const filledCells = row.filter((c) => c.trim() !== "").length;
+      if (filledCells < Math.max(3, numColumns * 0.4)) continue;
+      let textCells = 0;
+      for (const cell of row) {
+        const val = cell.trim();
+        if (!val) continue;
+        const isDate = datePattern.test(val);
+        const isAmount = amountPattern.test(val);
+        const isTime = timePattern.test(val);
+        const isPureNumber = /^\d+$/.test(val);
+        if (!isDate && !isAmount && !isTime && !isPureNumber) {
+          textCells++;
+        }
+      }
+      const score = textCells / filledCells * filledCells;
+      if (score > bestHeaderScore) {
+        bestHeaderScore = score;
+        headerRowIndex = i;
+      }
+    }
+    const headers = structuredRows[headerRowIndex].map((h, i) => h.trim() || `Column ${i + 1}`);
+    const headerFingerprint = headers.join("|").toLowerCase();
+    const dataRows = [];
+    for (let i = 0; i < structuredRows.length; i++) {
+      if (i === headerRowIndex) continue;
+      const row = structuredRows[i];
+      const rowFingerprint = row.map((c) => c.trim()).join("|").toLowerCase();
+      if (rowFingerprint === headerFingerprint) continue;
+      const filledCells = row.filter((c) => c.trim() !== "").length;
+      if (filledCells <= 1) continue;
+      const allText = row.join(" ");
+      if (/^page\s+\d+/i.test(allText.trim())) continue;
+      if (/^total/i.test(allText.trim())) continue;
       const obj = {};
       headers.forEach((header, index2) => {
         obj[header] = (row[index2] || "").trim();
       });
-      return obj;
-    });
+      dataRows.push(obj);
+    }
     return {
       headers,
-      rows,
-      rowCount: rows.length
+      rows: dataRows,
+      rowCount: dataRows.length
     };
   }
   async parse(buffer, fileType) {

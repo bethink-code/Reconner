@@ -121,6 +121,7 @@ export const uploadedFiles = pgTable("uploaded_files", {
   sourceType: text("source_type").notNull(),
   sourceName: text("source_name").notNull(),
   fileUrl: text("file_url").notNull(),
+  fileData: text("file_data"), // base64-encoded file buffer (for serverless persistence)
   fileSize: integer("file_size").notNull(),
   rowCount: integer("row_count").default(0),
   columnMapping: jsonb("column_mapping"),

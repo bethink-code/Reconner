@@ -27788,6 +27788,8 @@ var uploadedFiles = pgTable("uploaded_files", {
   sourceType: text("source_type").notNull(),
   sourceName: text("source_name").notNull(),
   fileUrl: text("file_url").notNull(),
+  fileData: text("file_data"),
+  // base64-encoded file buffer (for serverless persistence)
   fileSize: integer("file_size").notNull(),
   rowCount: integer("row_count").default(0),
   columnMapping: jsonb("column_mapping"),
@@ -32415,6 +32417,7 @@ async function registerRoutes(app2) {
         sourceType,
         sourceName,
         fileUrl,
+        fileData: req.file.buffer.toString("base64"),
         fileSize: req.file.size,
         rowCount: parsed.rowCount,
         columnMapping: null,
@@ -32456,8 +32459,13 @@ async function registerRoutes(app2) {
     try {
       const file = await assertFileOwner(req.params.fileId, req, res);
       if (!file) return;
-      const objectFile = await objectStorageService.getFile(file.fileUrl);
-      const [buffer] = await objectFile.download();
+      let buffer;
+      if (file.fileData) {
+        buffer = Buffer.from(file.fileData, "base64");
+      } else {
+        const objectFile = await objectStorageService.getFile(file.fileUrl);
+        [buffer] = await objectFile.download();
+      }
       const parsed = await fileParser.parse(buffer, file.fileType);
       const suggestedMappingsArray = fileParser.autoDetectColumns(parsed.headers);
       const suggestedMappings = {};
@@ -32607,8 +32615,13 @@ async function registerRoutes(app2) {
         return res.status(400).json({ error: "Column mapping not set" });
       }
       await storage.deleteTransactionsByFile(file.id);
-      const objectFile = await objectStorageService.getFile(file.fileUrl);
-      const [buffer] = await objectFile.download();
+      let buffer;
+      if (file.fileData) {
+        buffer = Buffer.from(file.fileData, "base64");
+      } else {
+        const objectFile = await objectStorageService.getFile(file.fileUrl);
+        [buffer] = await objectFile.download();
+      }
       const parsed = await fileParser.parse(buffer, file.fileType);
       if (parsed.rowCount > 5e5) {
         return res.status(400).json({
@@ -32694,7 +32707,9 @@ async function registerRoutes(app2) {
       console.log(`[PROCESS] Created ${createdCount} transactions in database`);
       await storage.updateFile(file.id, {
         status: "processed",
-        rowCount: createdCount
+        rowCount: createdCount,
+        fileData: null
+        // free DB storage after processing
       });
       res.json({
         success: true,

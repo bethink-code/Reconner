@@ -1183,6 +1183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sourceType,
         sourceName,
         fileUrl,
+        fileData: req.file.buffer.toString('base64'),
         fileSize: req.file.size,
         rowCount: parsed.rowCount,
         columnMapping: null,
@@ -1235,9 +1236,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const file = await assertFileOwner(req.params.fileId, req, res);
       if (!file) return;
 
-      const objectFile = await objectStorageService.getFile(file.fileUrl);
-      const [buffer] = await objectFile.download();
-      
+      // Read file buffer: prefer DB, fall back to filesystem
+      let buffer: Buffer;
+      if (file.fileData) {
+        buffer = Buffer.from(file.fileData, 'base64');
+      } else {
+        const objectFile = await objectStorageService.getFile(file.fileUrl);
+        [buffer] = await objectFile.download();
+      }
+
       const parsed = await fileParser.parse(buffer, file.fileType);
       const suggestedMappingsArray = fileParser.autoDetectColumns(parsed.headers);
       
@@ -1429,9 +1436,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete existing transactions from this file before reprocessing
       await storage.deleteTransactionsByFile(file.id);
 
-      const objectFile = await objectStorageService.getFile(file.fileUrl);
-      const [buffer] = await objectFile.download();
-      
+      // Read file buffer: prefer DB (survives serverless cold starts), fall back to filesystem
+      let buffer: Buffer;
+      if (file.fileData) {
+        buffer = Buffer.from(file.fileData, 'base64');
+      } else {
+        const objectFile = await objectStorageService.getFile(file.fileUrl);
+        [buffer] = await objectFile.download();
+      }
+
       const parsed = await fileParser.parse(buffer, file.fileType);
 
       if (parsed.rowCount > 500000) {
@@ -1536,9 +1549,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await storage.updateFile(file.id, {
         status: 'processed',
-        rowCount: createdCount
+        rowCount: createdCount,
+        fileData: null, // free DB storage after processing
       });
-
 
       res.json({
         success: true,

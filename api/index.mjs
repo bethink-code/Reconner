@@ -31369,7 +31369,7 @@ async function extractTablesWithAI(pdfBuffer) {
   const base64Pdf = pdfBuffer.toString("base64");
   const response = await client2.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 8192,
+    max_tokens: 16384,
     messages: [
       {
         role: "user",
@@ -31401,6 +31401,9 @@ Rules:
       }
     ]
   });
+  if (response.stop_reason === "max_tokens") {
+    console.warn("[AI-EXTRACT] Response was truncated (hit max_tokens). Attempting recovery.");
+  }
   const textContent = response.content.find((block) => block.type === "text");
   if (!textContent || textContent.type !== "text") {
     throw new Error("No text response from AI extraction");
@@ -31415,8 +31418,13 @@ Rules:
   } catch {
     const match = jsonStr.match(/\{[\s\S]*\}/);
     if (match) {
-      parsed = JSON.parse(match[0]);
+      try {
+        parsed = JSON.parse(match[0]);
+      } catch {
+        parsed = recoverTruncatedJSON(match[0]);
+      }
     } else {
+      console.error("[AI-EXTRACT] Unparseable response (first 500 chars):", jsonStr.substring(0, 500));
       throw new Error("AI returned invalid JSON response");
     }
   }

@@ -787,13 +787,11 @@ export class DatabaseStorage implements IStorage {
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as unmatched_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
-          -- Unmatchable = bank transactions OUTSIDE the period dates
-          COUNT(CASE WHEN source_type LIKE 'bank%' AND (
-            transaction_date < dw.min_date OR transaction_date > dw.max_date OR match_status = 'unmatchable'
-          ) THEN 1 END) as unmatchable_bank_transactions,
-          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (
-            transaction_date < dw.min_date OR transaction_date > dw.max_date OR match_status = 'unmatchable'
-          ) THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
+          -- Unmatchable within period dates (edge case — matching algo marked them)
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as unmatchable_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as excluded_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'

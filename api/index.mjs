@@ -29759,6 +29759,68 @@ function detectAndExcludeReversals(transactions2, presetName) {
   }
   return stats;
 }
+function detectAndExcludeDuplicates(transactions2) {
+  const stats = { duplicateGroups: 0, duplicatesExcluded: 0 };
+  const RRN_COLUMNS = ["RRN", "Rrn", "Retrieval Reference Number", "Retrieval Ref"];
+  const PLACEHOLDER_RRNS = /* @__PURE__ */ new Set(["0", "000000", "000000000000"]);
+  const byRRN = /* @__PURE__ */ new Map();
+  for (let i = 0; i < transactions2.length; i++) {
+    if (transactions2[i].matchStatus === "excluded") continue;
+    const rrn = findColumnRawValue(transactions2[i].rawData || {}, RRN_COLUMNS);
+    if (!rrn || rrn.length < 4 || PLACEHOLDER_RRNS.has(rrn)) continue;
+    if (!byRRN.has(rrn)) byRRN.set(rrn, []);
+    byRRN.get(rrn).push(i);
+  }
+  for (const [, indices] of byRRN) {
+    if (indices.length < 2) continue;
+    const amounts = indices.map(
+      (i) => Math.abs(parseFloat(transactions2[i].amount || "0")).toFixed(2)
+    );
+    if (new Set(amounts).size > 1) continue;
+    if (!areTimestampsClose(indices, transactions2, 5)) continue;
+    let bestIdx = indices[0];
+    let bestScore = scoreCompleteness(transactions2[bestIdx].rawData || {});
+    for (let k = 1; k < indices.length; k++) {
+      const score = scoreCompleteness(transactions2[indices[k]].rawData || {});
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = indices[k];
+      }
+    }
+    stats.duplicateGroups++;
+    for (const idx of indices) {
+      if (idx === bestIdx) continue;
+      transactions2[idx].matchStatus = "excluded";
+      transactions2[idx].description = (transactions2[idx].description || "") + " [Excluded: Duplicate RRN]";
+      stats.duplicatesExcluded++;
+    }
+  }
+  return stats;
+}
+function scoreCompleteness(rawData) {
+  let score = 0;
+  for (const value of Object.values(rawData)) {
+    if (value != null && String(value).trim() !== "") {
+      score++;
+    }
+  }
+  return score;
+}
+function areTimestampsClose(indices, transactions2, maxMinutes) {
+  const timestamps = [];
+  for (const i of indices) {
+    const date = transactions2[i].transactionDate || "";
+    const time = transactions2[i].transactionTime || "00:00:00";
+    if (!date) return true;
+    const dt = /* @__PURE__ */ new Date(`${date}T${time}`);
+    if (isNaN(dt.getTime())) return true;
+    timestamps.push(dt.getTime());
+  }
+  if (timestamps.length < 2) return true;
+  const min = Math.min(...timestamps);
+  const max = Math.max(...timestamps);
+  return max - min <= maxMinutes * 60 * 1e3;
+}
 var FileParser = class {
   parseCSV(buffer) {
     const text2 = buffer.toString("utf-8");
@@ -32572,6 +32634,13 @@ async function registerRoutes(app2) {
           matchId: null
         });
       }
+      let duplicateStats = null;
+      if (file.sourceType.startsWith("bank")) {
+        duplicateStats = detectAndExcludeDuplicates(validTransactions);
+        if (duplicateStats.duplicatesExcluded > 0) {
+          console.log(`[PROCESS] Duplicate detection: ${duplicateStats.duplicatesExcluded} excluded from ${duplicateStats.duplicateGroups} RRN groups`);
+        }
+      }
       let reversalStats = null;
       if (file.sourceType.startsWith("bank")) {
         const detectedPreset = fileParser.detectSourcePreset(parsed.headers);
@@ -32593,6 +32662,7 @@ async function registerRoutes(app2) {
         transactionsCreated: createdCount,
         totalRows: parsed.rowCount,
         skipStats,
+        duplicateStats,
         reversalStats
       });
     } catch (error) {

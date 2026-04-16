@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import multer from "multer";
 import { storage } from "./storage";
 import { pool } from "./db";
-import { fileParser, DataNormalizer, SOURCE_PRESETS, detectAndExcludeReversals } from "./fileParser";
+import { fileParser, DataNormalizer, SOURCE_PRESETS, detectAndExcludeReversals, detectAndExcludeDuplicates } from "./fileParser";
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
 import { setupAuth, isAuthenticated, requireOrg, requireWriter, requireOrgOwner } from "./auth";
@@ -1508,6 +1508,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // For bank files, detect and exclude duplicate transactions (same RRN)
+      let duplicateStats = null;
+      if (file.sourceType.startsWith('bank')) {
+        duplicateStats = detectAndExcludeDuplicates(validTransactions);
+        if (duplicateStats.duplicatesExcluded > 0) {
+          console.log(`[PROCESS] Duplicate detection: ${duplicateStats.duplicatesExcluded} excluded from ${duplicateStats.duplicateGroups} RRN groups`);
+        }
+      }
+
       // For bank files, detect and exclude reversed/declined/cancelled transactions
       let reversalStats = null;
       if (file.sourceType.startsWith('bank')) {
@@ -1536,6 +1545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transactionsCreated: createdCount,
         totalRows: parsed.rowCount,
         skipStats: skipStats,
+        duplicateStats: duplicateStats,
         reversalStats: reversalStats,
       });
     } catch (error) {

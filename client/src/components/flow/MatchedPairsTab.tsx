@@ -74,6 +74,7 @@ function getMatchLabel(matchType: string, userName: string, description?: string
     if (desc.includes("declined")) return "Declined";
     if (desc.includes("cancelled") || desc.includes("canceled")) return "Cancelled";
     if (desc.includes("reversed")) return "Reversed";
+    if (desc.includes("duplicate")) return "Duplicate";
     return "Excluded";
   }
   if (matchType === "linked") return `${userName} (With reason)`;
@@ -183,7 +184,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
     ["Lekana (Rules)", "Matched within your configured tolerance and date window"],
     [`${userName} (Confirmed)`, "You manually matched these transactions"],
     [`${userName} (With reason)`, "You matched and provided a reason"],
-    ["Excluded", "Reversed, declined, or cancelled — excluded from matching"],
+    ["Excluded", "Reversed, declined, cancelled, or duplicate — excluded from matching"],
   ];
 
   return (
@@ -286,7 +287,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
           },
           excluded: {
             title: "Excluded from matching",
-            description: "Your bank flagged these as declined, cancelled, or reversed — the payment didn't go through. They're kept here for your records but weren't included in the reconciliation.",
+            description: "Declined, cancelled, reversed, or duplicate transactions — excluded from matching. Duplicates are POS retry records where the same transaction appears twice.",
           },
           unmatched: {
             title: "Unmatched transactions",

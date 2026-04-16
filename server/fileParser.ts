@@ -780,6 +780,102 @@ export function detectAndExcludeReversals(
   return stats;
 }
 
+// ── Duplicate RRN detection ──────────────────────────────────────────
+
+export interface DuplicateDetectionStats {
+  duplicateGroups: number;
+  duplicatesExcluded: number;
+}
+
+/**
+ * Detect duplicate bank transactions that share the same RRN (Retrieval Reference Number).
+ * POS terminal retries can produce two rows for the same transaction — one with truncated
+ * fields (partial ISO 8583 message) and one complete. Keep the most complete row, exclude
+ * the rest. Mutates the transactions array in place.
+ */
+export function detectAndExcludeDuplicates(
+  transactions: any[],
+): DuplicateDetectionStats {
+  const stats: DuplicateDetectionStats = { duplicateGroups: 0, duplicatesExcluded: 0 };
+
+  const RRN_COLUMNS = ['RRN', 'Rrn', 'Retrieval Reference Number', 'Retrieval Ref'];
+  const PLACEHOLDER_RRNS = new Set(['0', '000000', '000000000000']);
+
+  // Group transaction indices by RRN
+  const byRRN = new Map<string, number[]>();
+  for (let i = 0; i < transactions.length; i++) {
+    if (transactions[i].matchStatus === 'excluded') continue;
+    const rrn = findColumnRawValue(transactions[i].rawData || {}, RRN_COLUMNS);
+    if (!rrn || rrn.length < 4 || PLACEHOLDER_RRNS.has(rrn)) continue;
+    if (!byRRN.has(rrn)) byRRN.set(rrn, []);
+    byRRN.get(rrn)!.push(i);
+  }
+
+  for (const [, indices] of byRRN) {
+    if (indices.length < 2) continue;
+
+    // Verify all have the same absolute amount — if not, they're distinct transactions
+    const amounts = indices.map(i =>
+      Math.abs(parseFloat(transactions[i].amount || '0')).toFixed(2)
+    );
+    if (new Set(amounts).size > 1) continue;
+
+    // Verify time proximity (within 5 minutes)
+    if (!areTimestampsClose(indices, transactions, 5)) continue;
+
+    // Score completeness: count non-empty fields in rawData
+    let bestIdx = indices[0];
+    let bestScore = scoreCompleteness(transactions[bestIdx].rawData || {});
+    for (let k = 1; k < indices.length; k++) {
+      const score = scoreCompleteness(transactions[indices[k]].rawData || {});
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = indices[k];
+      }
+    }
+
+    // Exclude all except the most complete row
+    stats.duplicateGroups++;
+    for (const idx of indices) {
+      if (idx === bestIdx) continue;
+      transactions[idx].matchStatus = 'excluded';
+      transactions[idx].description =
+        (transactions[idx].description || '') + ' [Excluded: Duplicate RRN]';
+      stats.duplicatesExcluded++;
+    }
+  }
+
+  return stats;
+}
+
+/** Count non-empty fields in a rawData object — higher = more complete row */
+function scoreCompleteness(rawData: Record<string, any>): number {
+  let score = 0;
+  for (const value of Object.values(rawData)) {
+    if (value != null && String(value).trim() !== '') {
+      score++;
+    }
+  }
+  return score;
+}
+
+/** Check whether all transactions in the group have timestamps within `maxMinutes` of each other */
+function areTimestampsClose(indices: number[], transactions: any[], maxMinutes: number): boolean {
+  const timestamps: number[] = [];
+  for (const i of indices) {
+    const date = transactions[i].transactionDate || '';
+    const time = transactions[i].transactionTime || '00:00:00';
+    if (!date) return true; // can't compare — assume close
+    const dt = new Date(`${date}T${time}`);
+    if (isNaN(dt.getTime())) return true; // unparseable — assume close
+    timestamps.push(dt.getTime());
+  }
+  if (timestamps.length < 2) return true;
+  const min = Math.min(...timestamps);
+  const max = Math.max(...timestamps);
+  return (max - min) <= maxMinutes * 60 * 1000;
+}
+
 export class FileParser {
   parseCSV(buffer: Buffer): ParsedFileData {
     const text = buffer.toString('utf-8');

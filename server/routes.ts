@@ -1598,9 +1598,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[TRANSACTIONS] Fetching for period ${req.params.periodId}, page ${page}, limit ${limit}`);
       
+      // Look up matching rules for date window, scope transactions to period dates
+      const rules = await storage.getMatchingRules(req.params.periodId);
+      const periodDates = {
+        startDate: period.startDate,
+        endDate: period.endDate,
+        dateWindowDays: rules.dateWindowDays,
+      };
+
       const result = await storage.getTransactionsByPeriodPaginated(
         req.params.periodId,
-        { limit, offset, sourceType, matchStatus, isCardTransaction }
+        { limit, offset, sourceType, matchStatus, isCardTransaction, periodDates }
       );
       
       console.log(`[TRANSACTIONS] Found ${result.total} total, returning ${result.transactions.length} on page ${page}`);
@@ -2471,9 +2479,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
 
-      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      const bankTxns = transactions.filter(t => t.sourceType?.startsWith('bank'));
-      const fuelTxns = transactions.filter(t => t.sourceType === 'fuel');
+      const allTransactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      const rules = await storage.getMatchingRules(req.params.periodId);
+
+      // Scope to date window
+      const bankStart = new Date(period.startDate + 'T00:00:00');
+      bankStart.setDate(bankStart.getDate() - 1);
+      const bankEnd = new Date(period.endDate + 'T00:00:00');
+      bankEnd.setDate(bankEnd.getDate() + rules.dateWindowDays);
+      const bankMinStr = bankStart.toISOString().substring(0, 10);
+      const bankMaxStr = bankEnd.toISOString().substring(0, 10);
+
+      const bankTxns = allTransactions.filter(t =>
+        t.sourceType?.startsWith('bank') &&
+        t.transactionDate && t.transactionDate >= bankMinStr && t.transactionDate <= bankMaxStr
+      );
+      const fuelTxns = allTransactions.filter(t =>
+        t.sourceType === 'fuel' &&
+        t.transactionDate && t.transactionDate >= period.startDate && t.transactionDate <= period.endDate
+      );
       const excluded = bankTxns.filter(t => t.matchStatus === 'excluded');
       const approved = bankTxns.filter(t => t.matchStatus !== 'excluded' && t.matchStatus !== 'unmatchable');
 
@@ -2813,13 +2837,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
 
-      const [transactions, matchesData, resolutions, attendantSummary, matchingRules] = await Promise.all([
+      const [allTransactions, matchesData, resolutions, attendantSummary, matchingRulesData] = await Promise.all([
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getMatchesByPeriod(req.params.periodId),
         storage.getResolutionsByPeriod(req.params.periodId),
         storage.getAttendantSummary(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
       ]);
+
+      // Scope transactions to period date window
+      const bankStart = new Date(period.startDate + 'T00:00:00');
+      bankStart.setDate(bankStart.getDate() - 1);
+      const bankEnd = new Date(period.endDate + 'T00:00:00');
+      bankEnd.setDate(bankEnd.getDate() + matchingRulesData.dateWindowDays);
+      const bankMinStr = bankStart.toISOString().substring(0, 10);
+      const bankMaxStr = bankEnd.toISOString().substring(0, 10);
+
+      const transactions = allTransactions.filter(t => {
+        if (t.sourceType === 'fuel') {
+          return t.transactionDate && t.transactionDate >= period.startDate && t.transactionDate <= period.endDate;
+        }
+        if (t.sourceType?.startsWith('bank')) {
+          return t.transactionDate && t.transactionDate >= bankMinStr && t.transactionDate <= bankMaxStr;
+        }
+        return true;
+      });
 
       // Build lookup maps
       const matchMap = new Map<string, typeof matchesData[0]>();
@@ -2988,17 +3030,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       // Matching rules
-      if (matchingRules) {
+      if (matchingRulesData) {
         summaryRows.push(
           { Metric: '' },
           { Metric: 'MATCHING RULES' },
-          { Metric: '  Amount Tolerance', Count: `±R ${Number(matchingRules.amountTolerance).toFixed(2)}` },
-          { Metric: '  Date Window', Count: `${matchingRules.dateWindowDays} day${matchingRules.dateWindowDays !== 1 ? 's' : ''}` },
-          { Metric: '  Time Window', Count: `${matchingRules.timeWindowMinutes} min` },
-          { Metric: '  Min Confidence', Count: `${matchingRules.minimumConfidence}%` },
-          { Metric: '  Auto-Match Threshold', Count: `${matchingRules.autoMatchThreshold}%` },
-          { Metric: '  Invoice Grouping', Count: matchingRules.groupByInvoice ? 'On' : 'Off' },
-          { Metric: '  Card Required', Count: matchingRules.requireCardMatch ? 'Yes' : 'No' },
+          { Metric: '  Amount Tolerance', Count: `±R ${Number(matchingRulesData.amountTolerance).toFixed(2)}` },
+          { Metric: '  Date Window', Count: `${matchingRulesData.dateWindowDays} day${matchingRulesData.dateWindowDays !== 1 ? 's' : ''}` },
+          { Metric: '  Time Window', Count: `${matchingRulesData.timeWindowMinutes} min` },
+          { Metric: '  Min Confidence', Count: `${matchingRulesData.minimumConfidence}%` },
+          { Metric: '  Auto-Match Threshold', Count: `${matchingRulesData.autoMatchThreshold}%` },
+          { Metric: '  Invoice Grouping', Count: matchingRulesData.groupByInvoice ? 'On' : 'Off' },
+          { Metric: '  Card Required', Count: matchingRulesData.requireCardMatch ? 'Yes' : 'No' },
         );
       }
 

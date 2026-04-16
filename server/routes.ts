@@ -2480,19 +2480,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!period) return;
 
       const allTransactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      const rules = await storage.getMatchingRules(req.params.periodId);
 
-      // Scope to date window
-      const bankStart = new Date(period.startDate + 'T00:00:00');
-      bankStart.setDate(bankStart.getDate() - 1);
-      const bankEnd = new Date(period.endDate + 'T00:00:00');
-      bankEnd.setDate(bankEnd.getDate() + rules.dateWindowDays);
-      const bankMinStr = bankStart.toISOString().substring(0, 10);
-      const bankMaxStr = bankEnd.toISOString().substring(0, 10);
-
+      // Scope to period dates (date window is for matching only)
       const bankTxns = allTransactions.filter(t =>
         t.sourceType?.startsWith('bank') &&
-        t.transactionDate && t.transactionDate >= bankMinStr && t.transactionDate <= bankMaxStr
+        t.transactionDate && t.transactionDate >= period.startDate && t.transactionDate <= period.endDate
       );
       const fuelTxns = allTransactions.filter(t =>
         t.sourceType === 'fuel' &&
@@ -2845,23 +2837,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getMatchingRules(req.params.periodId),
       ]);
 
-      // Scope transactions to period date window
-      const bankStart = new Date(period.startDate + 'T00:00:00');
-      bankStart.setDate(bankStart.getDate() - 1);
-      const bankEnd = new Date(period.endDate + 'T00:00:00');
-      bankEnd.setDate(bankEnd.getDate() + matchingRulesData.dateWindowDays);
-      const bankMinStr = bankStart.toISOString().substring(0, 10);
-      const bankMaxStr = bankEnd.toISOString().substring(0, 10);
-
-      const transactions = allTransactions.filter(t => {
-        if (t.sourceType === 'fuel') {
-          return t.transactionDate && t.transactionDate >= period.startDate && t.transactionDate <= period.endDate;
-        }
-        if (t.sourceType?.startsWith('bank')) {
-          return t.transactionDate && t.transactionDate >= bankMinStr && t.transactionDate <= bankMaxStr;
-        }
-        return true;
-      });
+      // Scope transactions to period dates (date window is for matching only)
+      const transactions = allTransactions.filter(t =>
+        t.transactionDate && t.transactionDate >= period.startDate && t.transactionDate <= period.endDate
+      );
 
       // Build lookup maps
       const matchMap = new Map<string, typeof matchesData[0]>();

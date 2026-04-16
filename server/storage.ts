@@ -569,32 +569,9 @@ export class DatabaseStorage implements IStorage {
       const isBank = sourceType === 'bank';
       const isFuel = sourceType === 'fuel';
 
-      if (isFuel) {
-        conditions.push(sql`${transactions.transactionDate} >= ${startDate}`);
-        conditions.push(sql`${transactions.transactionDate} <= ${endDate}`);
-      } else if (isBank) {
-        // Bank window: 1 day before start, dateWindowDays after end
-        const bankStart = new Date(startDate + 'T00:00:00');
-        bankStart.setDate(bankStart.getDate() - 1);
-        const bankEnd = new Date(endDate + 'T00:00:00');
-        bankEnd.setDate(bankEnd.getDate() + dateWindowDays);
-        const bankStartStr = bankStart.toISOString().substring(0, 10);
-        const bankEndStr = bankEnd.toISOString().substring(0, 10);
-        conditions.push(sql`${transactions.transactionDate} >= ${bankStartStr}`);
-        conditions.push(sql`${transactions.transactionDate} <= ${bankEndStr}`);
-      } else {
-        // No sourceType filter — apply combined: fuel within period OR bank within window
-        const bankStart = new Date(startDate + 'T00:00:00');
-        bankStart.setDate(bankStart.getDate() - 1);
-        const bankEnd = new Date(endDate + 'T00:00:00');
-        bankEnd.setDate(bankEnd.getDate() + dateWindowDays);
-        const bankStartStr = bankStart.toISOString().substring(0, 10);
-        const bankEndStr = bankEnd.toISOString().substring(0, 10);
-        conditions.push(sql`(
-          (${transactions.sourceType} = 'fuel' AND ${transactions.transactionDate} >= ${startDate} AND ${transactions.transactionDate} <= ${endDate})
-          OR (${transactions.sourceType} LIKE 'bank%' AND ${transactions.transactionDate} >= ${bankStartStr} AND ${transactions.transactionDate} <= ${bankEndStr})
-        )`);
-      }
+      // All display/review uses period dates — the wider date window is for matching only
+      conditions.push(sql`${transactions.transactionDate} >= ${startDate}`);
+      conditions.push(sql`${transactions.transactionDate} <= ${endDate}`);
     }
 
     // Build the where clause
@@ -763,11 +740,11 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN source_type = 'fuel'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as total_fuel_amount,
 
-          -- Bank counts scoped to date window (period ± buffer for settlement lag)
+          -- Bank counts scoped to PERIOD DATES (same as fuel — date window is for matching only)
           COUNT(CASE WHEN source_type LIKE 'bank%'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN 1 END) as bank_transactions,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
 
           -- Debtors scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND (
@@ -798,33 +775,33 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
 
-          -- Bank match stats scoped to date window
+          -- Bank match stats scoped to period dates
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN 1 END) as matched_bank_transactions,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_card_fuel,
 
           COUNT(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN 1 END) as unmatched_bank_transactions,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as unmatched_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
-          -- Unmatchable = bank transactions OUTSIDE the date window (kept for "outside range" display)
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
+          -- Unmatchable = bank transactions OUTSIDE the period dates
           COUNT(CASE WHEN source_type LIKE 'bank%' AND (
-            transaction_date < dw.bank_min OR transaction_date > dw.bank_max OR match_status = 'unmatchable'
+            transaction_date < dw.min_date OR transaction_date > dw.max_date OR match_status = 'unmatchable'
           ) THEN 1 END) as unmatchable_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (
-            transaction_date < dw.bank_min OR transaction_date > dw.bank_max OR match_status = 'unmatchable'
+            transaction_date < dw.min_date OR transaction_date > dw.max_date OR match_status = 'unmatchable'
           ) THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN 1 END) as excluded_bank_transactions,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as excluded_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN amount::numeric ELSE 0 END), 0) as excluded_bank_amount,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as excluded_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN 1 END) as resolved_bank_transactions,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as resolved_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved'
-                     AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
 
           -- Unmatched card fuel scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
@@ -836,11 +813,10 @@ export class DatabaseStorage implements IStorage {
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
-          -- Matched + total counts derived from scoped fuel + scoped bank
-          COUNT(CASE WHEN match_status = 'matched' AND (
-            (source_type = 'fuel' AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date)
-            OR (source_type LIKE 'bank%' AND transaction_date >= dw.bank_min AND transaction_date <= dw.bank_max)
-          ) THEN 1 END) as matched_transactions,
+          -- Matched + total counts: both fuel and bank scoped to period dates
+          COUNT(CASE WHEN match_status = 'matched'
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+          THEN 1 END) as matched_transactions,
 
           dw.min_date as period_start,
           dw.max_date as period_end,
@@ -987,14 +963,6 @@ export class DatabaseStorage implements IStorage {
 
   private async getPerBankBreakdown(periodId: string): Promise<PerBankBreakdown[]> {
     const result = await pool.query(`
-      WITH date_window AS (
-        SELECT
-          (rp.start_date::date - 1)::text AS bank_min,
-          (rp.end_date::date + COALESCE(mr.date_window_days, 3))::text AS bank_max
-        FROM reconciliation_periods rp
-        LEFT JOIN matching_rules mr ON mr.period_id = rp.id
-        WHERE rp.id = $1
-      )
       SELECT
         COALESCE(f.bank_name, t.source_name, 'Bank') as bank_name,
         COUNT(CASE WHEN t.match_status != 'excluded' THEN 1 END) as approved_count,
@@ -1007,9 +975,9 @@ export class DatabaseStorage implements IStorage {
         COALESCE(SUM(t.amount::numeric), 0) as total_amount
       FROM transactions t
       LEFT JOIN uploaded_files f ON t.file_id = f.id
-      CROSS JOIN date_window dw
+      JOIN reconciliation_periods rp ON rp.id = $1
       WHERE t.period_id = $1 AND t.source_type LIKE 'bank%'
-        AND t.transaction_date >= dw.bank_min AND t.transaction_date <= dw.bank_max
+        AND t.transaction_date >= rp.start_date AND t.transaction_date <= rp.end_date
       GROUP BY COALESCE(f.bank_name, t.source_name, 'Bank')
       ORDER BY COALESCE(f.bank_name, t.source_name, 'Bank')
     `, [periodId]);
@@ -1250,7 +1218,7 @@ export class DatabaseStorage implements IStorage {
         FROM transactions
         CROSS JOIN period_scope ps
         WHERE period_id = $1 AND source_type LIKE 'bank%'
-          AND transaction_date >= ps.bank_min AND transaction_date <= ps.bank_max
+          AND transaction_date >= ps.min_date AND transaction_date <= ps.max_date
       ),
       bank_sources AS (
         SELECT
@@ -1260,7 +1228,7 @@ export class DatabaseStorage implements IStorage {
         FROM transactions
         CROSS JOIN period_scope ps
         WHERE period_id = $1 AND source_type LIKE 'bank%'
-          AND transaction_date >= ps.bank_min AND transaction_date <= ps.bank_max
+          AND transaction_date >= ps.min_date AND transaction_date <= ps.max_date
         GROUP BY source_name
       ),
       card_matched AS (

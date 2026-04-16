@@ -3,7 +3,8 @@
   "outputDirectory": "dist/public",
   "functions": {
     "api/index.mjs": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "api/pdf.worker.js"
     }
   },
   "rewrites": [

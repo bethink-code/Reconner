@@ -114,7 +114,7 @@ export function ConfigureMatchingStep({
   const { toast } = useToast();
 
   // Fetch verification summary for data coverage
-  const { data: verSummary } = useQuery<{
+  const { data: verSummary, isLoading: verLoading } = useQuery<{
     overview: {
       fuelSystem: { totalSales: number; cardTransactions: number; cashTransactions: number };
       bankStatements: {
@@ -273,6 +273,15 @@ export function ConfigureMatchingStep({
           </div>
 
           {/* Data Coverage Preview */}
+          {verLoading && (
+            <div className="rounded-lg bg-section p-4 space-y-2 animate-pulse">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Data Coverage</p>
+              <div className="h-4 bg-muted-foreground/10 rounded w-3/4" />
+              <div className="h-4 bg-muted-foreground/10 rounded w-full" />
+              <div className="h-4 bg-muted-foreground/10 rounded w-5/6" />
+              <div className="h-4 bg-muted-foreground/10 rounded w-5/6" />
+            </div>
+          )}
           {verSummary && (() => {
             const fuelRange = verSummary.coverageAnalysis?.fuelDateRange;
             const periodStart = period?.startDate;

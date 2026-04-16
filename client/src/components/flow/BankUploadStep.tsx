@@ -185,11 +185,20 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
+
+      // Build detail line from processing stats
+      const parts: string[] = [];
+      if (data?.transactionsCreated) parts.push(`${data.transactionsCreated} transactions imported`);
+      if (data?.duplicateStats?.duplicatesExcluded > 0)
+        parts.push(`${data.duplicateStats.duplicatesExcluded} duplicate${data.duplicateStats.duplicatesExcluded > 1 ? 's' : ''} removed`);
+      if (data?.reversalStats?.totalExcluded > 0)
+        parts.push(`${data.reversalStats.totalExcluded} declined/reversed excluded`);
+
       toast({
         title: "Bank data imported",
-        description: "Your bank transactions have been processed successfully.",
+        description: parts.length > 0 ? parts.join(' · ') : "Your bank transactions have been processed successfully.",
       });
       // Return to BankStatusScreen so user can add more banks or proceed
       onBack();

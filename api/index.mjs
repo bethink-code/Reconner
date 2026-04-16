@@ -28288,45 +28288,51 @@ var DatabaseStorage = class {
       ),
       tx_stats AS (
         SELECT
-          COUNT(*) as total_transactions,
-          COUNT(CASE WHEN source_type = 'fuel' THEN 1 END) as fuel_transactions,
+          -- Fuel counts scoped to period dates (period is master)
+          COUNT(CASE WHEN source_type = 'fuel'
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as fuel_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel'
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as total_fuel_amount,
+
+          -- Bank counts (bank roams freely \u2014 not date-scoped)
           COUNT(CASE WHEN source_type LIKE 'bank%' THEN 1 END) as bank_transactions,
-          COUNT(CASE WHEN match_status = 'matched' THEN 1 END) as matched_transactions,
-          
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' THEN amount::numeric ELSE 0 END), 0) as total_fuel_amount,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
-          
-          -- Debtors identified by payment_type regardless of is_card_transaction flag
+
+          -- Debtors scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
-          ) THEN 1 END) as debtor_fuel_transactions,
+          ) AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as debtor_fuel_transactions,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
-          ) THEN amount::numeric ELSE 0 END), 0) as debtor_fuel_amount,
+          ) AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as debtor_fuel_amount,
 
-          -- Card = is_card_transaction='yes' excluding debtors
+          -- Card = is_card_transaction='yes' excluding debtors, scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND NOT (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
-          ) THEN 1 END) as card_fuel_transactions,
+          ) AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as card_fuel_transactions,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND NOT (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
-          ) THEN amount::numeric ELSE 0 END), 0) as card_fuel_amount,
+          ) AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as card_fuel_amount,
 
-          -- Cash = is_card_transaction='no' excluding debtors
+          -- Cash scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' AND NOT (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
-          ) THEN 1 END) as cash_fuel_transactions,
+          ) AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as cash_fuel_transactions,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'no' AND NOT (
             LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%'
-          ) THEN amount::numeric ELSE 0 END), 0) as cash_fuel_amount,
+          ) AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as cash_fuel_amount,
 
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN 1 END) as unknown_fuel_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown' THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown'
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as unknown_fuel_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown'
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
 
+          -- Bank match stats (unscoped \u2014 bank roams)
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN 1 END) as matched_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched' THEN 1 END) as matched_card_fuel,
-          
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
+                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as matched_card_fuel,
+
           COUNT(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0 THEN 1 END) as unmatched_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as unmatched_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable' THEN 1 END) as unmatchable_bank_transactions,
@@ -28335,27 +28341,22 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded' THEN amount::numeric ELSE 0 END), 0) as excluded_bank_amount,
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN 1 END) as resolved_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved' THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
-          
+
+          -- Unmatched card fuel scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+            AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date
           THEN 1 END) as unmatched_card_transactions,
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+            AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
-          -- Fuel card transactions scoped to period dates (period is master)
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes'
-                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as scoped_card_count,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes'
-                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_card_amount,
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
-                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as scoped_matched_count,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
-                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_matched_amount,
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched'
-                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN 1 END) as scoped_unmatched_count,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status != 'matched'
-                     AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date THEN amount::numeric ELSE 0 END), 0) as scoped_unmatched_amount,
+          -- Matched + total counts derived from scoped fuel + bank
+          COUNT(CASE WHEN match_status = 'matched' AND (
+            (source_type = 'fuel' AND transaction_date >= pd.min_date AND transaction_date <= pd.max_date)
+            OR source_type LIKE 'bank%'
+          ) THEN 1 END) as matched_transactions,
 
           pd.min_date as period_start,
           pd.max_date as period_end,
@@ -28413,7 +28414,6 @@ var DatabaseStorage = class {
       CROSS JOIN match_stats ms
     `, [periodId]);
     const row = result.rows[0] || {};
-    const totalTransactions = parseInt(row.total_transactions || "0");
     const fuelTransactions = parseInt(row.fuel_transactions || "0");
     const bankTransactions = parseInt(row.bank_transactions || "0");
     const matchedTransactions = parseInt(row.matched_transactions || "0");
@@ -28427,6 +28427,7 @@ var DatabaseStorage = class {
     const cardMatchRate = cardFuelTransactions > 0 ? matchedCardFuel / cardFuelTransactions * 100 : 0;
     const cardFuelAmount = parseFloat(row.card_fuel_amount || "0");
     const totalBankAmount = parseFloat(row.total_bank_amount || "0");
+    const totalTransactions = fuelTransactions + bankTransactions;
     return {
       totalTransactions,
       fuelTransactions,
@@ -28464,12 +28465,13 @@ var DatabaseStorage = class {
       matchedFuelAmount: parseFloat(row.matched_fuel_amount || "0"),
       debtorFuelTransactions: parseInt(row.debtor_fuel_transactions || "0"),
       debtorFuelAmount: parseFloat(row.debtor_fuel_amount || "0"),
-      scopedCardCount: parseInt(row.scoped_card_count || "0"),
-      scopedCardAmount: parseFloat(row.scoped_card_amount || "0"),
-      scopedMatchedCount: parseInt(row.scoped_matched_count || "0"),
-      scopedMatchedAmount: parseFloat(row.scoped_matched_amount || "0"),
-      scopedUnmatchedCount: parseInt(row.scoped_unmatched_count || "0"),
-      scopedUnmatchedAmount: parseFloat(row.scoped_unmatched_amount || "0"),
+      // scoped_* fields removed — main fuel counts are now period-date scoped
+      scopedCardCount: cardFuelTransactions,
+      scopedCardAmount: cardFuelAmount,
+      scopedMatchedCount: matchedCardFuel,
+      scopedMatchedAmount: parseFloat(row.matched_bank_amount || "0"),
+      scopedUnmatchedCount: parseInt(row.unmatched_card_transactions || "0"),
+      scopedUnmatchedAmount: parseFloat(row.unmatched_card_amount || "0"),
       fuelDateRange: row.fuel_date_min && row.fuel_date_max ? {
         min: row.fuel_date_min,
         max: row.fuel_date_max

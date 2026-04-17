@@ -161,7 +161,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                   <span className={cn("text-3xl font-bold tabular-nums", unmatchedBank > 0 ? "text-[#B45309]" : "text-[#166534]")}>{unmatchedBank}</span>
                   <div>
                     <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedBankAmount || 0)}</p>
-                    <p className="text-xs text-muted-foreground">of {matchableBankTotal} bank transactions</p>
+                    <p className="text-xs text-muted-foreground">{unmatchedBank === 1 ? 'bank transaction' : 'bank transactions'}</p>
                   </div>
                 </div>
                 {/* Progress bar */}
@@ -179,7 +179,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                   <span className={cn("text-3xl font-bold tabular-nums", unmatchedFuelCount > 0 ? "text-[#B45309]" : "text-[#166534]")}>{Math.max(0, unmatchedFuelCount)}</span>
                   <div>
                     <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedCardAmount || 0)}</p>
-                    <p className="text-xs text-muted-foreground">of {summary.cardFuelTransactions} card transactions</p>
+                    <p className="text-xs text-muted-foreground">{unmatchedFuelCount === 1 ? 'card transaction' : 'card transactions'}</p>
                   </div>
                 </div>
                 {/* Progress bar */}

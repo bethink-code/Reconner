@@ -127,7 +127,9 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   const isUnmatchedCard = (mt: string) => mt === "unmatched_card";
   const isUnmatchedBank = (mt: string) => mt === "unmatched_bank";
 
-  // Counts derived from the pairs dataset (already period-scoped on the server)
+  // Counts derived from the pairs dataset (already period-scoped on the server).
+  // Count fuel ITEMS rather than pair rows so the totals match the dashboard
+  // (an invoice-grouped match has 1 pair row but may represent multiple fuel items).
   const counts = useMemo(() => {
     const c = {
       exact: 0, rules: 0, confirmed: 0, reason: 0,
@@ -136,15 +138,16 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
     };
     for (const p of pairs) {
       const mt = p.match.matchType;
-      if (isExact(mt)) c.exact++;
-      else if (isRules(mt)) c.rules++;
-      else if (isConfirmed(mt)) c.confirmed++;
-      else if (isReason(mt)) c.reason++;
-      else if (isCash(mt)) c.cash++;
-      else if (isDebtor(mt)) c.debtor++;
-      else if (isDeclinedOrDuplicate(mt)) c.duplicates++;
-      else if (isUnmatchedCard(mt)) c.unmatchedCard++;
-      else if (isUnmatchedBank(mt)) c.unmatchedBank++;
+      const fuelItemCount = p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0);
+      if (isExact(mt)) c.exact += fuelItemCount;
+      else if (isRules(mt)) c.rules += fuelItemCount;
+      else if (isConfirmed(mt)) c.confirmed += fuelItemCount;
+      else if (isReason(mt)) c.reason += fuelItemCount;
+      else if (isCash(mt)) c.cash += fuelItemCount;
+      else if (isDebtor(mt)) c.debtor += fuelItemCount;
+      else if (isDeclinedOrDuplicate(mt)) c.duplicates += 1; // bank-only, fuel count irrelevant
+      else if (isUnmatchedCard(mt)) c.unmatchedCard += fuelItemCount;
+      else if (isUnmatchedBank(mt)) c.unmatchedBank += 1;
     }
     return c;
   }, [pairs]);

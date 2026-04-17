@@ -602,10 +602,11 @@ export function detectBankTransactionStatus(
     return 'unknown';
   }
 
-  // Standard Bank: Reject Code != 0 = declined
+  // Standard Bank: Reject Code != 0 = declined. Approved rows use padded zeros
+  // of variable width ('0', '00', '000'), so match any all-zero string.
   if (presetName === 'Standard Bank Digital') {
     const rejectCode = findColumnRawValue(rawRow, ['Reject  Code', 'Reject Code', 'RejectCode']);
-    if (rejectCode && rejectCode !== '0' && rejectCode !== '00') return 'declined';
+    if (rejectCode && !/^0+$/.test(rejectCode)) return 'declined';
     if (txTypeVal.includes('revers') || txTypeVal.includes('refund')) return 'reversed';
     return 'approved';
   }

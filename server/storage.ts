@@ -788,6 +788,11 @@ export class DatabaseStorage implements IStorage {
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as unmatchable_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
+          -- Lag-explained: in-period bank whose matching fuel falls outside the period
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'lag_explained'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as lag_explained_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'lag_explained'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as lag_explained_bank_amount,
           -- Excluded/resolved: only count within period dates (declined bank from other days isn't this period's problem)
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as excluded_bank_transactions,
@@ -923,6 +928,8 @@ export class DatabaseStorage implements IStorage {
       unmatchedCardAmount: parseFloat(row.unmatched_card_amount || '0'),
       unmatchableBankTransactions: parseInt(row.unmatchable_bank_transactions || '0'),
       unmatchableBankAmount: parseFloat(row.unmatchable_bank_amount || '0'),
+      lagExplainedBankTransactions: parseInt(row.lag_explained_bank_transactions || '0'),
+      lagExplainedBankAmount: parseFloat(row.lag_explained_bank_amount || '0'),
       excludedBankTransactions: parseInt(row.excluded_bank_transactions || '0'),
       excludedBankAmount: parseFloat(row.excluded_bank_amount || '0'),
       resolvedBankTransactions: parseInt(row.resolved_bank_transactions || '0'),

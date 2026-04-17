@@ -168,6 +168,11 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                 <div className="w-full h-1.5 rounded-full bg-[#E5E3DC] mt-3">
                   <div className="h-full rounded-full bg-[#166534]" style={{ width: `${matchableBankTotal > 0 ? ((matchableBankTotal - unmatchedBank) / matchableBankTotal) * 100 : 100}%` }} />
                 </div>
+                {(summary.lagExplainedBankTransactions || 0) > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {summary.lagExplainedBankTransactions} explained by fuel in another period
+                  </p>
+                )}
                 <InfoCardAction className="mt-2">Review bank side <ArrowRight className="h-3 w-3" /></InfoCardAction>
               </InfoCard>
 

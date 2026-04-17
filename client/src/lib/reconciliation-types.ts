@@ -23,6 +23,8 @@ export interface PeriodSummary {
   unmatchedCardAmount: number;
   unmatchableBankTransactions?: number;
   unmatchableBankAmount?: number;
+  lagExplainedBankTransactions?: number;
+  lagExplainedBankAmount?: number;
   excludedBankTransactions?: number;
   excludedBankAmount?: number;
   matchedBankAmount: number;

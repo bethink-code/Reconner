@@ -28359,6 +28359,11 @@ var DatabaseStorage = class {
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as unmatchable_bank_transactions,
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'unmatchable'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unmatchable_bank_amount,
+          -- Lag-explained: in-period bank whose matching fuel falls outside the period
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'lag_explained'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as lag_explained_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'lag_explained'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as lag_explained_bank_amount,
           -- Excluded/resolved: only count within period dates (declined bank from other days isn't this period's problem)
           COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'excluded'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as excluded_bank_transactions,
@@ -28482,6 +28487,8 @@ var DatabaseStorage = class {
       unmatchedCardAmount: parseFloat(row.unmatched_card_amount || "0"),
       unmatchableBankTransactions: parseInt(row.unmatchable_bank_transactions || "0"),
       unmatchableBankAmount: parseFloat(row.unmatchable_bank_amount || "0"),
+      lagExplainedBankTransactions: parseInt(row.lag_explained_bank_transactions || "0"),
+      lagExplainedBankAmount: parseFloat(row.lag_explained_bank_amount || "0"),
       excludedBankTransactions: parseInt(row.excluded_bank_transactions || "0"),
       excludedBankAmount: parseFloat(row.excluded_bank_amount || "0"),
       resolvedBankTransactions: parseInt(row.resolved_bank_transactions || "0"),
@@ -32906,6 +32913,70 @@ async function registerRoutes(app2) {
     if (isNaN(date.getTime())) return null;
     return Math.floor(date.getTime() / (1e3 * 60 * 60 * 24));
   }
+  function scoreBankToInvoices(bankTx, candidateInvoices, usedInvoices, rules) {
+    let bestMatch = null;
+    const seen = /* @__PURE__ */ new Set();
+    for (const invoice of candidateInvoices) {
+      if (seen.has(invoice.invoiceNumber)) continue;
+      seen.add(invoice.invoiceNumber);
+      if (usedInvoices.has(invoice.invoiceNumber)) continue;
+      if (invoice.items.some((item) => item.matchStatus === "matched")) continue;
+      const reasons = [];
+      const bankAmount = parseFloat(bankTx.amount);
+      const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
+      if (amountDiff > rules.amountTolerance) continue;
+      const fuelDate = parseDateToDays(invoice.firstDate || "");
+      const bankDate = parseDateToDays(bankTx.transactionDate || "");
+      if (fuelDate === null || bankDate === null) continue;
+      const dateDiff = bankDate - fuelDate;
+      if (dateDiff < -1 || dateDiff > rules.dateWindowDays) continue;
+      let confidence = 70;
+      if (dateDiff === 0) confidence = 85;
+      else if (Math.abs(dateDiff) === 1) confidence = 75;
+      else if (Math.abs(dateDiff) === 2) confidence = 68;
+      else confidence = 65;
+      const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
+      const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
+      let timeDiff = 0;
+      if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+        timeDiff = Math.abs(fuelTime - bankTime);
+        if (timeDiff <= 5) confidence = 100;
+        else if (timeDiff <= 15) confidence = 95;
+        else if (timeDiff <= 30) confidence = 85;
+        else confidence = 75;
+      }
+      if (amountDiff > 0) {
+        confidence -= Math.min(5, amountDiff / rules.amountTolerance * 5);
+      }
+      let cardMatch = "unknown";
+      if (rules.requireCardMatch) {
+        if (!bankTx.cardNumber || !invoice.cardNumber) continue;
+        if (bankTx.cardNumber !== invoice.cardNumber) continue;
+        cardMatch = "yes";
+        confidence += 25;
+        reasons.push("card-match-required");
+      } else if (bankTx.cardNumber && invoice.cardNumber) {
+        if (bankTx.cardNumber === invoice.cardNumber) {
+          cardMatch = "yes";
+          confidence += 25;
+          reasons.push("card-match-strong");
+        } else {
+          cardMatch = "no";
+          confidence -= 30;
+          reasons.push("card-differ");
+        }
+      }
+      confidence = Math.min(100, Math.max(0, confidence));
+      if (confidence < rules.minimumConfidence) continue;
+      const absDiff = Math.abs(dateDiff);
+      const cardMatchScore = cardMatch === "yes" ? 2 : cardMatch === "unknown" ? 1 : 0;
+      const bestCardScore = bestMatch ? bestMatch.reasons.some((r) => r.startsWith("card-match")) ? 2 : bestMatch.reasons.some((r) => r === "card-differ") ? 0 : 1 : -1;
+      if (!bestMatch || confidence > bestMatch.confidence || confidence === bestMatch.confidence && cardMatchScore > bestCardScore || confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff || confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff) {
+        bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
+      }
+    }
+    return bestMatch;
+  }
   app2.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
       const period = await assertPeriodWrite(req.params.periodId, req, res);
@@ -33094,6 +33165,45 @@ async function registerRoutes(app2) {
           matchCount++;
         }
       }
+      const matchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
+      const unmatchedInPeriodBank = matchableBankTransactions.filter((bt) => {
+        if (matchedBankIds.has(bt.id)) return false;
+        if (!bt.transactionDate) return false;
+        const day = toDateOnly(new Date(bt.transactionDate).getTime());
+        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
+      });
+      const outOfPeriodCardFuel = transactions2.filter((t) => {
+        if (t.sourceType !== "fuel" || t.isCardTransaction !== "yes" || isDebtorTx(t)) return false;
+        if (t.matchStatus === "matched" || t.matchStatus === "excluded") return false;
+        if (!t.transactionDate) return false;
+        const day = toDateOnly(new Date(t.transactionDate).getTime());
+        if (isNaN(day)) return false;
+        return day < periodStartDay || day > periodEndDay;
+      });
+      const outOfPeriodInvoices = groupFuelByInvoice(outOfPeriodCardFuel, rules.groupByInvoice);
+      const outOfPeriodByDate = /* @__PURE__ */ new Map();
+      for (const invoice of outOfPeriodInvoices) {
+        const dayKey = parseDateToDays(invoice.firstDate || "");
+        if (dayKey !== null) {
+          for (let offset = -1; offset <= rules.dateWindowDays; offset++) {
+            const key = dayKey + offset;
+            if (!outOfPeriodByDate.has(key)) outOfPeriodByDate.set(key, []);
+            outOfPeriodByDate.get(key).push(invoice);
+          }
+        }
+      }
+      const lagUsedInvoices = /* @__PURE__ */ new Set();
+      const lagExplainedBankIds = [];
+      for (const bankTx of unmatchedInPeriodBank) {
+        const bankDayKey = parseDateToDays(bankTx.transactionDate || "");
+        const candidates = bankDayKey !== null ? outOfPeriodByDate.get(bankDayKey) || [] : outOfPeriodInvoices;
+        const bestMatch = scoreBankToInvoices(bankTx, candidates, lagUsedInvoices, rules);
+        if (bestMatch) {
+          lagExplainedBankIds.push(bankTx.id);
+          lagUsedInvoices.add(bestMatch.invoice.invoiceNumber);
+        }
+      }
+      console.log(`[AUTO-MATCH] Lag-explained bank: ${lagExplainedBankIds.length} of ${unmatchedInPeriodBank.length} in-period unmatched`);
       console.log(`[MATCH] Creating ${pendingMatches.length} matches in bulk...`);
       const createdMatches = await storage.createMatchesBatch(
         pendingMatches.map((pm) => pm.matchData)
@@ -33106,6 +33216,9 @@ async function registerRoutes(app2) {
         for (const fuelId of pending.fuelItemIds) {
           txUpdates.push({ id: fuelId, data: { matchStatus: "matched", matchId: match.id } });
         }
+      }
+      for (const bankId of lagExplainedBankIds) {
+        txUpdates.push({ id: bankId, data: { matchStatus: "lag_explained", matchId: null } });
       }
       console.log(`[MATCH] Updating ${txUpdates.length} transactions in bulk...`);
       await storage.updateTransactionsBatch(txUpdates);
@@ -33121,6 +33234,7 @@ async function registerRoutes(app2) {
         bankTransactionsTotal: bankTransactions.length,
         bankTransactionsMatchable: matchableCount,
         bankTransactionsUnmatchable: unmatchableBankTransactions.length,
+        bankTransactionsLagExplained: lagExplainedBankIds.length,
         nonCardTransactionsSkipped: skippedNonCardCount,
         matchRate: `${matchRate}%`,
         rulesUsed: rules,

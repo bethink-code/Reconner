@@ -1744,6 +1744,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
   }
 
+  // Score a bank tx against candidate invoices using the same rules as the main matcher.
+  // Returns the best match or null. Used by the lag-detection pass to find out-of-period
+  // fuel that could explain an unmatched in-period bank tx.
+  type BestInvoiceMatch = {
+    invoice: FuelInvoice;
+    confidence: number;
+    timeDiff: number;
+    dateDiff: number;
+    amountDiff: number;
+    reasons: string[];
+  };
+  function scoreBankToInvoices(
+    bankTx: any,
+    candidateInvoices: FuelInvoice[],
+    usedInvoices: Set<string>,
+    rules: { amountTolerance: number; dateWindowDays: number; timeWindowMinutes: number; requireCardMatch: boolean; minimumConfidence: number }
+  ): BestInvoiceMatch | null {
+    let bestMatch: BestInvoiceMatch | null = null;
+    const seen = new Set<string>();
+
+    for (const invoice of candidateInvoices) {
+      if (seen.has(invoice.invoiceNumber)) continue;
+      seen.add(invoice.invoiceNumber);
+      if (usedInvoices.has(invoice.invoiceNumber)) continue;
+      if (invoice.items.some(item => item.matchStatus === 'matched')) continue;
+
+      const reasons: string[] = [];
+
+      const bankAmount = parseFloat(bankTx.amount);
+      const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
+      if (amountDiff > rules.amountTolerance) continue;
+
+      const fuelDate = parseDateToDays(invoice.firstDate || '');
+      const bankDate = parseDateToDays(bankTx.transactionDate || '');
+      if (fuelDate === null || bankDate === null) continue;
+      const dateDiff = bankDate - fuelDate;
+      if (dateDiff < -1 || dateDiff > rules.dateWindowDays) continue;
+
+      let confidence = 70;
+      if (dateDiff === 0) confidence = 85;
+      else if (Math.abs(dateDiff) === 1) confidence = 75;
+      else if (Math.abs(dateDiff) === 2) confidence = 68;
+      else confidence = 65;
+
+      const fuelTime = parseTimeToMinutes(invoice.firstTime || '');
+      const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
+      let timeDiff = 0;
+      if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+        timeDiff = Math.abs(fuelTime - bankTime);
+        if (timeDiff <= 5) confidence = 100;
+        else if (timeDiff <= 15) confidence = 95;
+        else if (timeDiff <= 30) confidence = 85;
+        else confidence = 75;
+      }
+
+      if (amountDiff > 0) {
+        confidence -= Math.min(5, (amountDiff / rules.amountTolerance) * 5);
+      }
+
+      let cardMatch: 'yes' | 'no' | 'unknown' = 'unknown';
+      if (rules.requireCardMatch) {
+        if (!bankTx.cardNumber || !invoice.cardNumber) continue;
+        if (bankTx.cardNumber !== invoice.cardNumber) continue;
+        cardMatch = 'yes';
+        confidence += 25;
+        reasons.push('card-match-required');
+      } else if (bankTx.cardNumber && invoice.cardNumber) {
+        if (bankTx.cardNumber === invoice.cardNumber) {
+          cardMatch = 'yes';
+          confidence += 25;
+          reasons.push('card-match-strong');
+        } else {
+          cardMatch = 'no';
+          confidence -= 30;
+          reasons.push('card-differ');
+        }
+      }
+
+      confidence = Math.min(100, Math.max(0, confidence));
+      if (confidence < rules.minimumConfidence) continue;
+
+      const absDiff = Math.abs(dateDiff);
+      const cardMatchScore = cardMatch === 'yes' ? 2 : cardMatch === 'unknown' ? 1 : 0;
+      const bestCardScore = bestMatch
+        ? (bestMatch.reasons.some(r => r.startsWith('card-match')) ? 2
+           : bestMatch.reasons.some(r => r === 'card-differ') ? 0 : 1)
+        : -1;
+
+      if (!bestMatch ||
+          confidence > bestMatch.confidence ||
+          (confidence === bestMatch.confidence && cardMatchScore > bestCardScore) ||
+          (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff) ||
+          (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
+        bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
+      }
+    }
+
+    return bestMatch;
+  }
+
   // ============================================
   // AUTO-MATCH WITH INVOICE GROUPING
   // ============================================
@@ -2050,6 +2150,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // *** PHASE 1: LAG DETECTION ***
+      // For each still-unmatched in-period bank tx, run the same matcher against
+      // out-of-period fuel. A hit means the bank is explained by fuel belonging to
+      // another period — don't create a match record, but tag the bank as
+      // 'lag_explained' so it drops out of Review Bank without disappearing silently.
+      const matchedBankIds = new Set(pendingMatches.map(pm => pm.bankTxId));
+      const unmatchedInPeriodBank = matchableBankTransactions.filter(bt => {
+        if (matchedBankIds.has(bt.id)) return false;
+        if (!bt.transactionDate) return false;
+        const day = toDateOnly(new Date(bt.transactionDate).getTime());
+        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
+      });
+
+      const outOfPeriodCardFuel = transactions.filter(t => {
+        if (t.sourceType !== 'fuel' || t.isCardTransaction !== 'yes' || isDebtorTx(t)) return false;
+        if (t.matchStatus === 'matched' || t.matchStatus === 'excluded') return false;
+        if (!t.transactionDate) return false;
+        const day = toDateOnly(new Date(t.transactionDate).getTime());
+        if (isNaN(day)) return false;
+        return day < periodStartDay || day > periodEndDay;
+      });
+
+      const outOfPeriodInvoices = groupFuelByInvoice(outOfPeriodCardFuel, rules.groupByInvoice);
+      const outOfPeriodByDate = new Map<number, FuelInvoice[]>();
+      for (const invoice of outOfPeriodInvoices) {
+        const dayKey = parseDateToDays(invoice.firstDate || '');
+        if (dayKey !== null) {
+          for (let offset = -1; offset <= rules.dateWindowDays; offset++) {
+            const key = dayKey + offset;
+            if (!outOfPeriodByDate.has(key)) outOfPeriodByDate.set(key, []);
+            outOfPeriodByDate.get(key)!.push(invoice);
+          }
+        }
+      }
+
+      const lagUsedInvoices = new Set<string>();
+      const lagExplainedBankIds: string[] = [];
+      for (const bankTx of unmatchedInPeriodBank) {
+        const bankDayKey = parseDateToDays(bankTx.transactionDate || '');
+        const candidates = bankDayKey !== null ? (outOfPeriodByDate.get(bankDayKey) || []) : outOfPeriodInvoices;
+        const bestMatch = scoreBankToInvoices(bankTx, candidates, lagUsedInvoices, rules);
+        if (bestMatch) {
+          lagExplainedBankIds.push(bankTx.id);
+          lagUsedInvoices.add(bestMatch.invoice.invoiceNumber);
+        }
+      }
+      console.log(`[AUTO-MATCH] Lag-explained bank: ${lagExplainedBankIds.length} of ${unmatchedInPeriodBank.length} in-period unmatched`);
+
       // Bulk create all matches at once
       console.log(`[MATCH] Creating ${pendingMatches.length} matches in bulk...`);
       const createdMatches = await storage.createMatchesBatch(
@@ -2057,7 +2205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       // Build transaction updates from created matches
-      const txUpdates: Array<{ id: string; data: { matchStatus: string; matchId: string } }> = [];
+      const txUpdates: Array<{ id: string; data: { matchStatus: string; matchId: string | null } }> = [];
       for (let i = 0; i < createdMatches.length; i++) {
         const match = createdMatches[i];
         const pending = pendingMatches[i];
@@ -2065,6 +2213,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const fuelId of pending.fuelItemIds) {
           txUpdates.push({ id: fuelId, data: { matchStatus: 'matched', matchId: match.id } });
         }
+      }
+      for (const bankId of lagExplainedBankIds) {
+        txUpdates.push({ id: bankId, data: { matchStatus: 'lag_explained', matchId: null } });
       }
 
       // Bulk update all transactions
@@ -2090,6 +2241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bankTransactionsTotal: bankTransactions.length,
         bankTransactionsMatchable: matchableCount,
         bankTransactionsUnmatchable: unmatchableBankTransactions.length,
+        bankTransactionsLagExplained: lagExplainedBankIds.length,
         nonCardTransactionsSkipped: skippedNonCardCount,
         matchRate: `${matchRate}%`,
         rulesUsed: rules,

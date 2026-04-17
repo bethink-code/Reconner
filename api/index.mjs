@@ -33347,7 +33347,8 @@ async function registerRoutes(app2) {
       }
       for (const tx of allTransactions) {
         if (tx.matchStatus !== "excluded") continue;
-        if (tx.sourceType !== "bank" && !tx.sourceType?.startsWith("bank")) continue;
+        if (!tx.sourceType?.startsWith("bank")) continue;
+        if (!tx.transactionDate || tx.transactionDate < period.startDate || tx.transactionDate > period.endDate) continue;
         details.push({
           match: {
             id: `excluded_${tx.id}`,

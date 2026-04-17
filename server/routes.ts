@@ -2379,9 +2379,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Excluded transactions (reversed, declined, cancelled — bank only, no fuel pair)
+      // Scoped to period dates — out-of-period excluded bank belongs to a different period
       for (const tx of allTransactions) {
         if (tx.matchStatus !== 'excluded') continue;
-        if (tx.sourceType !== 'bank' && !tx.sourceType?.startsWith('bank')) continue;
+        if (!tx.sourceType?.startsWith('bank')) continue;
+        if (!tx.transactionDate || tx.transactionDate < period.startDate || tx.transactionDate > period.endDate) continue;
         details.push({
           match: {
             id: `excluded_${tx.id}`,

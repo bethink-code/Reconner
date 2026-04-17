@@ -3,7 +3,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { InfoCard, InfoCardContent } from "@/components/ui/info-card";
 import {
   Popover,
   PopoverContent,
@@ -20,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Unlink, Search, ChevronLeft, ChevronRight, HelpCircle, ExternalLink, Loader2 } from "lucide-react";
-import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
@@ -43,7 +41,7 @@ interface MatchedPair {
     description: string | null;
     cardNumber: string | null;
     referenceNumber: string | null;
-  };
+  } | null;
   fuelTransaction: {
     id: string;
     transactionDate: string;
@@ -77,28 +75,29 @@ function getMatchLabel(matchType: string, userName: string, description?: string
     if (desc.includes("duplicate")) return "Duplicate";
     return "Excluded";
   }
+  if (matchType === "cash") return "Cash";
+  if (matchType === "debtor") return "Debtor";
+  if (matchType === "unmatched_card") return "Unmatched card";
+  if (matchType === "unmatched_bank") return "Unmatched bank";
   if (matchType === "linked") return `${userName} (With reason)`;
   return `${userName} (Confirmed)`;
 }
 
-export function MatchedPairsTab({ periodId }: { periodId: string }) {
+export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string; onJumpToReview?: (side: 'bank' | 'fuel') => void }) {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
   const userName = user?.firstName || "User";
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "exact" | "rules" | "confirmed" | "reason" | "excluded">("all");
+  type TopFilter = "total" | "lekana" | "garth" | "excluded" | "review";
+  type SubFilter = "exact" | "rules" | "confirmed" | "reason" | "cash" | "debtor" | "duplicates" | "bank" | "card" | null;
+  const [topFilter, setTopFilter] = useState<TopFilter>("total");
+  const [subFilter, setSubFilter] = useState<SubFilter>(null);
   const [page, setPage] = useState(0);
   const [pendingUnmatch, setPendingUnmatch] = useState<MatchedPair | null>(null);
   const PAGE_SIZE = 25;
 
   const { data: pairs = [], isLoading } = useQuery<MatchedPair[]>({
     queryKey: ["/api/periods", periodId, "matches", "details"],
-    enabled: !!periodId,
-  });
-
-  const { data: summary } = useQuery<{ unmatchedBankTransactions: number }>({
-    queryKey: ["/api/periods", periodId, "summary"],
     enabled: !!periodId,
   });
 
@@ -122,21 +121,67 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
   const isRules = (mt: string) => mt.startsWith("auto") && !isExact(mt);
   const isConfirmed = (mt: string) => mt === "user_confirmed" || mt === "manual";
   const isReason = (mt: string) => mt === "linked";
-  const isExcluded = (mt: string) => mt === "excluded";
+  const isDeclinedOrDuplicate = (mt: string) => mt === "excluded";
+  const isCash = (mt: string) => mt === "cash";
+  const isDebtor = (mt: string) => mt === "debtor";
+  const isUnmatchedCard = (mt: string) => mt === "unmatched_card";
+  const isUnmatchedBank = (mt: string) => mt === "unmatched_bank";
+
+  // Counts derived from the pairs dataset (already period-scoped on the server)
+  const counts = useMemo(() => {
+    const c = {
+      exact: 0, rules: 0, confirmed: 0, reason: 0,
+      cash: 0, debtor: 0, duplicates: 0,
+      unmatchedCard: 0, unmatchedBank: 0,
+    };
+    for (const p of pairs) {
+      const mt = p.match.matchType;
+      if (isExact(mt)) c.exact++;
+      else if (isRules(mt)) c.rules++;
+      else if (isConfirmed(mt)) c.confirmed++;
+      else if (isReason(mt)) c.reason++;
+      else if (isCash(mt)) c.cash++;
+      else if (isDebtor(mt)) c.debtor++;
+      else if (isDeclinedOrDuplicate(mt)) c.duplicates++;
+      else if (isUnmatchedCard(mt)) c.unmatchedCard++;
+      else if (isUnmatchedBank(mt)) c.unmatchedBank++;
+    }
+    return c;
+  }, [pairs]);
+
+  const totalFuel = counts.exact + counts.rules + counts.confirmed + counts.reason + counts.cash + counts.debtor + counts.unmatchedCard;
+  const totalLekana = counts.exact + counts.rules;
+  const totalGarth = counts.confirmed + counts.reason;
+  const totalExcluded = counts.cash + counts.debtor + counts.duplicates;
+  const totalReview = counts.unmatchedCard + counts.unmatchedBank;
+
+  const matchesTopFilter = (mt: string, t: TopFilter) => {
+    switch (t) {
+      case "total": return isExact(mt) || isRules(mt) || isConfirmed(mt) || isReason(mt) || isCash(mt) || isDebtor(mt) || isUnmatchedCard(mt);
+      case "lekana": return isExact(mt) || isRules(mt);
+      case "garth": return isConfirmed(mt) || isReason(mt);
+      case "excluded": return isCash(mt) || isDebtor(mt) || isDeclinedOrDuplicate(mt);
+      case "review": return isUnmatchedCard(mt) || isUnmatchedBank(mt);
+    }
+  };
+
+  const matchesSubFilter = (mt: string, s: SubFilter) => {
+    if (!s) return true;
+    switch (s) {
+      case "exact": return isExact(mt);
+      case "rules": return isRules(mt);
+      case "confirmed": return isConfirmed(mt);
+      case "reason": return isReason(mt);
+      case "cash": return isCash(mt);
+      case "debtor": return isDebtor(mt);
+      case "duplicates": return isDeclinedOrDuplicate(mt);
+      case "bank": return isUnmatchedBank(mt);
+      case "card": return isUnmatchedCard(mt);
+    }
+  };
 
   const filtered = useMemo(() => {
-    let result = pairs;
-    if (typeFilter === "exact") {
-      result = result.filter(p => isExact(p.match.matchType));
-    } else if (typeFilter === "rules") {
-      result = result.filter(p => isRules(p.match.matchType));
-    } else if (typeFilter === "confirmed") {
-      result = result.filter(p => isConfirmed(p.match.matchType));
-    } else if (typeFilter === "reason") {
-      result = result.filter(p => isReason(p.match.matchType));
-    } else if (typeFilter === "excluded") {
-      result = result.filter(p => isExcluded(p.match.matchType));
-    }
+    let result = pairs.filter(p => matchesTopFilter(p.match.matchType, topFilter) && matchesSubFilter(p.match.matchType, subFilter));
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(p =>
@@ -150,14 +195,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
       );
     }
     return result;
-  }, [pairs, search, typeFilter]);
-
-  const exactCount = useMemo(() => pairs.filter(p => isExact(p.match.matchType)).length, [pairs]);
-  const rulesCount = useMemo(() => pairs.filter(p => isRules(p.match.matchType)).length, [pairs]);
-  const confirmedCount = useMemo(() => pairs.filter(p => isConfirmed(p.match.matchType)).length, [pairs]);
-  const reasonCount = useMemo(() => pairs.filter(p => isReason(p.match.matchType)).length, [pairs]);
-  const excludedCount = useMemo(() => pairs.filter(p => isExcluded(p.match.matchType)).length, [pairs]);
-  const unmatchedCount = summary?.unmatchedBankTransactions ?? 0;
+  }, [pairs, search, topFilter, subFilter]);
 
   // Reset to first page when filters change
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -174,7 +212,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
   if (pairs.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">
-        No matched pairs yet. Run auto-match or manually match transactions to see results here.
+        No transactions yet. Upload fuel and bank data to see results here.
       </div>
     );
   }
@@ -187,128 +225,173 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
     ["Excluded", "Reversed, declined, cancelled, or duplicate — excluded from matching"],
   ];
 
+  // Summary card helper — renders one of the 5 top-level buckets
+  const SummaryCard = ({
+    id, label, count, countColor, subRows, onClick, disabled,
+  }: {
+    id: TopFilter;
+    label: string;
+    count: number;
+    countColor?: string;
+    subRows?: { key: string; label: string; count: number; isLink?: boolean; onClickSub?: () => void }[];
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => {
+    const isActive = topFilter === id;
+    return (
+      <button
+        type="button"
+        onClick={onClick || (() => { setTopFilter(id); setSubFilter(null); setPage(0); })}
+        disabled={disabled}
+        className={cn(
+          "flex flex-col text-left rounded-xl p-3.5 transition-colors border",
+          isActive ? "bg-[#FCE8A8] border-[#F5CC52]" : "bg-card border-transparent hover:bg-card/70",
+          disabled && "cursor-default opacity-70"
+        )}
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{label}</span>
+        <span className={cn("text-3xl font-bold tabular-nums leading-none mb-2", countColor || "text-[#1A1200]")}>{count}</span>
+        {subRows && subRows.length > 0 && (
+          <div className="border-t border-[#F0EEE8] pt-1.5 mt-auto space-y-0.5">
+            {subRows.map(sr => {
+              const isSubActive = isActive && subFilter === sr.key;
+              return (
+                <button
+                  key={sr.key}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (sr.onClickSub) {
+                      sr.onClickSub();
+                    } else {
+                      setTopFilter(id);
+                      setSubFilter(isSubActive ? null : (sr.key as SubFilter));
+                      setPage(0);
+                    }
+                  }}
+                  className={cn(
+                    "w-full flex items-center justify-between text-xs py-0.5 px-1.5 rounded-md transition-colors",
+                    isSubActive ? "bg-white font-semibold" : "hover:bg-white/50",
+                    sr.isLink && "hover:text-[#E8601C]"
+                  )}
+                >
+                  <span className={cn("text-muted-foreground", isSubActive && "text-[#1A1200]")}>{sr.label}</span>
+                  <span className={cn("tabular-nums font-medium", isSubActive ? "text-[#E8601C]" : "text-[#1A1200]")}>{sr.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="bg-section rounded-2xl p-6 space-y-4">
-      {/* Category summary — segmented card */}
-      <InfoCard>
-        <InfoCardContent className="flex divide-x divide-border/50 items-end">
-          {([
-            ["all", "All", null, pairs.length + unmatchedCount],
-            ["exact", "Lekana", "Exact", exactCount],
-            ["rules", "Lekana", "Rules", rulesCount],
-            ["confirmed", userName, "Confirmed", confirmedCount],
-            ["reason", userName, "With reason", reasonCount],
-            ["excluded", "Excluded", null, excludedCount],
-            ["unmatched", "Review", null, unmatchedCount],
-          ] as [string, string, string | null, number][]).map(([value, label, sublabel, count]) => {
-            const isUnmatched = value === "unmatched";
-            const isActive = !isUnmatched && typeFilter === value;
-            return (
-              <button
-                key={value}
-                onClick={() => {
-                  if (isUnmatched && unmatchedCount > 0) {
-                    setLocation(`/investigate?periodId=${periodId}`);
-                  } else if (!isUnmatched) {
-                    setTypeFilter(typeFilter === value ? "all" : value);
-                    setPage(0);
-                  }
-                }}
-                className={cn(
-                  "flex-1 py-2 px-2 text-center transition-colors rounded-lg",
-                  isActive && "bg-[#F5C400]/75",
-                  !isActive && !isUnmatched && "hover:bg-white/50",
-                  isUnmatched && unmatchedCount > 0 && "hover:bg-[#F5C400]/30 cursor-pointer",
-                  isUnmatched && unmatchedCount === 0 && "cursor-default"
-                )}
-              >
-                <p className={cn("text-[10px] font-semibold uppercase tracking-wider", isActive ? "text-black/50" : "text-muted-foreground/70")}>{label}</p>
-                {sublabel && <p className={cn("text-[10px] uppercase tracking-wider", isActive ? "text-black/60" : "text-muted-foreground/50")}>{sublabel}</p>}
-                <p className={cn(
-                  "text-lg font-bold tabular-nums mt-0.5",
-                  isActive && "text-[#1A1200]",
-                  !isActive && isUnmatched && unmatchedCount > 0 && "text-[#B45309]"
-                )}>{count}</p>
-              </button>
-            );
-          })}
-        </InfoCardContent>
+      {/* Option D — 5 summary cards */}
+      <div className="grid grid-cols-5 gap-3">
+        <SummaryCard
+          id="total"
+          label="Total"
+          count={totalFuel}
+        />
+        <SummaryCard
+          id="lekana"
+          label="Lekana matched"
+          count={totalLekana}
+          subRows={[
+            { key: "exact", label: "Exact", count: counts.exact },
+            { key: "rules", label: "Rules", count: counts.rules },
+          ]}
+        />
+        <SummaryCard
+          id="garth"
+          label={`${userName} matched`}
+          count={totalGarth}
+          countColor={totalGarth === 0 ? "text-muted-foreground/60" : undefined}
+          subRows={[
+            { key: "confirmed", label: "Confirmed", count: counts.confirmed },
+            { key: "reason", label: "With reason", count: counts.reason },
+          ]}
+        />
+        <SummaryCard
+          id="excluded"
+          label="Excluded"
+          count={totalExcluded}
+          subRows={[
+            { key: "cash", label: "Cash", count: counts.cash },
+            { key: "debtor", label: "Debtor", count: counts.debtor },
+            { key: "duplicates", label: "Duplicates", count: counts.duplicates },
+          ]}
+        />
+        <SummaryCard
+          id="review"
+          label="To review"
+          count={totalReview}
+          countColor={totalReview > 0 ? "text-[#B45309]" : undefined}
+          subRows={[
+            {
+              key: "bank",
+              label: "Unmatched bank →",
+              count: counts.unmatchedBank,
+              isLink: true,
+              onClickSub: () => onJumpToReview?.('bank'),
+            },
+            {
+              key: "card",
+              label: "Unmatched card →",
+              count: counts.unmatchedCard,
+              isLink: true,
+              onClickSub: () => onJumpToReview?.('fuel'),
+            },
+          ]}
+        />
+      </div>
 
-        {/* Search + legend — inside segmented card */}
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/30">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by amount, description, card, attendant..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(0); }}
-              className="pl-9 h-8 text-sm bg-white dark:bg-card"
-            />
-          </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground">
-                <HelpCircle className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Match Types</p>
-                {legendItems.map(([label, desc]) => (
-                  <div key={label} className="flex gap-2">
-                    <Badge variant="outline" className="text-[11px] px-1.5 py-0 shrink-0 h-5">{label}</Badge>
-                    <span className="text-xs text-muted-foreground">{desc}</span>
-                  </div>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
+      {/* Search */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by amount, description, card, attendant..."
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(0); }}
+            className="pl-9 h-8 text-sm bg-white dark:bg-card"
+          />
         </div>
-      </InfoCard>
-
-      {/* Context card explaining current filter */}
-      {typeFilter !== "all" && (() => {
-        const contexts: Record<string, { title: string; description: string }> = {
-          exact: {
-            title: "Exact matches by lekana",
-            description: "These transactions matched perfectly — same amount, same date. No human review needed.",
-          },
-          rules: {
-            title: "Rule-based matches by lekana",
-            description: "These were matched using your configured tolerance and date window. The amounts or dates were close enough to count as a match, but not identical.",
-          },
-          confirmed: {
-            title: `Confirmed by ${userName}`,
-            description: "You manually reviewed these and confirmed they belong together.",
-          },
-          reason: {
-            title: `Matched by ${userName} with a reason`,
-            description: "You matched these and documented why — for example, a tip or an overfill that explains the difference.",
-          },
-          excluded: {
-            title: "Excluded from matching",
-            description: "Declined, cancelled, reversed, or duplicate transactions — excluded from matching. Duplicates are POS retry records where the same transaction appears twice.",
-          },
-          unmatched: {
-            title: "Unmatched transactions",
-            description: "These bank transactions had no matching fuel record. Head to the Review tab to work through them.",
-          },
-        };
-        const ctx = contexts[typeFilter];
-        if (!ctx) return null;
-        return (
-          <InfoCard className="p-3">
-            <p className="text-sm font-medium text-[#1A1200]">{ctx.title}</p>
-            <p className="text-xs text-muted-foreground mt-1">{ctx.description}</p>
-          </InfoCard>
-        );
-      })()}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground">
+              <HelpCircle className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Match Types</p>
+              {legendItems.map(([label, desc]) => (
+                <div key={label} className="flex gap-2">
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0 shrink-0 h-5">{label}</Badge>
+                  <span className="text-xs text-muted-foreground">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {/* Count + pagination info */}
       <div className="flex items-center justify-between px-3 mb-2">
         <p className="text-xs text-muted-foreground">
-          {filtered.length} {filtered.length === 1 ? "pair" : "pairs"}
-          {typeFilter !== "all" && ` — click again to clear filter`}
+          {filtered.length} {filtered.length === 1 ? "transaction" : "transactions"}
+          {(topFilter !== "total" || subFilter) && (
+            <button
+              type="button"
+              onClick={() => { setTopFilter("total"); setSubFilter(null); }}
+              className="ml-2 text-[#E8601C] hover:underline"
+            >
+              Clear filter
+            </button>
+          )}
         </p>
         {totalPages > 1 && (
           <p className="text-xs text-muted-foreground">
@@ -320,21 +403,24 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
       {/* Pair list */}
       <div className="space-y-2">
         {paged.map(p => {
-          const bankAmt = parseFloat(p.bankTransaction.amount);
+          const bankAmt = p.bankTransaction ? parseFloat(p.bankTransaction.amount) : 0;
           const fuelAmt = p.fuelItems && p.fuelItems.length > 1
             ? p.fuelItems.reduce((s, i) => s + parseFloat(i.amount), 0)
             : p.fuelTransaction ? parseFloat(p.fuelTransaction.amount) : 0;
-          const diff = p.fuelTransaction ? Math.abs(bankAmt - fuelAmt) : 0;
+          const diff = (p.fuelTransaction && p.bankTransaction) ? Math.abs(bankAmt - fuelAmt) : 0;
           const confidence = p.match.matchConfidence ? parseFloat(p.match.matchConfidence) : null;
-          const matchLabel = getMatchLabel(p.match.matchType, userName, p.bankTransaction.description);
-          const excluded = p.match.matchType === "excluded";
+          const matchLabel = getMatchLabel(p.match.matchType, userName, p.bankTransaction?.description);
+          const mt = p.match.matchType;
+          const bankOnly = !p.fuelTransaction && !!p.bankTransaction;
+          const fuelOnly = !p.bankTransaction && !!p.fuelTransaction;
+          const muted = bankOnly || fuelOnly;
 
           return (
             <div
               key={p.match.id}
               className={cn(
                 "rounded-lg border p-3 grid gap-4",
-                excluded
+                muted
                   ? "border-muted bg-muted/20 grid-cols-[1fr_auto]"
                   : "border-[#E5E3DC]/50 bg-card grid-cols-[1fr_auto_1fr]"
               )}
@@ -382,8 +468,8 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                   </p>
                 </div>
               )}
-              {/* Left — Excluded (bank only, no fuel pair) */}
-              {excluded && (
+              {/* Left — Bank only (excluded, unmatched_bank) */}
+              {bankOnly && p.bankTransaction && (
                 <div className="min-w-0 space-y-0.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Bank</p>
                   <p className="text-sm font-semibold tabular-nums text-muted-foreground">{formatRand(bankAmt)}</p>
@@ -400,7 +486,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
 
               {/* Middle — Match info */}
               <div className="flex flex-col items-center justify-center gap-1.5 min-w-[140px] -my-3 py-3 px-3 bg-card">
-                <Badge variant="outline" className={cn("text-xs px-2 py-0.5", excluded && "text-muted-foreground")}>
+                <Badge variant="outline" className={cn("text-xs px-2 py-0.5", muted && "text-muted-foreground")}>
                   {matchLabel}
                 </Badge>
                 {confidence !== null && (
@@ -411,7 +497,7 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                     Diff {formatRand(diff)}
                   </span>
                 )}
-                {!excluded && (
+                {!muted && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -425,8 +511,8 @@ export function MatchedPairsTab({ periodId }: { periodId: string }) {
                 )}
               </div>
 
-              {/* Right — Bank */}
-              {!excluded && (
+              {/* Right — Bank (paired rows only) */}
+              {!muted && p.bankTransaction && (
                 <div className="min-w-0 space-y-0.5 text-right">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Bank</p>
                   <p className="text-sm font-semibold tabular-nums">{formatRand(bankAmt)}</p>

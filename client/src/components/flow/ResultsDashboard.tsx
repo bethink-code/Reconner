@@ -299,7 +299,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
             TRANSACTIONS TAB
         ════════════════════════════════════════════════════════════ */}
         <TabsContent value="transactions" className="mt-0 max-w-4xl mx-auto">
-          <MatchedPairsTab periodId={periodId} />
+          <MatchedPairsTab periodId={periodId} onJumpToReview={(side) => { setReviewSide(side); setActiveTab('review'); }} />
         </TabsContent>
 
         <TabsContent value="review" className="mt-0 max-w-4xl mx-auto ring-0 ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0">

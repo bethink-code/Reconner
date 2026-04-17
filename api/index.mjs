@@ -33345,10 +33345,15 @@ async function registerRoutes(app2) {
           fuelTransaction: fuelTx
         });
       }
+      const inPeriod = (date) => !!date && date >= period.startDate && date <= period.endDate;
+      const isDebtorFuel = (t) => {
+        const pt = (t.paymentType || "").toLowerCase();
+        return pt.includes("debtor") || pt.includes("account") || pt.includes("fleet");
+      };
       for (const tx of allTransactions) {
         if (tx.matchStatus !== "excluded") continue;
         if (!tx.sourceType?.startsWith("bank")) continue;
-        if (!tx.transactionDate || tx.transactionDate < period.startDate || tx.transactionDate > period.endDate) continue;
+        if (!inPeriod(tx.transactionDate)) continue;
         details.push({
           match: {
             id: `excluded_${tx.id}`,
@@ -33356,6 +33361,52 @@ async function registerRoutes(app2) {
             bankTransactionId: tx.id,
             fuelTransactionId: "",
             matchType: "excluded",
+            matchConfidence: null,
+            createdAt: tx.createdAt
+          },
+          bankTransaction: tx,
+          fuelTransaction: null
+        });
+      }
+      for (const tx of allTransactions) {
+        if (tx.sourceType !== "fuel") continue;
+        if (!inPeriod(tx.transactionDate)) continue;
+        if (matchedTxIds.has(tx.id)) continue;
+        let fuelMatchType = null;
+        if (isDebtorFuel(tx)) {
+          fuelMatchType = "debtor";
+        } else if (tx.isCardTransaction === "no") {
+          fuelMatchType = "cash";
+        } else if (tx.isCardTransaction === "yes" && (tx.matchStatus === "unmatched" || tx.matchStatus === null)) {
+          fuelMatchType = "unmatched_card";
+        } else {
+          continue;
+        }
+        details.push({
+          match: {
+            id: `${fuelMatchType}_${tx.id}`,
+            periodId: req.params.periodId,
+            bankTransactionId: "",
+            fuelTransactionId: tx.id,
+            matchType: fuelMatchType,
+            matchConfidence: null,
+            createdAt: tx.createdAt
+          },
+          bankTransaction: null,
+          fuelTransaction: tx
+        });
+      }
+      for (const tx of allTransactions) {
+        if (!tx.sourceType?.startsWith("bank")) continue;
+        if (!inPeriod(tx.transactionDate)) continue;
+        if (tx.matchStatus !== "unmatched") continue;
+        details.push({
+          match: {
+            id: `unmatched_bank_${tx.id}`,
+            periodId: req.params.periodId,
+            bankTransactionId: tx.id,
+            fuelTransactionId: "",
+            matchType: "unmatched_bank",
             matchConfidence: null,
             createdAt: tx.createdAt
           },

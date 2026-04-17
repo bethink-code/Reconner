@@ -2378,12 +2378,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Period-scoping helpers
+      const inPeriod = (date: string | null | undefined) =>
+        !!date && date >= period.startDate && date <= period.endDate;
+      const isDebtorFuel = (t: any) => {
+        const pt = (t.paymentType || '').toLowerCase();
+        return pt.includes('debtor') || pt.includes('account') || pt.includes('fleet');
+      };
+
       // Excluded transactions (reversed, declined, cancelled — bank only, no fuel pair)
       // Scoped to period dates — out-of-period excluded bank belongs to a different period
       for (const tx of allTransactions) {
         if (tx.matchStatus !== 'excluded') continue;
         if (!tx.sourceType?.startsWith('bank')) continue;
-        if (!tx.transactionDate || tx.transactionDate < period.startDate || tx.transactionDate > period.endDate) continue;
+        if (!inPeriod(tx.transactionDate)) continue;
         details.push({
           match: {
             id: `excluded_${tx.id}`,
@@ -2391,6 +2399,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
             bankTransactionId: tx.id,
             fuelTransactionId: '',
             matchType: 'excluded',
+            matchConfidence: null,
+            createdAt: tx.createdAt,
+          },
+          bankTransaction: tx,
+          fuelTransaction: null,
+        });
+      }
+
+      // Non-card fuel (cash + debtor) — fuel only, no bank pair
+      // These aren't matching candidates, but we surface them in the Transactions tab
+      // so the station owner sees the full 303-fuel breakdown.
+      for (const tx of allTransactions) {
+        if (tx.sourceType !== 'fuel') continue;
+        if (!inPeriod(tx.transactionDate)) continue;
+        if (matchedTxIds.has(tx.id)) continue;
+
+        let fuelMatchType: string | null = null;
+        if (isDebtorFuel(tx)) {
+          fuelMatchType = 'debtor';
+        } else if (tx.isCardTransaction === 'no') {
+          fuelMatchType = 'cash';
+        } else if (tx.isCardTransaction === 'yes' && (tx.matchStatus === 'unmatched' || tx.matchStatus === null)) {
+          fuelMatchType = 'unmatched_card';
+        } else {
+          continue;
+        }
+
+        details.push({
+          match: {
+            id: `${fuelMatchType}_${tx.id}`,
+            periodId: req.params.periodId,
+            bankTransactionId: '',
+            fuelTransactionId: tx.id,
+            matchType: fuelMatchType,
+            matchConfidence: null,
+            createdAt: tx.createdAt,
+          },
+          bankTransaction: null,
+          fuelTransaction: tx,
+        });
+      }
+
+      // Unmatched in-period bank — for the Review card's "bank-side" link
+      for (const tx of allTransactions) {
+        if (!tx.sourceType?.startsWith('bank')) continue;
+        if (!inPeriod(tx.transactionDate)) continue;
+        if (tx.matchStatus !== 'unmatched') continue;
+        details.push({
+          match: {
+            id: `unmatched_bank_${tx.id}`,
+            periodId: req.params.periodId,
+            bankTransactionId: tx.id,
+            fuelTransactionId: '',
+            matchType: 'unmatched_bank',
             matchConfidence: null,
             createdAt: tx.createdAt,
           },

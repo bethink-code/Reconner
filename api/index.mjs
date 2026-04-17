@@ -28294,14 +28294,8 @@ var DatabaseStorage = class {
         WHERE id = $1
       ),
       date_window AS (
-        SELECT
-          pd.min_date,
-          pd.max_date,
-          -- Bank window: 1 day before period start (timezone buffer), dateWindowDays after end (settlement lag)
-          (pd.min_date::date - 1)::text AS bank_min,
-          (pd.max_date::date + COALESCE(mr.date_window_days, 3))::text AS bank_max
+        SELECT pd.min_date, pd.max_date
         FROM period_dates pd
-        LEFT JOIN matching_rules mr ON mr.period_id = $1
       ),
       tx_stats AS (
         SELECT
@@ -28311,15 +28305,12 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN source_type = 'fuel'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as total_fuel_amount,
 
-          -- Bank counts: period dates OR matched (settlement lag matches count toward this period)
-          COUNT(CASE WHEN source_type LIKE 'bank%' AND (
-            (transaction_date >= dw.min_date AND transaction_date <= dw.max_date)
-            OR match_status = 'matched'
-          ) THEN 1 END) as bank_transactions,
-          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND (
-            (transaction_date >= dw.min_date AND transaction_date <= dw.max_date)
-            OR match_status = 'matched'
-          ) THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
+          -- Bank counts scoped strictly to period dates (settlement lag is a matching
+          -- technique only \u2014 out-of-period bank never inflates period totals, even if matched)
+          COUNT(CASE WHEN source_type LIKE 'bank%'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as total_bank_amount,
 
           -- Debtors scoped to period dates
           COUNT(CASE WHEN source_type = 'fuel' AND (
@@ -28350,9 +28341,12 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'unknown'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as unknown_fuel_amount,
 
-          -- Matched bank: count all matched regardless of date (the match validated the date window)
-          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN 1 END) as matched_bank_transactions,
-          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched' THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
+          -- Matched bank scoped to period dates (out-of-period matched bank is a lag-day
+          -- match and belongs to a different period's reporting, not this one)
+          COUNT(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_bank_transactions,
+          COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'matched'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as matched_bank_amount,
           COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'matched'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_card_fuel,
 
@@ -28385,11 +28379,9 @@ var DatabaseStorage = class {
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
-          -- Matched: fuel scoped to period dates, bank any date (settlement lag matches count)
-          COUNT(CASE WHEN match_status = 'matched' AND (
-            (source_type = 'fuel' AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date)
-            OR source_type LIKE 'bank%'
-          ) THEN 1 END) as matched_transactions,
+          -- Matched: both sides strictly in-period
+          COUNT(CASE WHEN match_status = 'matched'
+                     AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_transactions,
 
           dw.min_date as period_start,
           dw.max_date as period_end,
@@ -28402,7 +28394,7 @@ var DatabaseStorage = class {
         FROM transactions
         CROSS JOIN date_window dw
         WHERE period_id = $1
-        GROUP BY dw.min_date, dw.max_date, dw.bank_min, dw.bank_max
+        GROUP BY dw.min_date, dw.max_date
       ),
       match_stats AS (
         SELECT
@@ -28703,11 +28695,8 @@ var DatabaseStorage = class {
       WITH period_scope AS (
         SELECT
           rp.start_date AS min_date,
-          rp.end_date AS max_date,
-          (rp.start_date::date - 1)::text AS bank_min,
-          (rp.end_date::date + COALESCE(mr.date_window_days, 3))::text AS bank_max
+          rp.end_date AS max_date
         FROM reconciliation_periods rp
-        LEFT JOIN matching_rules mr ON mr.period_id = rp.id
         WHERE rp.id = $1
       ),
       fuel_stats AS (
@@ -32981,9 +32970,12 @@ async function registerRoutes(app2) {
         }
       }
       let matchCount = 0;
-      let skippedNonCardCount = transactions2.filter(
-        (t) => t.sourceType === "fuel" && t.isCardTransaction !== "yes"
-      ).length;
+      let skippedNonCardCount = transactions2.filter((t) => {
+        if (t.sourceType !== "fuel" || t.isCardTransaction === "yes") return false;
+        if (!t.transactionDate) return false;
+        const day = toDateOnly(new Date(t.transactionDate).getTime());
+        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
+      }).length;
       const matchedInvoices = /* @__PURE__ */ new Set();
       const pendingMatches = [];
       for (const bankTx of matchableBankTransactions) {

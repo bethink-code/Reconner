@@ -1851,9 +1851,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let matchCount = 0;
-      let skippedNonCardCount = transactions.filter(t =>
-        t.sourceType === 'fuel' && t.isCardTransaction !== 'yes'
-      ).length;
+      let skippedNonCardCount = transactions.filter(t => {
+        if (t.sourceType !== 'fuel' || t.isCardTransaction === 'yes') return false;
+        if (!t.transactionDate) return false;
+        const day = toDateOnly(new Date(t.transactionDate).getTime());
+        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
+      }).length;
 
       // Track matched invoices to avoid double-matching
       const matchedInvoices = new Set<string>();

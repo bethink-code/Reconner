@@ -231,13 +231,27 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
               )}
 
               {/* Investigate */}
-              <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => setActiveTab('investigate')}>
+              <InfoCard
+                className="cursor-pointer hover:bg-card/80 transition-colors"
+                onClick={() => setActiveTab(flaggedCount === 0 ? 'review' : 'investigate')}
+              >
                 <InfoCardLabel>Investigate</InfoCardLabel>
-                <div className="flex items-center gap-3 mt-3">
-                  <span className={cn("text-2xl font-bold tabular-nums", flaggedCount > 0 ? "text-[#B45309]" : "text-[#166534]")}>{flaggedCount}</span>
-                  <p className="text-xs text-muted-foreground">{flaggedCount === 0 ? "nothing to investigate yet" : "items flagged for follow-up"}</p>
-                </div>
-                <InfoCardAction className="mt-auto pt-3">View investigate list <ArrowRight className="h-3 w-3" /></InfoCardAction>
+                {flaggedCount === 0 ? (
+                  <>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Items you flag during review land here. Start with Review to work through anything unmatched.
+                    </p>
+                    <InfoCardAction className="mt-auto pt-3">Start reviewing <ArrowRight className="h-3 w-3" /></InfoCardAction>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 mt-3">
+                      <span className="text-2xl font-bold tabular-nums text-[#B45309]">{flaggedCount}</span>
+                      <p className="text-xs text-muted-foreground">items flagged for follow-up</p>
+                    </div>
+                    <InfoCardAction className="mt-auto pt-3">View investigate list <ArrowRight className="h-3 w-3" /></InfoCardAction>
+                  </>
+                )}
               </InfoCard>
             </div>
 

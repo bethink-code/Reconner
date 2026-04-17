@@ -81,7 +81,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   }
 
   // ── Calculations ──
-  const { unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, bankMatchPct, unmatchedFuelCount, cardOnlyAmount, bankApprovedAmount, fileSurplus } = deriveSummaryStats(summary);
+  const { unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, cardMatchPct, matchedCardCount, unmatchedFuelCount, cardOnlyAmount, bankApprovedAmount, fileSurplus } = deriveSummaryStats(summary);
 
   // Badge counts — subtract resolved/flagged transactions from unmatched totals
   const resolvedCount = resolutions?.filter(r => r.resolutionType !== 'flagged').length || 0;
@@ -140,16 +140,16 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                   <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
                     <circle cx="50" cy="50" r="42" fill="none" stroke="#E5E3DC" strokeWidth="8" />
                     <circle cx="50" cy="50" r="42" fill="none"
-                      stroke={bankMatchPct >= 80 ? "#166534" : bankMatchPct >= 60 ? "#B45309" : "#B91C1C"}
+                      stroke={cardMatchPct >= 80 ? "#166534" : cardMatchPct >= 60 ? "#B45309" : "#B91C1C"}
                       strokeWidth="8" strokeLinecap="round"
-                      strokeDasharray={`${bankMatchPct * 2.639} ${263.9 - bankMatchPct * 2.639}`} />
+                      strokeDasharray={`${cardMatchPct * 2.639} ${263.9 - cardMatchPct * 2.639}`} />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={cn("text-2xl font-bold tabular-nums", bankMatchPct >= 80 ? "text-[#166534]" : bankMatchPct >= 60 ? "text-[#B45309]" : "text-[#B91C1C]")}>{bankMatchPct}%</span>
+                    <span className={cn("text-2xl font-bold tabular-nums", cardMatchPct >= 80 ? "text-[#166534]" : cardMatchPct >= 60 ? "text-[#B45309]" : "text-[#B91C1C]")}>{cardMatchPct}%</span>
                   </div>
                 </div>
                 <p className="text-sm font-semibold">Match Rate</p>
-                <p className="text-xs text-muted-foreground">{summary.matchedPairs} of {matchableBankTotal} matched</p>
+                <p className="text-xs text-muted-foreground">{matchedCardCount} of {summary.cardFuelTransactions} card matched</p>
                 <InfoCardAction className="mt-2 justify-center">View transactions <ArrowRight className="h-3 w-3" /></InfoCardAction>
               </InfoCard>
 

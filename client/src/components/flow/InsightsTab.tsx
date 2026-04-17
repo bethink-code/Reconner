@@ -72,7 +72,7 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
   }), { declinedCount: 0, declinedAmount: 0, cancelledCount: 0, cancelledAmount: 0, approvedCount: 0, approvedAmount: 0 });
 
   const {
-    unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, bankMatchPct,
+    unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, cardMatchPct,
     cardOnly, cardOnlyAmount, bankApprovedAmount, fileSurplus,
     matchedSurplus, unmatchedBankAmt, unmatchedFuelCardAmount, totalFuelCardReconciled,
     reconSurplus, outsideRangeAmt,
@@ -311,7 +311,7 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
           </div>
           <div className="space-y-0.5">
             <DetailRow label="Matched" count={summary.matchedPairs} />
-            <DetailRow label="Match rate" value={`${bankMatchPct}%`} />
+            <DetailRow label="Match rate" value={`${cardMatchPct}%`} />
             <DetailRow label="Unmatched bank" count={unmatchedBank} highlight={unmatchedBank > 0} />
           </div>
         </DetailCard>

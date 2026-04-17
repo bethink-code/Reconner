@@ -5,7 +5,12 @@ export function deriveSummaryStats(summary: PeriodSummary) {
   const excludedBank = summary.excludedBankTransactions || 0;
   const matchableBankTotal = summary.bankTransactions - unmatchableBank - excludedBank;
   const unmatchedBank = summary.unmatchedBankTransactions;
-  const bankMatchPct = matchableBankTotal > 0 ? Math.round((summary.matchedPairs / matchableBankTotal) * 100) : 0;
+  // Match rate is fuel-side: of the card fuel uploaded, how many did we match to bank?
+  // Bank-side rate doesn't work because settlement-lag matches make matchedPairs > in-period bank.
+  const matchedCardCount = summary.scopedMatchedCount;
+  const cardMatchPct = summary.cardFuelTransactions > 0
+    ? Math.round((matchedCardCount / summary.cardFuelTransactions) * 100)
+    : 0;
   // Use the actual unmatched count from SQL — not derived from cardFuel - matched
   const unmatchedFuelCount = summary.unmatchedCardTransactions;
   const cardOnly = summary.cardFuelTransactions;
@@ -21,7 +26,8 @@ export function deriveSummaryStats(summary: PeriodSummary) {
   const outsideRangeAmt = summary.unmatchableBankAmount || 0;
 
   return {
-    unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, bankMatchPct,
+    unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank,
+    cardMatchPct, matchedCardCount,
     unmatchedFuelCount, cardOnly, cardOnlyAmount, bankApprovedAmount, fileSurplus,
     matchedSurplus, unmatchedBankAmt, unmatchedFuelCardAmount, totalFuelCardReconciled,
     reconSurplus, outsideRangeAmt,

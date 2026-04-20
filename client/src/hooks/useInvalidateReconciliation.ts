@@ -8,6 +8,7 @@ export function useInvalidateReconciliation(periodId: string) {
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "resolutions"] });
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matches"] });
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "verification-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "matching-rules"] });
   }, [periodId]);
   return invalidateAll;
 }

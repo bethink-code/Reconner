@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -152,6 +152,22 @@ export function ConfigureMatchingStep({
     queryKey: ["/api/periods", periodId, "matching-rules"],
     enabled: !!periodId,
   });
+
+  // When saved rules arrive, hydrate local state + detect which preset matches
+  useEffect(() => {
+    if (!existingRules) return;
+    setCustomRules(existingRules);
+    const match = PRESETS.find(p =>
+      p.rules.amountTolerance === existingRules.amountTolerance &&
+      p.rules.dateWindowDays === existingRules.dateWindowDays &&
+      p.rules.minimumConfidence === existingRules.minimumConfidence &&
+      p.rules.autoMatchThreshold === existingRules.autoMatchThreshold &&
+      p.rules.groupByInvoice === existingRules.groupByInvoice &&
+      p.rules.requireCardMatch === existingRules.requireCardMatch
+    );
+    setSelectedPreset(match ? match.id : "custom");
+    if (!match) setShowAdvanced(true);
+  }, [existingRules]);
 
   const saveMutation = useMutation({
     mutationFn: async (rules: MatchingRules) => {

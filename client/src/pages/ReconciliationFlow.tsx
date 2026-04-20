@@ -10,6 +10,7 @@ import { ReconciliationStepper, STEP_CANVAS_COLORS, type ReconciliationStep, typ
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import type { ReconciliationPeriod, UploadedFile } from "@shared/schema";
 import { Eye } from "lucide-react";
 
@@ -49,6 +50,7 @@ export default function ReconciliationFlow() {
   const [hasInitialized, setHasInitialized] = useState(false);
 
   const periodId = params?.periodId || "";
+  const invalidateAll = useInvalidateReconciliation(periodId);
 
   const { data: period, isLoading: periodLoading } = useQuery<ReconciliationPeriod>({
     queryKey: ["/api/periods", periodId],
@@ -93,10 +95,8 @@ export default function ReconciliationFlow() {
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "summary"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "transactions"] });
+      invalidateAll();
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "verification-summary"] });
       setIsAutoMatching(false);
       setMatchResult(null);
       setCompletedSteps(prev => [...prev.filter(s => s !== "configure"), "configure"]);

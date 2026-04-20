@@ -1325,22 +1325,40 @@ export class DatabaseStorage implements IStorage {
       CROSS JOIN invoice_groups ig
     `, [periodId]);
 
-    // Get bank sources breakdown
+    // Get bank sources breakdown — unscoped so we can report actual file coverage
     const sourcesResult = await pool.query(`
-      SELECT 
+      SELECT
         source_name,
         COUNT(*) as tx_count,
-        COALESCE(SUM(amount::numeric), 0) as source_amount
+        COALESCE(SUM(amount::numeric), 0) as source_amount,
+        MIN(transaction_date) as earliest,
+        MAX(transaction_date) as latest
       FROM transactions
       WHERE period_id = $1 AND source_type LIKE 'bank%'
       GROUP BY source_name
     `, [periodId]);
 
+    // Unscoped file coverage — the date range actually present in uploaded files,
+    // independent of period bounds. Used by the Data Coverage display so users can
+    // see whether their uploads cover the period.
+    const coverageResult = await pool.query(`
+      SELECT
+        MIN(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_min,
+        MAX(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_max,
+        MIN(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_min,
+        MAX(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_max
+      FROM transactions
+      WHERE period_id = $1
+    `, [periodId]);
+    const coverageRow = coverageResult.rows[0] || {};
+
     const row = result.rows[0] || {};
     const bankSources = sourcesResult.rows.map(s => ({
       name: s.source_name || 'Unknown Bank',
       amount: parseFloat(s.source_amount || '0'),
-      transactions: parseInt(s.tx_count || '0')
+      transactions: parseInt(s.tx_count || '0'),
+      earliest: s.earliest || null,
+      latest: s.latest || null,
     }));
 
     // Parse values
@@ -1486,7 +1504,8 @@ export class DatabaseStorage implements IStorage {
           totalAmount: totalBankAmount,
           totalTransactions: totalBankTransactions,
           sources: bankSources,
-          dateRange: { earliest: bankEarliest, latest: bankLatest, days: bankDays }
+          // Unscoped: actual upload coverage, not period-clamped
+          dateRange: { earliest: coverageRow.bank_min || null, latest: coverageRow.bank_max || null, days: calculateDays(coverageRow.bank_min, coverageRow.bank_max) }
         }
       },
       verificationStatus: {
@@ -1514,8 +1533,9 @@ export class DatabaseStorage implements IStorage {
       coverageAnalysis: {
         volumeCoverage,
         dateRangeCoverage,
-        fuelDateRange: { earliest: fuelEarliest, latest: fuelLatest, days: fuelDays },
-        bankDateRange: { earliest: bankEarliest, latest: bankLatest, days: bankDays },
+        // Unscoped: actual upload coverage, not period-clamped
+        fuelDateRange: { earliest: coverageRow.fuel_min || null, latest: coverageRow.fuel_max || null, days: calculateDays(coverageRow.fuel_min, coverageRow.fuel_max) },
+        bankDateRange: { earliest: coverageRow.bank_min || null, latest: coverageRow.bank_max || null, days: calculateDays(coverageRow.bank_min, coverageRow.bank_max) },
         missingDays,
         dailyAverages: { fuel: fuelDailyAvg, bank: bankDailyAvg },
         volumeGap

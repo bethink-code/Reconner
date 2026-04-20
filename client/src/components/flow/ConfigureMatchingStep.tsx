@@ -333,15 +333,17 @@ export function ConfigureMatchingStep({
                   );
                 })()}
                 {verSummary.overview.bankStatements.sources.map((src, i) => {
-                  const bankRange = verSummary.overview.bankStatements.dateRange;
-                  const status = bankRange?.earliest && bankRange?.latest
-                    ? getCoverageStatus(bankRange.earliest, bankRange.latest)
+                  // Prefer per-source date range; fall back to aggregate for older data
+                  const earliest = (src as any).earliest || verSummary.overview.bankStatements.dateRange?.earliest;
+                  const latest = (src as any).latest || verSummary.overview.bankStatements.dateRange?.latest;
+                  const status = earliest && latest
+                    ? getCoverageStatus(earliest, latest)
                     : 'unknown';
                   return (
                     <div key={i} className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">{src.name}</span>
                       <span className="flex items-center gap-1.5 font-medium">
-                        {bankRange?.earliest} to {bankRange?.latest}
+                        {earliest} to {latest}
                         <span className="text-muted-foreground">({src.transactions} txns)</span>
                         <StatusIcon status={status} />
                       </span>

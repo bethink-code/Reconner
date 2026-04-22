@@ -55,6 +55,9 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   const { data: rules } = useQuery<MatchingRulesConfig>({
     queryKey: ["/api/periods", periodId, "matching-rules"],
     enabled: !!periodId,
+    // Always refetch when the Summary tab mounts — rules change via the Adjust → Configure
+    // flow, and users expect the displayed values to reflect the current saved rules
+    refetchOnMount: "always",
   });
 
   // Resolutions query for badge counts

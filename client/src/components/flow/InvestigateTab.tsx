@@ -14,9 +14,10 @@ import { TransactionRow } from "./TransactionRow";
 
 interface InvestigateTabProps {
   periodId: string;
+  onJumpToAttendants?: () => void;
 }
 
-export function InvestigateTab({ periodId }: InvestigateTabProps) {
+export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabProps) {
   // Fetch resolutions to find flagged items
   const { data: resolutions, isLoading: resLoading } = useQuery<TransactionResolution[]>({
     queryKey: ["/api/periods", periodId, "resolutions"],
@@ -100,9 +101,9 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
   if (totalCount === 0) {
     return (
       <div className="mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 px-3 py-4">
           <div>
-            <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Investigate</h2>
+            <h2 className="text-2xl font-heading font-semibold text-[#1A1200]">Investigate</h2>
             <p className="text-sm text-muted-foreground">Your real-world follow-up list</p>
           </div>
           <div className="flex gap-2">
@@ -137,9 +138,9 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
   return (
     <div className="mx-auto space-y-6">
       {/* Header + downloads */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-3 py-4">
         <div>
-          <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Investigate</h2>
+          <h2 className="text-2xl font-heading font-semibold text-[#1A1200]">Investigate</h2>
           <p className="text-sm text-muted-foreground">
             {totalCount} item{totalCount !== 1 ? 's' : ''} across both sides · {formatRand(totalAmount)} total · work through these offline
           </p>
@@ -157,8 +158,8 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
       {/* Unmatched Bank section */}
       {flaggedBank.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#1A1200]">Unmatched bank <span className="text-muted-foreground font-normal">{flaggedBank.length} items</span></h3>
+          <div className="flex items-center justify-between px-3">
+            <h3 className="text-sm font-semibold text-[#1A1200]">{flaggedBank.length} unmatched bank transaction{flaggedBank.length !== 1 ? 's' : ''}</h3>
             <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatRand(bankAmount)}</span>
           </div>
           <div className="space-y-2">
@@ -177,9 +178,21 @@ export function InvestigateTab({ periodId }: InvestigateTabProps) {
       {/* Unmatched Fuel section */}
       {flaggedFuel.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#1A1200]">Unmatched fuel <span className="text-muted-foreground font-normal">{flaggedFuel.length} items</span></h3>
-            <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatRand(fuelAmount)}</span>
+          <div className="px-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[#1A1200]">{flaggedFuel.length} unmatched fuel card sales transaction{flaggedFuel.length !== 1 ? 's' : ''}</h3>
+              <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatRand(fuelAmount)}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Unmatched fuel card sales transactions are allocated to relevant attendant.{" "}
+              {onJumpToAttendants ? (
+                <button type="button" onClick={onJumpToAttendants} className="text-[#E8601C] hover:underline">
+                  View Attendant Report on Insights.
+                </button>
+              ) : (
+                "View Attendant Report on Insights."
+              )}
+            </p>
           </div>
           <div className="space-y-2">
             {flaggedFuel.map(({ transaction: txn, resolution }) => (

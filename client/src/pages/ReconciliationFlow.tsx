@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
+import { formatPeriodRange } from "@/lib/format";
 import type { ReconciliationPeriod, UploadedFile } from "@shared/schema";
 import { Eye } from "lucide-react";
 
@@ -352,7 +353,14 @@ export default function ReconciliationFlow() {
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                {period?.name || "Loading..."}
+                {period ? (
+                  <>
+                    {period.name}
+                    {period.startDate && period.endDate && (
+                      <span className="ml-2 text-muted-foreground/70">· {formatPeriodRange(period.startDate, period.endDate)}</span>
+                    )}
+                  </>
+                ) : "Loading..."}
               </p>
             </div>
           </div>

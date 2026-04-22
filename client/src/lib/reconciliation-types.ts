@@ -29,6 +29,14 @@ export interface PeriodSummary {
   excludedBankAmount?: number;
   matchedBankAmount: number;
   matchedFuelAmount: number;
+  // 6-bucket reconciliation fields
+  matchedFuelAmountInPeriod?: number;
+  lagFuelAmount?: number;
+  unmatchedFuelCoveredTransactions?: number;
+  unmatchedFuelCoveredAmount?: number;
+  unmatchedFuelUncoveredTransactions?: number;
+  unmatchedFuelUncoveredAmount?: number;
+  tenantBankCoverage?: { min: string; max: string };
   resolvedBankTransactions?: number;
   scopedCardCount: number;
   scopedCardAmount: number;

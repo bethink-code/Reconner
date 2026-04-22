@@ -46,7 +46,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const userName = user?.firstName || "User";
-  const [side, setSide] = useState<'bank' | 'fuel'>(initialSide || 'bank');
+  const [side, setSide] = useState<'bank' | 'fuel'>(initialSide || 'fuel');
   const [searchQuery, setSearchQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitialIndex, setModalInitialIndex] = useState(0);
@@ -413,8 +413,8 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   return (
     <div className="mx-auto space-y-4">
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Review</h2>
+      <div className="px-3 py-4">
+        <h2 className="text-2xl font-heading font-semibold text-[#1A1200]">Review unmatched transactions</h2>
         <p className="text-sm text-muted-foreground">Work through each side. Resolve what you can. Anything you can't explain goes to Investigate.</p>
       </div>
 
@@ -424,8 +424,8 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
       {/* Side selector — two cards */}
       <div className="grid grid-cols-2 gap-3">
           {([
+            { key: 'fuel' as const, label: 'Fuel card sales transactions', count: fuelUnmatchedCount, amount: fuelUnmatchedAmount, total: fuelTotalCount, totalAmt: fuelTotalAmount },
             { key: 'bank' as const, label: 'Bank transactions', count: bankUnmatchedCount, amount: bankUnmatchedAmount, total: bankTotalCount, totalAmt: bankTotalAmount },
-            { key: 'fuel' as const, label: 'Fuel system card transactions', count: fuelUnmatchedCount, amount: fuelUnmatchedAmount, total: fuelTotalCount, totalAmt: fuelTotalAmount },
           ]).map((s, idx) => {
             const isActive = side === s.key;
             const sideCounts = perSideCounts[s.key];
@@ -450,8 +450,8 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   <p className={cn("text-base font-bold tabular-nums", s.count > 0 ? "text-[#B45309]" : "text-[#1A1200]")}>{formatRand(originalAmount)}</p>
                 </div>
                 <div className="flex items-baseline justify-between mb-4">
-                  <p className="text-xs text-muted-foreground">{s.count > 0 ? "Not matched" : "All matched"}</p>
-                  <p className="text-[10px] text-muted-foreground">of {originalTotal} {s.key === 'bank' ? 'bank' : 'fuel'} transactions</p>
+                  <p className="text-xs text-muted-foreground">To review</p>
+                  <p className="text-[10px] text-muted-foreground">across {originalTotal} {s.key === 'bank' ? 'bank' : 'fuel card sales'} transactions</p>
                 </div>
 
                 {/* Destination counts: Matched by user | To investigate */}

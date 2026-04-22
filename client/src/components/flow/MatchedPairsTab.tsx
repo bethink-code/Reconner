@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Popover,
   PopoverContent,
@@ -77,7 +78,7 @@ function getMatchLabel(matchType: string, userName: string, description?: string
   }
   if (matchType === "cash") return "Cash";
   if (matchType === "debtor") return "Debtor";
-  if (matchType === "unmatched_card") return "Unmatched card";
+  if (matchType === "unmatched_card") return "Unmatched fuel card sales";
   if (matchType === "unmatched_bank") return "Unmatched bank";
   if (matchType === "linked") return `${userName} (With reason)`;
   return `${userName} (Confirmed)`;
@@ -208,7 +209,15 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
 
   if (isLoading) {
     return (
-      <div className="py-12 text-center text-sm text-muted-foreground">Loading matched pairs...</div>
+      <div className="bg-section rounded-2xl p-6 space-y-4">
+        <div className="grid grid-cols-5 gap-3">
+          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+        </div>
+        <Skeleton className="h-10 w-full rounded-md" />
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+        </div>
+      </div>
     );
   }
 
@@ -273,8 +282,8 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
                     }
                   }}
                   className={cn(
-                    "w-full flex items-center justify-between text-xs py-0.5 px-1.5 rounded-md transition-colors",
-                    isSubActive ? "bg-white font-semibold" : "hover:bg-white/50",
+                    "w-[calc(100%+1rem)] flex items-center justify-between text-xs py-0.5 -mx-2 px-2 rounded-sm transition-colors",
+                    isSubActive ? "bg-white font-semibold" : "hover:bg-black/5",
                     sr.isLink && "hover:text-[#E8601C]"
                   )}
                 >
@@ -295,7 +304,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
       <div className="grid grid-cols-5 gap-3">
         <SummaryCard
           id="total"
-          label="Total"
+          label="All transactions"
           count={totalFuel}
         />
         <SummaryCard
@@ -324,7 +333,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
           subRows={[
             { key: "cash", label: "Cash", count: counts.cash },
             { key: "debtor", label: "Debtor", count: counts.debtor },
-            { key: "duplicates", label: "Duplicates", count: counts.duplicates },
+            { key: "duplicates", label: "Bank duplicates", count: counts.duplicates },
           ]}
         />
         <SummaryCard
@@ -335,14 +344,14 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
           subRows={[
             {
               key: "bank",
-              label: "Unmatched bank →",
+              label: "Unmatched bank",
               count: counts.unmatchedBank,
               isLink: true,
               onClickSub: () => onJumpToReview?.('bank'),
             },
             {
               key: "card",
-              label: "Unmatched card →",
+              label: "Unmatched fuel card sales",
               count: counts.unmatchedCard,
               isLink: true,
               onClickSub: () => onJumpToReview?.('fuel'),

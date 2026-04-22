@@ -68,12 +68,22 @@ export interface PeriodSummary {
   unmatchedCardAmount: number;
   unmatchableBankTransactions: number;
   unmatchableBankAmount: number;
+  lagExplainedBankTransactions: number;
+  lagExplainedBankAmount: number;
   excludedBankTransactions: number;
   excludedBankAmount: number;
   resolvedBankTransactions: number;
   resolvedBankAmount: number;
   matchedBankAmount: number;
   matchedFuelAmount: number;
+  // New 6-bucket reconciliation fields
+  matchedFuelAmountInPeriod: number;
+  lagFuelAmount: number;
+  unmatchedFuelCoveredTransactions: number;
+  unmatchedFuelCoveredAmount: number;
+  unmatchedFuelUncoveredTransactions: number;
+  unmatchedFuelUncoveredAmount: number;
+  tenantBankCoverage?: { min: string; max: string };
   debtorFuelTransactions: number;
   debtorFuelAmount: number;
   // Fuel card transactions scoped to bank coverage dates
@@ -726,6 +736,23 @@ export class DatabaseStorage implements IStorage {
         SELECT pd.min_date, pd.max_date
         FROM period_dates pd
       ),
+      tenant_ctx AS (
+        SELECT organization_id, property_id
+        FROM reconciliation_periods
+        WHERE id = $1
+      ),
+      bank_coverage AS (
+        SELECT
+          MIN(t.transaction_date) AS bank_cov_start,
+          MAX(t.transaction_date) AS bank_cov_end
+        FROM transactions t
+        JOIN reconciliation_periods p ON t.period_id = p.id
+        CROSS JOIN tenant_ctx tc
+        WHERE t.source_type LIKE 'bank%'
+          AND t.transaction_date ~ '^\\d{4}-\\d{2}-\\d{2}$'
+          AND p.organization_id = tc.organization_id
+          AND (p.property_id = tc.property_id OR (p.property_id IS NULL AND tc.property_id IS NULL))
+      ),
       tx_stats AS (
         SELECT
           -- Fuel counts scoped to period dates (period is master)
@@ -813,6 +840,30 @@ export class DatabaseStorage implements IStorage {
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
+          -- Unmatched card fuel, split by whether the fuel date is covered by uploaded bank data (tenant-wide)
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+            AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+            AND bc.bank_cov_start IS NOT NULL
+            AND transaction_date >= bc.bank_cov_start AND transaction_date <= bc.bank_cov_end
+          THEN 1 END) as unmatched_fuel_covered_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+            AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+            AND bc.bank_cov_start IS NOT NULL
+            AND transaction_date >= bc.bank_cov_start AND transaction_date <= bc.bank_cov_end
+          THEN amount::numeric ELSE 0 END), 0) as unmatched_fuel_covered_amount,
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+            AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+            AND (bc.bank_cov_start IS NULL OR transaction_date < bc.bank_cov_start OR transaction_date > bc.bank_cov_end)
+          THEN 1 END) as unmatched_fuel_uncovered_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+            AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+            AND (bc.bank_cov_start IS NULL OR transaction_date < bc.bank_cov_start OR transaction_date > bc.bank_cov_end)
+          THEN amount::numeric ELSE 0 END), 0) as unmatched_fuel_uncovered_amount,
+
           -- Matched: both sides strictly in-period
           COUNT(CASE WHEN match_status = 'matched'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN 1 END) as matched_transactions,
@@ -827,8 +878,9 @@ export class DatabaseStorage implements IStorage {
 
         FROM transactions
         CROSS JOIN date_window dw
+        CROSS JOIN bank_coverage bc
         WHERE period_id = $1
-        GROUP BY dw.min_date, dw.max_date
+        GROUP BY dw.min_date, dw.max_date, bc.bank_cov_start, bc.bank_cov_end
       ),
       match_stats AS (
         SELECT
@@ -840,6 +892,40 @@ export class DatabaseStorage implements IStorage {
             WHERE t.source_type = 'fuel'
               AND t.match_id IN (SELECT id FROM matches WHERE period_id = $1)
           ), 0) as matched_fuel_amount,
+          -- Matched fuel where the paired bank tx is in-period (true "both sides in period")
+          COALESCE((
+            SELECT SUM(t.amount::numeric)
+            FROM transactions t
+            WHERE t.source_type = 'fuel'
+              AND t.match_id IN (SELECT id FROM matches WHERE period_id = $1)
+              AND EXISTS (
+                SELECT 1 FROM transactions tb
+                CROSS JOIN date_window dw2
+                WHERE tb.match_id = t.match_id
+                  AND tb.source_type LIKE 'bank%'
+                  AND tb.match_status = 'matched'
+                  AND tb.transaction_date >= dw2.min_date
+                  AND tb.transaction_date <= dw2.max_date
+              )
+          ), 0) as matched_fuel_amount_in_period,
+          -- Lag fuel: in-period fuel whose paired bank tx is out-of-period
+          COALESCE((
+            SELECT SUM(t.amount::numeric)
+            FROM transactions t
+            CROSS JOIN date_window dw3
+            WHERE t.source_type = 'fuel'
+              AND t.match_id IN (SELECT id FROM matches WHERE period_id = $1)
+              AND t.transaction_date >= dw3.min_date AND t.transaction_date <= dw3.max_date
+              AND NOT EXISTS (
+                SELECT 1 FROM transactions tb
+                CROSS JOIN date_window dw4
+                WHERE tb.match_id = t.match_id
+                  AND tb.source_type LIKE 'bank%'
+                  AND tb.match_status = 'matched'
+                  AND tb.transaction_date >= dw4.min_date
+                  AND tb.transaction_date <= dw4.max_date
+              )
+          ), 0) as lag_fuel_amount,
           COUNT(CASE WHEN ABS(
             TO_DATE(t_bank.transaction_date, 'YYYY-MM-DD') -
             TO_DATE(t_fuel.transaction_date, 'YYYY-MM-DD')
@@ -861,16 +947,21 @@ export class DatabaseStorage implements IStorage {
         JOIN transactions t_bank ON m.bank_transaction_id = t_bank.id
         WHERE m.period_id = $1
       )
-      SELECT 
+      SELECT
         tx.*,
         COALESCE(ms.matched_pairs, 0) as matched_pairs,
         COALESCE(ms.matched_fuel_amount, 0) as matched_fuel_amount,
+        COALESCE(ms.matched_fuel_amount_in_period, 0) as matched_fuel_amount_in_period,
+        COALESCE(ms.lag_fuel_amount, 0) as lag_fuel_amount,
         COALESCE(ms.matches_same_day, 0) as matches_same_day,
         COALESCE(ms.matches_1_day, 0) as matches_1_day,
         COALESCE(ms.matches_2_day, 0) as matches_2_day,
-        COALESCE(ms.matches_3_day, 0) as matches_3_day
+        COALESCE(ms.matches_3_day, 0) as matches_3_day,
+        bc.bank_cov_start,
+        bc.bank_cov_end
       FROM tx_stats tx
       CROSS JOIN match_stats ms
+      CROSS JOIN bank_coverage bc
     `, [periodId]);
 
     const row = result.rows[0] || {};
@@ -936,6 +1027,16 @@ export class DatabaseStorage implements IStorage {
       resolvedBankAmount: parseFloat(row.resolved_bank_amount || '0'),
       matchedBankAmount: parseFloat(row.matched_bank_amount || '0'),
       matchedFuelAmount: parseFloat(row.matched_fuel_amount || '0'),
+      matchedFuelAmountInPeriod: parseFloat(row.matched_fuel_amount_in_period || '0'),
+      lagFuelAmount: parseFloat(row.lag_fuel_amount || '0'),
+      unmatchedFuelCoveredTransactions: parseInt(row.unmatched_fuel_covered_transactions || '0'),
+      unmatchedFuelCoveredAmount: parseFloat(row.unmatched_fuel_covered_amount || '0'),
+      unmatchedFuelUncoveredTransactions: parseInt(row.unmatched_fuel_uncovered_transactions || '0'),
+      unmatchedFuelUncoveredAmount: parseFloat(row.unmatched_fuel_uncovered_amount || '0'),
+      tenantBankCoverage: row.bank_cov_start && row.bank_cov_end ? {
+        min: row.bank_cov_start,
+        max: row.bank_cov_end,
+      } : undefined,
       debtorFuelTransactions: parseInt(row.debtor_fuel_transactions || '0'),
       debtorFuelAmount: parseFloat(row.debtor_fuel_amount || '0'),
       // scoped_* fields removed — main fuel counts are now period-date scoped

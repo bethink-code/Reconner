@@ -13,7 +13,7 @@ import { InvestigateTab } from "@/components/flow/InvestigateTab";
 export default function InvestigateTransactions() {
   const [, setLocation] = useLocation();
   const [periodId, setPeriodId] = useState<string>("");
-  const [side, setSide] = useState<'bank' | 'fuel'>('bank');
+  const [side, setSide] = useState<'bank' | 'fuel'>('fuel');
   const [filter, setFilter] = useState<'all' | 'flagged'>('all');
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function InvestigateTransactions() {
     } else {
       setLocation("/");
     }
-    if (sideParam === 'fuel') setSide('fuel');
+    if (sideParam === 'bank') setSide('bank');
     if (filterParam === 'flagged') setFilter('flagged');
   }, [setLocation]);
 

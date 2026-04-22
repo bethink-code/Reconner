@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { formatPeriodRange } from "@/lib/format";
 import {
   Select,
   SelectContent,
@@ -146,7 +147,7 @@ export default function Dashboard() {
   const displayPeriods: DisplayPeriod[] = periods.map(period => ({
     id: period.id,
     name: period.name,
-    dateRange: `${period.startDate} to ${period.endDate}`,
+    dateRange: formatPeriodRange(period.startDate, period.endDate),
     status: period.status as "in_progress" | "complete",
     lastModified: period.updatedAt ? new Date(period.updatedAt).toLocaleDateString() :
                    new Date(period.createdAt!).toLocaleDateString(),
@@ -540,7 +541,7 @@ export default function Dashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Reconciliation Period</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteTarget?.name}"? This will permanently delete all associated files, transactions, and matches. This action cannot be undone.
+              Are you sure you want to delete "{deleteTarget?.name}"{deleteTarget?.dateRange ? ` (${deleteTarget.dateRange})` : ""}? This will permanently delete all associated files, transactions, and matches. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

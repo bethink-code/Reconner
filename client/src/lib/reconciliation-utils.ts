@@ -15,7 +15,9 @@ export function deriveSummaryStats(summary: PeriodSummary) {
   const unmatchedFuelCount = summary.unmatchedCardTransactions;
   const cardOnly = summary.cardFuelTransactions;
   const cardOnlyAmount = summary.cardFuelAmount;
-  const bankApprovedAmount = summary.matchedBankAmount + (summary.unmatchedBankAmount || 0);
+  // bankApprovedAmount = all in-period bank that the matching engine categorised (matched + unmatched + lag-explained).
+  // Previously omitted lag-explained bank, which understated the bank total.
+  const bankApprovedAmount = summary.matchedBankAmount + (summary.unmatchedBankAmount || 0) + (summary.lagExplainedBankAmount || 0);
   // Financial reconciliation uses card-only (no debtors) — debtors aren't expected to have bank matches
   const fileSurplus = bankApprovedAmount - cardOnlyAmount;
   const matchedSurplus = summary.matchedBankAmount - summary.matchedFuelAmount;
@@ -25,11 +27,24 @@ export function deriveSummaryStats(summary: PeriodSummary) {
   const reconSurplus = unmatchedFuelCardAmount + fileSurplus;
   const outsideRangeAmt = summary.unmatchableBankAmount || 0;
 
+  // 6-bucket reconciliation breakdown (factual labels only)
+  const matchedFuelInPeriod = summary.matchedFuelAmountInPeriod ?? summary.matchedFuelAmount;
+  const lagFuelAmount = summary.lagFuelAmount ?? 0;
+  const unmatchedFuelCoveredAmount = summary.unmatchedFuelCoveredAmount ?? 0;
+  const unmatchedFuelUncoveredAmount = summary.unmatchedFuelUncoveredAmount ?? 0;
+  const lagExplainedBankAmount = summary.lagExplainedBankAmount ?? 0;
+  // Matched amount variance = bank − fuel on pairs where both sides are in-period
+  const matchedVariance = summary.matchedBankAmount - matchedFuelInPeriod;
+  const tenantBankCoverage = summary.tenantBankCoverage;
+
   return {
     unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank,
     cardMatchPct, matchedCardCount,
     unmatchedFuelCount, cardOnly, cardOnlyAmount, bankApprovedAmount, fileSurplus,
     matchedSurplus, unmatchedBankAmt, unmatchedFuelCardAmount, totalFuelCardReconciled,
     reconSurplus, outsideRangeAmt,
+    // 6-bucket fields
+    matchedFuelInPeriod, lagFuelAmount, unmatchedFuelCoveredAmount, unmatchedFuelUncoveredAmount,
+    lagExplainedBankAmount, matchedVariance, tenantBankCoverage,
   };
 }

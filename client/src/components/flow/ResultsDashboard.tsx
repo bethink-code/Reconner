@@ -38,7 +38,7 @@ interface Period {
 
 export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: ResultsDashboardProps) {
   const [activeTab, setActiveTab] = useState("summary");
-  const [reviewSide, setReviewSide] = useState<'bank' | 'fuel'>('bank');
+  const [reviewSide, setReviewSide] = useState<'bank' | 'fuel'>('fuel');
   const [insightsView, setInsightsView] = useState<'landing' | 'detail' | 'attendants' | 'declined'>('landing');
   const [rulesExpanded, setRulesExpanded] = useState(false);
 
@@ -148,33 +148,15 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                     <span className={cn("text-2xl font-bold tabular-nums", cardMatchPct >= 80 ? "text-[#166534]" : cardMatchPct >= 60 ? "text-[#B45309]" : "text-[#B91C1C]")}>{cardMatchPct}%</span>
                   </div>
                 </div>
-                <p className="text-sm font-semibold">Match Rate</p>
-                <p className="text-xs text-muted-foreground">{matchedCardCount} of {summary.cardFuelTransactions} card matched</p>
+                <p className="text-sm font-semibold">Fuel card sales match rate</p>
+                <p className="text-xs text-muted-foreground">{matchedCardCount} of {summary.cardFuelTransactions} card transactions matched</p>
                 <InfoCardAction className="mt-2 justify-center">View transactions <ArrowRight className="h-3 w-3" /></InfoCardAction>
-              </InfoCard>
-
-              {/* Review Bank */}
-              <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col" onClick={() => { setActiveTab('review'); setReviewSide('bank'); }}>
-                <InfoCardLabel>Review Bank</InfoCardLabel>
-                <p className="text-xs text-muted-foreground mt-0.5">Money received with no pump record</p>
-                <div className="flex-1 flex items-center gap-3 mt-3">
-                  <span className={cn("text-3xl font-bold tabular-nums", unmatchedBank > 0 ? "text-[#B45309]" : "text-[#166534]")}>{unmatchedBank}</span>
-                  <div>
-                    <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedBankAmount || 0)}</p>
-                    <p className="text-xs text-muted-foreground">{unmatchedBank === 1 ? 'bank transaction' : 'bank transactions'}</p>
-                  </div>
-                </div>
-                {/* Progress bar */}
-                <div className="w-full h-1.5 rounded-full bg-[#E5E3DC] mt-3">
-                  <div className="h-full rounded-full bg-[#166534]" style={{ width: `${matchableBankTotal > 0 ? ((matchableBankTotal - unmatchedBank) / matchableBankTotal) * 100 : 100}%` }} />
-                </div>
-                <InfoCardAction className="mt-2">Review bank side <ArrowRight className="h-3 w-3" /></InfoCardAction>
               </InfoCard>
 
               {/* Review Fuel */}
               <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col" onClick={() => { setActiveTab('review'); setReviewSide('fuel'); }}>
                 <InfoCardLabel>Review Fuel</InfoCardLabel>
-                <p className="text-xs text-muted-foreground mt-0.5">Fuel pumped, no payment received</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Fuel card sales with no approved card payment</p>
                 <div className="flex-1 flex items-center gap-3 mt-3">
                   <span className={cn("text-3xl font-bold tabular-nums", unmatchedFuelCount > 0 ? "text-[#B45309]" : "text-[#166534]")}>{Math.max(0, unmatchedFuelCount)}</span>
                   <div>
@@ -187,6 +169,24 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                   <div className="h-full rounded-full bg-[#166534]" style={{ width: `${summary.cardFuelTransactions > 0 ? ((summary.cardFuelTransactions - Math.max(0, unmatchedFuelCount)) / summary.cardFuelTransactions) * 100 : 100}%` }} />
                 </div>
                 <InfoCardAction className="mt-2">Review fuel side <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
+
+              {/* Review Bank */}
+              <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col" onClick={() => { setActiveTab('review'); setReviewSide('bank'); }}>
+                <InfoCardLabel>Review Bank</InfoCardLabel>
+                <p className="text-xs text-muted-foreground mt-0.5">Approved card payment with no fuel transaction</p>
+                <div className="flex-1 flex items-center gap-3 mt-3">
+                  <span className={cn("text-3xl font-bold tabular-nums", unmatchedBank > 0 ? "text-[#B45309]" : "text-[#166534]")}>{unmatchedBank}</span>
+                  <div>
+                    <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedBankAmount || 0)}</p>
+                    <p className="text-xs text-muted-foreground">{unmatchedBank === 1 ? 'bank transaction' : 'bank transactions'}</p>
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full h-1.5 rounded-full bg-[#E5E3DC] mt-3">
+                  <div className="h-full rounded-full bg-[#166534]" style={{ width: `${matchableBankTotal > 0 ? ((matchableBankTotal - unmatchedBank) / matchableBankTotal) * 100 : 100}%` }} />
+                </div>
+                <InfoCardAction className="mt-2">Review bank side <ArrowRight className="h-3 w-3" /></InfoCardAction>
               </InfoCard>
             </div>
 
@@ -216,7 +216,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
               {/* Declined */}
               {excludedBank > 0 && (
                 <InfoCard className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => { setInsightsView('declined'); setActiveTab('insights'); }}>
-                  <InfoCardLabel>Declined</InfoCardLabel>
+                  <InfoCardLabel>Declined card transactions</InfoCardLabel>
                   <div className="flex items-center gap-3 mt-3">
                     <AlertTriangle className="h-8 w-8 text-[#B45309]" />
                     <div>
@@ -316,7 +316,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
         </TabsContent>
 
         <TabsContent value="investigate" className="mt-0 max-w-4xl mx-auto">
-          <InvestigateTab periodId={periodId} />
+          <InvestigateTab periodId={periodId} onJumpToAttendants={() => { setInsightsView('attendants'); setActiveTab('insights'); }} />
         </TabsContent>
 
         <TabsContent value="insights" className="mt-0 max-w-4xl mx-auto">

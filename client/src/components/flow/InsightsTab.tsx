@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
   ChevronRight,
@@ -73,24 +74,33 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
 
   const {
     unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, cardMatchPct,
+    matchedCardCount, unmatchedFuelCount,
     cardOnly, cardOnlyAmount, bankApprovedAmount, fileSurplus,
     matchedSurplus, unmatchedBankAmt, unmatchedFuelCardAmount, totalFuelCardReconciled,
     reconSurplus, outsideRangeAmt,
+    matchedFuelInPeriod, lagFuelAmount, unmatchedFuelCoveredAmount, unmatchedFuelUncoveredAmount,
+    lagExplainedBankAmount, matchedVariance, tenantBankCoverage,
   } = deriveSummaryStats(summary);
 
   // ═══════════════════════════════════════════════════════════
   //  BACK HEADER for sub-views
   // ═══════════════════════════════════════════════════════════
-  const BackHeader = ({ title }: { title: string }) => (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={() => setView('landing')}
-      className="mb-4"
-    >
-      <ArrowLeft className="h-4 w-4 mr-1" />
-      Back to Insights
-    </Button>
+  const BackHeader = ({ title, description }: { title: string; description?: string }) => (
+    <div className="mb-4">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setView('landing')}
+        className="mb-3"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Insights
+      </Button>
+      <div className="px-3 py-4">
+        <h2 className="text-2xl font-heading font-semibold text-[#1A1200]">{title}</h2>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      </div>
+    </div>
   );
 
   // ═══════════════════════════════════════════════════════════
@@ -99,8 +109,8 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
   if (view === 'landing') {
     return (
       <div className="mx-auto space-y-6">
-        <div>
-          <h2 className="text-lg font-heading font-semibold text-[#1A1200]">Insights</h2>
+        <div className="px-3 py-4">
+          <h2 className="text-2xl font-heading font-semibold text-[#1A1200]">Insights</h2>
           <p className="text-sm text-muted-foreground">Reports and analysis for this reconciliation period</p>
         </div>
 
@@ -112,8 +122,8 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
                 <FileText className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <h3 className="font-semibold">Financial Overview</h3>
-                <p className="text-xs text-muted-foreground mt-1">Card sales reconciliation, surplus/shortfall analysis, and full transaction-level breakdown.</p>
+                <h3 className="font-semibold">Reconciliation overview</h3>
+                <p className="text-xs text-muted-foreground mt-1">Fuel card sales reconciliation, surplus/shortfall analysis, and full transaction-level breakdown.</p>
               </div>
               <div className="flex items-center gap-1 text-sm font-medium text-[#B45309]">
                 View report <ChevronRight className="h-4 w-4" />
@@ -144,7 +154,7 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
                 <MinusCircle className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <h3 className="font-semibold">Declined</h3>
+                <h3 className="font-semibold">Declined card transactions</h3>
                 <p className="text-xs text-muted-foreground mt-1">Transactions declined at point of sale. Patterns by card type, pump, time of day.</p>
               </div>
               <div className="flex items-center gap-1 text-sm font-medium text-[#B45309]">
@@ -192,10 +202,13 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
   if (view === 'detail') {
     return (
       <div className="mx-auto space-y-4">
-        <BackHeader title="Detail" />
+        <BackHeader
+          title="Reconciliation overview"
+          description="Fuel card sales reconciliation, surplus/shortfall analysis, and full transaction-level breakdown."
+        />
 
         {/* Fuel Sales */}
-        <DetailCard title="Fuel Sales">
+        <DetailCard title="Fuel sales">
           <div className="mb-3">
             <ResponsiveContainer width="100%" height={32}>
               <BarChart layout="vertical" data={[{ card: cardOnlyAmount, debtor: summary.debtorFuelAmount, cash: summary.cashFuelAmount }]} stackOffset="expand" barSize={20}>
@@ -225,7 +238,7 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
         </DetailCard>
 
         {/* Bank Transactions */}
-        <DetailCard title="Bank Transactions">
+        <DetailCard title="Bank transactions">
           {banks.length > 1 && (
             <div className="mb-3">
               <ResponsiveContainer width="100%" height={32}>
@@ -290,10 +303,10 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
         </DetailCard>
 
         {/* Matching */}
-        <DetailCard title="Matching">
+        <DetailCard title="Fuel card sales matching">
           <div className="mb-3">
             <ResponsiveContainer width="100%" height={32}>
-              <BarChart layout="vertical" data={[{ matched: summary.matchedPairs, unmatched: unmatchedBank }]} stackOffset="expand" barSize={20}>
+              <BarChart layout="vertical" data={[{ matched: matchedCardCount, unmatched: Math.max(0, unmatchedFuelCount) }]} stackOffset="expand" barSize={20}>
                 <XAxis type="number" hide />
                 <YAxis type="category" hide />
                 <Tooltip content={({ payload }) => {
@@ -310,62 +323,93 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
             </div>
           </div>
           <div className="space-y-0.5">
-            <DetailRow label="Matched" count={summary.matchedPairs} />
-            <DetailRow label="Match rate" value={`${cardMatchPct}%`} />
-            <DetailRow label="Unmatched bank" count={unmatchedBank} highlight={unmatchedBank > 0} />
+            <DetailRow label="Fuel card sales match rate" value={`${cardMatchPct}%`} />
+            <DetailRow label="Matched fuel card sales transactions" count={matchedCardCount} />
+            <DetailRow label="Unmatched fuel card sales transactions" count={Math.max(0, unmatchedFuelCount)} highlight={unmatchedFuelCount > 0} />
           </div>
         </DetailCard>
 
         {/* Card Sales Reconciliation — top-level gap */}
-        <DetailCard title="Card Sales Reconciliation">
+        <DetailCard title="Fuel card sales reconciliation">
           <div className="space-y-0.5">
-            <DetailRow label="Fuel card sales" amount={formatRand(cardOnlyAmount)} />
             <DetailRow label="Bank approved amount" amount={formatRand(bankApprovedAmount)} />
+            <DetailRow label="Fuel card sales" amount={formatRand(cardOnlyAmount)} />
           </div>
           <div className="mt-2 pt-2 border-t border-[#E5E3DC]/50">
-            <DetailRow label="Surplus / Shortfall" amount={formatRand(fileSurplus)} bold highlight={fileSurplus !== 0} />
+            <DetailRow label="Surplus / shortfall" amount={formatRand(fileSurplus)} bold highlight={fileSurplus !== 0} />
           </div>
           <p className="text-xs text-muted-foreground/60 mt-2 leading-relaxed">
-            The surplus/shortfall is explained by three components below: decimal matching errors, fuel attendant errors, and unmatched bank transactions.
+            The surplus/shortfall breaks down into six factual buckets below. Each bucket contributes a signed amount that sums to the total above.
           </p>
         </DetailCard>
 
-        {/* Surplus / Shortfall Analysis — 3-bucket breakdown */}
-        <DetailCard title="Surplus / Shortfall Analysis">
-          {/* Bucket 1: Decimal matching error */}
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Decimal matching error</p>
+        {/* Surplus / Shortfall Analysis — 6-bucket factual breakdown */}
+        <DetailCard title="Surplus / shortfall analysis">
+          {/* Bucket 1: Matched amount variance */}
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Matched amount variance</p>
           <div className="space-y-0.5">
-            <DetailRow label="Matched fuel amount" amount={formatRand(summary.matchedFuelAmount)} />
+            <DetailRow label="Matched fuel amount (both sides in period)" amount={formatRand(matchedFuelInPeriod)} />
             <DetailRow label="Matched bank amount" amount={formatRand(summary.matchedBankAmount)} />
-            <DetailRow label="Decimal error" amount={formatRand(matchedSurplus)} bold highlight={matchedSurplus !== 0} />
+            <DetailRow label="Variance" amount={formatRand(matchedVariance)} bold highlight={matchedVariance !== 0} />
           </div>
           <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
-            Small rounding differences between bank and fuel amounts on matched transactions.
+            Difference between bank and fuel on matched pairs where both sides fall inside the period. Usually small (pump calibration, rounding, or match tolerance).
           </p>
 
-          {/* Bucket 2: Fuel attendant error */}
+          {/* Bucket 2: Fuel matched to bank outside period */}
           <div className="mt-3 pt-3 border-t border-[#E5E3DC]/50">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Fuel attendant error</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Fuel matched to bank outside period</p>
             <div className="space-y-0.5">
-              <DetailRow label="Unmatched fuel card transactions" amount={formatRand(unmatchedFuelCardAmount)} bold highlight={unmatchedFuelCardAmount > 0} />
+              <DetailRow label="In-period fuel card sales matched to out-of-period bank" amount={formatRand(lagFuelAmount)} bold highlight={lagFuelAmount > 0} />
             </div>
             <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
-              Card fuel dispensed with no matching bank payment. May include declined card payments.
+              Often settlement lag, but could also be a false match — verify before assuming.
             </p>
           </div>
 
-          {/* Bucket 3: Unmatched bank */}
+          {/* Bucket 3: Unmatched fuel, within bank coverage */}
           <div className="mt-3 pt-3 border-t border-[#E5E3DC]/50">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Unmatched bank transactions</p>
-            {unmatchedBankAmt > 0 ? (
-              <div className="space-y-0.5">
-                <DetailRow label="Unmatched bank amount" amount={formatRand(unmatchedBankAmt)} bold highlight />
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">No unmatched bank transactions</p>
-            )}
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Fuel card sales with no bank match, within bank coverage</p>
+            <div className="space-y-0.5">
+              <DetailRow label="Unmatched fuel with bank data available for that date" amount={formatRand(unmatchedFuelCoveredAmount)} bold highlight={unmatchedFuelCoveredAmount > 0} />
+            </div>
             <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
-              Bank approved payments with no matching fuel record.
+              Bank data covers these dates but no match was found — real gaps to investigate.
+            </p>
+          </div>
+
+          {/* Bucket 4: Unmatched fuel, outside bank coverage */}
+          <div className="mt-3 pt-3 border-t border-[#E5E3DC]/50">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Fuel card sales with no bank match, outside bank coverage</p>
+            <div className="space-y-0.5">
+              <DetailRow label="Unmatched fuel for dates with no uploaded bank data" amount={formatRand(unmatchedFuelUncoveredAmount)} bold highlight={unmatchedFuelUncoveredAmount > 0} />
+            </div>
+            <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
+              {tenantBankCoverage
+                ? `No bank data uploaded for these fuel dates (bank coverage: ${tenantBankCoverage.min} to ${tenantBankCoverage.max}).`
+                : "No bank data uploaded yet for this property."}
+            </p>
+          </div>
+
+          {/* Bucket 5: Bank with no fuel match */}
+          <div className="mt-3 pt-3 border-t border-[#E5E3DC]/50">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Bank with no fuel match</p>
+            <div className="space-y-0.5">
+              <DetailRow label="In-period bank amount with no fuel match" amount={formatRand(unmatchedBankAmt)} bold highlight={unmatchedBankAmt > 0} />
+            </div>
+            <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
+              Bank deposits with no fuel sale to explain them — investigate.
+            </p>
+          </div>
+
+          {/* Bucket 6: Bank matched to fuel outside period */}
+          <div className="mt-3 pt-3 border-t border-[#E5E3DC]/50">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Bank matched to fuel outside period</p>
+            <div className="space-y-0.5">
+              <DetailRow label="In-period bank matched to out-of-period fuel (lag-explained)" amount={formatRand(lagExplainedBankAmount)} bold highlight={lagExplainedBankAmount > 0} />
+            </div>
+            <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
+              Bank deposits this period that explain fuel sales from a prior period.
             </p>
           </div>
 
@@ -373,16 +417,23 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
           <div className="mt-3 pt-2 bg-[#E5E3DC]/30 -mx-4 px-4 pb-2 rounded-b-xl">
             <DetailRow
               label="Total surplus / shortfall"
-              amount={formatRand(matchedSurplus - unmatchedFuelCardAmount + unmatchedBankAmt)}
+              amount={formatRand(
+                matchedVariance
+                - lagFuelAmount
+                - unmatchedFuelCoveredAmount
+                - unmatchedFuelUncoveredAmount
+                + unmatchedBankAmt
+                + lagExplainedBankAmount
+              )}
               bold
-              highlight={(matchedSurplus - unmatchedFuelCardAmount + unmatchedBankAmt) !== 0}
+              highlight={(matchedVariance - lagFuelAmount - unmatchedFuelCoveredAmount - unmatchedFuelUncoveredAmount + unmatchedBankAmt + lagExplainedBankAmount) !== 0}
             />
           </div>
         </DetailCard>
 
         {/* Excluded bank — informational */}
         {(summary.excludedBankAmount || 0) > 0 && (
-          <DetailCard title="Excluded Bank Transactions">
+          <DetailCard title="Excluded bank transactions">
             <DetailRow label="Excluded bank amount" amount={formatRand(summary.excludedBankAmount || 0)} />
             <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
               Declined, cancelled, or reversed transactions excluded from reconciliation.
@@ -399,17 +450,19 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
   if (view === 'attendants') {
     return (
       <div className="mx-auto">
-        <BackHeader title="Attendants" />
+        <BackHeader
+          title="Attendants"
+          description="Performance by attendant. Sales totals, match rates, and flagged transactions per person."
+        />
         <AttendantReport
           data={attendantData}
           isLoading={attendantLoading}
           formatRandExact={formatRand}
           periodId={periodId}
-          bankCoverageRange={summary.bankCoverageRange}
           unmatchedBankCount={unmatchedBank}
           unmatchedBankAmount={summary.unmatchedBankAmount || 0}
-          totalDeclinedCount={totals.declinedCount}
-          totalDeclinedAmount={totals.declinedAmount}
+          declineTransactions={declineData?.transactions}
+          onJumpToDeclined={() => setView('declined')}
         />
       </div>
     );
@@ -423,7 +476,10 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
 
     return (
       <div className="mx-auto space-y-4">
-        <BackHeader title="Declined" />
+        <BackHeader
+          title="Declined card transactions"
+          description="Transactions declined at point of sale. Patterns by card type, pump, time of day."
+        />
 
         {!hasDeclined ? (
           <Card className="bg-section border-[#E5E3DC]">
@@ -437,48 +493,48 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
           </div>
         ) : (
           <>
-            {/* Section 1: Decline Summary */}
-            <DetailCard title="Decline Summary">
+            {/* Section 1: Decline Summary — includes per-bank breakdown */}
+            <DetailCard title="Decline summary" summary>
               <div className="space-y-0.5">
                 <DetailRow label="Total declined / cancelled" count={declineData.summary.totalDeclined} amount={formatRand(declineData.summary.totalDeclinedAmount)} />
               </div>
-              <div className="space-y-0.5 mt-3 pt-3 border-t border-[#E5E3DC]/50">
-                <DetailRow label="Resubmitted successfully" count={declineData.summary.resubmittedCount} />
-              </div>
-              <div className="mt-3 pt-2 bg-[#E5E3DC]/30 -mx-4 px-4 pb-2 rounded-b-xl">
-                <DetailRow label="Net unrecovered" count={declineData.summary.unrecoveredCount} amount={formatRand(declineData.summary.netUnrecoveredAmount)} bold highlight={declineData.summary.netUnrecoveredAmount > 0} />
-              </div>
-            </DetailCard>
 
-            {/* Section 2: Per-bank breakdown (kept from original) */}
-            <DetailCard title="Declined & Cancelled by Bank">
-              {banks.length > 0 && (
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr>
-                      <th className="text-left py-1 pr-2 font-medium text-muted-foreground text-xs"></th>
-                      {banks.map(b => (<th key={b.bankName} className="text-right py-1 px-1 font-medium text-muted-foreground text-xs">{b.bankName}</th>))}
-                      <th className="text-right py-1 pl-1 font-medium text-muted-foreground text-xs">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {totals.declinedCount > 0 && (
-                      <tr>
-                        <td className="py-0.5 pr-2 font-medium">Declined</td>
-                        {banks.map(b => (<td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums">{b.declinedCount || '-'}</td>))}
-                        <td className="text-right pl-1 py-0.5 tabular-nums font-medium">{totals.declinedCount}</td>
-                      </tr>
-                    )}
-                    {totals.cancelledCount > 0 && (
-                      <tr className={totals.declinedCount > 0 ? "border-t border-[#E5E3DC]/50" : ""}>
-                        <td className="py-0.5 pr-2 font-medium">Cancelled</td>
-                        {banks.map(b => (<td key={b.bankName} className="text-right px-1 py-0.5 tabular-nums">{b.cancelledCount || '-'}</td>))}
-                        <td className="text-right pl-1 py-0.5 tabular-nums font-medium">{totals.cancelledCount}</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
+              {(() => {
+                // Group ALL declined-analysis transactions by bank so sub-items sum to the top total
+                const byBank = new Map<string, { count: number; amount: number }>();
+                for (const tx of declineData.transactions) {
+                  const key = tx.bank || 'Unknown';
+                  const existing = byBank.get(key) ?? { count: 0, amount: 0 };
+                  existing.count += 1;
+                  existing.amount += tx.amount;
+                  byBank.set(key, existing);
+                }
+                return Array.from(byBank.entries())
+                  .sort((a, b) => b[1].count - a[1].count)
+                  .map(([bankName, stats]) => (
+                    <div key={bankName} className="flex items-center justify-between pl-3 text-xs">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getBankColor(bankName) }} />
+                        {bankName}
+                      </span>
+                      <div className="flex items-center gap-4">
+                        <span className="tabular-nums text-muted-foreground w-10 text-right">{stats.count.toLocaleString()}</span>
+                        <span className="tabular-nums text-muted-foreground text-right min-w-[100px]">{formatRand(stats.amount)}</span>
+                      </div>
+                    </div>
+                  ));
+              })()}
+
+              <Separator className="my-3" />
+              <div className="space-y-0.5">
+                <DetailRow
+                  label="Resubmitted successfully"
+                  count={declineData.summary.resubmittedCount}
+                  amount={formatRand(declineData.summary.totalDeclinedAmount - declineData.summary.netUnrecoveredAmount)}
+                />
+              </div>
+              <Separator className="my-3" />
+              <DetailRow label="Net unrecovered" count={declineData.summary.unrecoveredCount} amount={formatRand(declineData.summary.netUnrecoveredAmount)} bold highlight={declineData.summary.netUnrecoveredAmount > 0} />
             </DetailCard>
 
             {/* Section 3: Transaction Detail — grouped by card */}
@@ -498,46 +554,86 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
                 return b[1].length - a[1].length;
               });
 
+              // Suspicious patterns grouped by card so we can show them as badges on each card group
+              const suspiciousByCard = new Map<string, Map<string, 'high' | 'medium' | 'low'>>();
+              for (const s of declineData.suspicious) {
+                if (!s.cardNumber) continue; // non-card-specific patterns handled below
+                if (!suspiciousByCard.has(s.cardNumber)) suspiciousByCard.set(s.cardNumber, new Map());
+                // If the same pattern appears multiple times, keep the highest severity seen
+                const existing = suspiciousByCard.get(s.cardNumber)!.get(s.pattern);
+                const rank = { high: 0, medium: 1, low: 2 };
+                if (!existing || rank[s.severity] < rank[existing]) {
+                  suspiciousByCard.get(s.cardNumber)!.set(s.pattern, s.severity);
+                }
+              }
+              const isLateNight = (time: string) => {
+                if (!time) return false;
+                const h = parseInt(time.split(':')[0]);
+                return h >= 22 || h < 5;
+              };
+              const badgeColor = (sev: 'high' | 'medium' | 'low') =>
+                sev === 'high' ? 'bg-[#B91C1C]/10 text-[#B91C1C]'
+                : sev === 'medium' ? 'bg-[#B45309]/10 text-[#B45309]'
+                : 'bg-muted text-muted-foreground';
+
               return (
                 <div className="space-y-3">
                   {groups.map(([card, txns]) => {
                     const hasUnrecovered = txns.some(t => !t.isRecovered);
                     const attendant = txns.find(t => t.attendant)?.attendant;
+                    const cardPatterns = Array.from(suspiciousByCard.get(card) ?? new Map<string, 'high' | 'medium' | 'low'>());
+                    if (txns.some(t => isLateNight(t.time))) cardPatterns.push(['Late-night decline', 'low']);
                     return (
                       <DetailCard key={card} title={`Card ${card}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs text-muted-foreground">
+                        <div className="flex items-center flex-wrap gap-2 mb-2">
+                          <span className="text-sm text-muted-foreground">
                             {txns[0].bank} · {txns.length} transaction{txns.length !== 1 ? 's' : ''}
                             {attendant && <> · Attendant: <span className="font-medium text-foreground">{attendant}</span></>}
                           </span>
                           {hasUnrecovered ? (
-                            <span className="text-xs font-medium text-[#B45309]">Unrecovered</span>
+                            <span className="text-sm font-medium text-[#B45309]">Unrecovered</span>
                           ) : (
-                            <span className="text-xs font-medium text-[#166534]">Recovered</span>
+                            <span className="text-sm font-medium text-[#166534]">Recovered</span>
                           )}
+                          {cardPatterns.map(([pattern, severity]) => (
+                            <span key={pattern} className={cn("text-xs font-medium px-2 py-0.5 rounded-full", badgeColor(severity))}>
+                              {pattern}
+                            </span>
+                          ))}
                         </div>
                         <div className="space-y-1">
-                          {txns.sort((a, b) => a.time.localeCompare(b.time)).map(tx => (
-                            <div key={tx.id} className={cn("flex items-center justify-between text-[13px] py-1 pl-2 border-l-2", tx.isRecovered ? "border-[#166534]/30" : "border-[#B45309]")}>
-                              <div className="flex-1 min-w-0">
-                                <span className={cn(tx.isRecovered && "text-muted-foreground")}>
-                                  {tx.type} {formatRand(tx.amount)} at {tx.time}
-                                </span>
-                                {tx.note && (
-                                  <span className="text-xs text-muted-foreground ml-2">
-                                    → {tx.note}{tx.recoveredAmount > 0 ? ` (${formatRand(tx.recoveredAmount)})` : ''}
+                          {txns.sort((a, b) => a.time.localeCompare(b.time)).map(tx => {
+                            const shortfall = tx.amount - tx.recoveredAmount;
+                            const isPartial = shortfall > 0.50 && tx.recoveredAmount > 0;
+                            // Reformat the note: strip "— shortfall NNN.NN" and append "of R {recovered}"
+                            const outcomeLabel = isPartial
+                              ? `${tx.note.split(' — shortfall')[0]} of ${formatRand(tx.recoveredAmount)}`
+                              : tx.note;
+                            return (
+                              <div key={tx.id} className={cn("py-1 pl-2 border-l-2", tx.isRecovered ? "border-[#166534]/30" : "border-[#B45309]")}>
+                                {/* Declined transaction */}
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className={cn(tx.isRecovered && "text-muted-foreground")}>
+                                    {tx.type} {formatRand(tx.amount)} at {tx.time}
                                   </span>
+                                  <span className={cn("tabular-nums shrink-0 ml-3", tx.isRecovered ? "text-muted-foreground line-through" : "text-[#B45309] font-medium")}>
+                                    {formatRand(tx.amount)}
+                                  </span>
+                                </div>
+                                {/* Outcome — the payoff line */}
+                                {tx.note && (
+                                  <div className="flex items-center justify-between text-sm font-semibold mt-1 pl-4">
+                                    <span>{outcomeLabel}</span>
+                                    {isPartial ? (
+                                      <span className="text-[#B45309] shrink-0 ml-3"><span className="text-xs mr-1">Shortfall</span><span className="tabular-nums">{formatRand(shortfall)}</span></span>
+                                    ) : tx.recoveredAmount > 0 ? (
+                                      <span className="text-[#166534] shrink-0 ml-3"><span className="text-xs mr-1">Recovered</span><span className="tabular-nums">{formatRand(tx.recoveredAmount)}</span></span>
+                                    ) : null}
+                                  </div>
                                 )}
                               </div>
-                              <div className="text-right tabular-nums shrink-0 ml-3">
-                                {tx.isRecovered ? (
-                                  <span className="text-muted-foreground line-through">{formatRand(tx.amount)}</span>
-                                ) : (
-                                  <span className="text-[#B45309] font-medium">{formatRand(tx.amount)}</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </DetailCard>
                     );
@@ -546,32 +642,6 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
               );
             })()}
 
-            {/* Section 4: Suspicious Activity */}
-            {declineData.suspicious.length > 0 && (
-              <DetailCard title="Suspicious Activity">
-                <div className="space-y-2">
-                  {declineData.suspicious.map((s, i) => (
-                    <div key={i} className="rounded-lg border border-[#E5E3DC] p-3">
-                      <div className="flex items-start gap-2">
-                        <Shield className={cn("h-4 w-4 mt-0.5 shrink-0",
-                          s.severity === 'high' ? 'text-[#B91C1C]' : s.severity === 'medium' ? 'text-[#B45309]' : 'text-muted-foreground'
-                        )} />
-                        <div>
-                          <p className={cn("text-[13px] font-medium",
-                            s.severity === 'high' ? 'text-[#B91C1C]' : s.severity === 'medium' ? 'text-[#B45309]' : 'text-foreground'
-                          )}>{s.pattern}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{s.detail}</p>
-                          {s.attendant && <p className="text-xs text-muted-foreground">Attendant: <span className="font-medium text-foreground">{s.attendant}</span></p>}
-                          {s.shortfall > 0 && (
-                            <p className="text-xs font-medium text-[#B91C1C] mt-1">Potential shortfall: {formatRand(s.shortfall)}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </DetailCard>
-            )}
           </>
         )}
       </div>
@@ -583,9 +653,9 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
 
 // ── Shared sub-components ──
 
-function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
+function DetailCard({ title, children, summary }: { title: string; children: React.ReactNode; summary?: boolean }) {
   return (
-    <div className="rounded-xl bg-section p-4">
+    <div className={cn("rounded-xl p-4", summary ? "bg-card border border-[#E5E3DC]" : "bg-section")}>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">{title}</h3>
       {children}
     </div>
@@ -602,7 +672,7 @@ function DetailRow({ label, count, amount, value, bold, highlight, muted }: {
   muted?: boolean;
 }) {
   return (
-    <div className={cn("flex items-center justify-between text-[13px] py-0.5", bold && "font-medium", muted && "text-muted-foreground")}>
+    <div className={cn("flex items-center justify-between text-sm py-0.5", bold && "font-medium", muted && "text-muted-foreground")}>
       <span className={cn(muted && "text-muted-foreground")}>{label}</span>
       <div className="flex items-center gap-4">
         {count !== undefined && <span className="tabular-nums text-muted-foreground w-10 text-right">{count.toLocaleString()}</span>}

@@ -2105,17 +2105,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Bank settlement must post on or after fuel — a card can't settle before it was swiped
       if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
 
+      const fuelTime = parseTimeToMinutes(invoice.firstTime || '');
+      const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
+
+      // Same-day: bank time must not precede fuel time (settlement can't happen before swipe)
+      if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+
       let confidence = 70;
       if (dateDiff === 0) confidence = 85;
       else if (Math.abs(dateDiff) === 1) confidence = 75;
       else if (Math.abs(dateDiff) === 2) confidence = 68;
       else confidence = 65;
 
-      const fuelTime = parseTimeToMinutes(invoice.firstTime || '');
-      const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
       let timeDiff = 0;
       if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-        timeDiff = Math.abs(fuelTime - bankTime);
+        timeDiff = bankTime - fuelTime; // bank-after-fuel guaranteed by check above
         if (timeDiff <= 5) confidence = 100;
         else if (timeDiff <= 15) confidence = 95;
         else if (timeDiff <= 30) confidence = 85;
@@ -2341,6 +2345,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Bank settlement must post on or after fuel — a card can't settle before it was swiped
           if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
 
+          const fuelTime = parseTimeToMinutes(invoice.firstTime || '');
+          const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
+
+          // Same-day: bank time must not precede fuel time (settlement can't happen before swipe)
+          if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+
           // Calculate base confidence from date difference
           let confidence = 70;
           if (dateDiff === 0) {
@@ -2357,14 +2367,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             reasons.push(`${Math.abs(dateDiff)} days difference (weekend/holiday processing)`);
           }
 
-          // Time matching (only for same-day transactions)
-          const fuelTime = parseTimeToMinutes(invoice.firstTime || '');
-          const bankTime = parseTimeToMinutes(bankTx.transactionTime || '');
-
           let timeDiff = 0;
 
           if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-            timeDiff = Math.abs(fuelTime - bankTime);
+            timeDiff = bankTime - fuelTime; // bank-after-fuel guaranteed by check above
 
             if (timeDiff <= 5) {
               confidence = 100;

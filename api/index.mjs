@@ -33252,16 +33252,17 @@ async function registerRoutes(app2) {
       if (fuelDate === null || bankDate === null) continue;
       const dateDiff = bankDate - fuelDate;
       if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
+      const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
+      const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
+      if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
       let confidence = 70;
       if (dateDiff === 0) confidence = 85;
       else if (Math.abs(dateDiff) === 1) confidence = 75;
       else if (Math.abs(dateDiff) === 2) confidence = 68;
       else confidence = 65;
-      const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
-      const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
       let timeDiff = 0;
       if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-        timeDiff = Math.abs(fuelTime - bankTime);
+        timeDiff = bankTime - fuelTime;
         if (timeDiff <= 5) confidence = 100;
         else if (timeDiff <= 15) confidence = 95;
         else if (timeDiff <= 30) confidence = 85;
@@ -33396,6 +33397,9 @@ async function registerRoutes(app2) {
           if (fuelDate === null || bankDate === null) continue;
           const dateDiff = bankDate - fuelDate;
           if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
+          const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
+          const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
+          if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
           let confidence = 70;
           if (dateDiff === 0) {
             confidence = 85;
@@ -33410,11 +33414,9 @@ async function registerRoutes(app2) {
             confidence = 65;
             reasons.push(`${Math.abs(dateDiff)} days difference (weekend/holiday processing)`);
           }
-          const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
-          const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
           let timeDiff = 0;
           if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-            timeDiff = Math.abs(fuelTime - bankTime);
+            timeDiff = bankTime - fuelTime;
             if (timeDiff <= 5) {
               confidence = 100;
               reasons.push("Times within 5 minutes");

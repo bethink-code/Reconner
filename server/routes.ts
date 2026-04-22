@@ -2102,7 +2102,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bankDate = parseDateToDays(bankTx.transactionDate || '');
       if (fuelDate === null || bankDate === null) continue;
       const dateDiff = bankDate - fuelDate;
-      if (dateDiff < -1 || dateDiff > rules.dateWindowDays) continue;
+      // Bank settlement must post on or after fuel — a card can't settle before it was swiped
+      if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
 
       let confidence = 70;
       if (dateDiff === 0) confidence = 85;
@@ -2337,9 +2338,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const dateDiff = bankDate - fuelDate; // Positive = bank is later
 
-          // Allow bank to be 0-N days after fuel (based on rules)
-          // Also allow bank to be 1 day before fuel (timezone differences)
-          if (dateDiff < -1 || dateDiff > rules.dateWindowDays) continue;
+          // Bank settlement must post on or after fuel — a card can't settle before it was swiped
+          if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
 
           // Calculate base confidence from date difference
           let confidence = 70;

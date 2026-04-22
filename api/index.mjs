@@ -33251,7 +33251,7 @@ async function registerRoutes(app2) {
       const bankDate = parseDateToDays(bankTx.transactionDate || "");
       if (fuelDate === null || bankDate === null) continue;
       const dateDiff = bankDate - fuelDate;
-      if (dateDiff < -1 || dateDiff > rules.dateWindowDays) continue;
+      if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
       let confidence = 70;
       if (dateDiff === 0) confidence = 85;
       else if (Math.abs(dateDiff) === 1) confidence = 75;
@@ -33395,7 +33395,7 @@ async function registerRoutes(app2) {
           const bankDate = parseDateToDays(bankTx.transactionDate || "");
           if (fuelDate === null || bankDate === null) continue;
           const dateDiff = bankDate - fuelDate;
-          if (dateDiff < -1 || dateDiff > rules.dateWindowDays) continue;
+          if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
           let confidence = 70;
           if (dateDiff === 0) {
             confidence = 85;

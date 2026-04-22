@@ -3656,17 +3656,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               'Metric': `  ${tx.type} at ${tx.time}`,
               'Count': '',
               'Amount': fmt(tx.amount),
+              'Type': tx.type,
             });
             if (tx.note) {
               const outcomeLabel = isPartial
-                ? `${tx.note.split(' — shortfall')[0]} of ${fmt(tx.recoveredAmount).toFixed(2)}`
+                ? `${tx.note.split(' — shortfall')[0]} of R ${tx.recoveredAmount.toFixed(2)}`
                 : tx.note;
               declinedRows.push({
                 'Metric': `    ${outcomeLabel}`,
                 'Count': '',
-                'Amount': isPartial
-                  ? `Shortfall R ${shortfall.toFixed(2)}`
-                  : tx.recoveredAmount > 0 ? `Recovered R ${tx.recoveredAmount.toFixed(2)}` : '',
+                'Amount': isPartial ? fmt(shortfall) : tx.recoveredAmount > 0 ? fmt(tx.recoveredAmount) : '',
+                'Type': isPartial ? 'Shortfall' : tx.recoveredAmount > 0 ? 'Recovered' : '',
               });
             }
           }

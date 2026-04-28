@@ -33486,25 +33486,16 @@ async function registerRoutes(app2) {
           const bankDate = parseDateToDays(bt.transactionDate || "");
           const bankTime = parseTimeToMinutes(bt.transactionTime || "");
           if (bankDate === null) continue;
-          if (bankDate < fuelDate) continue;
-          if (bankDate === fuelDate && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
-          const cardMatch = !!(inv.cardNumber && bt.cardNumber && inv.cardNumber === bt.cardNumber);
-          candidates.push({ bt, cardMatch, bankDate, bankTime: bankTime ?? 0 });
+          if (bankDate !== fuelDate) continue;
+          if (fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+          candidates.push({ bt, bankTime: bankTime ?? 0 });
         }
         if (candidates.length === 0) continue;
-        candidates.sort((a, b) => {
-          if (a.cardMatch !== b.cardMatch) return a.cardMatch ? -1 : 1;
-          if (a.bankDate !== b.bankDate) return a.bankDate - b.bankDate;
-          return a.bankTime - b.bankTime;
-        });
+        candidates.sort((a, b) => a.bankTime - b.bankTime);
         const winner = candidates[0];
-        const dateDiff = winner.bankDate - fuelDate;
         const timeDiff = fuelTime !== null ? winner.bankTime - fuelTime : 0;
-        let confidence = 70;
-        if (dateDiff === 0) confidence = timeDiff <= 30 ? 95 : 85;
-        else if (dateDiff === 1) confidence = 80;
-        if (winner.cardMatch) confidence = Math.min(100, confidence + 5);
-        matches2.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff });
+        const confidence = timeDiff <= 30 ? 95 : timeDiff <= 120 ? 88 : 80;
+        matches2.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff: 0 });
         matchedInvoiceIds.add(inv.invoiceNumber);
         matchedBankIds.add(winner.bt.id);
       }
@@ -33652,7 +33643,30 @@ async function registerRoutes(app2) {
       }).length;
       const matchedInvoices = /* @__PURE__ */ new Set();
       const pendingMatches = [];
+      const fifoFuelInvoices = fuelInvoices.filter((inv) => isRoundAmount(inv.totalAmount));
+      const fifoBankTxns = matchableBankTransactions.filter((bt) => isRoundAmount(parseFloat(bt.amount)));
+      const fifoResult = roundAmountFifoMatch(fifoFuelInvoices, fifoBankTxns);
+      let roundFifoMatchCount = 0;
+      for (const m of fifoResult.matches) {
+        pendingMatches.push({
+          matchData: {
+            periodId: req.params.periodId,
+            fuelTransactionId: m.invoice.items[0].id,
+            bankTransactionId: m.bank.id,
+            matchType: "auto_round_fifo",
+            matchConfidence: String(m.confidence)
+          },
+          bankTxId: m.bank.id,
+          fuelItemIds: m.invoice.items.map((item) => item.id)
+        });
+        matchedInvoices.add(m.invoice.invoiceNumber);
+        matchCount++;
+        roundFifoMatchCount++;
+      }
+      const fifoMatchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
+      console.log(`[AUTO-MATCH] Round-amount FIFO: ${roundFifoMatchCount} matches from ${fifoFuelInvoices.length} fuel / ${fifoBankTxns.length} bank candidates`);
       for (const bankTx of matchableBankTransactions) {
+        if (fifoMatchedBankIds.has(bankTx.id)) continue;
         let bestMatch = null;
         const bankDayKey = parseDateToDays(bankTx.transactionDate || "");
         const candidateInvoices = bankDayKey !== null ? invoicesByDate.get(bankDayKey) || [] : fuelInvoices;
@@ -33662,6 +33676,7 @@ async function registerRoutes(app2) {
           seen.add(invoice.invoiceNumber);
           if (matchedInvoices.has(invoice.invoiceNumber)) continue;
           if (invoice.items.some((item) => item.matchStatus === "matched")) continue;
+          if (isRoundAmount(invoice.totalAmount)) continue;
           const reasons = [];
           const bankAmount = parseFloat(bankTx.amount);
           const fuelAmount = invoice.totalAmount;
@@ -33769,32 +33784,6 @@ async function registerRoutes(app2) {
           matchCount++;
         }
       }
-      const matchedBankIdsAfterMain = new Set(pendingMatches.map((pm) => pm.bankTxId));
-      const fifoFuelInvoices = fuelInvoices.filter(
-        (inv) => !matchedInvoices.has(inv.invoiceNumber) && isRoundAmount(inv.totalAmount)
-      );
-      const fifoBankTxns = matchableBankTransactions.filter(
-        (bt) => !matchedBankIdsAfterMain.has(bt.id) && isRoundAmount(parseFloat(bt.amount))
-      );
-      const fifoResult = roundAmountFifoMatch(fifoFuelInvoices, fifoBankTxns);
-      let roundFifoMatchCount = 0;
-      for (const m of fifoResult.matches) {
-        pendingMatches.push({
-          matchData: {
-            periodId: req.params.periodId,
-            fuelTransactionId: m.invoice.items[0].id,
-            bankTransactionId: m.bank.id,
-            matchType: "auto_round_fifo",
-            matchConfidence: String(m.confidence)
-          },
-          bankTxId: m.bank.id,
-          fuelItemIds: m.invoice.items.map((item) => item.id)
-        });
-        matchedInvoices.add(m.invoice.invoiceNumber);
-        matchCount++;
-        roundFifoMatchCount++;
-      }
-      console.log(`[AUTO-MATCH] Round-amount FIFO: ${roundFifoMatchCount} matches from ${fifoFuelInvoices.length} fuel / ${fifoBankTxns.length} bank candidates`);
       const matchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
       const unmatchedInPeriodBank = matchableBankTransactions.filter((bt) => {
         if (matchedBankIds.has(bt.id)) return false;

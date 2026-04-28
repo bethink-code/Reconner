@@ -2198,11 +2198,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return rand % ROUND_AMOUNT_RULES.minDenomination === 0;
   }
 
-  // FIFO match a set of round-amount fuel invoices against round-amount bank txns.
-  // Premise: real customers come first, fakes get printed later. Earliest fuel invoice
-  // takes earliest available bank settlement (where bank time >= fuel time, since
-  // settlement can't precede the swipe). Card-tail match is preferred when both sides
-  // have card numbers. Anything left unmatched on the fuel side is the fraud residue.
+  // FIFO match round-amount fuel invoices against round-amount bank txns.
+  //
+  // Owner's rules (as encoded):
+  //   3. Match round numbers — use invoice time to find the FIRST card transaction for
+  //      the same round number. Repeat until all card slips are matched.
+  //   "Don't match round number fuel trx with bank trx on next day" (Pieter, 2026-04-28)
+  //
+  // Therefore: SAME-DAY ONLY, pure invoice-time FIFO, no card-tail preference.
+  // The card-tail check belongs in the duplicate-detection step on the *unmatched*
+  // residue (per rule 3c), not in the matching itself.
   type FifoMatch = {
     invoice: FuelInvoice;
     bank: any;
@@ -2237,6 +2242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bankList = banksByAmount.get(amountCents);
       if (!bankList || bankList.length === 0) continue;
 
+      // Sort fuel invoices by invoice time ASC — owner's rule 3a "first card transaction"
       const sortedInvoices = [...invList].sort((a, b) => {
         const aD = parseDateToDays(a.firstDate || '') ?? 0;
         const bD = parseDateToDays(b.firstDate || '') ?? 0;
@@ -2251,37 +2257,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const fuelTime = parseTimeToMinutes(inv.firstTime || '');
         if (fuelDate === null) continue;
 
-        // Build candidate bank list: not yet taken, settlement after swipe.
-        const candidates: { bt: any; cardMatch: boolean; bankDate: number; bankTime: number }[] = [];
+        // Candidate banks: not yet taken, SAME DAY, settlement after swipe.
+        const candidates: { bt: any; bankTime: number }[] = [];
         for (const bt of bankList) {
           if (matchedBankIds.has(bt.id)) continue;
           const bankDate = parseDateToDays(bt.transactionDate || '');
           const bankTime = parseTimeToMinutes(bt.transactionTime || '');
           if (bankDate === null) continue;
-          if (bankDate < fuelDate) continue;
-          if (bankDate === fuelDate && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
-          const cardMatch = !!(inv.cardNumber && bt.cardNumber && inv.cardNumber === bt.cardNumber);
-          candidates.push({ bt, cardMatch, bankDate, bankTime: bankTime ?? 0 });
+          if (bankDate !== fuelDate) continue; // SAME-DAY ONLY for round amounts
+          if (fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+          candidates.push({ bt, bankTime: bankTime ?? 0 });
         }
         if (candidates.length === 0) continue;
 
-        // Prefer card-tail match; otherwise earliest by date+time.
-        candidates.sort((a, b) => {
-          if (a.cardMatch !== b.cardMatch) return a.cardMatch ? -1 : 1;
-          if (a.bankDate !== b.bankDate) return a.bankDate - b.bankDate;
-          return a.bankTime - b.bankTime;
-        });
+        // Pure time FIFO — earliest available bank settlement after the swipe.
+        candidates.sort((a, b) => a.bankTime - b.bankTime);
 
         const winner = candidates[0];
-        const dateDiff = winner.bankDate - fuelDate;
         const timeDiff = fuelTime !== null ? winner.bankTime - fuelTime : 0;
+        const confidence = timeDiff <= 30 ? 95 : timeDiff <= 120 ? 88 : 80;
 
-        let confidence = 70;
-        if (dateDiff === 0) confidence = timeDiff <= 30 ? 95 : 85;
-        else if (dateDiff === 1) confidence = 80;
-        if (winner.cardMatch) confidence = Math.min(100, confidence + 5);
-
-        matches.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff });
+        matches.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff: 0 });
         matchedInvoiceIds.add(inv.invoiceNumber);
         matchedBankIds.add(winner.bt.id);
       }
@@ -2523,8 +2519,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fuelItemIds: string[];
       }> = [];
 
-      // Match bank transactions to invoices (only matchable ones)
+      // *** STAGE 1 — ROUND-AMOUNT SAME-DAY FIFO ***
+      // Owner's rule 3: round amounts (no change to give = the fraud-friendly amounts)
+      // are matched by walking fuel invoices in invoice-time order and locking the
+      // earliest available bank settlement same-day. Runs BEFORE the main pass so the
+      // main pass tolerance can't grab round-amount fuel and give it to a non-exact
+      // bank settlement. Round-amount fuel residue surfaces as phantom_suspect.
+      const fifoFuelInvoices = fuelInvoices.filter(inv => isRoundAmount(inv.totalAmount));
+      const fifoBankTxns = matchableBankTransactions.filter(bt => isRoundAmount(parseFloat(bt.amount)));
+      const fifoResult = roundAmountFifoMatch(fifoFuelInvoices, fifoBankTxns);
+      let roundFifoMatchCount = 0;
+      for (const m of fifoResult.matches) {
+        pendingMatches.push({
+          matchData: {
+            periodId: req.params.periodId,
+            fuelTransactionId: m.invoice.items[0].id,
+            bankTransactionId: m.bank.id,
+            matchType: 'auto_round_fifo',
+            matchConfidence: String(m.confidence),
+          },
+          bankTxId: m.bank.id,
+          fuelItemIds: m.invoice.items.map(item => item.id),
+        });
+        matchedInvoices.add(m.invoice.invoiceNumber);
+        matchCount++;
+        roundFifoMatchCount++;
+      }
+      const fifoMatchedBankIds = new Set(pendingMatches.map(pm => pm.bankTxId));
+      console.log(`[AUTO-MATCH] Round-amount FIFO: ${roundFifoMatchCount} matches from ${fifoFuelInvoices.length} fuel / ${fifoBankTxns.length} bank candidates`);
+
+      // *** STAGE 2 — Main pass for non-round fuel ***
+      // Round-amount fuel is reserved for FIFO (above) — main pass tolerance must not
+      // grab it, even if FIFO didn't find it a partner (residue → phantom_suspect).
+      // Round-amount bank that FIFO didn't match IS still allowed to match non-round
+      // fuel here (e.g. Bank R400.00 settling Fuel R400.20 — pump-calibration drift).
       for (const bankTx of matchableBankTransactions) {
+        // Skip banks already matched by FIFO
+        if (fifoMatchedBankIds.has(bankTx.id)) continue;
         let bestMatch: { 
           invoice: FuelInvoice; 
           confidence: number; 
@@ -2546,6 +2577,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Skip if already matched
           if (matchedInvoices.has(invoice.invoiceNumber)) continue;
           if (invoice.items.some(item => item.matchStatus === 'matched')) continue;
+          // Skip round-amount fuel — owned by the FIFO pass above; if FIFO didn't match
+          // it, the main-pass tolerance is not allowed to grab it (owner's rule).
+          if (isRoundAmount(invoice.totalAmount)) continue;
 
           const reasons: string[] = [];
 
@@ -2705,39 +2739,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           matchCount++;
         }
       }
-
-      // *** ROUND-AMOUNT FIFO PASS ***
-      // Round amounts (R10 multiples, .00 cents) are the fraud signal — fakes prefer
-      // them so no change has to be given. The main scoring pass picks "best" per bank
-      // by confidence, which can let a later fake outscore an earlier real customer.
-      // FIFO walks earliest-first so legit customers lock in first; the residue is the
-      // suspect set surfaced in the Reprint Report.
-      const matchedBankIdsAfterMain = new Set(pendingMatches.map(pm => pm.bankTxId));
-      const fifoFuelInvoices = fuelInvoices.filter(inv =>
-        !matchedInvoices.has(inv.invoiceNumber) && isRoundAmount(inv.totalAmount)
-      );
-      const fifoBankTxns = matchableBankTransactions.filter(bt =>
-        !matchedBankIdsAfterMain.has(bt.id) && isRoundAmount(parseFloat(bt.amount))
-      );
-      const fifoResult = roundAmountFifoMatch(fifoFuelInvoices, fifoBankTxns);
-      let roundFifoMatchCount = 0;
-      for (const m of fifoResult.matches) {
-        pendingMatches.push({
-          matchData: {
-            periodId: req.params.periodId,
-            fuelTransactionId: m.invoice.items[0].id,
-            bankTransactionId: m.bank.id,
-            matchType: 'auto_round_fifo',
-            matchConfidence: String(m.confidence),
-          },
-          bankTxId: m.bank.id,
-          fuelItemIds: m.invoice.items.map(item => item.id),
-        });
-        matchedInvoices.add(m.invoice.invoiceNumber);
-        matchCount++;
-        roundFifoMatchCount++;
-      }
-      console.log(`[AUTO-MATCH] Round-amount FIFO: ${roundFifoMatchCount} matches from ${fifoFuelInvoices.length} fuel / ${fifoBankTxns.length} bank candidates`);
 
       // *** PHASE 1: LAG DETECTION ***
       // For each still-unmatched in-period bank tx, run the same matcher against

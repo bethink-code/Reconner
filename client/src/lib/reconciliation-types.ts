@@ -36,6 +36,10 @@ export interface PeriodSummary {
   unmatchedFuelCoveredAmount?: number;
   unmatchedFuelUncoveredTransactions?: number;
   unmatchedFuelUncoveredAmount?: number;
+  phantomSuspectCardTransactions?: number;
+  phantomSuspectCardAmount?: number;
+  nextPeriodPendingCardTransactions?: number;
+  nextPeriodPendingCardAmount?: number;
   tenantBankCoverage?: { min: string; max: string };
   resolvedBankTransactions?: number;
   scopedCardCount: number;

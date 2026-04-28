@@ -28391,39 +28391,58 @@ var DatabaseStorage = class {
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
 
-          -- Unmatched card fuel scoped to period dates
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+          -- Unmatched card fuel scoped to period dates.
+          -- Includes 'next_period_pending' (non-round residue, presumed lag) so existing
+          -- totals stay correct. EXCLUDES 'phantom_suspect' (round-amount residue) \u2014 that
+          -- bucket is reported separately below as the suspected-reprint signal.
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN 1 END) as unmatched_card_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
           -- Unmatched card fuel, split by whether the fuel date is covered by uploaded bank data (tenant-wide)
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND bc.bank_cov_start IS NOT NULL
             AND transaction_date >= bc.bank_cov_start AND transaction_date <= bc.bank_cov_end
           THEN 1 END) as unmatched_fuel_covered_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND bc.bank_cov_start IS NOT NULL
             AND transaction_date >= bc.bank_cov_start AND transaction_date <= bc.bank_cov_end
           THEN amount::numeric ELSE 0 END), 0) as unmatched_fuel_covered_amount,
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND (bc.bank_cov_start IS NULL OR transaction_date < bc.bank_cov_start OR transaction_date > bc.bank_cov_end)
           THEN 1 END) as unmatched_fuel_uncovered_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND (bc.bank_cov_start IS NULL OR transaction_date < bc.bank_cov_start OR transaction_date > bc.bank_cov_end)
           THEN amount::numeric ELSE 0 END), 0) as unmatched_fuel_uncovered_amount,
+
+          -- Phantom-suspect: round-amount card fuel that didn't match \u2014 the suspected-reprint signal
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'phantom_suspect'
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+          THEN 1 END) as phantom_suspect_card_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'phantom_suspect'
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+          THEN amount::numeric ELSE 0 END), 0) as phantom_suspect_card_amount,
+
+          -- Next-period-pending: non-round card fuel residue, presumed legitimate settlement lag
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'next_period_pending'
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+          THEN 1 END) as next_period_pending_card_transactions,
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'next_period_pending'
+            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
+          THEN amount::numeric ELSE 0 END), 0) as next_period_pending_card_amount,
 
           -- Matched: both sides strictly in-period
           COUNT(CASE WHEN match_status = 'matched'
@@ -28582,6 +28601,10 @@ var DatabaseStorage = class {
       unmatchedFuelCoveredAmount: parseFloat(row.unmatched_fuel_covered_amount || "0"),
       unmatchedFuelUncoveredTransactions: parseInt(row.unmatched_fuel_uncovered_transactions || "0"),
       unmatchedFuelUncoveredAmount: parseFloat(row.unmatched_fuel_uncovered_amount || "0"),
+      phantomSuspectCardTransactions: parseInt(row.phantom_suspect_card_transactions || "0"),
+      phantomSuspectCardAmount: parseFloat(row.phantom_suspect_card_amount || "0"),
+      nextPeriodPendingCardTransactions: parseInt(row.next_period_pending_card_transactions || "0"),
+      nextPeriodPendingCardAmount: parseFloat(row.next_period_pending_card_amount || "0"),
       tenantBankCoverage: row.bank_cov_start && row.bank_cov_end ? {
         min: row.bank_cov_start,
         max: row.bank_cov_end
@@ -28759,6 +28782,130 @@ var DatabaseStorage = class {
         banks,
         totalCount: parseInt(row.total_count || "0"),
         totalAmount: parseFloat(row.total_amount || "0")
+      };
+    });
+  }
+  async getCashierSummary(periodId) {
+    const result = await pool.query(`
+      WITH period_dates AS (
+        SELECT start_date AS min_date, end_date AS max_date
+        FROM reconciliation_periods
+        WHERE id = $1
+      ),
+      is_card_only AS (
+        SELECT t.id FROM transactions t
+        CROSS JOIN period_dates pd
+        WHERE t.period_id = $1 AND t.source_type = 'fuel'
+          AND t.is_card_transaction = 'yes'
+          AND NOT (LOWER(t.payment_type) LIKE '%debtor%' OR LOWER(t.payment_type) LIKE '%account%' OR LOWER(t.payment_type) LIKE '%fleet%')
+          AND t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date
+      ),
+      is_debtor AS (
+        SELECT t.id FROM transactions t
+        CROSS JOIN period_dates pd
+        WHERE t.period_id = $1 AND t.source_type = 'fuel'
+          AND (LOWER(t.payment_type) LIKE '%debtor%' OR LOWER(t.payment_type) LIKE '%account%' OR LOWER(t.payment_type) LIKE '%fleet%')
+          AND t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date
+      )
+      SELECT
+        COALESCE(NULLIF(TRIM(t.cashier), ''), 'Unknown') AS cashier,
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched' THEN 1 END)::int AS matched_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched' THEN t.amount::numeric ELSE 0 END), 0) AS matched_amount,
+        -- Unmatched here means "any non-matched card fuel" so the per-cashier total reconciles
+        -- against the global totals (which still include phantom_suspect + next_period_pending).
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched' THEN 1 END)::int AS unmatched_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched' THEN t.amount::numeric ELSE 0 END), 0) AS unmatched_amount,
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'phantom_suspect' THEN 1 END)::int AS phantom_slip_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'phantom_suspect' THEN t.amount::numeric ELSE 0 END), 0) AS phantom_slip_amount,
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'next_period_pending' THEN 1 END)::int AS next_period_pending_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'next_period_pending' THEN t.amount::numeric ELSE 0 END), 0) AS next_period_pending_amount,
+        COUNT(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN 1 END)::int AS debtor_count,
+        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN t.amount::numeric ELSE 0 END), 0) AS debtor_amount,
+        COUNT(CASE WHEN t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date THEN 1 END)::int AS total_count,
+        COALESCE(SUM(CASE WHEN t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date THEN t.amount::numeric ELSE 0 END), 0) AS total_amount
+      FROM transactions t
+      CROSS JOIN period_dates pd
+      WHERE t.period_id = $1 AND t.source_type = 'fuel'
+      GROUP BY COALESCE(NULLIF(TRIM(t.cashier), ''), 'Unknown'), pd.min_date, pd.max_date
+      ORDER BY matched_count DESC, cashier ASC
+    `, [periodId]);
+    const bankBreakdown = await pool.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(t_fuel.cashier), ''), 'Unknown') AS cashier,
+        COALESCE(f.bank_name, t_bank.source_name, 'Bank') AS bank_name,
+        COUNT(*)::int AS count,
+        COALESCE(SUM(t_bank.amount::numeric), 0) AS amount
+      FROM matches m
+      JOIN transactions t_fuel ON m.fuel_transaction_id = t_fuel.id
+      JOIN transactions t_bank ON m.bank_transaction_id = t_bank.id
+      LEFT JOIN uploaded_files f ON t_bank.file_id = f.id
+      WHERE m.period_id = $1
+      GROUP BY COALESCE(NULLIF(TRIM(t_fuel.cashier), ''), 'Unknown'),
+               COALESCE(f.bank_name, t_bank.source_name, 'Bank')
+      ORDER BY count DESC
+    `, [periodId]);
+    const declinedBreakdown = await pool.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(fuel_match.cashier), ''), 'Unknown') AS cashier,
+        COUNT(*)::int AS declined_count,
+        COALESCE(SUM(b.amount::numeric), 0) AS declined_amount
+      FROM transactions b
+      LEFT JOIN LATERAL (
+        SELECT DISTINCT ON (t.card_number) t.cashier
+        FROM transactions t
+        WHERE t.period_id = $1
+          AND t.source_type = 'fuel'
+          AND t.card_number IS NOT NULL
+          AND t.card_number != ''
+          AND t.card_number = b.card_number
+        ORDER BY t.card_number, t.transaction_date DESC
+        LIMIT 1
+      ) fuel_match ON true
+      WHERE b.period_id = $1
+        AND b.source_type LIKE 'bank%'
+        AND b.match_status = 'excluded'
+        AND LOWER(b.description) LIKE '%declined%'
+      GROUP BY COALESCE(NULLIF(TRIM(fuel_match.cashier), ''), 'Unknown')
+    `, [periodId]);
+    const banksByCashier = {};
+    for (const row of bankBreakdown.rows) {
+      const c = row.cashier;
+      if (!banksByCashier[c]) banksByCashier[c] = [];
+      banksByCashier[c].push({
+        bankName: row.bank_name,
+        count: parseInt(row.count || "0"),
+        amount: parseFloat(row.amount || "0")
+      });
+    }
+    const declinedByCashier = {};
+    for (const row of declinedBreakdown.rows) {
+      declinedByCashier[row.cashier] = {
+        count: parseInt(row.declined_count || "0"),
+        amount: parseFloat(row.declined_amount || "0")
+      };
+    }
+    return result.rows.map((row) => {
+      const banks = banksByCashier[row.cashier] || [];
+      const matchedBankAmount = banks.reduce((sum, b) => sum + b.amount, 0);
+      const declined = declinedByCashier[row.cashier] || { count: 0, amount: 0 };
+      return {
+        cashier: row.cashier,
+        matchedCount: parseInt(row.matched_count || "0"),
+        matchedAmount: parseFloat(row.matched_amount || "0"),
+        matchedBankAmount,
+        unmatchedCount: parseInt(row.unmatched_count || "0"),
+        unmatchedAmount: parseFloat(row.unmatched_amount || "0"),
+        debtorCount: parseInt(row.debtor_count || "0"),
+        debtorAmount: parseFloat(row.debtor_amount || "0"),
+        declinedCount: declined.count,
+        declinedAmount: declined.amount,
+        banks,
+        totalCount: parseInt(row.total_count || "0"),
+        totalAmount: parseFloat(row.total_amount || "0"),
+        phantomSlipCount: parseInt(row.phantom_slip_count || "0"),
+        phantomSlipAmount: parseFloat(row.phantom_slip_amount || "0"),
+        nextPeriodPendingCount: parseInt(row.next_period_pending_count || "0"),
+        nextPeriodPendingAmount: parseFloat(row.next_period_pending_amount || "0")
       };
     });
   }
@@ -31661,6 +31808,60 @@ function findNearestFuelForDecline(tx, fuelTxns) {
   }
   return nearest;
 }
+function computeReprintAnalysis(fuelTxns) {
+  const isRoundFuel = (tx) => {
+    if (tx.isCardTransaction !== "yes") return false;
+    const amount = parseFloat(tx.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return false;
+    const cents = Math.round((amount - Math.floor(amount)) * 100);
+    if (cents !== 0) return false;
+    return Math.round(amount) % 10 === 0;
+  };
+  const phantoms = fuelTxns.filter((t) => t.matchStatus === "phantom_suspect");
+  const allRoundFuel = fuelTxns.filter(isRoundFuel);
+  const cardCounts = /* @__PURE__ */ new Map();
+  for (const tx of allRoundFuel) {
+    const card = tx.cardNumber?.trim();
+    if (!card) continue;
+    cardCounts.set(card, (cardCounts.get(card) ?? 0) + 1);
+  }
+  const suspectCardTails = Array.from(cardCounts.entries()).filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).map(([card]) => card);
+  const slips = phantoms.map((tx) => ({
+    id: tx.id,
+    date: tx.transactionDate,
+    time: tx.transactionTime || "",
+    amount: parseFloat(tx.amount),
+    cardNumber: tx.cardNumber?.trim() || "",
+    cashier: tx.cashier?.trim() || "Unknown",
+    attendant: tx.attendant?.trim() || "Unknown",
+    reference: tx.referenceNumber?.trim() || "",
+    description: tx.description?.trim() || ""
+  })).sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.time.localeCompare(b.time);
+  });
+  const byCashierMap = /* @__PURE__ */ new Map();
+  for (const slip of slips) {
+    if (!byCashierMap.has(slip.cashier)) byCashierMap.set(slip.cashier, []);
+    byCashierMap.get(slip.cashier).push(slip);
+  }
+  const byCashier = Array.from(byCashierMap.entries()).map(([cashier, group]) => ({
+    cashier,
+    count: group.length,
+    amount: group.reduce((sum, s) => sum + s.amount, 0),
+    slips: group
+  })).sort((a, b) => b.amount - a.amount);
+  return {
+    summary: {
+      totalSlips: slips.length,
+      totalAmount: slips.reduce((sum, s) => sum + s.amount, 0),
+      cashierCount: byCashier.length,
+      suspectCardTails
+    },
+    byCashier,
+    slips
+  };
+}
 function computeDeclineAnalysis(bankTxns, fuelTxns) {
   const excluded = bankTxns.filter((t) => t.matchStatus === "excluded");
   const approved = bankTxns.filter((t) => t.matchStatus !== "excluded" && t.matchStatus !== "unmatchable");
@@ -33235,6 +33436,85 @@ async function registerRoutes(app2) {
     if (isNaN(date.getTime())) return null;
     return Math.floor(date.getTime() / (1e3 * 60 * 60 * 24));
   }
+  const ROUND_AMOUNT_RULES = {
+    // Smallest "no change needed" denomination. R10 multiples (R10, R20, R50, R100, R200,
+    // R500, R1000) all settle in notes only. Anything not a multiple of R10 needs coins.
+    minDenomination: 10
+  };
+  function isRoundAmount(amount) {
+    if (!Number.isFinite(amount) || amount <= 0) return false;
+    const cents = Math.round((amount - Math.floor(amount)) * 100);
+    if (cents !== 0) return false;
+    const rand = Math.round(amount);
+    return rand % ROUND_AMOUNT_RULES.minDenomination === 0;
+  }
+  function roundAmountFifoMatch(invoices, banks) {
+    const amountKey = (n) => Math.round(n * 100);
+    const invoicesByAmount = /* @__PURE__ */ new Map();
+    for (const inv of invoices) {
+      const key = amountKey(inv.totalAmount);
+      if (!invoicesByAmount.has(key)) invoicesByAmount.set(key, []);
+      invoicesByAmount.get(key).push(inv);
+    }
+    const banksByAmount = /* @__PURE__ */ new Map();
+    for (const bt of banks) {
+      const key = amountKey(parseFloat(bt.amount));
+      if (!banksByAmount.has(key)) banksByAmount.set(key, []);
+      banksByAmount.get(key).push(bt);
+    }
+    const matches2 = [];
+    const matchedInvoiceIds = /* @__PURE__ */ new Set();
+    const matchedBankIds = /* @__PURE__ */ new Set();
+    for (const [amountCents, invList] of invoicesByAmount) {
+      const bankList = banksByAmount.get(amountCents);
+      if (!bankList || bankList.length === 0) continue;
+      const sortedInvoices = [...invList].sort((a, b) => {
+        const aD = parseDateToDays(a.firstDate || "") ?? 0;
+        const bD = parseDateToDays(b.firstDate || "") ?? 0;
+        if (aD !== bD) return aD - bD;
+        const aT = parseTimeToMinutes(a.firstTime || "") ?? 0;
+        const bT = parseTimeToMinutes(b.firstTime || "") ?? 0;
+        return aT - bT;
+      });
+      for (const inv of sortedInvoices) {
+        const fuelDate = parseDateToDays(inv.firstDate || "");
+        const fuelTime = parseTimeToMinutes(inv.firstTime || "");
+        if (fuelDate === null) continue;
+        const candidates = [];
+        for (const bt of bankList) {
+          if (matchedBankIds.has(bt.id)) continue;
+          const bankDate = parseDateToDays(bt.transactionDate || "");
+          const bankTime = parseTimeToMinutes(bt.transactionTime || "");
+          if (bankDate === null) continue;
+          if (bankDate < fuelDate) continue;
+          if (bankDate === fuelDate && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+          const cardMatch = !!(inv.cardNumber && bt.cardNumber && inv.cardNumber === bt.cardNumber);
+          candidates.push({ bt, cardMatch, bankDate, bankTime: bankTime ?? 0 });
+        }
+        if (candidates.length === 0) continue;
+        candidates.sort((a, b) => {
+          if (a.cardMatch !== b.cardMatch) return a.cardMatch ? -1 : 1;
+          if (a.bankDate !== b.bankDate) return a.bankDate - b.bankDate;
+          return a.bankTime - b.bankTime;
+        });
+        const winner = candidates[0];
+        const dateDiff = winner.bankDate - fuelDate;
+        const timeDiff = fuelTime !== null ? winner.bankTime - fuelTime : 0;
+        let confidence = 70;
+        if (dateDiff === 0) confidence = timeDiff <= 30 ? 95 : 85;
+        else if (dateDiff === 1) confidence = 80;
+        if (winner.cardMatch) confidence = Math.min(100, confidence + 5);
+        matches2.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff });
+        matchedInvoiceIds.add(inv.invoiceNumber);
+        matchedBankIds.add(winner.bt.id);
+      }
+    }
+    return {
+      matches: matches2,
+      residualInvoices: invoices.filter((inv) => !matchedInvoiceIds.has(inv.invoiceNumber)),
+      residualBanks: banks.filter((bt) => !matchedBankIds.has(bt.id))
+    };
+  }
   function scoreBankToInvoices(bankTx, candidateInvoices, usedInvoices, rules) {
     let bestMatch = null;
     const seen = /* @__PURE__ */ new Set();
@@ -33489,6 +33769,32 @@ async function registerRoutes(app2) {
           matchCount++;
         }
       }
+      const matchedBankIdsAfterMain = new Set(pendingMatches.map((pm) => pm.bankTxId));
+      const fifoFuelInvoices = fuelInvoices.filter(
+        (inv) => !matchedInvoices.has(inv.invoiceNumber) && isRoundAmount(inv.totalAmount)
+      );
+      const fifoBankTxns = matchableBankTransactions.filter(
+        (bt) => !matchedBankIdsAfterMain.has(bt.id) && isRoundAmount(parseFloat(bt.amount))
+      );
+      const fifoResult = roundAmountFifoMatch(fifoFuelInvoices, fifoBankTxns);
+      let roundFifoMatchCount = 0;
+      for (const m of fifoResult.matches) {
+        pendingMatches.push({
+          matchData: {
+            periodId: req.params.periodId,
+            fuelTransactionId: m.invoice.items[0].id,
+            bankTransactionId: m.bank.id,
+            matchType: "auto_round_fifo",
+            matchConfidence: String(m.confidence)
+          },
+          bankTxId: m.bank.id,
+          fuelItemIds: m.invoice.items.map((item) => item.id)
+        });
+        matchedInvoices.add(m.invoice.invoiceNumber);
+        matchCount++;
+        roundFifoMatchCount++;
+      }
+      console.log(`[AUTO-MATCH] Round-amount FIFO: ${roundFifoMatchCount} matches from ${fifoFuelInvoices.length} fuel / ${fifoBankTxns.length} bank candidates`);
       const matchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
       const unmatchedInPeriodBank = matchableBankTransactions.filter((bt) => {
         if (matchedBankIds.has(bt.id)) return false;
@@ -33544,6 +33850,21 @@ async function registerRoutes(app2) {
       for (const bankId of lagExplainedBankIds) {
         txUpdates.push({ id: bankId, data: { matchStatus: "lag_explained", matchId: null } });
       }
+      const finalMatchedFuelIds = /* @__PURE__ */ new Set();
+      for (const pm of pendingMatches) {
+        for (const fid of pm.fuelItemIds) finalMatchedFuelIds.add(fid);
+      }
+      let phantomSuspectCount = 0;
+      let nextPeriodPendingCount = 0;
+      for (const ft of fuelTransactions) {
+        if (finalMatchedFuelIds.has(ft.id)) continue;
+        const amount = parseFloat(ft.amount);
+        const tag = isRoundAmount(amount) ? "phantom_suspect" : "next_period_pending";
+        txUpdates.push({ id: ft.id, data: { matchStatus: tag, matchId: null } });
+        if (tag === "phantom_suspect") phantomSuspectCount++;
+        else nextPeriodPendingCount++;
+      }
+      console.log(`[AUTO-MATCH] Residual fuel tagged: ${phantomSuspectCount} phantom_suspect, ${nextPeriodPendingCount} next_period_pending`);
       console.log(`[MATCH] Updating ${txUpdates.length} transactions in bulk...`);
       await storage.updateTransactionsBatch(txUpdates);
       const matchableCount = matchableBankTransactions.length;
@@ -33553,6 +33874,9 @@ async function registerRoutes(app2) {
       res.json({
         success: true,
         matchesCreated: matchCount,
+        roundFifoMatches: roundFifoMatchCount,
+        phantomSuspectCount,
+        nextPeriodPendingCount,
         cardTransactionsProcessed: fuelTransactions.length,
         invoicesCreated: fuelInvoices.length,
         bankTransactionsTotal: bankTransactions.length,
@@ -34020,15 +34344,40 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to fetch attendant summary" });
     }
   });
+  app2.get("/api/periods/:periodId/cashier-summary", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const cashierSummary = await storage.getCashierSummary(req.params.periodId);
+      res.json(cashierSummary);
+    } catch (error) {
+      console.error("Error fetching cashier summary:", error);
+      res.status(500).json({ error: "Failed to fetch cashier summary" });
+    }
+  });
+  app2.get("/api/periods/:periodId/reprint-analysis", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
+      const fuel = transactions2.filter((t) => t.sourceType === "fuel");
+      const result = computeReprintAnalysis(fuel);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching reprint analysis:", error);
+      res.status(500).json({ error: "Failed to fetch reprint analysis" });
+    }
+  });
   app2.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
-      const [allTransactions, matchesData, resolutions, attendantSummary, matchingRulesData, periodSummary] = await Promise.all([
+      const [allTransactions, matchesData, resolutions, attendantSummary, cashierSummary, matchingRulesData, periodSummary] = await Promise.all([
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getMatchesByPeriod(req.params.periodId),
         storage.getResolutionsByPeriod(req.params.periodId),
         storage.getAttendantSummary(req.params.periodId),
+        storage.getCashierSummary(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
         storage.getPeriodSummary(req.params.periodId)
       ]);
@@ -34554,6 +34903,111 @@ async function registerRoutes(app2) {
           attendantRows.push({ "Metric": "  These could not be attributed to any attendant \u2014 see Unmatched bank sheet" });
         }
         XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(attendantRows), "Attendant Summary");
+      }
+      if (cashierSummary.length > 0) {
+        const withVerified = cashierSummary.filter((c) => c.matchedCount > 0).sort((a, b) => b.matchedBankAmount - a.matchedBankAmount);
+        const unverified = cashierSummary.filter((c) => c.matchedCount === 0 && c.unmatchedCount > 0);
+        const totalFuelCardSales = withVerified.reduce((s, c) => s + c.matchedAmount + c.unmatchedAmount, 0);
+        const totalFuelCardSalesCount = withVerified.reduce((s, c) => s + c.matchedCount + c.unmatchedCount, 0);
+        const totalMatchedFuelCardSales = withVerified.reduce((s, c) => s + c.matchedAmount, 0);
+        const totalMatchedFuelCardSalesCount = withVerified.reduce((s, c) => s + c.matchedCount, 0);
+        const totalMatchedBankAmount = withVerified.reduce((s, c) => s + c.matchedBankAmount, 0);
+        const totalUnmatchedCardCount = cashierSummary.reduce((s, c) => s + c.unmatchedCount, 0);
+        const totalUnmatchedCardAmount = cashierSummary.reduce((s, c) => s + c.unmatchedAmount, 0);
+        const totalPhantomCount = cashierSummary.reduce((s, c) => s + c.phantomSlipCount, 0);
+        const totalPhantomAmount = cashierSummary.reduce((s, c) => s + c.phantomSlipAmount, 0);
+        const totalNextPeriodCount = cashierSummary.reduce((s, c) => s + c.nextPeriodPendingCount, 0);
+        const totalNextPeriodAmount = cashierSummary.reduce((s, c) => s + c.nextPeriodPendingAmount, 0);
+        const totalCalibrationError = totalMatchedFuelCardSales - totalMatchedBankAmount;
+        const totalShortfallToCashiers = totalUnmatchedCardAmount + totalCalibrationError;
+        const unmatchedCashierCount = cashierSummary.filter((c) => c.unmatchedCount > 0).length;
+        const cashierRows = [];
+        cashierRows.push({ "Metric": "CASHIER ACCOUNTABILITY", "Count": "", "Amount": "" });
+        cashierRows.push({ "Metric": "  Fuel card sales", "Count": totalFuelCardSalesCount, "Amount": fmt(totalFuelCardSales) });
+        cashierRows.push({ "Metric": "  less Matched fuel card sales", "Count": totalMatchedFuelCardSalesCount, "Amount": fmt(totalMatchedFuelCardSales) });
+        cashierRows.push({ "Metric": "  Unmatched fuel card sales", "Count": totalUnmatchedCardCount, "Amount": fmt(totalUnmatchedCardAmount) });
+        cashierRows.push({ "Metric": `    (across ${unmatchedCashierCount} cashier${unmatchedCashierCount !== 1 ? "s" : ""})` });
+        cashierRows.push({ "Metric": "  plus Pump calibration error", "Count": "", "Amount": fmt(totalCalibrationError) });
+        cashierRows.push({ "Metric": "  Total shortfall allocated to cashiers", "Count": "", "Amount": fmt(totalShortfallToCashiers) });
+        if (totalPhantomCount > 0) {
+          cashierRows.push({});
+          cashierRows.push({ "Metric": "  Suspected phantom slips (round-amount, no bank match)", "Count": totalPhantomCount, "Amount": fmt(totalPhantomAmount) });
+        }
+        if (totalNextPeriodCount > 0) {
+          cashierRows.push({ "Metric": "  Pending next period (likely settlement lag)", "Count": totalNextPeriodCount, "Amount": fmt(totalNextPeriodAmount) });
+        }
+        cashierRows.push({});
+        cashierRows.push({ "Metric": "VERIFIED FUEL CARD SALES BY CASHIER" });
+        cashierRows.push({});
+        for (const c of withVerified) {
+          const totalCardSales = c.matchedAmount + c.unmatchedAmount;
+          const calibrationErr = c.matchedAmount - c.matchedBankAmount;
+          const cashierShortfall = c.unmatchedAmount + calibrationErr;
+          cashierRows.push({ "Metric": `${c.cashier} (${c.matchedCount} verified sale${c.matchedCount !== 1 ? "s" : ""})` });
+          cashierRows.push({ "Metric": "  Total card sales", "Count": c.matchedCount + c.unmatchedCount, "Amount": fmt(totalCardSales) });
+          cashierRows.push({ "Metric": "  Matched card sales", "Count": c.matchedCount, "Amount": fmt(c.matchedAmount) });
+          cashierRows.push({ "Metric": "  Matched bank amount", "Count": c.matchedCount, "Amount": fmt(c.matchedBankAmount) });
+          if (c.banks.length >= 2) {
+            for (const bank of c.banks) {
+              cashierRows.push({ "Metric": `    ${bank.bankName}`, "Count": bank.count, "Amount": fmt(bank.amount) });
+            }
+          }
+          if (c.debtorCount > 0) {
+            cashierRows.push({ "Metric": "  Debtor / Account", "Count": c.debtorCount, "Amount": fmt(c.debtorAmount) });
+          }
+          if (c.unmatchedCount > 0 || Math.abs(calibrationErr) >= 0.01 || c.phantomSlipCount > 0) {
+            if (c.unmatchedCount > 0) {
+              cashierRows.push({ "Metric": "  Unmatched card sales", "Count": c.unmatchedCount, "Amount": fmt(c.unmatchedAmount) });
+            }
+            if (c.phantomSlipCount > 0) {
+              cashierRows.push({ "Metric": "  Suspected phantom slips", "Count": c.phantomSlipCount, "Amount": fmt(c.phantomSlipAmount) });
+            }
+            if (Math.abs(calibrationErr) >= 0.01) {
+              cashierRows.push({ "Metric": "  Pump calibration error", "Count": "", "Amount": fmt(calibrationErr) });
+            }
+            cashierRows.push({ "Metric": "  Cashier shortfall", "Count": "", "Amount": fmt(cashierShortfall) });
+          }
+          cashierRows.push({});
+        }
+        if (unverified.length > 0) {
+          cashierRows.push({ "Metric": "NO VERIFIED FUEL CARD SALES" });
+          for (const c of unverified) {
+            cashierRows.push({ "Metric": `  ${c.cashier}`, "Count": c.unmatchedCount, "Amount": fmt(c.unmatchedAmount) });
+          }
+        }
+        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(cashierRows), "Cashier Summary");
+      }
+      {
+        const reprintAnalysis = computeReprintAnalysis(fuelTxns);
+        if (reprintAnalysis.summary.totalSlips > 0) {
+          const reprintRows = [];
+          reprintRows.push({ "Section": "SUSPECTED REPRINT SLIPS \u2014 SUMMARY" });
+          reprintRows.push({ "Section": "  Total slips", "Count": reprintAnalysis.summary.totalSlips, "Amount": fmt(reprintAnalysis.summary.totalAmount) });
+          reprintRows.push({ "Section": `  Across ${reprintAnalysis.summary.cashierCount} cashier${reprintAnalysis.summary.cashierCount !== 1 ? "s" : ""}` });
+          if (reprintAnalysis.summary.suspectCardTails.length > 0) {
+            reprintRows.push({});
+            reprintRows.push({ "Section": "CARDS USED ON MULTIPLE ROUND-AMOUNT SALES" });
+            for (const card of reprintAnalysis.summary.suspectCardTails) {
+              reprintRows.push({ "Section": `  ${card}` });
+            }
+          }
+          reprintRows.push({});
+          reprintRows.push({ "Section": "PER-CASHIER BREAKDOWN" });
+          for (const group of reprintAnalysis.byCashier) {
+            reprintRows.push({});
+            reprintRows.push({ "Section": `${group.cashier}`, "Count": group.count, "Amount": fmt(group.amount) });
+            for (const slip of group.slips) {
+              reprintRows.push({
+                "Section": `  ${slip.date} ${slip.time}`,
+                "Card": slip.cardNumber,
+                "Attendant": slip.attendant,
+                "Reference": slip.reference,
+                "Amount": fmt(slip.amount)
+              });
+            }
+          }
+          XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(reprintRows), "Suspected reprints");
+        }
       }
       const allRows = transactions2.map((t) => ({
         "Date": t.transactionDate,

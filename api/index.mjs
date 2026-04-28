@@ -33480,22 +33480,37 @@ async function registerRoutes(app2) {
         const fuelDate = parseDateToDays(inv.firstDate || "");
         const fuelTime = parseTimeToMinutes(inv.firstTime || "");
         if (fuelDate === null) continue;
+        const LATE_NIGHT_FUEL_MIN = 22 * 60;
+        const EARLY_MORNING_BANK_MAX = 4 * 60;
+        const MAX_CROSS_MIDNIGHT_GAP = 4 * 60;
         const candidates = [];
         for (const bt of bankList) {
           if (matchedBankIds.has(bt.id)) continue;
           const bankDate = parseDateToDays(bt.transactionDate || "");
           const bankTime = parseTimeToMinutes(bt.transactionTime || "");
           if (bankDate === null) continue;
-          if (bankDate !== fuelDate) continue;
-          if (fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
-          candidates.push({ bt, bankTime: bankTime ?? 0 });
+          if (bankDate === fuelDate) {
+            if (fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+            const effectiveGap = fuelTime !== null && bankTime !== null ? bankTime - fuelTime : 0;
+            candidates.push({ bt, bankTime: bankTime ?? 0, isCrossDay: false, effectiveGap });
+          } else if (bankDate === fuelDate + 1 && fuelTime !== null && bankTime !== null) {
+            if (fuelTime < LATE_NIGHT_FUEL_MIN) continue;
+            if (bankTime > EARLY_MORNING_BANK_MAX) continue;
+            const effectiveGap = 24 * 60 - fuelTime + bankTime;
+            if (effectiveGap > MAX_CROSS_MIDNIGHT_GAP) continue;
+            candidates.push({ bt, bankTime, isCrossDay: true, effectiveGap });
+          }
         }
         if (candidates.length === 0) continue;
-        candidates.sort((a, b) => a.bankTime - b.bankTime);
+        candidates.sort((a, b) => {
+          if (a.isCrossDay !== b.isCrossDay) return a.isCrossDay ? 1 : -1;
+          return a.effectiveGap - b.effectiveGap;
+        });
         const winner = candidates[0];
-        const timeDiff = fuelTime !== null ? winner.bankTime - fuelTime : 0;
-        const confidence = timeDiff <= 30 ? 95 : timeDiff <= 120 ? 88 : 80;
-        matches2.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff: 0 });
+        const dateDiff = winner.isCrossDay ? 1 : 0;
+        const timeDiff = winner.effectiveGap;
+        const confidence = !winner.isCrossDay ? timeDiff <= 30 ? 95 : timeDiff <= 120 ? 88 : 80 : 78;
+        matches2.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff });
         matchedInvoiceIds.add(inv.invoiceNumber);
         matchedBankIds.add(winner.bt.id);
       }
@@ -33665,17 +33680,15 @@ async function registerRoutes(app2) {
       }
       const fifoMatchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
       console.log(`[AUTO-MATCH] Round-amount FIFO: ${roundFifoMatchCount} matches from ${fifoFuelInvoices.length} fuel / ${fifoBankTxns.length} bank candidates`);
+      const mainPassCandidates = [];
       for (const bankTx of matchableBankTransactions) {
         if (fifoMatchedBankIds.has(bankTx.id)) continue;
-        let bestMatch = null;
         const bankDayKey = parseDateToDays(bankTx.transactionDate || "");
         const candidateInvoices = bankDayKey !== null ? invoicesByDate.get(bankDayKey) || [] : fuelInvoices;
         const seen = /* @__PURE__ */ new Set();
         for (const invoice of candidateInvoices) {
           if (seen.has(invoice.invoiceNumber)) continue;
           seen.add(invoice.invoiceNumber);
-          if (matchedInvoices.has(invoice.invoiceNumber)) continue;
-          if (invoice.items.some((item) => item.matchStatus === "matched")) continue;
           if (isRoundAmount(invoice.totalAmount)) continue;
           const reasons = [];
           const bankAmount = parseFloat(bankTx.amount);
@@ -33758,31 +33771,47 @@ async function registerRoutes(app2) {
           }
           confidence = Math.min(100, Math.max(0, confidence));
           if (confidence < rules.minimumConfidence) continue;
-          const absDiff = Math.abs(dateDiff);
           const cardMatchScore = cardMatch === "yes" ? 2 : cardMatch === "unknown" ? 1 : 0;
-          const bestCardScore = bestMatch ? bestMatch.reasons.some((r) => r.includes("Card numbers match")) ? 2 : bestMatch.reasons.some((r) => r.includes("Card numbers differ")) ? 0 : 1 : -1;
-          if (!bestMatch || confidence > bestMatch.confidence || confidence === bestMatch.confidence && cardMatchScore > bestCardScore || confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff || confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff) {
-            bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
-          }
-        }
-        if (bestMatch) {
-          const isExact = Math.abs(bestMatch.amountDiff) < 5e-3;
-          const aboveThreshold = bestMatch.confidence >= rules.autoMatchThreshold;
-          const matchType = isExact && aboveThreshold ? "auto_exact" : isExact ? "auto_exact_review" : aboveThreshold ? "auto_rules" : "auto_rules_review";
-          pendingMatches.push({
-            matchData: {
-              periodId: req.params.periodId,
-              fuelTransactionId: bestMatch.invoice.items[0].id,
-              bankTransactionId: bankTx.id,
-              matchType,
-              matchConfidence: String(bestMatch.confidence)
-            },
-            bankTxId: bankTx.id,
-            fuelItemIds: bestMatch.invoice.items.map((item) => item.id)
+          mainPassCandidates.push({
+            bankTx,
+            invoice,
+            confidence,
+            timeDiff,
+            dateDiff: Math.abs(dateDiff),
+            amountDiff,
+            cardMatchScore,
+            reasons
           });
-          matchedInvoices.add(bestMatch.invoice.invoiceNumber);
-          matchCount++;
         }
+      }
+      mainPassCandidates.sort((a, b) => {
+        if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+        if (b.cardMatchScore !== a.cardMatchScore) return b.cardMatchScore - a.cardMatchScore;
+        if (a.dateDiff !== b.dateDiff) return a.dateDiff - b.dateDiff;
+        return a.timeDiff - b.timeDiff;
+      });
+      const mainPassUsedBankIds = /* @__PURE__ */ new Set();
+      for (const c of mainPassCandidates) {
+        if (mainPassUsedBankIds.has(c.bankTx.id)) continue;
+        if (matchedInvoices.has(c.invoice.invoiceNumber)) continue;
+        if (c.invoice.items.some((item) => item.matchStatus === "matched")) continue;
+        const isExact = Math.abs(c.amountDiff) < 5e-3;
+        const aboveThreshold = c.confidence >= rules.autoMatchThreshold;
+        const matchType = isExact && aboveThreshold ? "auto_exact" : isExact ? "auto_exact_review" : aboveThreshold ? "auto_rules" : "auto_rules_review";
+        pendingMatches.push({
+          matchData: {
+            periodId: req.params.periodId,
+            fuelTransactionId: c.invoice.items[0].id,
+            bankTransactionId: c.bankTx.id,
+            matchType,
+            matchConfidence: String(c.confidence)
+          },
+          bankTxId: c.bankTx.id,
+          fuelItemIds: c.invoice.items.map((item) => item.id)
+        });
+        matchedInvoices.add(c.invoice.invoiceNumber);
+        mainPassUsedBankIds.add(c.bankTx.id);
+        matchCount++;
       }
       const matchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
       const unmatchedInPeriodBank = matchableBankTransactions.filter((bt) => {

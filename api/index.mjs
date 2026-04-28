@@ -33708,6 +33708,17 @@ async function registerRoutes(app2) {
           const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
           const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
           if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+          if (dateDiff > 0) {
+            const NR_LATE_NIGHT_FUEL_MIN = 22 * 60;
+            const NR_EARLY_MORNING_BANK_MAX = 4 * 60;
+            const NR_MAX_CROSS_MIDNIGHT_GAP = 4 * 60;
+            if (dateDiff !== 1) continue;
+            if (fuelTime === null || bankTime === null) continue;
+            if (fuelTime < NR_LATE_NIGHT_FUEL_MIN) continue;
+            if (bankTime > NR_EARLY_MORNING_BANK_MAX) continue;
+            const effectiveGap = 24 * 60 - fuelTime + bankTime;
+            if (effectiveGap > NR_MAX_CROSS_MIDNIGHT_GAP) continue;
+          }
           let confidence = 70;
           if (dateDiff === 0) {
             confidence = 85;

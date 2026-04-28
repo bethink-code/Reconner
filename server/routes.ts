@@ -2647,6 +2647,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Same-day: bank time must not precede fuel time (settlement can't happen before swipe)
           if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
 
+          // Owner's rule 1: matches must be same-day. The only cross-day exception is the
+          // late-night midnight-crossing window (fuel late evening → bank early next
+          // morning, small effective gap). Anything else cross-day is forbidden — the
+          // wider bank upload is for matching ACROSS periods (handled by lag detection
+          // and per-day reconciliation), not for stealing tomorrow's bank into today.
+          if (dateDiff > 0) {
+            const NR_LATE_NIGHT_FUEL_MIN = 22 * 60;
+            const NR_EARLY_MORNING_BANK_MAX = 4 * 60;
+            const NR_MAX_CROSS_MIDNIGHT_GAP = 4 * 60;
+            if (dateDiff !== 1) continue;
+            if (fuelTime === null || bankTime === null) continue;
+            if (fuelTime < NR_LATE_NIGHT_FUEL_MIN) continue;
+            if (bankTime > NR_EARLY_MORNING_BANK_MAX) continue;
+            const effectiveGap = (24 * 60 - fuelTime) + bankTime;
+            if (effectiveGap > NR_MAX_CROSS_MIDNIGHT_GAP) continue;
+          }
+
           // Calculate base confidence from date difference
           let confidence = 70;
           if (dateDiff === 0) {

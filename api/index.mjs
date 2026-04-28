@@ -33784,17 +33784,21 @@ async function registerRoutes(app2) {
           });
         }
       }
-      mainPassCandidates.sort((a, b) => {
+      const sameDayCandidates = mainPassCandidates.filter((c) => c.dateDiff === 0);
+      const crossDayCandidates = mainPassCandidates.filter((c) => c.dateDiff > 0);
+      const sortByConfidence = (a, b) => {
         if (b.confidence !== a.confidence) return b.confidence - a.confidence;
         if (b.cardMatchScore !== a.cardMatchScore) return b.cardMatchScore - a.cardMatchScore;
         if (a.dateDiff !== b.dateDiff) return a.dateDiff - b.dateDiff;
         return a.timeDiff - b.timeDiff;
-      });
+      };
+      sameDayCandidates.sort(sortByConfidence);
+      crossDayCandidates.sort(sortByConfidence);
       const mainPassUsedBankIds = /* @__PURE__ */ new Set();
-      for (const c of mainPassCandidates) {
-        if (mainPassUsedBankIds.has(c.bankTx.id)) continue;
-        if (matchedInvoices.has(c.invoice.invoiceNumber)) continue;
-        if (c.invoice.items.some((item) => item.matchStatus === "matched")) continue;
+      const assignCandidate = (c) => {
+        if (mainPassUsedBankIds.has(c.bankTx.id)) return;
+        if (matchedInvoices.has(c.invoice.invoiceNumber)) return;
+        if (c.invoice.items.some((item) => item.matchStatus === "matched")) return;
         const isExact = Math.abs(c.amountDiff) < 5e-3;
         const aboveThreshold = c.confidence >= rules.autoMatchThreshold;
         const matchType = isExact && aboveThreshold ? "auto_exact" : isExact ? "auto_exact_review" : aboveThreshold ? "auto_rules" : "auto_rules_review";
@@ -33812,7 +33816,10 @@ async function registerRoutes(app2) {
         matchedInvoices.add(c.invoice.invoiceNumber);
         mainPassUsedBankIds.add(c.bankTx.id);
         matchCount++;
-      }
+      };
+      for (const c of sameDayCandidates) assignCandidate(c);
+      for (const c of crossDayCandidates) assignCandidate(c);
+      console.log(`[AUTO-MATCH] Main pass: ${sameDayCandidates.length} same-day candidates, ${crossDayCandidates.length} cross-day; ${mainPassUsedBankIds.size} banks matched`);
       const matchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
       const unmatchedInPeriodBank = matchableBankTransactions.filter((bt) => {
         if (matchedBankIds.has(bt.id)) return false;

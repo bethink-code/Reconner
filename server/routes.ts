@@ -2746,22 +2746,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Sort all candidate (bank, fuel) pairs by confidence DESC, then card match,
-      // then smallest date diff, then smallest time diff. Highest-quality pair wins
-      // its assignment first regardless of bank iteration order.
-      mainPassCandidates.sort((a, b) => {
+      // Owner's rule 1 says "First match all card transactions with bank transactions
+      // that was done on the same day" — strict ordering. Same-day matches are an
+      // ABSOLUTE priority over cross-day, even when a cross-day pair has higher
+      // confidence. We split candidates into same-day vs cross-day buckets, assign
+      // same-day first, then assign cross-day from whatever residue is left.
+      const sameDayCandidates = mainPassCandidates.filter(c => c.dateDiff === 0);
+      const crossDayCandidates = mainPassCandidates.filter(c => c.dateDiff > 0);
+
+      const sortByConfidence = (a: MainCandidate, b: MainCandidate) => {
         if (b.confidence !== a.confidence) return b.confidence - a.confidence;
         if (b.cardMatchScore !== a.cardMatchScore) return b.cardMatchScore - a.cardMatchScore;
         if (a.dateDiff !== b.dateDiff) return a.dateDiff - b.dateDiff;
         return a.timeDiff - b.timeDiff;
-      });
+      };
+      sameDayCandidates.sort(sortByConfidence);
+      crossDayCandidates.sort(sortByConfidence);
 
-      // Walk top-down: each (bank, fuel) pair locks in if both sides are still free.
       const mainPassUsedBankIds = new Set<string>();
-      for (const c of mainPassCandidates) {
-        if (mainPassUsedBankIds.has(c.bankTx.id)) continue;
-        if (matchedInvoices.has(c.invoice.invoiceNumber)) continue;
-        if (c.invoice.items.some(item => item.matchStatus === 'matched')) continue;
+      const assignCandidate = (c: MainCandidate) => {
+        if (mainPassUsedBankIds.has(c.bankTx.id)) return;
+        if (matchedInvoices.has(c.invoice.invoiceNumber)) return;
+        if (c.invoice.items.some(item => item.matchStatus === 'matched')) return;
 
         const isExact = Math.abs(c.amountDiff) < 0.005;
         const aboveThreshold = c.confidence >= rules.autoMatchThreshold;
@@ -2785,7 +2791,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         matchedInvoices.add(c.invoice.invoiceNumber);
         mainPassUsedBankIds.add(c.bankTx.id);
         matchCount++;
-      }
+      };
+
+      // Stage 2a: same-day pairs first
+      for (const c of sameDayCandidates) assignCandidate(c);
+      // Stage 2b: cross-day pairs only consume whatever's left
+      for (const c of crossDayCandidates) assignCandidate(c);
+      console.log(`[AUTO-MATCH] Main pass: ${sameDayCandidates.length} same-day candidates, ${crossDayCandidates.length} cross-day; ${mainPassUsedBankIds.size} banks matched`);
 
       // *** PHASE 1: LAG DETECTION ***
       // For each still-unmatched in-period bank tx, run the same matcher against

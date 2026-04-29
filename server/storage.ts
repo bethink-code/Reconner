@@ -83,12 +83,6 @@ export interface PeriodSummary {
   unmatchedFuelCoveredAmount: number;
   unmatchedFuelUncoveredTransactions: number;
   unmatchedFuelUncoveredAmount: number;
-  // Round-amount card fuel that didn't match — suspected reprint/phantom slip
-  phantomSuspectCardTransactions: number;
-  phantomSuspectCardAmount: number;
-  // Non-round card fuel residue, presumed legitimate settlement lag
-  nextPeriodPendingCardTransactions: number;
-  nextPeriodPendingCardAmount: number;
   tenantBankCoverage?: { min: string; max: string };
   debtorFuelTransactions: number;
   debtorFuelAmount: number;
@@ -146,29 +140,6 @@ export interface AttendantSummaryRow {
   banks: AttendantBankBreakdown[];
   totalCount: number;
   totalAmount: number;
-}
-
-// Cashier accountability — same shape as attendant plus phantom-slip and next-period fields.
-// Cashier is the human who closed the transaction on the fuel-management system and
-// assigned the payment type; they are the accountability unit for cash-handling.
-export interface CashierSummaryRow {
-  cashier: string;
-  matchedCount: number;
-  matchedAmount: number;
-  matchedBankAmount: number;
-  unmatchedCount: number;
-  unmatchedAmount: number;
-  debtorCount: number;
-  debtorAmount: number;
-  declinedCount: number;
-  declinedAmount: number;
-  banks: AttendantBankBreakdown[];
-  totalCount: number;
-  totalAmount: number;
-  phantomSlipCount: number;
-  phantomSlipAmount: number;
-  nextPeriodPendingCount: number;
-  nextPeriodPendingAmount: number;
 }
 
 export interface VerificationSummary {
@@ -299,7 +270,6 @@ export interface IStorage {
   
   getPeriodSummary(periodId: string): Promise<PeriodSummary>;
   getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]>;
-  getCashierSummary(periodId: string): Promise<CashierSummaryRow[]>;
   getVerificationSummary(periodId: string): Promise<VerificationSummary>;
   
   getMatchingRules(periodId: string): Promise<MatchingRulesConfig>;
@@ -860,58 +830,39 @@ export class DatabaseStorage implements IStorage {
           COALESCE(SUM(CASE WHEN source_type LIKE 'bank%' AND match_status = 'resolved'
                      AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date THEN amount::numeric ELSE 0 END), 0) as resolved_bank_amount,
 
-          -- Unmatched card fuel scoped to period dates.
-          -- Includes 'next_period_pending' (non-round residue, presumed lag) so existing
-          -- totals stay correct. EXCLUDES 'phantom_suspect' (round-amount residue) — that
-          -- bucket is reported separately below as the suspected-reprint signal.
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
+          -- Unmatched card fuel scoped to period dates
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN 1 END) as unmatched_card_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
           THEN amount::numeric ELSE 0 END), 0) as unmatched_card_amount,
 
           -- Unmatched card fuel, split by whether the fuel date is covered by uploaded bank data (tenant-wide)
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND bc.bank_cov_start IS NOT NULL
             AND transaction_date >= bc.bank_cov_start AND transaction_date <= bc.bank_cov_end
           THEN 1 END) as unmatched_fuel_covered_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND bc.bank_cov_start IS NOT NULL
             AND transaction_date >= bc.bank_cov_start AND transaction_date <= bc.bank_cov_end
           THEN amount::numeric ELSE 0 END), 0) as unmatched_fuel_covered_amount,
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
+          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND (bc.bank_cov_start IS NULL OR transaction_date < bc.bank_cov_start OR transaction_date > bc.bank_cov_end)
           THEN 1 END) as unmatched_fuel_uncovered_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status IN ('unmatched', 'next_period_pending') OR match_status IS NULL) AND amount::numeric > 0
+          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND (match_status = 'unmatched' OR match_status IS NULL) AND amount::numeric > 0
             AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%')
             AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
             AND (bc.bank_cov_start IS NULL OR transaction_date < bc.bank_cov_start OR transaction_date > bc.bank_cov_end)
           THEN amount::numeric ELSE 0 END), 0) as unmatched_fuel_uncovered_amount,
-
-          -- Phantom-suspect: round-amount card fuel that didn't match — the suspected-reprint signal
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'phantom_suspect'
-            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
-          THEN 1 END) as phantom_suspect_card_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'phantom_suspect'
-            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
-          THEN amount::numeric ELSE 0 END), 0) as phantom_suspect_card_amount,
-
-          -- Next-period-pending: non-round card fuel residue, presumed legitimate settlement lag
-          COUNT(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'next_period_pending'
-            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
-          THEN 1 END) as next_period_pending_card_transactions,
-          COALESCE(SUM(CASE WHEN source_type = 'fuel' AND is_card_transaction = 'yes' AND match_status = 'next_period_pending'
-            AND transaction_date >= dw.min_date AND transaction_date <= dw.max_date
-          THEN amount::numeric ELSE 0 END), 0) as next_period_pending_card_amount,
 
           -- Matched: both sides strictly in-period
           COUNT(CASE WHEN match_status = 'matched'
@@ -1082,10 +1033,6 @@ export class DatabaseStorage implements IStorage {
       unmatchedFuelCoveredAmount: parseFloat(row.unmatched_fuel_covered_amount || '0'),
       unmatchedFuelUncoveredTransactions: parseInt(row.unmatched_fuel_uncovered_transactions || '0'),
       unmatchedFuelUncoveredAmount: parseFloat(row.unmatched_fuel_uncovered_amount || '0'),
-      phantomSuspectCardTransactions: parseInt(row.phantom_suspect_card_transactions || '0'),
-      phantomSuspectCardAmount: parseFloat(row.phantom_suspect_card_amount || '0'),
-      nextPeriodPendingCardTransactions: parseInt(row.next_period_pending_card_transactions || '0'),
-      nextPeriodPendingCardAmount: parseFloat(row.next_period_pending_card_amount || '0'),
       tenantBankCoverage: row.bank_cov_start && row.bank_cov_end ? {
         min: row.bank_cov_start,
         max: row.bank_cov_end,
@@ -1277,140 +1224,6 @@ export class DatabaseStorage implements IStorage {
         banks,
         totalCount: parseInt(row.total_count || '0'),
         totalAmount: parseFloat(row.total_amount || '0'),
-      };
-    });
-  }
-
-  async getCashierSummary(periodId: string): Promise<CashierSummaryRow[]> {
-    // Per-cashier accountability — parallel of getAttendantSummary, with the cashier
-    // (the person who closed the transaction in the fuel-management system) as the
-    // grouping key. Adds phantom-slip and next-period-pending columns surfaced by the
-    // round-amount FIFO matching pass.
-    const result = await pool.query(`
-      WITH period_dates AS (
-        SELECT start_date AS min_date, end_date AS max_date
-        FROM reconciliation_periods
-        WHERE id = $1
-      ),
-      is_card_only AS (
-        SELECT t.id FROM transactions t
-        CROSS JOIN period_dates pd
-        WHERE t.period_id = $1 AND t.source_type = 'fuel'
-          AND t.is_card_transaction = 'yes'
-          AND NOT (LOWER(t.payment_type) LIKE '%debtor%' OR LOWER(t.payment_type) LIKE '%account%' OR LOWER(t.payment_type) LIKE '%fleet%')
-          AND t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date
-      ),
-      is_debtor AS (
-        SELECT t.id FROM transactions t
-        CROSS JOIN period_dates pd
-        WHERE t.period_id = $1 AND t.source_type = 'fuel'
-          AND (LOWER(t.payment_type) LIKE '%debtor%' OR LOWER(t.payment_type) LIKE '%account%' OR LOWER(t.payment_type) LIKE '%fleet%')
-          AND t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date
-      )
-      SELECT
-        COALESCE(NULLIF(TRIM(t.cashier), ''), 'Unknown') AS cashier,
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched' THEN 1 END)::int AS matched_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'matched' THEN t.amount::numeric ELSE 0 END), 0) AS matched_amount,
-        -- Unmatched here means "any non-matched card fuel" so the per-cashier total reconciles
-        -- against the global totals (which still include phantom_suspect + next_period_pending).
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched' THEN 1 END)::int AS unmatched_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status != 'matched' THEN t.amount::numeric ELSE 0 END), 0) AS unmatched_amount,
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'phantom_suspect' THEN 1 END)::int AS phantom_slip_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'phantom_suspect' THEN t.amount::numeric ELSE 0 END), 0) AS phantom_slip_amount,
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'next_period_pending' THEN 1 END)::int AS next_period_pending_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_card_only) AND t.match_status = 'next_period_pending' THEN t.amount::numeric ELSE 0 END), 0) AS next_period_pending_amount,
-        COUNT(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN 1 END)::int AS debtor_count,
-        COALESCE(SUM(CASE WHEN t.id IN (SELECT id FROM is_debtor) THEN t.amount::numeric ELSE 0 END), 0) AS debtor_amount,
-        COUNT(CASE WHEN t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date THEN 1 END)::int AS total_count,
-        COALESCE(SUM(CASE WHEN t.transaction_date >= pd.min_date AND t.transaction_date <= pd.max_date THEN t.amount::numeric ELSE 0 END), 0) AS total_amount
-      FROM transactions t
-      CROSS JOIN period_dates pd
-      WHERE t.period_id = $1 AND t.source_type = 'fuel'
-      GROUP BY COALESCE(NULLIF(TRIM(t.cashier), ''), 'Unknown'), pd.min_date, pd.max_date
-      ORDER BY matched_count DESC, cashier ASC
-    `, [periodId]);
-
-    const bankBreakdown = await pool.query(`
-      SELECT
-        COALESCE(NULLIF(TRIM(t_fuel.cashier), ''), 'Unknown') AS cashier,
-        COALESCE(f.bank_name, t_bank.source_name, 'Bank') AS bank_name,
-        COUNT(*)::int AS count,
-        COALESCE(SUM(t_bank.amount::numeric), 0) AS amount
-      FROM matches m
-      JOIN transactions t_fuel ON m.fuel_transaction_id = t_fuel.id
-      JOIN transactions t_bank ON m.bank_transaction_id = t_bank.id
-      LEFT JOIN uploaded_files f ON t_bank.file_id = f.id
-      WHERE m.period_id = $1
-      GROUP BY COALESCE(NULLIF(TRIM(t_fuel.cashier), ''), 'Unknown'),
-               COALESCE(f.bank_name, t_bank.source_name, 'Bank')
-      ORDER BY count DESC
-    `, [periodId]);
-
-    const declinedBreakdown = await pool.query(`
-      SELECT
-        COALESCE(NULLIF(TRIM(fuel_match.cashier), ''), 'Unknown') AS cashier,
-        COUNT(*)::int AS declined_count,
-        COALESCE(SUM(b.amount::numeric), 0) AS declined_amount
-      FROM transactions b
-      LEFT JOIN LATERAL (
-        SELECT DISTINCT ON (t.card_number) t.cashier
-        FROM transactions t
-        WHERE t.period_id = $1
-          AND t.source_type = 'fuel'
-          AND t.card_number IS NOT NULL
-          AND t.card_number != ''
-          AND t.card_number = b.card_number
-        ORDER BY t.card_number, t.transaction_date DESC
-        LIMIT 1
-      ) fuel_match ON true
-      WHERE b.period_id = $1
-        AND b.source_type LIKE 'bank%'
-        AND b.match_status = 'excluded'
-        AND LOWER(b.description) LIKE '%declined%'
-      GROUP BY COALESCE(NULLIF(TRIM(fuel_match.cashier), ''), 'Unknown')
-    `, [periodId]);
-
-    const banksByCashier: Record<string, AttendantBankBreakdown[]> = {};
-    for (const row of bankBreakdown.rows) {
-      const c = row.cashier;
-      if (!banksByCashier[c]) banksByCashier[c] = [];
-      banksByCashier[c].push({
-        bankName: row.bank_name,
-        count: parseInt(row.count || '0'),
-        amount: parseFloat(row.amount || '0'),
-      });
-    }
-
-    const declinedByCashier: Record<string, { count: number; amount: number }> = {};
-    for (const row of declinedBreakdown.rows) {
-      declinedByCashier[row.cashier] = {
-        count: parseInt(row.declined_count || '0'),
-        amount: parseFloat(row.declined_amount || '0'),
-      };
-    }
-
-    return result.rows.map(row => {
-      const banks = banksByCashier[row.cashier] || [];
-      const matchedBankAmount = banks.reduce((sum, b) => sum + b.amount, 0);
-      const declined = declinedByCashier[row.cashier] || { count: 0, amount: 0 };
-      return {
-        cashier: row.cashier,
-        matchedCount: parseInt(row.matched_count || '0'),
-        matchedAmount: parseFloat(row.matched_amount || '0'),
-        matchedBankAmount,
-        unmatchedCount: parseInt(row.unmatched_count || '0'),
-        unmatchedAmount: parseFloat(row.unmatched_amount || '0'),
-        debtorCount: parseInt(row.debtor_count || '0'),
-        debtorAmount: parseFloat(row.debtor_amount || '0'),
-        declinedCount: declined.count,
-        declinedAmount: declined.amount,
-        banks,
-        totalCount: parseInt(row.total_count || '0'),
-        totalAmount: parseFloat(row.total_amount || '0'),
-        phantomSlipCount: parseInt(row.phantom_slip_count || '0'),
-        phantomSlipAmount: parseFloat(row.phantom_slip_amount || '0'),
-        nextPeriodPendingCount: parseInt(row.next_period_pending_count || '0'),
-        nextPeriodPendingAmount: parseFloat(row.next_period_pending_amount || '0'),
       };
     });
   }

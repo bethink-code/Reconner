@@ -134,37 +134,6 @@ export type DeclineAnalysisResult = {
   suspicious: DeclineAnalysisSuspicious[];
 };
 
-// Suspected reprint slip — a round-amount fuel sale tagged 'phantom_suspect' by the matcher.
-export type ReprintSlip = {
-  id: string;
-  date: string;
-  time: string;
-  amount: number;
-  cardNumber: string;
-  cashier: string;
-  attendant: string;
-  reference: string;
-  description: string;
-};
-
-export type ReprintCashierGroup = {
-  cashier: string;
-  count: number;
-  amount: number;
-  slips: ReprintSlip[];
-};
-
-export type ReprintAnalysisResult = {
-  summary: {
-    totalSlips: number;
-    totalAmount: number;
-    cashierCount: number;
-    suspectCardTails: string[];
-  };
-  byCashier: ReprintCashierGroup[];
-  slips: ReprintSlip[];
-};
-
 type BankLike = {
   id: string;
   amount: string;
@@ -176,90 +145,6 @@ type BankLike = {
   description: string | null;
   matchStatus: string;
 };
-
-/**
- * Identify suspected reprint/phantom slips from the period's transactions. Pure function — no I/O.
- * Operates on fuel transactions tagged 'phantom_suspect' by the round-amount FIFO matching pass:
- * round-amount fuel sales (R10 multiples, .00 cents) with no bank settlement counterpart.
- *
- * Suspect card-tails: card-tails appearing on multiple round-amount fuel transactions in the
- * period (matched OR phantom). These are the cards a rogue terminal might be reprinting from.
- */
-function computeReprintAnalysis<F extends FuelLike & {
-  id: string;
-  amount: string;
-  isCardTransaction: string | null;
-  matchStatus: string;
-  description: string | null;
-  referenceNumber?: string | null;
-}>(
-  fuelTxns: readonly F[]
-): ReprintAnalysisResult {
-  const isRoundFuel = (tx: F) => {
-    if (tx.isCardTransaction !== 'yes') return false;
-    const amount = parseFloat(tx.amount);
-    if (!Number.isFinite(amount) || amount <= 0) return false;
-    const cents = Math.round((amount - Math.floor(amount)) * 100);
-    if (cents !== 0) return false;
-    return Math.round(amount) % 10 === 0;
-  };
-
-  const phantoms = fuelTxns.filter(t => t.matchStatus === 'phantom_suspect');
-  const allRoundFuel = fuelTxns.filter(isRoundFuel);
-
-  // Cards appearing on 2+ round-amount fuel txns in this period — possible cloning sources
-  const cardCounts = new Map<string, number>();
-  for (const tx of allRoundFuel) {
-    const card = tx.cardNumber?.trim();
-    if (!card) continue;
-    cardCounts.set(card, (cardCounts.get(card) ?? 0) + 1);
-  }
-  const suspectCardTails = Array.from(cardCounts.entries())
-    .filter(([, count]) => count >= 2)
-    .sort((a, b) => b[1] - a[1])
-    .map(([card]) => card);
-
-  const slips: ReprintSlip[] = phantoms.map(tx => ({
-    id: tx.id,
-    date: tx.transactionDate,
-    time: tx.transactionTime || '',
-    amount: parseFloat(tx.amount),
-    cardNumber: tx.cardNumber?.trim() || '',
-    cashier: (tx.cashier?.trim()) || 'Unknown',
-    attendant: (tx.attendant?.trim()) || 'Unknown',
-    reference: tx.referenceNumber?.trim() || '',
-    description: tx.description?.trim() || '',
-  })).sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    return a.time.localeCompare(b.time);
-  });
-
-  // Group by cashier — accountability unit per the owner's mental model
-  const byCashierMap = new Map<string, ReprintSlip[]>();
-  for (const slip of slips) {
-    if (!byCashierMap.has(slip.cashier)) byCashierMap.set(slip.cashier, []);
-    byCashierMap.get(slip.cashier)!.push(slip);
-  }
-  const byCashier: ReprintCashierGroup[] = Array.from(byCashierMap.entries())
-    .map(([cashier, group]) => ({
-      cashier,
-      count: group.length,
-      amount: group.reduce((sum, s) => sum + s.amount, 0),
-      slips: group,
-    }))
-    .sort((a, b) => b.amount - a.amount);
-
-  return {
-    summary: {
-      totalSlips: slips.length,
-      totalAmount: slips.reduce((sum, s) => sum + s.amount, 0),
-      cashierCount: byCashier.length,
-      suspectCardTails,
-    },
-    byCashier,
-    slips,
-  };
-}
 
 /** Run the decline analysis over period-scoped bank + fuel transactions. Pure function — no I/O. */
 function computeDeclineAnalysis<B extends BankLike, F extends FuelLike & { amount: string; isCardTransaction: string | null }>(
@@ -2181,141 +2066,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
   }
 
-  // Round-amount fraud-detection rules. Round-amount fuel slips are the fraud signal:
-  // an attendant/cashier scam reuses old or rogue-terminal slips that conveniently land
-  // on round amounts so no cash change has to be given (till stays closed).
-  const ROUND_AMOUNT_RULES = {
-    // Smallest "no change needed" denomination. R10 multiples (R10, R20, R50, R100, R200,
-    // R500, R1000) all settle in notes only. Anything not a multiple of R10 needs coins.
-    minDenomination: 10,
-  };
-
-  function isRoundAmount(amount: number): boolean {
-    if (!Number.isFinite(amount) || amount <= 0) return false;
-    const cents = Math.round((amount - Math.floor(amount)) * 100);
-    if (cents !== 0) return false;
-    const rand = Math.round(amount);
-    return rand % ROUND_AMOUNT_RULES.minDenomination === 0;
-  }
-
-  // FIFO match round-amount fuel invoices against round-amount bank txns.
-  //
-  // Owner's rules (as encoded):
-  //   3. Match round numbers — use invoice time to find the FIRST card transaction for
-  //      the same round number. Repeat until all card slips are matched.
-  //
-  // Same-day is the absolute priority; cross-day is allowed only in the
-  // late-night midnight-crossing case (fuel >= 22:00 → bank next-day <= 04:00,
-  // effective gap <= 4hrs). Pure invoice-time FIFO, no card-tail preference inside
-  // FIFO — the card-tail check belongs in duplicate-detection on the *unmatched*
-  // residue (per rule 3c), not in the matching itself.
-  type FifoMatch = {
-    invoice: FuelInvoice;
-    bank: any;
-    confidence: number;
-    timeDiff: number;
-    dateDiff: number;
-  };
-  function roundAmountFifoMatch(
-    invoices: FuelInvoice[],
-    banks: any[]
-  ): { matches: FifoMatch[]; residualInvoices: FuelInvoice[]; residualBanks: any[] } {
-    const amountKey = (n: number) => Math.round(n * 100); // cents, stable for equality
-
-    const invoicesByAmount = new Map<number, FuelInvoice[]>();
-    for (const inv of invoices) {
-      const key = amountKey(inv.totalAmount);
-      if (!invoicesByAmount.has(key)) invoicesByAmount.set(key, []);
-      invoicesByAmount.get(key)!.push(inv);
-    }
-    const banksByAmount = new Map<number, any[]>();
-    for (const bt of banks) {
-      const key = amountKey(parseFloat(bt.amount));
-      if (!banksByAmount.has(key)) banksByAmount.set(key, []);
-      banksByAmount.get(key)!.push(bt);
-    }
-
-    const matches: FifoMatch[] = [];
-    const matchedInvoiceIds = new Set<string>();
-    const matchedBankIds = new Set<string>();
-
-    for (const [amountCents, invList] of invoicesByAmount) {
-      const bankList = banksByAmount.get(amountCents);
-      if (!bankList || bankList.length === 0) continue;
-
-      // Sort fuel invoices by invoice time ASC — owner's rule 3a "first card transaction"
-      const sortedInvoices = [...invList].sort((a, b) => {
-        const aD = parseDateToDays(a.firstDate || '') ?? 0;
-        const bD = parseDateToDays(b.firstDate || '') ?? 0;
-        if (aD !== bD) return aD - bD;
-        const aT = parseTimeToMinutes(a.firstTime || '') ?? 0;
-        const bT = parseTimeToMinutes(b.firstTime || '') ?? 0;
-        return aT - bT;
-      });
-
-      for (const inv of sortedInvoices) {
-        const fuelDate = parseDateToDays(inv.firstDate || '');
-        const fuelTime = parseTimeToMinutes(inv.firstTime || '');
-        if (fuelDate === null) continue;
-
-        // Same-day is the absolute priority. Late-night midnight-crossing is the only
-        // cross-day exception: fuel late evening (>= 22:00) can settle in early morning
-        // of the next day (<= 04:00) within a small effective time gap. Anything else
-        // cross-day for round amounts is blocked (fakes settle never; legit settles
-        // same-day or in the early-morning batch).
-        const LATE_NIGHT_FUEL_MIN = 22 * 60;
-        const EARLY_MORNING_BANK_MAX = 4 * 60;
-        const MAX_CROSS_MIDNIGHT_GAP = 4 * 60;
-
-        const candidates: { bt: any; bankTime: number; isCrossDay: boolean; effectiveGap: number }[] = [];
-        for (const bt of bankList) {
-          if (matchedBankIds.has(bt.id)) continue;
-          const bankDate = parseDateToDays(bt.transactionDate || '');
-          const bankTime = parseTimeToMinutes(bt.transactionTime || '');
-          if (bankDate === null) continue;
-
-          if (bankDate === fuelDate) {
-            // Same-day — bank settlement must be at or after fuel time
-            if (fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
-            const effectiveGap = (fuelTime !== null && bankTime !== null) ? bankTime - fuelTime : 0;
-            candidates.push({ bt, bankTime: bankTime ?? 0, isCrossDay: false, effectiveGap });
-          } else if (bankDate === fuelDate + 1 && fuelTime !== null && bankTime !== null) {
-            // Late-night midnight-crossing exception
-            if (fuelTime < LATE_NIGHT_FUEL_MIN) continue;
-            if (bankTime > EARLY_MORNING_BANK_MAX) continue;
-            const effectiveGap = (24 * 60 - fuelTime) + bankTime;
-            if (effectiveGap > MAX_CROSS_MIDNIGHT_GAP) continue;
-            candidates.push({ bt, bankTime, isCrossDay: true, effectiveGap });
-          }
-        }
-        if (candidates.length === 0) continue;
-
-        // Same-day always preferred over cross-day; then earliest available within group.
-        candidates.sort((a, b) => {
-          if (a.isCrossDay !== b.isCrossDay) return a.isCrossDay ? 1 : -1;
-          return a.effectiveGap - b.effectiveGap;
-        });
-
-        const winner = candidates[0];
-        const dateDiff = winner.isCrossDay ? 1 : 0;
-        const timeDiff = winner.effectiveGap;
-        const confidence = !winner.isCrossDay
-          ? (timeDiff <= 30 ? 95 : timeDiff <= 120 ? 88 : 80)
-          : 78; // cross-day late-night match has slightly lower confidence
-
-        matches.push({ invoice: inv, bank: winner.bt, confidence, timeDiff, dateDiff });
-        matchedInvoiceIds.add(inv.invoiceNumber);
-        matchedBankIds.add(winner.bt.id);
-      }
-    }
-
-    return {
-      matches,
-      residualInvoices: invoices.filter(inv => !matchedInvoiceIds.has(inv.invoiceNumber)),
-      residualBanks: banks.filter(bt => !matchedBankIds.has(bt.id)),
-    };
-  }
-
   // Score a bank tx against candidate invoices using the same rules as the main matcher.
   // Returns the best match or null. Used by the lag-detection pass to find out-of-period
   // fuel that could explain an unmatched in-period bank tx.
@@ -2545,62 +2295,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fuelItemIds: string[];
       }> = [];
 
-      // *** STAGE 1 — ROUND-AMOUNT SAME-DAY FIFO ***
-      // Owner's rule 3: round amounts (no change to give = the fraud-friendly amounts)
-      // are matched by walking fuel invoices in invoice-time order and locking the
-      // earliest available bank settlement same-day. Runs BEFORE the main pass so the
-      // main pass tolerance can't grab round-amount fuel and give it to a non-exact
-      // bank settlement. Round-amount fuel residue surfaces as phantom_suspect.
-      const fifoFuelInvoices = fuelInvoices.filter(inv => isRoundAmount(inv.totalAmount));
-      const fifoBankTxns = matchableBankTransactions.filter(bt => isRoundAmount(parseFloat(bt.amount)));
-      const fifoResult = roundAmountFifoMatch(fifoFuelInvoices, fifoBankTxns);
-      let roundFifoMatchCount = 0;
-      for (const m of fifoResult.matches) {
-        pendingMatches.push({
-          matchData: {
-            periodId: req.params.periodId,
-            fuelTransactionId: m.invoice.items[0].id,
-            bankTransactionId: m.bank.id,
-            matchType: 'auto_round_fifo',
-            matchConfidence: String(m.confidence),
-          },
-          bankTxId: m.bank.id,
-          fuelItemIds: m.invoice.items.map(item => item.id),
-        });
-        matchedInvoices.add(m.invoice.invoiceNumber);
-        matchCount++;
-        roundFifoMatchCount++;
-      }
-      const fifoMatchedBankIds = new Set(pendingMatches.map(pm => pm.bankTxId));
-      console.log(`[AUTO-MATCH] Round-amount FIFO: ${roundFifoMatchCount} matches from ${fifoFuelInvoices.length} fuel / ${fifoBankTxns.length} bank candidates`);
-
-      // *** STAGE 2 — Main pass for non-round fuel (GLOBAL GREEDY) ***
-      // Round-amount fuel is reserved for FIFO (above) — main pass tolerance must not
-      // grab it, even if FIFO didn't find it a partner (residue → phantom_suspect).
-      // Round-amount bank that FIFO didn't match IS still allowed to match non-round
-      // fuel here (e.g. Bank R400.00 settling Fuel R400.20 — pump-calibration drift).
-      //
-      // Global-greedy assignment: collect EVERY (bank, fuel) candidate above the
-      // confidence threshold across all banks first, sort by confidence DESC, then
-      // walk top-down assigning. Replaces the previous bank-iteration-order greedy
-      // which let earlier-iterated banks lock in suboptimal matches and starve later
-      // banks of their better candidates ("first auto-match wrong, unmatch+rematch
-      // right" symptom Pieter reported).
-      type MainCandidate = {
-        bankTx: any;
-        invoice: FuelInvoice;
-        confidence: number;
-        timeDiff: number;
-        dateDiff: number;
-        amountDiff: number;
-        cardMatchScore: number; // 2=match, 1=unknown, 0=mismatch
-        reasons: string[];
-      };
-      const mainPassCandidates: MainCandidate[] = [];
-
+      // Match bank transactions to invoices (only matchable ones)
       for (const bankTx of matchableBankTransactions) {
-        // Skip banks already matched by FIFO
-        if (fifoMatchedBankIds.has(bankTx.id)) continue;
+        let bestMatch: { 
+          invoice: FuelInvoice; 
+          confidence: number; 
+          timeDiff: number; 
+          dateDiff: number;
+          amountDiff: number;
+          reasons: string[];
+        } | null = null;
 
         // Look up candidate invoices by bank transaction date
         const bankDayKey = parseDateToDays(bankTx.transactionDate || '');
@@ -2611,9 +2315,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const invoice of candidateInvoices) {
           if (seen.has(invoice.invoiceNumber)) continue;
           seen.add(invoice.invoiceNumber);
-          // Skip round-amount fuel — owned by the FIFO pass above; if FIFO didn't match
-          // it, the main-pass tolerance is not allowed to grab it (owner's rule).
-          if (isRoundAmount(invoice.totalAmount)) continue;
+          // Skip if already matched
+          if (matchedInvoices.has(invoice.invoiceNumber)) continue;
+          if (invoice.items.some(item => item.matchStatus === 'matched')) continue;
 
           const reasons: string[] = [];
 
@@ -2646,23 +2350,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Same-day: bank time must not precede fuel time (settlement can't happen before swipe)
           if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
-
-          // Owner's rule 1: matches must be same-day. The only cross-day exception is the
-          // late-night midnight-crossing window (fuel late evening → bank early next
-          // morning, small effective gap). Anything else cross-day is forbidden — the
-          // wider bank upload is for matching ACROSS periods (handled by lag detection
-          // and per-day reconciliation), not for stealing tomorrow's bank into today.
-          if (dateDiff > 0) {
-            const NR_LATE_NIGHT_FUEL_MIN = 22 * 60;
-            const NR_EARLY_MORNING_BANK_MAX = 4 * 60;
-            const NR_MAX_CROSS_MIDNIGHT_GAP = 4 * 60;
-            if (dateDiff !== 1) continue;
-            if (fuelTime === null || bankTime === null) continue;
-            if (fuelTime < NR_LATE_NIGHT_FUEL_MIN) continue;
-            if (bankTime > NR_EARLY_MORNING_BANK_MAX) continue;
-            const effectiveGap = (24 * 60 - fuelTime) + bankTime;
-            if (effectiveGap > NR_MAX_CROSS_MIDNIGHT_GAP) continue;
-          }
 
           // Calculate base confidence from date difference
           let confidence = 70;
@@ -2749,72 +2436,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Check minimum confidence threshold
           if (confidence < rules.minimumConfidence) continue;
 
+          // Prefer matches with: highest confidence, then card match, then smallest date diff, then smallest time diff
+          const absDiff = Math.abs(dateDiff);
           const cardMatchScore = cardMatch === 'yes' ? 2 : cardMatch === 'unknown' ? 1 : 0;
-          mainPassCandidates.push({
-            bankTx,
-            invoice,
-            confidence,
-            timeDiff,
-            dateDiff: Math.abs(dateDiff),
-            amountDiff,
-            cardMatchScore,
-            reasons,
+          const bestCardScore = bestMatch ? 
+            (bestMatch.reasons.some(r => r.includes('Card numbers match')) ? 2 : 
+             bestMatch.reasons.some(r => r.includes('Card numbers differ')) ? 0 : 1) : -1;
+          
+          if (!bestMatch || 
+              confidence > bestMatch.confidence ||
+              (confidence === bestMatch.confidence && cardMatchScore > bestCardScore) ||
+              (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff) ||
+              (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
+            bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
+          }
+        }
+
+        // Collect match for bulk creation
+        if (bestMatch) {
+          const isExact = Math.abs(bestMatch.amountDiff) < 0.005;
+          const aboveThreshold = bestMatch.confidence >= rules.autoMatchThreshold;
+          const matchType = isExact && aboveThreshold ? 'auto_exact'
+            : isExact ? 'auto_exact_review'
+            : aboveThreshold ? 'auto_rules'
+            : 'auto_rules_review';
+
+          pendingMatches.push({
+            matchData: {
+              periodId: req.params.periodId,
+              fuelTransactionId: bestMatch.invoice.items[0].id,
+              bankTransactionId: bankTx.id,
+              matchType,
+              matchConfidence: String(bestMatch.confidence),
+            },
+            bankTxId: bankTx.id,
+            fuelItemIds: bestMatch.invoice.items.map(item => item.id),
           });
+
+          matchedInvoices.add(bestMatch.invoice.invoiceNumber);
+          matchCount++;
         }
       }
-
-      // Owner's rule 1 says "First match all card transactions with bank transactions
-      // that was done on the same day" — strict ordering. Same-day matches are an
-      // ABSOLUTE priority over cross-day, even when a cross-day pair has higher
-      // confidence. We split candidates into same-day vs cross-day buckets, assign
-      // same-day first, then assign cross-day from whatever residue is left.
-      const sameDayCandidates = mainPassCandidates.filter(c => c.dateDiff === 0);
-      const crossDayCandidates = mainPassCandidates.filter(c => c.dateDiff > 0);
-
-      const sortByConfidence = (a: MainCandidate, b: MainCandidate) => {
-        if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-        if (b.cardMatchScore !== a.cardMatchScore) return b.cardMatchScore - a.cardMatchScore;
-        if (a.dateDiff !== b.dateDiff) return a.dateDiff - b.dateDiff;
-        return a.timeDiff - b.timeDiff;
-      };
-      sameDayCandidates.sort(sortByConfidence);
-      crossDayCandidates.sort(sortByConfidence);
-
-      const mainPassUsedBankIds = new Set<string>();
-      const assignCandidate = (c: MainCandidate) => {
-        if (mainPassUsedBankIds.has(c.bankTx.id)) return;
-        if (matchedInvoices.has(c.invoice.invoiceNumber)) return;
-        if (c.invoice.items.some(item => item.matchStatus === 'matched')) return;
-
-        const isExact = Math.abs(c.amountDiff) < 0.005;
-        const aboveThreshold = c.confidence >= rules.autoMatchThreshold;
-        const matchType = isExact && aboveThreshold ? 'auto_exact'
-          : isExact ? 'auto_exact_review'
-          : aboveThreshold ? 'auto_rules'
-          : 'auto_rules_review';
-
-        pendingMatches.push({
-          matchData: {
-            periodId: req.params.periodId,
-            fuelTransactionId: c.invoice.items[0].id,
-            bankTransactionId: c.bankTx.id,
-            matchType,
-            matchConfidence: String(c.confidence),
-          },
-          bankTxId: c.bankTx.id,
-          fuelItemIds: c.invoice.items.map(item => item.id),
-        });
-
-        matchedInvoices.add(c.invoice.invoiceNumber);
-        mainPassUsedBankIds.add(c.bankTx.id);
-        matchCount++;
-      };
-
-      // Stage 2a: same-day pairs first
-      for (const c of sameDayCandidates) assignCandidate(c);
-      // Stage 2b: cross-day pairs only consume whatever's left
-      for (const c of crossDayCandidates) assignCandidate(c);
-      console.log(`[AUTO-MATCH] Main pass: ${sameDayCandidates.length} same-day candidates, ${crossDayCandidates.length} cross-day; ${mainPassUsedBankIds.size} banks matched`);
 
       // *** PHASE 1: LAG DETECTION ***
       // For each still-unmatched in-period bank tx, run the same matcher against
@@ -2884,28 +2546,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         txUpdates.push({ id: bankId, data: { matchStatus: 'lag_explained', matchId: null } });
       }
 
-      // *** RESIDUAL FUEL TAGGING ***
-      // After all matching passes, every in-period card-fuel invoice that didn't match
-      // gets an explicit positive tag instead of staying as the noisy generic 'unmatched':
-      //   - round-amount residue → 'phantom_suspect' (Reprint Report only, out of Review)
-      //   - non-round residue → 'next_period_pending' (Review, presumed settlement lag)
-      // This realises the user's "fewer transactions to match" outcome.
-      const finalMatchedFuelIds = new Set<string>();
-      for (const pm of pendingMatches) {
-        for (const fid of pm.fuelItemIds) finalMatchedFuelIds.add(fid);
-      }
-      let phantomSuspectCount = 0;
-      let nextPeriodPendingCount = 0;
-      for (const ft of fuelTransactions) {
-        if (finalMatchedFuelIds.has(ft.id)) continue;
-        const amount = parseFloat(ft.amount);
-        const tag = isRoundAmount(amount) ? 'phantom_suspect' : 'next_period_pending';
-        txUpdates.push({ id: ft.id, data: { matchStatus: tag, matchId: null } });
-        if (tag === 'phantom_suspect') phantomSuspectCount++;
-        else nextPeriodPendingCount++;
-      }
-      console.log(`[AUTO-MATCH] Residual fuel tagged: ${phantomSuspectCount} phantom_suspect, ${nextPeriodPendingCount} next_period_pending`);
-
       // Bulk update all transactions
       console.log(`[MATCH] Updating ${txUpdates.length} transactions in bulk...`);
       await storage.updateTransactionsBatch(txUpdates);
@@ -2924,9 +2564,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         matchesCreated: matchCount,
-        roundFifoMatches: roundFifoMatchCount,
-        phantomSuspectCount,
-        nextPeriodPendingCount,
         cardTransactionsProcessed: fuelTransactions.length,
         invoicesCreated: fuelInvoices.length,
         bankTransactionsTotal: bankTransactions.length,
@@ -3494,44 +3131,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/periods/:periodId/cashier-summary", isAuthenticated, async (req: any, res) => {
-    try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
-      if (!period) return;
-      const cashierSummary = await storage.getCashierSummary(req.params.periodId);
-      res.json(cashierSummary);
-    } catch (error) {
-      console.error("Error fetching cashier summary:", error);
-      res.status(500).json({ error: "Failed to fetch cashier summary" });
-    }
-  });
-
-  app.get("/api/periods/:periodId/reprint-analysis", isAuthenticated, async (req: any, res) => {
-    try {
-      const period = await assertPeriodOwner(req.params.periodId, req, res);
-      if (!period) return;
-      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      const fuel = transactions.filter(t => t.sourceType === 'fuel');
-      const result = computeReprintAnalysis(fuel);
-      res.json(result);
-    } catch (error) {
-      console.error("Error fetching reprint analysis:", error);
-      res.status(500).json({ error: "Failed to fetch reprint analysis" });
-    }
-  });
-
   // Export full reconciliation report as Excel
   app.get("/api/periods/:periodId/export", isAuthenticated, async (req: any, res) => {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
 
-      const [allTransactions, matchesData, resolutions, attendantSummary, cashierSummary, matchingRulesData, periodSummary] = await Promise.all([
+      const [allTransactions, matchesData, resolutions, attendantSummary, matchingRulesData, periodSummary] = await Promise.all([
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getMatchesByPeriod(req.params.periodId),
         storage.getResolutionsByPeriod(req.params.periodId),
         storage.getAttendantSummary(req.params.periodId),
-        storage.getCashierSummary(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
         storage.getPeriodSummary(req.params.periodId),
       ]);
@@ -4207,131 +3817,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attendantRows), 'Attendant Summary');
-      }
-
-      // Sheet 8b: Cashier Summary — per-cashier accountability with phantom slips
-      if (cashierSummary.length > 0) {
-        const withVerified = cashierSummary
-          .filter(c => c.matchedCount > 0)
-          .sort((a, b) => b.matchedBankAmount - a.matchedBankAmount);
-        const unverified = cashierSummary.filter(c => c.matchedCount === 0 && c.unmatchedCount > 0);
-
-        const totalFuelCardSales = withVerified.reduce((s, c) => s + c.matchedAmount + c.unmatchedAmount, 0);
-        const totalFuelCardSalesCount = withVerified.reduce((s, c) => s + c.matchedCount + c.unmatchedCount, 0);
-        const totalMatchedFuelCardSales = withVerified.reduce((s, c) => s + c.matchedAmount, 0);
-        const totalMatchedFuelCardSalesCount = withVerified.reduce((s, c) => s + c.matchedCount, 0);
-        const totalMatchedBankAmount = withVerified.reduce((s, c) => s + c.matchedBankAmount, 0);
-        const totalUnmatchedCardCount = cashierSummary.reduce((s, c) => s + c.unmatchedCount, 0);
-        const totalUnmatchedCardAmount = cashierSummary.reduce((s, c) => s + c.unmatchedAmount, 0);
-        const totalPhantomCount = cashierSummary.reduce((s, c) => s + c.phantomSlipCount, 0);
-        const totalPhantomAmount = cashierSummary.reduce((s, c) => s + c.phantomSlipAmount, 0);
-        const totalNextPeriodCount = cashierSummary.reduce((s, c) => s + c.nextPeriodPendingCount, 0);
-        const totalNextPeriodAmount = cashierSummary.reduce((s, c) => s + c.nextPeriodPendingAmount, 0);
-        const totalCalibrationError = totalMatchedFuelCardSales - totalMatchedBankAmount;
-        const totalShortfallToCashiers = totalUnmatchedCardAmount + totalCalibrationError;
-        const unmatchedCashierCount = cashierSummary.filter(c => c.unmatchedCount > 0).length;
-
-        const cashierRows: Record<string, any>[] = [];
-
-        cashierRows.push({ 'Metric': 'CASHIER ACCOUNTABILITY', 'Count': '', 'Amount': '' });
-        cashierRows.push({ 'Metric': '  Fuel card sales', 'Count': totalFuelCardSalesCount, 'Amount': fmt(totalFuelCardSales) });
-        cashierRows.push({ 'Metric': '  less Matched fuel card sales', 'Count': totalMatchedFuelCardSalesCount, 'Amount': fmt(totalMatchedFuelCardSales) });
-        cashierRows.push({ 'Metric': '  Unmatched fuel card sales', 'Count': totalUnmatchedCardCount, 'Amount': fmt(totalUnmatchedCardAmount) });
-        cashierRows.push({ 'Metric': `    (across ${unmatchedCashierCount} cashier${unmatchedCashierCount !== 1 ? 's' : ''})` });
-        cashierRows.push({ 'Metric': '  plus Pump calibration error', 'Count': '', 'Amount': fmt(totalCalibrationError) });
-        cashierRows.push({ 'Metric': '  Total shortfall allocated to cashiers', 'Count': '', 'Amount': fmt(totalShortfallToCashiers) });
-        if (totalPhantomCount > 0) {
-          cashierRows.push({});
-          cashierRows.push({ 'Metric': '  Suspected phantom slips (round-amount, no bank match)', 'Count': totalPhantomCount, 'Amount': fmt(totalPhantomAmount) });
-        }
-        if (totalNextPeriodCount > 0) {
-          cashierRows.push({ 'Metric': '  Pending next period (likely settlement lag)', 'Count': totalNextPeriodCount, 'Amount': fmt(totalNextPeriodAmount) });
-        }
-        cashierRows.push({});
-
-        cashierRows.push({ 'Metric': 'VERIFIED FUEL CARD SALES BY CASHIER' });
-        cashierRows.push({});
-
-        for (const c of withVerified) {
-          const totalCardSales = c.matchedAmount + c.unmatchedAmount;
-          const calibrationErr = c.matchedAmount - c.matchedBankAmount;
-          const cashierShortfall = c.unmatchedAmount + calibrationErr;
-
-          cashierRows.push({ 'Metric': `${c.cashier} (${c.matchedCount} verified sale${c.matchedCount !== 1 ? 's' : ''})` });
-          cashierRows.push({ 'Metric': '  Total card sales', 'Count': c.matchedCount + c.unmatchedCount, 'Amount': fmt(totalCardSales) });
-          cashierRows.push({ 'Metric': '  Matched card sales', 'Count': c.matchedCount, 'Amount': fmt(c.matchedAmount) });
-          cashierRows.push({ 'Metric': '  Matched bank amount', 'Count': c.matchedCount, 'Amount': fmt(c.matchedBankAmount) });
-
-          if (c.banks.length >= 2) {
-            for (const bank of c.banks) {
-              cashierRows.push({ 'Metric': `    ${bank.bankName}`, 'Count': bank.count, 'Amount': fmt(bank.amount) });
-            }
-          }
-
-          if (c.debtorCount > 0) {
-            cashierRows.push({ 'Metric': '  Debtor / Account', 'Count': c.debtorCount, 'Amount': fmt(c.debtorAmount) });
-          }
-
-          if (c.unmatchedCount > 0 || Math.abs(calibrationErr) >= 0.01 || c.phantomSlipCount > 0) {
-            if (c.unmatchedCount > 0) {
-              cashierRows.push({ 'Metric': '  Unmatched card sales', 'Count': c.unmatchedCount, 'Amount': fmt(c.unmatchedAmount) });
-            }
-            if (c.phantomSlipCount > 0) {
-              cashierRows.push({ 'Metric': '  Suspected phantom slips', 'Count': c.phantomSlipCount, 'Amount': fmt(c.phantomSlipAmount) });
-            }
-            if (Math.abs(calibrationErr) >= 0.01) {
-              cashierRows.push({ 'Metric': '  Pump calibration error', 'Count': '', 'Amount': fmt(calibrationErr) });
-            }
-            cashierRows.push({ 'Metric': '  Cashier shortfall', 'Count': '', 'Amount': fmt(cashierShortfall) });
-          }
-
-          cashierRows.push({});
-        }
-
-        if (unverified.length > 0) {
-          cashierRows.push({ 'Metric': 'NO VERIFIED FUEL CARD SALES' });
-          for (const c of unverified) {
-            cashierRows.push({ 'Metric': `  ${c.cashier}`, 'Count': c.unmatchedCount, 'Amount': fmt(c.unmatchedAmount) });
-          }
-        }
-
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cashierRows), 'Cashier Summary');
-      }
-
-      // Sheet 8c: Suspected reprint slips — round-amount fuel sales with no bank settlement
-      {
-        const reprintAnalysis = computeReprintAnalysis(fuelTxns);
-        if (reprintAnalysis.summary.totalSlips > 0) {
-          const reprintRows: Record<string, any>[] = [];
-
-          reprintRows.push({ 'Section': 'SUSPECTED REPRINT SLIPS — SUMMARY' });
-          reprintRows.push({ 'Section': '  Total slips', 'Count': reprintAnalysis.summary.totalSlips, 'Amount': fmt(reprintAnalysis.summary.totalAmount) });
-          reprintRows.push({ 'Section': `  Across ${reprintAnalysis.summary.cashierCount} cashier${reprintAnalysis.summary.cashierCount !== 1 ? 's' : ''}` });
-          if (reprintAnalysis.summary.suspectCardTails.length > 0) {
-            reprintRows.push({});
-            reprintRows.push({ 'Section': 'CARDS USED ON MULTIPLE ROUND-AMOUNT SALES' });
-            for (const card of reprintAnalysis.summary.suspectCardTails) {
-              reprintRows.push({ 'Section': `  ${card}` });
-            }
-          }
-          reprintRows.push({});
-          reprintRows.push({ 'Section': 'PER-CASHIER BREAKDOWN' });
-          for (const group of reprintAnalysis.byCashier) {
-            reprintRows.push({});
-            reprintRows.push({ 'Section': `${group.cashier}`, 'Count': group.count, 'Amount': fmt(group.amount) });
-            for (const slip of group.slips) {
-              reprintRows.push({
-                'Section': `  ${slip.date} ${slip.time}`,
-                'Card': slip.cardNumber,
-                'Attendant': slip.attendant,
-                'Reference': slip.reference,
-                'Amount': fmt(slip.amount),
-              });
-            }
-          }
-
-          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(reprintRows), 'Suspected reprints');
-        }
       }
 
       // Sheet 9: All Transactions

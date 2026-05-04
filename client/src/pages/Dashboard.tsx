@@ -194,6 +194,7 @@ export default function Dashboard() {
       description: `Based on matching rules from: ${period.name}`,
       startDate: nextStart,
       endDate: nextEnd,
+      propertyId: source?.propertyId || currentPropertyId || "",
     });
     setShowCreateDialog(true);
   };

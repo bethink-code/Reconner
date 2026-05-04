@@ -354,7 +354,7 @@ export const requireOrgOwner: RequestHandler = (req, res, next) => {
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as SessionUser | undefined;
 
-  if (!req.isAuthenticated() || !user.expires_at) {
+  if (!req.isAuthenticated() || !user?.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 

@@ -1,0 +1,188 @@
+export interface FuelInvoice<TItem> {
+  invoiceNumber: string;
+  items: TItem[];
+  totalAmount: number;
+  firstDate: string;
+  firstTime: string | null;
+  cardNumber: string | null;
+}
+
+export interface MatchingRulesLike {
+  amountTolerance: number;
+  dateWindowDays: number;
+  timeWindowMinutes: number;
+  requireCardMatch: boolean;
+  minimumConfidence: number;
+}
+
+export interface BestInvoiceMatch<TItem> {
+  invoice: FuelInvoice<TItem>;
+  confidence: number;
+  timeDiff: number;
+  dateDiff: number;
+  amountDiff: number;
+  reasons: string[];
+}
+
+type FuelTxnLike = {
+  id: string;
+  amount: string;
+  transactionDate: string;
+  transactionTime: string | null;
+  cardNumber: string | null;
+  referenceNumber: string | null;
+  matchStatus: string;
+};
+
+type BankTxnLike = {
+  amount: string;
+  transactionDate: string;
+  transactionTime: string | null;
+  cardNumber: string | null;
+};
+
+export function groupFuelByInvoice<T extends FuelTxnLike>(
+  fuelTransactions: T[],
+  groupByInvoice: boolean,
+): FuelInvoice<T>[] {
+  if (!groupByInvoice) {
+    return fuelTransactions.map((tx) => ({
+      invoiceNumber: tx.id,
+      items: [tx],
+      totalAmount: parseFloat(tx.amount),
+      firstDate: tx.transactionDate,
+      firstTime: tx.transactionTime,
+      cardNumber: tx.cardNumber,
+    }));
+  }
+
+  const invoices: Record<string, FuelInvoice<T>> = {};
+
+  for (const tx of fuelTransactions) {
+    const invoiceNum = tx.referenceNumber || tx.id;
+
+    if (!invoices[invoiceNum]) {
+      invoices[invoiceNum] = {
+        invoiceNumber: invoiceNum,
+        items: [],
+        totalAmount: 0,
+        firstDate: tx.transactionDate,
+        firstTime: tx.transactionTime,
+        cardNumber: tx.cardNumber,
+      };
+    }
+
+    invoices[invoiceNum].items.push(tx);
+    invoices[invoiceNum].totalAmount += parseFloat(tx.amount);
+  }
+
+  return Object.values(invoices);
+}
+
+export function parseTimeToMinutes(timeStr: string): number | null {
+  if (!timeStr) return null;
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  return hours * 60 + minutes;
+}
+
+export function parseDateToDays(dateStr: string): number | null {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return null;
+  return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
+}
+
+export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends FuelTxnLike>(
+  bankTx: TBank,
+  candidateInvoices: FuelInvoice<TFuel>[],
+  usedInvoices: Set<string>,
+  rules: MatchingRulesLike,
+): BestInvoiceMatch<TFuel> | null {
+  let bestMatch: BestInvoiceMatch<TFuel> | null = null;
+  const seen = new Set<string>();
+
+  for (const invoice of candidateInvoices) {
+    if (seen.has(invoice.invoiceNumber)) continue;
+    seen.add(invoice.invoiceNumber);
+    if (usedInvoices.has(invoice.invoiceNumber)) continue;
+    if (invoice.items.some((item) => item.matchStatus === "matched")) continue;
+
+    const reasons: string[] = [];
+
+    const bankAmount = parseFloat(bankTx.amount);
+    const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
+    if (amountDiff > rules.amountTolerance) continue;
+
+    const fuelDate = parseDateToDays(invoice.firstDate || "");
+    const bankDate = parseDateToDays(bankTx.transactionDate || "");
+    if (fuelDate === null || bankDate === null) continue;
+    const dateDiff = bankDate - fuelDate;
+    if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
+
+    const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
+    const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
+
+    if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
+
+    let confidence = 70;
+    if (dateDiff === 0) confidence = 85;
+    else if (Math.abs(dateDiff) === 1) confidence = 75;
+    else if (Math.abs(dateDiff) === 2) confidence = 68;
+    else confidence = 65;
+
+    let timeDiff = 0;
+    if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+      timeDiff = bankTime - fuelTime;
+      if (timeDiff <= 5) confidence = 100;
+      else if (timeDiff <= 15) confidence = 95;
+      else if (timeDiff <= 30) confidence = 85;
+      else confidence = 75;
+    }
+
+    if (amountDiff > 0) {
+      confidence -= Math.min(5, (amountDiff / rules.amountTolerance) * 5);
+    }
+
+    let cardMatch: "yes" | "no" | "unknown" = "unknown";
+    if (rules.requireCardMatch) {
+      if (!bankTx.cardNumber || !invoice.cardNumber) continue;
+      if (bankTx.cardNumber !== invoice.cardNumber) continue;
+      cardMatch = "yes";
+      confidence += 25;
+      reasons.push("card-match-required");
+    } else if (bankTx.cardNumber && invoice.cardNumber) {
+      if (bankTx.cardNumber === invoice.cardNumber) {
+        cardMatch = "yes";
+        confidence += 25;
+        reasons.push("card-match-strong");
+      } else {
+        cardMatch = "no";
+        confidence -= 30;
+        reasons.push("card-differ");
+      }
+    }
+
+    confidence = Math.min(100, Math.max(0, confidence));
+    if (confidence < rules.minimumConfidence) continue;
+
+    const absDiff = Math.abs(dateDiff);
+    const cardMatchScore = cardMatch === "yes" ? 2 : cardMatch === "unknown" ? 1 : 0;
+    const bestCardScore = bestMatch
+      ? (bestMatch.reasons.some((r) => r.startsWith("card-match")) ? 2
+        : bestMatch.reasons.some((r) => r === "card-differ") ? 0 : 1)
+      : -1;
+
+    if (!bestMatch ||
+        confidence > bestMatch.confidence ||
+        (confidence === bestMatch.confidence && cardMatchScore > bestCardScore) ||
+        (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff) ||
+        (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
+      bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
+    }
+  }
+
+  return bestMatch;
+}

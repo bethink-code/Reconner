@@ -148,6 +148,7 @@ export interface VerificationSummary {
       totalSales: number;
       cardSales: number;
       cardTransactions: number;
+      matchableInvoices: number;
       cashSales: number;
       cashTransactions: number;
     };
@@ -264,9 +265,21 @@ export interface IStorage {
   getMatchesByPeriod(periodId: string): Promise<Match[]>;
   getMatch(id: string): Promise<Match | undefined>;
   createMatch(match: InsertMatch): Promise<Match>;
+  createMatchBundle(match: InsertMatch, resolution?: InsertTransactionResolution): Promise<Match>;
   deleteMatch(id: string): Promise<void>;
+  deleteMatchBundle(matchId: string, fuelTransactionId: string, bankTransactionId: string): Promise<void>;
   deleteMatchesByFile(fileId: string): Promise<void>;
   resetMatchesByPeriod(periodId: string): Promise<void>;
+  applyAutoMatchResults(
+    periodId: string,
+    pendingMatches: Array<{
+      matchData: InsertMatch;
+      bankTxId: string;
+      fuelItemIds: string[];
+    }>,
+    lagExplainedBankIds: string[],
+    unmatchableBankIds: string[],
+  ): Promise<Match[]>;
   
   getPeriodSummary(periodId: string): Promise<PeriodSummary>;
   getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]>;
@@ -664,6 +677,21 @@ export class DatabaseStorage implements IStorage {
     return newMatch;
   }
 
+  async createMatchBundle(match: InsertMatch, resolution?: InsertTransactionResolution): Promise<Match> {
+    return await db.transaction(async (tx) => {
+      const [newMatch] = await tx.insert(matches).values(match).returning();
+      await tx.update(transactions)
+        .set({ matchStatus: 'matched', matchId: newMatch.id })
+        .where(inArray(transactions.id, [match.bankTransactionId, match.fuelTransactionId]));
+
+      if (resolution) {
+        await tx.insert(transactionResolutions).values(resolution);
+      }
+
+      return newMatch;
+    });
+  }
+
   async createMatchesBatch(matchData: InsertMatch[]): Promise<Match[]> {
     if (matchData.length === 0) return [];
     // Drizzle supports bulk insert with .values(array)
@@ -691,6 +719,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMatch(id: string): Promise<void> {
     await db.delete(matches).where(eq(matches.id, id));
+  }
+
+  async deleteMatchBundle(matchId: string, fuelTransactionId: string, bankTransactionId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.update(transactions)
+        .set({ matchStatus: 'unmatched', matchId: null })
+        .where(inArray(transactions.id, [fuelTransactionId, bankTransactionId]));
+      await tx.delete(matches).where(eq(matches.id, matchId));
+    });
   }
 
   async deleteMatchesByFile(fileId: string): Promise<void> {
@@ -723,6 +760,61 @@ export class DatabaseStorage implements IStorage {
         eq(transactions.periodId, periodId),
         sql`match_status != 'excluded'`
       ));
+  }
+
+  async applyAutoMatchResults(
+    periodId: string,
+    pendingMatches: Array<{
+      matchData: InsertMatch;
+      bankTxId: string;
+      fuelItemIds: string[];
+    }>,
+    lagExplainedBankIds: string[],
+    unmatchableBankIds: string[],
+  ): Promise<Match[]> {
+    return await db.transaction(async (tx) => {
+      await tx.delete(matches).where(eq(matches.periodId, periodId));
+      await tx.update(transactions)
+        .set({ matchStatus: 'unmatched', matchId: null })
+        .where(and(
+          eq(transactions.periodId, periodId),
+          sql`match_status != 'excluded'`
+        ));
+
+      if (unmatchableBankIds.length > 0) {
+        await tx.update(transactions)
+          .set({ matchStatus: 'unmatchable', matchId: null })
+          .where(inArray(transactions.id, unmatchableBankIds));
+      }
+
+      const createdMatches: Match[] = [];
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < pendingMatches.length; i += BATCH_SIZE) {
+        const batch = pendingMatches.slice(i, i + BATCH_SIZE);
+        const inserted = await tx.insert(matches).values(batch.map(pm => pm.matchData)).returning();
+        createdMatches.push(...inserted);
+
+        for (let j = 0; j < inserted.length; j++) {
+          const match = inserted[j];
+          const pending = batch[j];
+          await tx.update(transactions)
+            .set({ matchStatus: 'matched', matchId: match.id })
+            .where(inArray(transactions.id, [pending.bankTxId, ...pending.fuelItemIds]));
+        }
+      }
+
+      if (lagExplainedBankIds.length > 0) {
+        await tx.update(transactions)
+          .set({ matchStatus: 'lag_explained', matchId: null })
+          .where(inArray(transactions.id, lagExplainedBankIds));
+      }
+
+      await tx.update(reconciliationPeriods)
+        .set({ status: 'complete', updatedAt: new Date() })
+        .where(eq(reconciliationPeriods.id, periodId));
+
+      return createdMatches;
+    });
   }
 
   async getPeriodSummary(periodId: string): Promise<PeriodSummary> {

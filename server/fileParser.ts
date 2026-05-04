@@ -82,7 +82,6 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'PAN': 'cardNumber',
       'Card Type': 'ignore',
       'Payment Method': 'paymentType',
-      'Invoice No': 'ignore',
       'MID': 'ignore',
       'Batch': 'ignore',
       'RRN': 'ignore',
@@ -814,11 +813,11 @@ export function detectAndExcludeDuplicates(
     byRRN.get(rrn)!.push(i);
   }
 
-  for (const [, indices] of byRRN) {
+  for (const indices of byRRN.values()) {
     if (indices.length < 2) continue;
 
     // Verify all have the same absolute amount — if not, they're distinct transactions
-    const amounts = indices.map(i =>
+    const amounts = indices.map((i: number) =>
       Math.abs(parseFloat(transactions[i].amount || '0')).toFixed(2)
     );
     if (new Set(amounts).size > 1) continue;

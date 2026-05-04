@@ -8,6 +8,48 @@ export interface AiUsage {
   estimatedCostUsd: number;
 }
 
+function recoverTruncatedJSON(input: string): { headers: string[]; rows: string[][] } {
+  let working = input.trim();
+  const closingStack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (const char of working) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "{") closingStack.push("}");
+    else if (char === "[") closingStack.push("]");
+    else if ((char === "}" || char === "]") && closingStack[closingStack.length - 1] === char) {
+      closingStack.pop();
+    }
+  }
+
+  if (inString) {
+    working += "\"";
+  }
+
+  working += closingStack.reverse().join("");
+  working = working.replace(/,\s*([}\]])/g, "$1");
+
+  const parsed = JSON.parse(working);
+  if (!parsed?.headers || !parsed?.rows) {
+    throw new Error("Recovered JSON is missing headers or rows");
+  }
+
+  return parsed;
+}
+
 export function computeConfidenceScore(parsed: ParsedFileData): number {
   const { headers, rows } = parsed;
   if (rows.length === 0) return 0;

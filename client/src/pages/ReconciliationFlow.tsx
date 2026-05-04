@@ -95,13 +95,13 @@ export default function ReconciliationFlow() {
       const response = await apiRequest("POST", `/api/periods/${periodId}/auto-match`, {});
       return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       invalidateAll();
       queryClient.invalidateQueries({ queryKey: ["/api/periods"] });
       setIsAutoMatching(false);
-      setMatchResult(null);
+      setMatchResult(data);
       setCompletedSteps(prev => [...prev.filter(s => s !== "configure"), "configure"]);
-      setCurrentStep("results");
+      setCurrentStep("configure");
     },
     onError: (error: Error) => {
       setIsAutoMatching(false);

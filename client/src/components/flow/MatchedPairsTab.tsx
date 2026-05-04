@@ -31,6 +31,7 @@ interface MatchedPair {
   match: {
     id: string;
     matchType: string;
+    matchStage?: string | null;
     matchConfidence: string | null;
     createdAt: string;
   };
@@ -65,9 +66,15 @@ interface MatchedPair {
   }[];
 }
 
-function getMatchLabel(matchType: string, userName: string, description?: string | null): string {
+function getMatchLabel(matchType: string, userName: string, description?: string | null, matchStage?: string | null): string {
   if (matchType === "auto_exact" || matchType === "auto_exact_review") return "Lekana (Exact)";
-  if (matchType.startsWith("auto")) return "Lekana (Rules)";
+  if (matchType.startsWith("auto")) {
+    if (matchStage === "strict_same_day_exact") return "Lekana (Strict Same-Day)";
+    if (matchStage === "operational_close_match") return "Lekana (Operational Close)";
+    if (matchStage === "boundary_transactions") return "Lekana (Boundary)";
+    if (matchStage === "settlement_fallback") return "Lekana (Settlement Fallback)";
+    return "Lekana (Auto)";
+  }
   if (matchType === "excluded") {
     const desc = (description || "").toLowerCase();
     if (desc.includes("declined")) return "Declined";
@@ -90,7 +97,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   const userName = user?.firstName || "User";
   const [search, setSearch] = useState("");
   type TopFilter = "total" | "lekana" | "garth" | "excluded" | "review";
-  type SubFilter = "exact" | "rules" | "confirmed" | "reason" | "cash" | "debtor" | "duplicates" | "bank" | "card" | null;
+  type SubFilter = "strict" | "operational" | "boundary" | "fallback" | "confirmed" | "reason" | "cash" | "debtor" | "duplicates" | "bank" | "card" | null;
   const [topFilter, setTopFilter] = useState<TopFilter>("total");
   const [subFilter, setSubFilter] = useState<SubFilter>(null);
   const [page, setPage] = useState(0);
@@ -118,8 +125,12 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
     },
   });
 
-  const isExact = (mt: string) => mt === "auto_exact" || mt === "auto_exact_review";
-  const isRules = (mt: string) => mt.startsWith("auto") && !isExact(mt);
+  const stageOf = (p: MatchedPair) => p.match.matchStage;
+  const isStrict = (p: MatchedPair) => stageOf(p) === "strict_same_day_exact";
+  const isOperational = (p: MatchedPair) => stageOf(p) === "operational_close_match";
+  const isBoundary = (p: MatchedPair) => stageOf(p) === "boundary_transactions";
+  const isFallback = (p: MatchedPair) => stageOf(p) === "settlement_fallback";
+  const isLekanaAuto = (p: MatchedPair) => p.match.matchType.startsWith("auto");
   const isConfirmed = (mt: string) => mt === "user_confirmed" || mt === "manual";
   const isReason = (mt: string) => mt === "linked";
   const isDeclinedOrDuplicate = (mt: string) => mt === "excluded";
@@ -140,8 +151,11 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
     for (const p of pairs) {
       const mt = p.match.matchType;
       const fuelItemCount = p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0);
-      if (isExact(mt)) c.exact += fuelItemCount;
-      else if (isRules(mt)) c.rules += fuelItemCount;
+      if (isStrict(p)) c.exact += fuelItemCount;
+      else if (isOperational(p)) c.rules += fuelItemCount;
+      else if (isBoundary(p)) c.rules += fuelItemCount;
+      else if (isFallback(p)) c.rules += fuelItemCount;
+      else if (isLekanaAuto(p)) c.rules += fuelItemCount;
       else if (isConfirmed(mt)) c.confirmed += fuelItemCount;
       else if (isReason(mt)) c.reason += fuelItemCount;
       else if (isCash(mt)) c.cash += fuelItemCount;
@@ -154,26 +168,33 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   }, [pairs]);
 
   const totalFuel = counts.exact + counts.rules + counts.confirmed + counts.reason + counts.cash + counts.debtor + counts.unmatchedCard + counts.unmatchedBank + counts.duplicates;
-  const totalLekana = counts.exact + counts.rules;
+  const strictCount = pairs.reduce((sum, p) => sum + (isStrict(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
+  const operationalCount = pairs.reduce((sum, p) => sum + (isOperational(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
+  const boundaryCount = pairs.reduce((sum, p) => sum + (isBoundary(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
+  const fallbackCount = pairs.reduce((sum, p) => sum + (isFallback(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
+  const totalLekana = strictCount + operationalCount + boundaryCount + fallbackCount;
   const totalGarth = counts.confirmed + counts.reason;
   const totalExcluded = counts.cash + counts.debtor + counts.duplicates;
   const totalReview = counts.unmatchedCard + counts.unmatchedBank;
 
   const matchesTopFilter = (mt: string, t: TopFilter) => {
     switch (t) {
-      case "total": return isExact(mt) || isRules(mt) || isConfirmed(mt) || isReason(mt) || isCash(mt) || isDebtor(mt) || isUnmatchedCard(mt) || isUnmatchedBank(mt) || isDeclinedOrDuplicate(mt);
-      case "lekana": return isExact(mt) || isRules(mt);
+      case "total": return mt.startsWith("auto") || isConfirmed(mt) || isReason(mt) || isCash(mt) || isDebtor(mt) || isUnmatchedCard(mt) || isUnmatchedBank(mt) || isDeclinedOrDuplicate(mt);
+      case "lekana": return mt.startsWith("auto");
       case "garth": return isConfirmed(mt) || isReason(mt);
       case "excluded": return isCash(mt) || isDebtor(mt) || isDeclinedOrDuplicate(mt);
       case "review": return isUnmatchedCard(mt) || isUnmatchedBank(mt);
     }
   };
 
-  const matchesSubFilter = (mt: string, s: SubFilter) => {
+  const matchesSubFilter = (p: MatchedPair, s: SubFilter) => {
     if (!s) return true;
+    const mt = p.match.matchType;
     switch (s) {
-      case "exact": return isExact(mt);
-      case "rules": return isRules(mt);
+      case "strict": return isStrict(p);
+      case "operational": return isOperational(p);
+      case "boundary": return isBoundary(p);
+      case "fallback": return isFallback(p);
       case "confirmed": return isConfirmed(mt);
       case "reason": return isReason(mt);
       case "cash": return isCash(mt);
@@ -185,7 +206,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   };
 
   const filtered = useMemo(() => {
-    let result = pairs.filter(p => matchesTopFilter(p.match.matchType, topFilter) && matchesSubFilter(p.match.matchType, subFilter));
+    let result = pairs.filter(p => matchesTopFilter(p.match.matchType, topFilter) && matchesSubFilter(p, subFilter));
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(p =>
@@ -230,8 +251,10 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   }
 
   const legendItems = [
-    ["Lekana (Exact)", "Perfect 1:1 amount and date match"],
-    ["Lekana (Rules)", "Matched within your configured tolerance and date window"],
+    ["Lekana (Strict Same-Day)", "Matched in the strict same-day exact pass"],
+    ["Lekana (Operational Close)", "Matched in the close operational pass"],
+    ["Lekana (Boundary)", "Matched in the boundary transactions pass"],
+    ["Lekana (Settlement Fallback)", "Matched in the wider settlement fallback pass"],
     [`${userName} (Confirmed)`, "You manually matched these transactions"],
     [`${userName} (With reason)`, "You matched and provided a reason"],
     ["Excluded", "Reversed, declined, cancelled, or duplicate — excluded from matching"],
@@ -312,8 +335,10 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
           label="Lekana matched"
           count={totalLekana}
           subRows={[
-            { key: "exact", label: "Exact", count: counts.exact },
-            { key: "rules", label: "Rules", count: counts.rules },
+            { key: "strict", label: "Strict same-day", count: strictCount },
+            { key: "operational", label: "Operational close", count: operationalCount },
+            { key: "boundary", label: "Boundary", count: boundaryCount },
+            { key: "fallback", label: "Settlement fallback", count: fallbackCount },
           ]}
         />
         <SummaryCard
@@ -421,7 +446,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
             : p.fuelTransaction ? parseFloat(p.fuelTransaction.amount) : 0;
           const diff = (p.fuelTransaction && p.bankTransaction) ? Math.abs(bankAmt - fuelAmt) : 0;
           const confidence = p.match.matchConfidence ? parseFloat(p.match.matchConfidence) : null;
-          const matchLabel = getMatchLabel(p.match.matchType, userName, p.bankTransaction?.description);
+          const matchLabel = getMatchLabel(p.match.matchType, userName, p.bankTransaction?.description, p.match.matchStage);
           const mt = p.match.matchType;
           const bankOnly = !p.fuelTransaction && !!p.bankTransaction;
           const fuelOnly = !p.bankTransaction && !!p.fuelTransaction;

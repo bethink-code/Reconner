@@ -118,6 +118,7 @@ export function registerReconciliationReadRoutes(app: Express) {
         match: {
           id: string;
           matchType: string;
+          matchStage?: string | null;
           matchConfidence: string | null;
           createdAt: Date | null;
         };
@@ -135,6 +136,66 @@ export function registerReconciliationReadRoutes(app: Express) {
         !!transaction &&
         transaction.sourceType === "fuel" &&
         isInPeriod(transaction);
+
+      const parseTimeToMinutes = (timeStr: string | null | undefined): number | null => {
+        if (!timeStr) return null;
+        const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (!match) return null;
+        return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+      };
+
+      const boundaryPositions = (() => {
+        const grouped = new Map<string, typeof transactions>();
+        for (const tx of transactions) {
+          if (!isCanonicalFuel(tx)) continue;
+          const key = tx.transactionDate;
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key)!.push(tx);
+        }
+
+        const result = new Map<string, "start" | "end" | "both" | "none">();
+        for (const dayTxs of grouped.values()) {
+          const sorted = [...dayTxs].sort((a, b) => {
+            const timeA = parseTimeToMinutes(a.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+            const timeB = parseTimeToMinutes(b.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+            if (timeA !== timeB) return timeA - timeB;
+            return a.id.localeCompare(b.id);
+          });
+          if (sorted.length === 0) continue;
+          const first = sorted[0];
+          const last = sorted[sorted.length - 1];
+          result.set(first.id, first.id === last.id ? "both" : "start");
+          result.set(last.id, first.id === last.id ? "both" : "end");
+        }
+        return result;
+      })();
+
+      const classifyMatchStage = (
+        fuelItems: typeof transactions,
+        bankTransaction: (typeof transactions)[number] | null,
+        matchType: string,
+      ) => {
+        if (!matchType.startsWith("auto")) return null;
+        const anchorFuel = fuelItems[0];
+        if (!anchorFuel || !bankTransaction) return null;
+        const amountDiff = Math.abs(
+          parseFloat(bankTransaction.amount) - fuelItems.reduce((sum, item) => sum + parseFloat(item.amount), 0),
+        );
+        const fuelDate = new Date(anchorFuel.transactionDate).getTime();
+        const bankDate = new Date(bankTransaction.transactionDate).getTime();
+        const dayDiff = Math.round((bankDate - fuelDate) / 86400000);
+        const boundary = boundaryPositions.get(anchorFuel.id) || "none";
+
+        if (amountDiff <= 0.01 && dayDiff === 0) return "strict_same_day_exact";
+        if (
+          (boundary === "start" || boundary === "both") && dayDiff === -1 ||
+          (boundary === "end" || boundary === "both") && dayDiff === 1
+        ) {
+          return "boundary_transactions";
+        }
+        if (dayDiff >= 0 && dayDiff <= 1) return "operational_close_match";
+        return "settlement_fallback";
+      };
 
       for (const transaction of transactions) {
         if (transaction.sourceType === "fuel" && transaction.matchId) {
@@ -158,6 +219,7 @@ export function registerReconciliationReadRoutes(app: Express) {
           match: {
             ...match,
             matchType,
+            matchStage: classifyMatchStage(fuelItems, bankTransaction, matchType),
           },
           fuelTransaction,
           bankTransaction,

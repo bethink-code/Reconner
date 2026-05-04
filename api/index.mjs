@@ -33753,6 +33753,54 @@ function registerReconciliationReadRoutes(app2) {
         return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
       };
       const isCanonicalFuel = (transaction) => !!transaction && transaction.sourceType === "fuel" && isInPeriod(transaction);
+      const parseTimeToMinutes2 = (timeStr) => {
+        if (!timeStr) return null;
+        const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (!match) return null;
+        return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+      };
+      const boundaryPositions = (() => {
+        const grouped = /* @__PURE__ */ new Map();
+        for (const tx of transactions2) {
+          if (!isCanonicalFuel(tx)) continue;
+          const key = tx.transactionDate;
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key).push(tx);
+        }
+        const result = /* @__PURE__ */ new Map();
+        for (const dayTxs of grouped.values()) {
+          const sorted = [...dayTxs].sort((a, b) => {
+            const timeA = parseTimeToMinutes2(a.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+            const timeB = parseTimeToMinutes2(b.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+            if (timeA !== timeB) return timeA - timeB;
+            return a.id.localeCompare(b.id);
+          });
+          if (sorted.length === 0) continue;
+          const first = sorted[0];
+          const last = sorted[sorted.length - 1];
+          result.set(first.id, first.id === last.id ? "both" : "start");
+          result.set(last.id, first.id === last.id ? "both" : "end");
+        }
+        return result;
+      })();
+      const classifyMatchStage = (fuelItems, bankTransaction, matchType) => {
+        if (!matchType.startsWith("auto")) return null;
+        const anchorFuel = fuelItems[0];
+        if (!anchorFuel || !bankTransaction) return null;
+        const amountDiff = Math.abs(
+          parseFloat(bankTransaction.amount) - fuelItems.reduce((sum, item) => sum + parseFloat(item.amount), 0)
+        );
+        const fuelDate = new Date(anchorFuel.transactionDate).getTime();
+        const bankDate = new Date(bankTransaction.transactionDate).getTime();
+        const dayDiff = Math.round((bankDate - fuelDate) / 864e5);
+        const boundary = boundaryPositions.get(anchorFuel.id) || "none";
+        if (amountDiff <= 0.01 && dayDiff === 0) return "strict_same_day_exact";
+        if ((boundary === "start" || boundary === "both") && dayDiff === -1 || (boundary === "end" || boundary === "both") && dayDiff === 1) {
+          return "boundary_transactions";
+        }
+        if (dayDiff >= 0 && dayDiff <= 1) return "operational_close_match";
+        return "settlement_fallback";
+      };
       for (const transaction of transactions2) {
         if (transaction.sourceType === "fuel" && transaction.matchId) {
           if (!fuelItemsByMatchId.has(transaction.matchId)) {
@@ -33769,7 +33817,8 @@ function registerReconciliationReadRoutes(app2) {
         return {
           match: {
             ...match,
-            matchType
+            matchType,
+            matchStage: classifyMatchStage(fuelItems, bankTransaction, matchType)
           },
           fuelTransaction,
           bankTransaction,

@@ -33,6 +33,8 @@ export interface StageMatch<TBank, TFuel> {
   bestMatch: BestInvoiceMatch<TFuel>;
 }
 
+type BoundaryPosition = "start" | "end" | "both" | "none";
+
 type FuelTxnLike = {
   id: string;
   amount: string;
@@ -116,12 +118,14 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
     description: "Legacy single-pass scoring",
     order: 1,
     maxAmountDiff: rules.amountTolerance,
+    minDateDiffDays: 0,
     maxDateDiffDays: rules.dateWindowDays,
     maxTimeDiffMinutes: rules.timeWindowMinutes,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence: rules.minimumConfidence,
     autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence,
+    boundaryMode: "none",
   });
 }
 
@@ -130,6 +134,7 @@ export function scoreBankToInvoicesForStage<TBank extends BankTxnLike, TFuel ext
   candidateInvoices: FuelInvoice<TFuel>[],
   usedInvoices: Set<string>,
   stage: MatchingStage,
+  getBoundaryPosition?: (invoice: FuelInvoice<TFuel>) => BoundaryPosition,
 ): BestInvoiceMatch<TFuel> | null {
   let bestMatch: BestInvoiceMatch<TFuel> | null = null;
   const seen = new Set<string>();
@@ -151,7 +156,18 @@ export function scoreBankToInvoicesForStage<TBank extends BankTxnLike, TFuel ext
     const bankDate = parseDateToDays(bankTx.transactionDate || "");
     if (fuelDate === null || bankDate === null) continue;
     const dateDiff = bankDate - fuelDate;
-    if (dateDiff < 0 || dateDiff > stage.maxDateDiffDays) continue;
+    if (dateDiff < stage.minDateDiffDays || dateDiff > stage.maxDateDiffDays) continue;
+
+    const boundaryPosition = getBoundaryPosition ? getBoundaryPosition(invoice) : "none";
+    if (stage.boundaryMode === "boundary") {
+      const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+      const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+      const isDirectionalBoundary =
+        (dateDiff === -1 && allowsPreviousDay) ||
+        (dateDiff === 1 && allowsNextDay);
+      if (!isDirectionalBoundary) continue;
+      reasons.push(dateDiff === -1 ? "boundary-previous-day" : "boundary-next-day");
+    }
 
     const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
     const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
@@ -228,12 +244,19 @@ export function runSequentialMatchingStages<TBank extends BankTxnLike & { id: st
   const remainingBanks = [...bankTransactions];
   const usedInvoices = new Set<string>();
   const stageMatches: StageMatch<TBank, TFuel>[] = [];
+  const boundaryPositions = deriveBoundaryPositions(fuelInvoices);
 
   for (const stage of stages) {
     const stillRemaining: TBank[] = [];
 
     for (const bankTx of remainingBanks) {
-      const bestMatch = scoreBankToInvoicesForStage(bankTx, fuelInvoices, usedInvoices, stage);
+      const bestMatch = scoreBankToInvoicesForStage(
+        bankTx,
+        fuelInvoices,
+        usedInvoices,
+        stage,
+        (invoice) => boundaryPositions.get(invoice.invoiceNumber) || "none",
+      );
       if (!bestMatch) {
         stillRemaining.push(bankTx);
         continue;
@@ -252,4 +275,34 @@ export function runSequentialMatchingStages<TBank extends BankTxnLike & { id: st
   }
 
   return stageMatches;
+}
+
+function deriveBoundaryPositions<TFuel>(fuelInvoices: FuelInvoice<TFuel>[]): Map<string, BoundaryPosition> {
+  const grouped = new Map<string, FuelInvoice<TFuel>[]>();
+
+  for (const invoice of fuelInvoices) {
+    const key = invoice.firstDate || "";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(invoice);
+  }
+
+  const positions = new Map<string, BoundaryPosition>();
+
+  for (const invoices of grouped.values()) {
+    const sorted = [...invoices].sort((a, b) => {
+      const timeA = parseTimeToMinutes(a.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
+      const timeB = parseTimeToMinutes(b.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
+      if (timeA !== timeB) return timeA - timeB;
+      return a.invoiceNumber.localeCompare(b.invoiceNumber);
+    });
+
+    if (sorted.length === 0) continue;
+
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    positions.set(first.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "start");
+    positions.set(last.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "end");
+  }
+
+  return positions;
 }

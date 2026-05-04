@@ -323,7 +323,11 @@ export function ConfigureMatchingStep({
                   <div className="flex flex-wrap gap-2 mt-3">
                     <Badge variant="outline">Amount +/- R{stage.maxAmountDiff.toFixed(2)}</Badge>
                     <Badge variant="outline">
-                      {stage.maxDateDiffDays === 0 ? "Same day only" : `Up to ${stage.maxDateDiffDays} day lag`}
+                      {stage.boundaryMode === "boundary"
+                        ? "Previous-day start / next-day end"
+                        : stage.maxDateDiffDays === 0
+                          ? "Same day only"
+                          : `Up to ${stage.maxDateDiffDays} day lag`}
                     </Badge>
                     <Badge variant="outline">
                       {stage.maxTimeDiffMinutes === null ? "No same-day time cap" : `${stage.maxTimeDiffMinutes} min time window`}

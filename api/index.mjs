@@ -33990,15 +33990,17 @@ function scoreBankToInvoices(bankTx, candidateInvoices, usedInvoices, rules) {
     description: "Legacy single-pass scoring",
     order: 1,
     maxAmountDiff: rules.amountTolerance,
+    minDateDiffDays: 0,
     maxDateDiffDays: rules.dateWindowDays,
     maxTimeDiffMinutes: rules.timeWindowMinutes,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence: rules.minimumConfidence,
-    autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence
+    autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence,
+    boundaryMode: "none"
   });
 }
-function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, stage) {
+function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, stage, getBoundaryPosition) {
   let bestMatch = null;
   const seen = /* @__PURE__ */ new Set();
   for (const invoice of candidateInvoices) {
@@ -34015,7 +34017,15 @@ function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, st
     const bankDate = parseDateToDays(bankTx.transactionDate || "");
     if (fuelDate === null || bankDate === null) continue;
     const dateDiff = bankDate - fuelDate;
-    if (dateDiff < 0 || dateDiff > stage.maxDateDiffDays) continue;
+    if (dateDiff < stage.minDateDiffDays || dateDiff > stage.maxDateDiffDays) continue;
+    const boundaryPosition = getBoundaryPosition ? getBoundaryPosition(invoice) : "none";
+    if (stage.boundaryMode === "boundary") {
+      const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+      const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+      const isDirectionalBoundary = dateDiff === -1 && allowsPreviousDay || dateDiff === 1 && allowsNextDay;
+      if (!isDirectionalBoundary) continue;
+      reasons.push(dateDiff === -1 ? "boundary-previous-day" : "boundary-next-day");
+    }
     const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
     const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
     if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
@@ -34070,10 +34080,17 @@ function runSequentialMatchingStages(bankTransactions, fuelInvoices, stages) {
   const remainingBanks = [...bankTransactions];
   const usedInvoices = /* @__PURE__ */ new Set();
   const stageMatches = [];
+  const boundaryPositions = deriveBoundaryPositions(fuelInvoices);
   for (const stage of stages) {
     const stillRemaining = [];
     for (const bankTx of remainingBanks) {
-      const bestMatch = scoreBankToInvoicesForStage(bankTx, fuelInvoices, usedInvoices, stage);
+      const bestMatch = scoreBankToInvoicesForStage(
+        bankTx,
+        fuelInvoices,
+        usedInvoices,
+        stage,
+        (invoice) => boundaryPositions.get(invoice.invoiceNumber) || "none"
+      );
       if (!bestMatch) {
         stillRemaining.push(bankTx);
         continue;
@@ -34090,6 +34107,29 @@ function runSequentialMatchingStages(bankTransactions, fuelInvoices, stages) {
   }
   return stageMatches;
 }
+function deriveBoundaryPositions(fuelInvoices) {
+  const grouped = /* @__PURE__ */ new Map();
+  for (const invoice of fuelInvoices) {
+    const key = invoice.firstDate || "";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(invoice);
+  }
+  const positions = /* @__PURE__ */ new Map();
+  for (const invoices of grouped.values()) {
+    const sorted = [...invoices].sort((a, b) => {
+      const timeA = parseTimeToMinutes(a.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
+      const timeB = parseTimeToMinutes(b.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
+      if (timeA !== timeB) return timeA - timeB;
+      return a.invoiceNumber.localeCompare(b.invoiceNumber);
+    });
+    if (sorted.length === 0) continue;
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    positions.set(first.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "start");
+    positions.set(last.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "end");
+  }
+  return positions;
+}
 
 // shared/matchingStages.ts
 var clampPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
@@ -34100,12 +34140,14 @@ function buildMatchingStages(rules) {
     description: "Exact-amount, same-day matches first. This is the cleanest operational pass.",
     order: 1,
     maxAmountDiff: 0.01,
+    minDateDiffDays: 0,
     maxDateDiffDays: 0,
     maxTimeDiffMinutes: Math.min(rules.timeWindowMinutes, 120),
     requireExactAmount: true,
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 85)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 90))
+    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 90)),
+    boundaryMode: "none"
   };
   const closeOperationalStage = {
     id: "operational_close_match",
@@ -34113,32 +34155,52 @@ function buildMatchingStages(rules) {
     description: "Then we allow small amount and timing variation for normal same-day or next-day settlement.",
     order: 2,
     maxAmountDiff: Math.max(0.01, rules.amountTolerance),
+    minDateDiffDays: 0,
     maxDateDiffDays: Math.min(Math.max(rules.dateWindowDays, 0), 1),
     maxTimeDiffMinutes: rules.timeWindowMinutes,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence: clampPercent(Math.max(rules.minimumConfidence, rules.autoMatchThreshold - 10)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 80))
+    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 80)),
+    boundaryMode: "none"
+  };
+  const boundaryStage = {
+    id: "boundary_transactions",
+    name: "Boundary Transactions",
+    description: "Checks first-of-day fuel sales against the previous bank day, and last-of-day fuel sales against the next bank day, before broad fallback matching.",
+    order: 3,
+    maxAmountDiff: Math.max(0.01, Math.min(rules.amountTolerance, 1)),
+    minDateDiffDays: -1,
+    maxDateDiffDays: 1,
+    maxTimeDiffMinutes: null,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence: clampPercent(Math.max(rules.minimumConfidence, 70)),
+    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 85)),
+    boundaryMode: "boundary"
   };
   const settlementFallbackStage = {
     id: "settlement_fallback",
     name: "Settlement Fallback",
     description: "Finally, we use the wider date window for delayed bank settlement and lower-confidence review candidates.",
-    order: 3,
+    order: 4,
     maxAmountDiff: Math.max(0.01, rules.amountTolerance),
+    minDateDiffDays: 0,
     maxDateDiffDays: Math.max(rules.dateWindowDays, 0),
     maxTimeDiffMinutes: null,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence: clampPercent(rules.minimumConfidence),
-    autoConfirmConfidence: clampPercent(rules.autoMatchThreshold)
+    autoConfirmConfidence: clampPercent(rules.autoMatchThreshold),
+    boundaryMode: "none"
   };
   return [
     strictStage,
     closeOperationalStage,
+    boundaryStage,
     settlementFallbackStage
   ].filter((stage, index2, stages) => {
-    if (index2 === 2 && stage.maxDateDiffDays <= stages[1].maxDateDiffDays) {
+    if (stage.id === "settlement_fallback" && stage.maxDateDiffDays <= stages[1].maxDateDiffDays) {
       return false;
     }
     return true;

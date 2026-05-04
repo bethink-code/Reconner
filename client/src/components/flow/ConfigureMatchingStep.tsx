@@ -56,7 +56,7 @@ const PRESETS: PresetConfig[] = [
     rules: {
       amountTolerance: 0.01,
       dateWindowDays: 1,
-      timeWindowMinutes: 480,
+      timeWindowMinutes: 30,
       attendantSubmissionDelayMinutes: 120,
       minimumConfidence: 90,
       autoMatchThreshold: 95,
@@ -74,7 +74,7 @@ const PRESETS: PresetConfig[] = [
     rules: {
       amountTolerance: 1.0,
       dateWindowDays: 3,
-      timeWindowMinutes: 720,
+      timeWindowMinutes: 60,
       attendantSubmissionDelayMinutes: 120,
       minimumConfidence: 60,
       autoMatchThreshold: 85,
@@ -92,7 +92,7 @@ const PRESETS: PresetConfig[] = [
     rules: {
       amountTolerance: 2.0,
       dateWindowDays: 5,
-      timeWindowMinutes: 1440,
+      timeWindowMinutes: 120,
       attendantSubmissionDelayMinutes: 120,
       minimumConfidence: 50,
       autoMatchThreshold: 75,
@@ -147,7 +147,7 @@ export function ConfigureMatchingStep({
   const [customRules, setCustomRules] = useState<MatchingRules>({
     amountTolerance: 1.0,
     dateWindowDays: 3,
-    timeWindowMinutes: 720,
+    timeWindowMinutes: 60,
     attendantSubmissionDelayMinutes: 120,
     requireCardMatch: false,
     groupByInvoice: true,
@@ -167,6 +167,7 @@ export function ConfigureMatchingStep({
     const match = PRESETS.find(p =>
       p.rules.amountTolerance === existingRules.amountTolerance &&
       p.rules.dateWindowDays === existingRules.dateWindowDays &&
+      p.rules.timeWindowMinutes === existingRules.timeWindowMinutes &&
       p.rules.attendantSubmissionDelayMinutes === existingRules.attendantSubmissionDelayMinutes &&
       p.rules.minimumConfidence === existingRules.minimumConfidence &&
       p.rules.autoMatchThreshold === existingRules.autoMatchThreshold &&
@@ -333,7 +334,7 @@ export function ConfigureMatchingStep({
                         ? "Previous-day start / next-day end"
                         : stage.maxDateDiffDays === 0
                           ? "Same day only"
-                          : `Up to ${stage.maxDateDiffDays} day lag`}
+                          : `${stage.maxDateDiffDays} day forward / back match window`}
                     </Badge>
                       <Badge variant="outline">
                       {stage.requireExactAmount
@@ -499,9 +500,9 @@ export function ConfigureMatchingStep({
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Date Window</Label>
+                    <Label>Forward / Back Match Window</Label>
                     <span className="text-sm font-mono">
-                      ±{customRules.dateWindowDays} days
+                      -{customRules.dateWindowDays} / +{customRules.dateWindowDays} days
                     </span>
                   </div>
                   <Slider
@@ -513,7 +514,7 @@ export function ConfigureMatchingStep({
                     data-testid="slider-date-window"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How many days can transactions differ?
+                    How far before or after the fuel sale a bank transaction can still be considered for matching. This does not change the reconciliation period itself.
                   </p>
                 </div>
 

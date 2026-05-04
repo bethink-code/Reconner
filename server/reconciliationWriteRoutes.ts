@@ -6,6 +6,7 @@ import { assertPeriodWrite } from "./routeAccess";
 import {
   groupFuelByInvoice as groupFuelByInvoiceFromReconciliation,
   parseDateToDays as parseDateToDaysFromReconciliation,
+  parseTimeToMinutes as parseTimeToMinutesFromReconciliation,
   runSequentialMatchingStages,
   scoreBankToInvoices as scoreBankToInvoicesFromReconciliation,
   type FuelInvoice as ReconciliationFuelInvoice,
@@ -86,6 +87,7 @@ export function registerReconciliationWriteRoutes(app: Express) {
 
       const fuelInvoices = groupFuelByInvoiceFromReconciliation(fuelTransactions, rules.groupByInvoice);
       const stages = buildMatchingStages(rules);
+      const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
 
       let matchCount = 0;
       const skippedNonCardCount = transactions.filter(t => {
@@ -103,9 +105,55 @@ export function registerReconciliationWriteRoutes(app: Express) {
 
       const stageMatches = runSequentialMatchingStages(matchableBankTransactions, fuelInvoices, stages);
       const stageCounts = new Map<string, number>();
+      let competingSameDaySkipped = 0;
+
+      const hasCompetingSameDayCandidate = (
+        stageId: string,
+        bankTransaction: typeof matchableBankTransactions[number],
+        bestMatch: (typeof stageMatches)[number]["bestMatch"],
+      ) => {
+        if (!operationalStage) return false;
+        if (stageId !== "boundary_transactions" && stageId !== "settlement_fallback") return false;
+
+        const invoice = bestMatch.invoice;
+        const fuelDate = invoice.firstDate;
+        if (!fuelDate) return false;
+
+        const fuelTime = parseTimeToMinutesFromReconciliation(invoice.firstTime || "");
+
+        return matchableBankTransactions.some((candidateBank) => {
+          if (candidateBank.id === bankTransaction.id) return false;
+          if (candidateBank.transactionDate !== fuelDate) return false;
+
+          const amountDiff = Math.abs(parseFloat(candidateBank.amount) - invoice.totalAmount);
+          if (amountDiff > operationalStage.maxAmountDiff) return false;
+
+          const bankTime = parseTimeToMinutesFromReconciliation(candidateBank.transactionTime || "");
+          if (
+            fuelTime !== null &&
+            bankTime !== null &&
+            operationalStage.maxTimeDiffMinutes !== null &&
+            Math.abs(bankTime - fuelTime) > operationalStage.maxTimeDiffMinutes
+          ) {
+            return false;
+          }
+
+          if (operationalStage.requireCardMatch) {
+            if (!candidateBank.cardNumber || !invoice.cardNumber) return false;
+            if (candidateBank.cardNumber !== invoice.cardNumber) return false;
+          }
+
+          return true;
+        });
+      };
 
       for (const stageMatch of stageMatches) {
         const { stage, bankTransaction, bestMatch } = stageMatch;
+        if (hasCompetingSameDayCandidate(stage.id, bankTransaction, bestMatch)) {
+          competingSameDaySkipped++;
+          continue;
+        }
+
         const isExact = Math.abs(bestMatch.amountDiff) < 0.005;
         const aboveThreshold = bestMatch.confidence >= stage.autoConfirmConfidence;
         const matchType = isExact && aboveThreshold ? "auto_exact"
@@ -131,6 +179,9 @@ export function registerReconciliationWriteRoutes(app: Express) {
 
       for (const stage of stages) {
         console.log(`[AUTO-MATCH] Stage ${stage.order} ${stage.name}: ${stageCounts.get(stage.name) || 0} matches`);
+      }
+      if (competingSameDaySkipped > 0) {
+        console.log(`[AUTO-MATCH] Competing same-day candidates held for review: ${competingSameDaySkipped}`);
       }
 
       const matchedBankIds = new Set(pendingMatches.map(pm => pm.bankTxId));
@@ -204,7 +255,12 @@ export function registerReconciliationWriteRoutes(app: Express) {
         matchRate: `${matchRate}%`,
         rulesUsed: rules,
         stagesUsed: stages,
-        warnings: dateRangeWarning ? [dateRangeWarning] : []
+        warnings: [
+          ...(dateRangeWarning ? [dateRangeWarning] : []),
+          ...(competingSameDaySkipped > 0
+            ? [`${competingSameDaySkipped} later-pass match(es) were held back because a same-day operational candidate exists and should be reviewed manually.`]
+            : []),
+        ]
       });
     } catch (error) {
       console.error("Error auto-matching:", error);

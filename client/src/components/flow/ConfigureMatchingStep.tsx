@@ -142,7 +142,7 @@ export function ConfigureMatchingStep({
     queryKey: ["/api/periods", periodId],
     enabled: !!periodId,
   });
-  const [selectedPreset, setSelectedPreset] = useState<string>("moderate");
+  const [selectedPreset, setSelectedPreset] = useState<string>("custom");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customRules, setCustomRules] = useState<MatchingRules>({
     amountTolerance: 1.0,
@@ -291,9 +291,10 @@ export function ConfigureMatchingStep({
                   Use when transactions often have timing or amount variations.
                 </>
               )}
-              {!selectedPreset && (
+              {selectedPreset === "custom" && (
                 <>
-                  Select a preset above or customize the settings below.
+                  <span className="font-medium">Custom</span> uses your saved station rules.
+                  The cards above are presets only, and the live stages below reflect the actual rules that will run.
                 </>
               )}
             </p>

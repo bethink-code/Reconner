@@ -33741,13 +33741,23 @@ function registerReconciliationReadRoutes(app2) {
       const matches2 = await storage.getMatchesByPeriod(req.params.periodId);
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
       const txMap = new Map(transactions2.map((tx) => [tx.id, tx]));
+      const fuelItemsByMatchId = /* @__PURE__ */ new Map();
+      for (const transaction of transactions2) {
+        if (transaction.sourceType === "fuel" && transaction.matchId) {
+          if (!fuelItemsByMatchId.has(transaction.matchId)) {
+            fuelItemsByMatchId.set(transaction.matchId, []);
+          }
+          fuelItemsByMatchId.get(transaction.matchId).push(transaction);
+        }
+      }
       const matchDetails = matches2.map((match) => {
         const fuelTransaction = txMap.get(match.fuelTransactionId);
         const bankTransaction = txMap.get(match.bankTransactionId);
         return {
-          ...match,
+          match,
           fuelTransaction,
-          bankTransaction
+          bankTransaction,
+          fuelItems: fuelItemsByMatchId.get(match.id) || (fuelTransaction ? [fuelTransaction] : [])
         };
       });
       res.json(matchDetails);

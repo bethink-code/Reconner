@@ -105,14 +105,25 @@ export function registerReconciliationReadRoutes(app: Express) {
       const matches = await storage.getMatchesByPeriod(req.params.periodId);
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
       const txMap = new Map(transactions.map((tx) => [tx.id, tx]));
+      const fuelItemsByMatchId = new Map<string, typeof transactions>();
+
+      for (const transaction of transactions) {
+        if (transaction.sourceType === "fuel" && transaction.matchId) {
+          if (!fuelItemsByMatchId.has(transaction.matchId)) {
+            fuelItemsByMatchId.set(transaction.matchId, []);
+          }
+          fuelItemsByMatchId.get(transaction.matchId)!.push(transaction);
+        }
+      }
 
       const matchDetails = matches.map((match) => {
         const fuelTransaction = txMap.get(match.fuelTransactionId);
         const bankTransaction = txMap.get(match.bankTransactionId);
         return {
-          ...match,
+          match,
           fuelTransaction,
           bankTransaction,
+          fuelItems: fuelItemsByMatchId.get(match.id) || (fuelTransaction ? [fuelTransaction] : []),
         };
       });
 

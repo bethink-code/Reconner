@@ -67,12 +67,12 @@ interface MatchedPair {
 }
 
 function getMatchLabel(matchType: string, userName: string, description?: string | null, matchStage?: string | null): string {
-  if (matchType === "auto_exact" || matchType === "auto_exact_review") return "Lekana (Exact)";
   if (matchType.startsWith("auto")) {
     if (matchStage === "strict_same_day_exact") return "Lekana (Strict Same-Day)";
     if (matchStage === "operational_close_match") return "Lekana (Operational Close)";
     if (matchStage === "boundary_transactions") return "Lekana (Boundary)";
     if (matchStage === "settlement_fallback") return "Lekana (Settlement Fallback)";
+    if (matchType === "auto_exact" || matchType === "auto_exact_review") return "Lekana (Strict Same-Day)";
     return "Lekana (Auto)";
   }
   if (matchType === "excluded") {

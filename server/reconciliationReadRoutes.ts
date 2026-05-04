@@ -193,7 +193,7 @@ export function registerReconciliationReadRoutes(app: Express) {
         ) {
           return "boundary_transactions";
         }
-        if (dayDiff >= 0 && dayDiff <= 1) return "operational_close_match";
+        if (dayDiff === 0) return "operational_close_match";
         return "settlement_fallback";
       };
 

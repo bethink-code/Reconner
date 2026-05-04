@@ -33,6 +33,11 @@ export interface StageMatch<TBank, TFuel> {
   bestMatch: BestInvoiceMatch<TFuel>;
 }
 
+interface CandidateEdge<TBank, TFuel> {
+  bankTransaction: TBank;
+  bestMatch: BestInvoiceMatch<TFuel>;
+}
+
 type BoundaryPosition = "start" | "end" | "both" | "none";
 
 type FuelTxnLike = {
@@ -142,92 +147,12 @@ export function scoreBankToInvoicesForStage<TBank extends BankTxnLike, TFuel ext
   for (const invoice of candidateInvoices) {
     if (seen.has(invoice.invoiceNumber)) continue;
     seen.add(invoice.invoiceNumber);
+    const candidate = scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition);
+    if (!candidate) continue;
     if (usedInvoices.has(invoice.invoiceNumber)) continue;
-    if (invoice.items.some((item) => item.matchStatus === "matched")) continue;
 
-    const reasons: string[] = [`stage:${stage.id}`];
-
-    const bankAmount = parseFloat(bankTx.amount);
-    const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
-    if (amountDiff > stage.maxAmountDiff) continue;
-    if (stage.requireExactAmount && amountDiff > 0.01) continue;
-
-    const fuelDate = parseDateToDays(invoice.firstDate || "");
-    const bankDate = parseDateToDays(bankTx.transactionDate || "");
-    if (fuelDate === null || bankDate === null) continue;
-    const dateDiff = bankDate - fuelDate;
-    if (dateDiff < stage.minDateDiffDays || dateDiff > stage.maxDateDiffDays) continue;
-
-    const boundaryPosition = getBoundaryPosition ? getBoundaryPosition(invoice) : "none";
-    if (stage.boundaryMode === "boundary") {
-      const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
-      const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
-      const isDirectionalBoundary =
-        (dateDiff === -1 && allowsPreviousDay) ||
-        (dateDiff === 1 && allowsNextDay);
-      if (!isDirectionalBoundary) continue;
-      reasons.push(dateDiff === -1 ? "boundary-previous-day" : "boundary-next-day");
-    }
-
-    const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
-    const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
-
-    let confidence = 70;
-    if (dateDiff === 0) confidence = 85;
-    else if (Math.abs(dateDiff) === 1) confidence = 75;
-    else if (Math.abs(dateDiff) === 2) confidence = 68;
-    else confidence = 65;
-
-    let timeDiff = 0;
-    if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-      timeDiff = Math.abs(bankTime - fuelTime);
-      if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) continue;
-      if (timeDiff <= 5) confidence = 100;
-      else if (timeDiff <= 15) confidence = 95;
-      else if (timeDiff <= 30) confidence = 85;
-      else confidence = 75;
-    }
-
-    if (amountDiff > 0) {
-      const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
-      confidence -= Math.min(5, (amountDiff / divisor) * 5);
-    }
-
-    let cardMatch: "yes" | "no" | "unknown" = "unknown";
-    if (stage.requireCardMatch) {
-      if (!bankTx.cardNumber || !invoice.cardNumber) continue;
-      if (bankTx.cardNumber !== invoice.cardNumber) continue;
-      cardMatch = "yes";
-      confidence += 25;
-      reasons.push("card-match-required");
-    } else if (bankTx.cardNumber && invoice.cardNumber) {
-      if (bankTx.cardNumber === invoice.cardNumber) {
-        cardMatch = "yes";
-        confidence += 25;
-        reasons.push("card-match-strong");
-      } else {
-        cardMatch = "no";
-        confidence -= 30;
-        reasons.push("card-differ");
-      }
-    }
-
-    confidence = Math.min(100, Math.max(0, confidence));
-    if (confidence < stage.minimumConfidence) continue;
-
-    const absDiff = Math.abs(dateDiff);
-    const cardMatchScore = cardMatch === "yes" ? 2 : cardMatch === "unknown" ? 1 : 0;
-    const bestCardScore = bestMatch
-      ? (bestMatch.reasons.some((r) => r.startsWith("card-match")) ? 2
-        : bestMatch.reasons.some((r) => r === "card-differ") ? 0 : 1)
-      : -1;
-
-    if (!bestMatch ||
-        confidence > bestMatch.confidence ||
-        (confidence === bestMatch.confidence && cardMatchScore > bestCardScore) ||
-        (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff) ||
-        (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
-      bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
+    if (!bestMatch || compareBestMatches(candidate, bestMatch) < 0) {
+      bestMatch = candidate;
     }
   }
 
@@ -245,34 +170,168 @@ export function runSequentialMatchingStages<TBank extends BankTxnLike & { id: st
   const boundaryPositions = deriveBoundaryPositions(fuelInvoices);
 
   for (const stage of stages) {
-    const stillRemaining: TBank[] = [];
+    const stageCandidates: CandidateEdge<TBank, TFuel>[] = [];
 
     for (const bankTx of remainingBanks) {
-      const bestMatch = scoreBankToInvoicesForStage(
-        bankTx,
-        fuelInvoices,
-        usedInvoices,
-        stage,
-        (invoice) => boundaryPositions.get(invoice.invoiceNumber) || "none",
-      );
-      if (!bestMatch) {
-        stillRemaining.push(bankTx);
-        continue;
+      for (const invoice of fuelInvoices) {
+        if (usedInvoices.has(invoice.invoiceNumber)) continue;
+        const candidate = scoreBankToInvoiceCandidate(
+          bankTx,
+          invoice,
+          stage,
+          (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none",
+        );
+        if (!candidate) continue;
+        stageCandidates.push({
+          bankTransaction: bankTx,
+          bestMatch: candidate,
+        });
       }
+    }
 
-      usedInvoices.add(bestMatch.invoice.invoiceNumber);
+    stageCandidates.sort((a, b) => {
+      const comparison = compareBestMatches(a.bestMatch, b.bestMatch);
+      if (comparison !== 0) return comparison;
+      return compareBankTransactions(a.bankTransaction, b.bankTransaction);
+    });
+
+    const matchedBankIds = new Set<string>();
+    const matchedInvoiceNumbers = new Set<string>();
+
+    for (const candidate of stageCandidates) {
+      if (matchedBankIds.has(candidate.bankTransaction.id)) continue;
+      if (matchedInvoiceNumbers.has(candidate.bestMatch.invoice.invoiceNumber)) continue;
+      if (usedInvoices.has(candidate.bestMatch.invoice.invoiceNumber)) continue;
+
+      matchedBankIds.add(candidate.bankTransaction.id);
+      matchedInvoiceNumbers.add(candidate.bestMatch.invoice.invoiceNumber);
+      usedInvoices.add(candidate.bestMatch.invoice.invoiceNumber);
       stageMatches.push({
         stage,
-        bankTransaction: bankTx,
-        bestMatch,
+        bankTransaction: candidate.bankTransaction,
+        bestMatch: candidate.bestMatch,
       });
     }
 
+    const stillRemaining = remainingBanks.filter((bankTx) => !matchedBankIds.has(bankTx.id));
     remainingBanks.length = 0;
     remainingBanks.push(...stillRemaining);
   }
 
   return stageMatches;
+}
+
+function scoreBankToInvoiceCandidate<TBank extends BankTxnLike, TFuel extends FuelTxnLike>(
+  bankTx: TBank,
+  invoice: FuelInvoice<TFuel>,
+  stage: MatchingStage,
+  getBoundaryPosition?: (invoice: FuelInvoice<TFuel>) => BoundaryPosition,
+): BestInvoiceMatch<TFuel> | null {
+  if (invoice.items.some((item) => item.matchStatus === "matched")) return null;
+
+  const reasons: string[] = [`stage:${stage.id}`];
+  const bankAmount = parseFloat(bankTx.amount);
+  const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
+  if (amountDiff > stage.maxAmountDiff) return null;
+  if (stage.requireExactAmount && amountDiff > 0.01) return null;
+
+  const fuelDate = parseDateToDays(invoice.firstDate || "");
+  const bankDate = parseDateToDays(bankTx.transactionDate || "");
+  if (fuelDate === null || bankDate === null) return null;
+  const dateDiff = bankDate - fuelDate;
+  if (dateDiff < stage.minDateDiffDays || dateDiff > stage.maxDateDiffDays) return null;
+
+  const boundaryPosition = getBoundaryPosition ? getBoundaryPosition(invoice) : "none";
+  if (stage.boundaryMode === "boundary") {
+    const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+    const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+    const isDirectionalBoundary =
+      (dateDiff === -1 && allowsPreviousDay) ||
+      (dateDiff === 1 && allowsNextDay);
+    if (!isDirectionalBoundary) return null;
+    reasons.push(dateDiff === -1 ? "boundary-previous-day" : "boundary-next-day");
+  }
+
+  const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
+  const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
+
+  let confidence = 70;
+  if (dateDiff === 0) confidence = 85;
+  else if (Math.abs(dateDiff) === 1) confidence = 75;
+  else if (Math.abs(dateDiff) === 2) confidence = 68;
+  else confidence = 65;
+
+  let timeDiff = 0;
+  if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+    timeDiff = Math.abs(bankTime - fuelTime);
+    if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) return null;
+    if (timeDiff <= 5) confidence = 100;
+    else if (timeDiff <= 15) confidence = 95;
+    else if (timeDiff <= 30) confidence = 85;
+    else confidence = 75;
+  }
+
+  if (amountDiff > 0) {
+    const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
+    confidence -= Math.min(5, (amountDiff / divisor) * 5);
+  }
+
+  if (stage.requireCardMatch) {
+    if (!bankTx.cardNumber || !invoice.cardNumber) return null;
+    if (bankTx.cardNumber !== invoice.cardNumber) return null;
+    confidence += 25;
+    reasons.push("card-match-required");
+  } else if (bankTx.cardNumber && invoice.cardNumber) {
+    if (bankTx.cardNumber === invoice.cardNumber) {
+      confidence += 25;
+      reasons.push("card-match-strong");
+    } else {
+      confidence -= 30;
+      reasons.push("card-differ");
+    }
+  }
+
+  confidence = Math.min(100, Math.max(0, confidence));
+  if (confidence < stage.minimumConfidence) return null;
+
+  return {
+    invoice,
+    confidence,
+    timeDiff,
+    dateDiff: Math.abs(dateDiff),
+    amountDiff,
+    reasons,
+  };
+}
+
+function getCardMatchScore(reasons: string[]): number {
+  if (reasons.some((reason) => reason.startsWith("card-match"))) return 2;
+  if (reasons.some((reason) => reason === "card-differ")) return 0;
+  return 1;
+}
+
+function compareBestMatches<TFuel>(a: BestInvoiceMatch<TFuel>, b: BestInvoiceMatch<TFuel>): number {
+  if (a.confidence !== b.confidence) return b.confidence - a.confidence;
+
+  const cardScoreDiff = getCardMatchScore(b.reasons) - getCardMatchScore(a.reasons);
+  if (cardScoreDiff !== 0) return cardScoreDiff;
+
+  if (a.dateDiff !== b.dateDiff) return a.dateDiff - b.dateDiff;
+  if (a.timeDiff !== b.timeDiff) return a.timeDiff - b.timeDiff;
+  if (a.amountDiff !== b.amountDiff) return a.amountDiff - b.amountDiff;
+  return a.invoice.invoiceNumber.localeCompare(b.invoice.invoiceNumber);
+}
+
+function compareBankTransactions<TBank extends BankTxnLike & { id: string }>(a: TBank, b: TBank): number {
+  const dateComparison = (parseDateToDays(a.transactionDate || "") ?? Number.MAX_SAFE_INTEGER) -
+    (parseDateToDays(b.transactionDate || "") ?? Number.MAX_SAFE_INTEGER);
+  if (dateComparison !== 0) return dateComparison;
+
+  const timeComparison = (parseTimeToMinutes(a.transactionTime || "") ?? Number.MAX_SAFE_INTEGER) -
+    (parseTimeToMinutes(b.transactionTime || "") ?? Number.MAX_SAFE_INTEGER);
+  if (timeComparison !== 0) return timeComparison;
+
+  return a.id.localeCompare(b.id);
 }
 
 function deriveBoundaryPositions<TFuel>(fuelInvoices: FuelInvoice<TFuel>[]): Map<string, BoundaryPosition> {

@@ -34081,41 +34081,22 @@ function runSequentialMatchingStages(bankTransactions, fuelInvoices, stages) {
   const stageMatches = [];
   const boundaryPositions = deriveBoundaryPositions(fuelInvoices);
   for (const stage of stages) {
-    const stageCandidates = [];
-    for (const bankTx of remainingBanks) {
-      for (const invoice of fuelInvoices) {
-        if (usedInvoices.has(invoice.invoiceNumber)) continue;
-        const candidate = scoreBankToInvoiceCandidate(
-          bankTx,
-          invoice,
-          stage,
-          (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none"
-        );
-        if (!candidate) continue;
-        stageCandidates.push({
-          bankTransaction: bankTx,
-          bestMatch: candidate
-        });
-      }
-    }
-    stageCandidates.sort((a, b) => {
-      const comparison = compareBestMatches(a.bestMatch, b.bestMatch);
-      if (comparison !== 0) return comparison;
-      return compareBankTransactions(a.bankTransaction, b.bankTransaction);
-    });
-    const matchedBankIds = /* @__PURE__ */ new Set();
-    const matchedInvoiceNumbers = /* @__PURE__ */ new Set();
-    for (const candidate of stageCandidates) {
-      if (matchedBankIds.has(candidate.bankTransaction.id)) continue;
-      if (matchedInvoiceNumbers.has(candidate.bestMatch.invoice.invoiceNumber)) continue;
-      if (usedInvoices.has(candidate.bestMatch.invoice.invoiceNumber)) continue;
-      matchedBankIds.add(candidate.bankTransaction.id);
-      matchedInvoiceNumbers.add(candidate.bestMatch.invoice.invoiceNumber);
-      usedInvoices.add(candidate.bestMatch.invoice.invoiceNumber);
+    const candidateLists = buildStageCandidateLists(
+      remainingBanks,
+      fuelInvoices,
+      usedInvoices,
+      stage,
+      boundaryPositions
+    );
+    const matchedBankIds = assignStageMatches(candidateLists);
+    for (const { bankTransaction } of candidateLists) {
+      if (!matchedBankIds.has(bankTransaction.id)) continue;
+      const assignedMatch = matchedBankIds.get(bankTransaction.id);
+      usedInvoices.add(assignedMatch.invoice.invoiceNumber);
       stageMatches.push({
         stage,
-        bankTransaction: candidate.bankTransaction,
-        bestMatch: candidate.bestMatch
+        bankTransaction,
+        bestMatch: assignedMatch
       });
     }
     const stillRemaining = remainingBanks.filter((bankTx) => !matchedBankIds.has(bankTx.id));
@@ -34188,6 +34169,49 @@ function scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition
     amountDiff,
     reasons
   };
+}
+function buildStageCandidateLists(bankTransactions, fuelInvoices, usedInvoices, stage, boundaryPositions) {
+  return bankTransactions.map((bankTransaction) => {
+    const candidates = fuelInvoices.filter((invoice) => !usedInvoices.has(invoice.invoiceNumber)).map(
+      (invoice) => scoreBankToInvoiceCandidate(
+        bankTransaction,
+        invoice,
+        stage,
+        (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none"
+      )
+    ).filter((candidate) => !!candidate).sort(compareBestMatches);
+    return { bankTransaction, candidates };
+  }).filter((entry) => entry.candidates.length > 0).sort((a, b) => {
+    if (a.candidates.length !== b.candidates.length) return a.candidates.length - b.candidates.length;
+    const topComparison = compareBestMatches(a.candidates[0], b.candidates[0]);
+    if (topComparison !== 0) return topComparison;
+    return compareBankTransactions(a.bankTransaction, b.bankTransaction);
+  });
+}
+function assignStageMatches(candidateLists) {
+  const bankById = new Map(candidateLists.map((entry) => [entry.bankTransaction.id, entry]));
+  const invoiceAssignments = /* @__PURE__ */ new Map();
+  const bankAssignments = /* @__PURE__ */ new Map();
+  const tryAssign = (bankId, visitedInvoices) => {
+    const bankEntry = bankById.get(bankId);
+    if (!bankEntry) return false;
+    for (const candidate of bankEntry.candidates) {
+      const invoiceNumber = candidate.invoice.invoiceNumber;
+      if (visitedInvoices.has(invoiceNumber)) continue;
+      visitedInvoices.add(invoiceNumber);
+      const currentBankId = invoiceAssignments.get(invoiceNumber);
+      if (!currentBankId || tryAssign(currentBankId, visitedInvoices)) {
+        invoiceAssignments.set(invoiceNumber, bankId);
+        bankAssignments.set(bankId, candidate);
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const entry of candidateLists) {
+    tryAssign(entry.bankTransaction.id, /* @__PURE__ */ new Set());
+  }
+  return bankAssignments;
 }
 function getCardMatchScore(reasons) {
   if (reasons.some((reason) => reason.startsWith("card-match"))) return 2;

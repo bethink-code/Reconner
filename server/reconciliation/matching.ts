@@ -33,9 +33,9 @@ export interface StageMatch<TBank, TFuel> {
   bestMatch: BestInvoiceMatch<TFuel>;
 }
 
-interface CandidateEdge<TBank, TFuel> {
+interface CandidateListEntry<TBank, TFuel> {
   bankTransaction: TBank;
-  bestMatch: BestInvoiceMatch<TFuel>;
+  candidates: BestInvoiceMatch<TFuel>[];
 }
 
 type BoundaryPosition = "start" | "end" | "both" | "none";
@@ -170,46 +170,24 @@ export function runSequentialMatchingStages<TBank extends BankTxnLike & { id: st
   const boundaryPositions = deriveBoundaryPositions(fuelInvoices);
 
   for (const stage of stages) {
-    const stageCandidates: CandidateEdge<TBank, TFuel>[] = [];
+    const candidateLists = buildStageCandidateLists(
+      remainingBanks,
+      fuelInvoices,
+      usedInvoices,
+      stage,
+      boundaryPositions,
+    );
 
-    for (const bankTx of remainingBanks) {
-      for (const invoice of fuelInvoices) {
-        if (usedInvoices.has(invoice.invoiceNumber)) continue;
-        const candidate = scoreBankToInvoiceCandidate(
-          bankTx,
-          invoice,
-          stage,
-          (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none",
-        );
-        if (!candidate) continue;
-        stageCandidates.push({
-          bankTransaction: bankTx,
-          bestMatch: candidate,
-        });
-      }
-    }
+    const matchedBankIds = assignStageMatches(candidateLists);
 
-    stageCandidates.sort((a, b) => {
-      const comparison = compareBestMatches(a.bestMatch, b.bestMatch);
-      if (comparison !== 0) return comparison;
-      return compareBankTransactions(a.bankTransaction, b.bankTransaction);
-    });
-
-    const matchedBankIds = new Set<string>();
-    const matchedInvoiceNumbers = new Set<string>();
-
-    for (const candidate of stageCandidates) {
-      if (matchedBankIds.has(candidate.bankTransaction.id)) continue;
-      if (matchedInvoiceNumbers.has(candidate.bestMatch.invoice.invoiceNumber)) continue;
-      if (usedInvoices.has(candidate.bestMatch.invoice.invoiceNumber)) continue;
-
-      matchedBankIds.add(candidate.bankTransaction.id);
-      matchedInvoiceNumbers.add(candidate.bestMatch.invoice.invoiceNumber);
-      usedInvoices.add(candidate.bestMatch.invoice.invoiceNumber);
+    for (const { bankTransaction } of candidateLists) {
+      if (!matchedBankIds.has(bankTransaction.id)) continue;
+      const assignedMatch = matchedBankIds.get(bankTransaction.id)!;
+      usedInvoices.add(assignedMatch.invoice.invoiceNumber);
       stageMatches.push({
         stage,
-        bankTransaction: candidate.bankTransaction,
-        bestMatch: candidate.bestMatch,
+        bankTransaction,
+        bestMatch: assignedMatch,
       });
     }
 
@@ -302,6 +280,73 @@ function scoreBankToInvoiceCandidate<TBank extends BankTxnLike, TFuel extends Fu
     amountDiff,
     reasons,
   };
+}
+
+function buildStageCandidateLists<TBank extends BankTxnLike & { id: string }, TFuel extends FuelTxnLike>(
+  bankTransactions: TBank[],
+  fuelInvoices: FuelInvoice<TFuel>[],
+  usedInvoices: Set<string>,
+  stage: MatchingStage,
+  boundaryPositions: Map<string, BoundaryPosition>,
+): CandidateListEntry<TBank, TFuel>[] {
+  return bankTransactions
+    .map((bankTransaction) => {
+      const candidates = fuelInvoices
+        .filter((invoice) => !usedInvoices.has(invoice.invoiceNumber))
+        .map((invoice) =>
+          scoreBankToInvoiceCandidate(
+            bankTransaction,
+            invoice,
+            stage,
+            (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none",
+          ),
+        )
+        .filter((candidate): candidate is BestInvoiceMatch<TFuel> => !!candidate)
+        .sort(compareBestMatches);
+
+      return { bankTransaction, candidates };
+    })
+    .filter((entry) => entry.candidates.length > 0)
+    .sort((a, b) => {
+      if (a.candidates.length !== b.candidates.length) return a.candidates.length - b.candidates.length;
+      const topComparison = compareBestMatches(a.candidates[0], b.candidates[0]);
+      if (topComparison !== 0) return topComparison;
+      return compareBankTransactions(a.bankTransaction, b.bankTransaction);
+    });
+}
+
+function assignStageMatches<TBank extends BankTxnLike & { id: string }, TFuel extends FuelTxnLike>(
+  candidateLists: CandidateListEntry<TBank, TFuel>[],
+): Map<string, BestInvoiceMatch<TFuel>> {
+  const bankById = new Map(candidateLists.map((entry) => [entry.bankTransaction.id, entry]));
+  const invoiceAssignments = new Map<string, string>();
+  const bankAssignments = new Map<string, BestInvoiceMatch<TFuel>>();
+
+  const tryAssign = (bankId: string, visitedInvoices: Set<string>): boolean => {
+    const bankEntry = bankById.get(bankId);
+    if (!bankEntry) return false;
+
+    for (const candidate of bankEntry.candidates) {
+      const invoiceNumber = candidate.invoice.invoiceNumber;
+      if (visitedInvoices.has(invoiceNumber)) continue;
+      visitedInvoices.add(invoiceNumber);
+
+      const currentBankId = invoiceAssignments.get(invoiceNumber);
+      if (!currentBankId || tryAssign(currentBankId, visitedInvoices)) {
+        invoiceAssignments.set(invoiceNumber, bankId);
+        bankAssignments.set(bankId, candidate);
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  for (const entry of candidateLists) {
+    tryAssign(entry.bankTransaction.id, new Set<string>());
+  }
+
+  return bankAssignments;
 }
 
 function getCardMatchScore(reasons: string[]): number {

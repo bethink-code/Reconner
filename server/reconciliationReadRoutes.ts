@@ -102,10 +102,39 @@ export function registerReconciliationReadRoutes(app: Express) {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
 
-      const matches = await storage.getMatchesByPeriod(req.params.periodId);
-      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      const [matches, transactions, resolutions] = await Promise.all([
+        storage.getMatchesByPeriod(req.params.periodId),
+        storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId),
+      ]);
       const txMap = new Map(transactions.map((tx) => [tx.id, tx]));
       const fuelItemsByMatchId = new Map<string, typeof transactions>();
+      const linkedResolutionTransactionIds = new Set(
+        resolutions
+          .filter((resolution) => resolution.resolutionType === "linked")
+          .map((resolution) => resolution.transactionId),
+      );
+      type LedgerRow = {
+        match: {
+          id: string;
+          matchType: string;
+          matchConfidence: string | null;
+          createdAt: Date | null;
+        };
+        fuelTransaction: (typeof transactions)[number] | null;
+        bankTransaction: (typeof transactions)[number] | null;
+        fuelItems: typeof transactions;
+      };
+
+      const isInPeriod = (transaction: (typeof transactions)[number] | null | undefined) => {
+        if (!transaction?.transactionDate) return false;
+        return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
+      };
+
+      const isCanonicalFuel = (transaction: (typeof transactions)[number] | null | undefined) =>
+        !!transaction &&
+        transaction.sourceType === "fuel" &&
+        isInPeriod(transaction);
 
       for (const transaction of transactions) {
         if (transaction.sourceType === "fuel" && transaction.matchId) {
@@ -116,18 +145,122 @@ export function registerReconciliationReadRoutes(app: Express) {
         }
       }
 
-      const matchDetails = matches.map((match) => {
-        const fuelTransaction = txMap.get(match.fuelTransactionId);
-        const bankTransaction = txMap.get(match.bankTransactionId);
+      const matchDetails: LedgerRow[] = matches.map((match) => {
+        const fuelTransaction = txMap.get(match.fuelTransactionId) || null;
+        const bankTransaction = txMap.get(match.bankTransactionId) || null;
+        const fuelItems = fuelItemsByMatchId.get(match.id) || (fuelTransaction ? [fuelTransaction] : []);
+        const matchType =
+          linkedResolutionTransactionIds.has(match.bankTransactionId) ||
+          linkedResolutionTransactionIds.has(match.fuelTransactionId)
+            ? "linked"
+            : match.matchType;
         return {
-          match,
+          match: {
+            ...match,
+            matchType,
+          },
           fuelTransaction,
           bankTransaction,
-          fuelItems: fuelItemsByMatchId.get(match.id) || (fuelTransaction ? [fuelTransaction] : []),
+          fuelItems,
         };
+      }).filter((row) => {
+        if (row.fuelItems.some((item) => isCanonicalFuel(item))) return true;
+        return isCanonicalFuel(row.fuelTransaction);
       });
 
-      res.json(matchDetails);
+      const syntheticRows: LedgerRow[] = transactions.flatMap((transaction): LedgerRow[] => {
+        const paymentType = transaction.paymentType?.toLowerCase() || "";
+        const isDebtor =
+          paymentType.includes("debtor") ||
+          paymentType.includes("account") ||
+          paymentType.includes("fleet");
+
+        if (transaction.sourceType === "fuel" && transaction.matchStatus !== "matched") {
+          if (!isCanonicalFuel(transaction)) return [];
+          if (isDebtor) {
+            return [{
+              match: {
+                id: `debtor-${transaction.id}`,
+                matchType: "debtor",
+                matchConfidence: null,
+                createdAt: transaction.createdAt,
+              },
+              fuelTransaction: transaction,
+              bankTransaction: null,
+              fuelItems: [transaction],
+            }];
+          }
+
+          if (transaction.isCardTransaction === "no") {
+            return [{
+              match: {
+                id: `cash-${transaction.id}`,
+                matchType: "cash",
+                matchConfidence: null,
+                createdAt: transaction.createdAt,
+              },
+              fuelTransaction: transaction,
+              bankTransaction: null,
+              fuelItems: [transaction],
+            }];
+          }
+
+          if (transaction.isCardTransaction === "yes" && transaction.matchStatus === "unmatched") {
+            return [{
+              match: {
+                id: `unmatched-card-${transaction.id}`,
+                matchType: "unmatched_card",
+                matchConfidence: null,
+                createdAt: transaction.createdAt,
+              },
+              fuelTransaction: transaction,
+              bankTransaction: null,
+              fuelItems: [transaction],
+            }];
+          }
+        }
+
+        if (transaction.sourceType?.startsWith("bank")) {
+          if (!isInPeriod(transaction)) return [];
+          if (transaction.matchStatus === "unmatched" || transaction.matchStatus === "lag_explained" || transaction.matchStatus === "unmatchable") {
+            return [{
+              match: {
+                id: `unmatched-bank-${transaction.id}`,
+                matchType: "unmatched_bank",
+                matchConfidence: null,
+                createdAt: transaction.createdAt,
+              },
+              fuelTransaction: null,
+              bankTransaction: transaction,
+              fuelItems: [],
+            }];
+          }
+
+          if (transaction.matchStatus === "excluded") {
+            return [{
+              match: {
+                id: `excluded-${transaction.id}`,
+                matchType: "excluded",
+                matchConfidence: null,
+                createdAt: transaction.createdAt,
+              },
+              fuelTransaction: null,
+              bankTransaction: transaction,
+              fuelItems: [],
+            }];
+          }
+        }
+
+        return [];
+      });
+
+      const allRows = [...matchDetails, ...syntheticRows].sort((a: LedgerRow, b: LedgerRow) => {
+        const aDate = a.match.createdAt ? new Date(a.match.createdAt).getTime() : 0;
+        const bDate = b.match.createdAt ? new Date(b.match.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
+
+      res.json(allRows);
     } catch (error) {
       console.error("Error fetching match details:", error);
       res.status(500).json({ error: "Failed to fetch match details" });

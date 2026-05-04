@@ -33748,6 +33748,11 @@ function registerReconciliationReadRoutes(app2) {
       const linkedResolutionTransactionIds = new Set(
         resolutions.filter((resolution) => resolution.resolutionType === "linked").map((resolution) => resolution.transactionId)
       );
+      const isInPeriod = (transaction) => {
+        if (!transaction?.transactionDate) return false;
+        return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
+      };
+      const isCanonicalFuel = (transaction) => !!transaction && transaction.sourceType === "fuel" && isInPeriod(transaction);
       for (const transaction of transactions2) {
         if (transaction.sourceType === "fuel" && transaction.matchId) {
           if (!fuelItemsByMatchId.has(transaction.matchId)) {
@@ -33759,6 +33764,7 @@ function registerReconciliationReadRoutes(app2) {
       const matchDetails = matches2.map((match) => {
         const fuelTransaction = txMap.get(match.fuelTransactionId) || null;
         const bankTransaction = txMap.get(match.bankTransactionId) || null;
+        const fuelItems = fuelItemsByMatchId.get(match.id) || (fuelTransaction ? [fuelTransaction] : []);
         const matchType = linkedResolutionTransactionIds.has(match.bankTransactionId) || linkedResolutionTransactionIds.has(match.fuelTransactionId) ? "linked" : match.matchType;
         return {
           match: {
@@ -33767,13 +33773,17 @@ function registerReconciliationReadRoutes(app2) {
           },
           fuelTransaction,
           bankTransaction,
-          fuelItems: fuelItemsByMatchId.get(match.id) || (fuelTransaction ? [fuelTransaction] : [])
+          fuelItems
         };
+      }).filter((row) => {
+        if (row.fuelItems.some((item) => isCanonicalFuel(item))) return true;
+        return isCanonicalFuel(row.fuelTransaction);
       });
       const syntheticRows = transactions2.flatMap((transaction) => {
         const paymentType = transaction.paymentType?.toLowerCase() || "";
         const isDebtor = paymentType.includes("debtor") || paymentType.includes("account") || paymentType.includes("fleet");
         if (transaction.sourceType === "fuel" && transaction.matchStatus !== "matched") {
+          if (!isCanonicalFuel(transaction)) return [];
           if (isDebtor) {
             return [{
               match: {
@@ -33815,6 +33825,7 @@ function registerReconciliationReadRoutes(app2) {
           }
         }
         if (transaction.sourceType?.startsWith("bank")) {
+          if (!isInPeriod(transaction)) return [];
           if (transaction.matchStatus === "unmatched" || transaction.matchStatus === "lag_explained" || transaction.matchStatus === "unmatchable") {
             return [{
               match: {

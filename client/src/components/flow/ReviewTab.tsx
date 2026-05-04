@@ -215,8 +215,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
         }
 
         if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
-          if (bankTime < fuelTime) continue;
-          const timeGap = bankTime - fuelTime;
+          const timeGap = Math.abs(bankTime - fuelTime);
           if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
         }
 
@@ -228,8 +227,8 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
 
         let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
         if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
-          const timeGap = bankTime - fuelTime;
-          timeDiffLabel = timeGap <= 0 ? "Same time" : `${timeGap} min`;
+          const timeGap = Math.abs(bankTime - fuelTime);
+          timeDiffLabel = timeGap === 0 ? "Same time" : `${timeGap} min`;
           if (timeGap <= 5) confidence = 100;
           else if (timeGap <= 15) confidence = 95;
           else if (timeGap <= 30) confidence = 85;
@@ -439,8 +438,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
         }
 
         if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
-          if (bankTime < fuelTime) continue;
-          const timeGap = bankTime - fuelTime;
+          const timeGap = Math.abs(bankTime - fuelTime);
           if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
         }
 
@@ -452,8 +450,8 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
 
         let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
         if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
-          const timeGap = bankTime - fuelTime;
-          timeDiffLabel = timeGap <= 0 ? "Same time" : `${timeGap} min`;
+          const timeGap = Math.abs(bankTime - fuelTime);
+          timeDiffLabel = timeGap === 0 ? "Same time" : `${timeGap} min`;
           if (timeGap <= 5) confidence = 100;
           else if (timeGap <= 15) confidence = 95;
           else if (timeGap <= 30) confidence = 85;

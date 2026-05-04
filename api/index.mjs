@@ -34088,7 +34088,6 @@ function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, st
     }
     const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
     const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
-    if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
     let confidence = 70;
     if (dateDiff === 0) confidence = 85;
     else if (Math.abs(dateDiff) === 1) confidence = 75;
@@ -34096,7 +34095,7 @@ function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, st
     else confidence = 65;
     let timeDiff = 0;
     if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-      timeDiff = bankTime - fuelTime;
+      timeDiff = Math.abs(bankTime - fuelTime);
       if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) continue;
       if (timeDiff <= 5) confidence = 100;
       else if (timeDiff <= 15) confidence = 95;

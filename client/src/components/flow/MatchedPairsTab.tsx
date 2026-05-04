@@ -153,7 +153,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
     return c;
   }, [pairs]);
 
-  const totalFuel = counts.exact + counts.rules + counts.confirmed + counts.reason + counts.cash + counts.debtor + counts.unmatchedCard;
+  const totalFuel = counts.exact + counts.rules + counts.confirmed + counts.reason + counts.cash + counts.debtor + counts.unmatchedCard + counts.unmatchedBank + counts.duplicates;
   const totalLekana = counts.exact + counts.rules;
   const totalGarth = counts.confirmed + counts.reason;
   const totalExcluded = counts.cash + counts.debtor + counts.duplicates;
@@ -161,7 +161,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
 
   const matchesTopFilter = (mt: string, t: TopFilter) => {
     switch (t) {
-      case "total": return isExact(mt) || isRules(mt) || isConfirmed(mt) || isReason(mt) || isCash(mt) || isDebtor(mt) || isUnmatchedCard(mt);
+      case "total": return isExact(mt) || isRules(mt) || isConfirmed(mt) || isReason(mt) || isCash(mt) || isDebtor(mt) || isUnmatchedCard(mt) || isUnmatchedBank(mt) || isDeclinedOrDuplicate(mt);
       case "lekana": return isExact(mt) || isRules(mt);
       case "garth": return isConfirmed(mt) || isReason(mt);
       case "excluded": return isCash(mt) || isDebtor(mt) || isDeclinedOrDuplicate(mt);
@@ -426,6 +426,8 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
           const bankOnly = !p.fuelTransaction && !!p.bankTransaction;
           const fuelOnly = !p.bankTransaction && !!p.fuelTransaction;
           const muted = bankOnly || fuelOnly;
+          const singleFuelItem = p.fuelItems?.length === 1 ? p.fuelItems[0] : null;
+          const displayFuel = p.fuelTransaction || singleFuelItem;
 
           return (
             <div
@@ -438,20 +440,20 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
               )}
             >
               {/* Left — Fuel */}
-              {p.fuelTransaction && !p.fuelItems && (
+              {displayFuel && (!p.fuelItems || p.fuelItems.length <= 1) && (
                 <div className="min-w-0 space-y-0.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                     Fuel
-                    {p.fuelTransaction.referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelTransaction.referenceNumber}</span>}
+                    {displayFuel.referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {displayFuel.referenceNumber}</span>}
                   </p>
                   <p className="text-sm font-semibold tabular-nums">{formatRand(fuelAmt)}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {p.fuelTransaction.transactionDate}
-                    {p.fuelTransaction.transactionTime && ` ${p.fuelTransaction.transactionTime}`}
-                    {p.fuelTransaction.attendant && ` \u2022 ${p.fuelTransaction.attendant}`}
+                    {displayFuel.transactionDate}
+                    {displayFuel.transactionTime && ` ${displayFuel.transactionTime}`}
+                    {displayFuel.attendant && ` \u2022 ${displayFuel.attendant}`}
                   </p>
-                  {p.fuelTransaction.pump && (
-                    <p className="text-xs text-muted-foreground">Pump {p.fuelTransaction.pump}</p>
+                  {displayFuel.pump && (
+                    <p className="text-xs text-muted-foreground">Pump {displayFuel.pump}</p>
                   )}
                 </div>
               )}
@@ -577,13 +579,13 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
       {/* Confirmation dialog */}
       <AlertDialog open={!!pendingUnmatch} onOpenChange={open => { if (!open) setPendingUnmatch(null); }}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove match?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will unlink the bank transaction ({pendingUnmatch ? formatRand(pendingUnmatch.bankTransaction.amount) : ""}) from its fuel match.
-              Both transactions will return to the unmatched pool for re-investigation.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove match?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will unlink the bank transaction ({pendingUnmatch?.bankTransaction ? formatRand(pendingUnmatch.bankTransaction.amount) : ""}) from its fuel match.
+                Both transactions will return to the unmatched pool for re-investigation.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction

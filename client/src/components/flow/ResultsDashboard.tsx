@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InfoCard, InfoCardLabel, InfoCardContent, InfoCardAction } from "@/components/ui/info-card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -16,6 +17,7 @@ import { formatRand } from "@/lib/format";
 import type { MatchingRulesConfig, TransactionResolution } from "@shared/schema";
 import type { PeriodSummary } from "@/lib/reconciliation-types";
 import { deriveSummaryStats } from "@/lib/reconciliation-utils";
+import { buildMatchingStages } from "@shared/matchingStages";
 import { MatchedPairsTab } from "./MatchedPairsTab";
 import { ReviewTab } from "./ReviewTab";
 import { InvestigateTab } from "./InvestigateTab";
@@ -90,6 +92,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   const resolvedCount = resolutions?.filter(r => r.resolutionType !== 'flagged').length || 0;
   const flaggedCount = resolutions?.filter(r => r.resolutionType === 'flagged').length || 0;
   const reviewCount = Math.max(0, unmatchedBank + Math.max(0, unmatchedFuelCount) - resolvedCount - flaggedCount);
+  const matchingStages = rules ? buildMatchingStages(rules) : [];
 
   const tabTriggerClass = "text-sm px-1 pb-2.5 -mb-px text-[#6B7280] border-b-2 border-transparent rounded-none bg-transparent shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-[#1A1200] data-[state=active]:!font-semibold data-[state=active]:!text-base data-[state=active]:!border-[#1A1200] data-[state=active]:!shadow-none hover:text-[#1A1200] transition-colors";
 
@@ -132,6 +135,87 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
         {/* ════════════════════════════════════════════════════════════
             SUMMARY TAB — 4 action cards
         ════════════════════════════════════════════════════════════ */}
+      <div className="bg-section rounded-2xl max-w-4xl mx-auto px-6 py-4 mb-4">
+        <button
+          type="button"
+          onClick={() => setRulesExpanded(!rulesExpanded)}
+          className="w-full text-left"
+          data-testid="button-toggle-matching-logic"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Matching Logic</p>
+              <p className="text-sm text-[#1A1200]">
+                These are the active rules and ordered Lekana passes behind this reconciliation.
+              </p>
+            </div>
+            <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform rotate-90", rulesExpanded && "rotate-[270deg]")} />
+          </div>
+        </button>
+
+        {rulesExpanded && rules && (
+          <div className="mt-4 pt-4 border-t border-border space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3">
+              <RuleValue label="Tolerance" value={`±R ${Number(rules.amountTolerance).toFixed(2)}`} />
+              <RuleValue label="Date Window" value={`${rules.dateWindowDays} day${rules.dateWindowDays !== 1 ? "s" : ""}`} />
+              <RuleValue label="Time Window" value={`${rules.timeWindowMinutes} min`} />
+              <RuleValue label="Min Confidence" value={`${rules.minimumConfidence}%`} />
+              <RuleValue label="Auto-Match" value={`${rules.autoMatchThreshold}%`} />
+              <RuleValue label="Invoice Group" value={rules.groupByInvoice ? "On" : "Off"} />
+              <RuleValue label="Card Required" value={rules.requireCardMatch ? "Yes" : "No"} />
+              {period && <RuleValue label="Period" value={`${period.startDate} to ${period.endDate}`} />}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Ordered Passes</p>
+              <div className="space-y-3">
+                {matchingStages.map((stage) => (
+                  <div key={stage.id} className="rounded-xl bg-card border border-border/60 p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Pass {stage.order}
+                        </p>
+                        <p className="text-sm font-semibold mt-1">{stage.name}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{stage.description}</p>
+                      </div>
+                      <Badge variant="secondary" className="shrink-0">
+                        {stage.minimumConfidence}% min
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <Badge variant="outline">Amount +/- R{stage.maxAmountDiff.toFixed(2)}</Badge>
+                      <Badge variant="outline">
+                        {stage.boundaryMode === "boundary"
+                          ? "Previous-day start / next-day end"
+                          : stage.maxDateDiffDays === 0
+                            ? "Same day only"
+                            : `Up to ${stage.maxDateDiffDays} day lag`}
+                      </Badge>
+                      <Badge variant="outline">
+                        {stage.maxTimeDiffMinutes === null ? "No same-day time cap" : `${stage.maxTimeDiffMinutes} min time window`}
+                      </Badge>
+                      <Badge variant="outline">
+                        {stage.requireCardMatch ? "Card match required" : "Card match optional"}
+                      </Badge>
+                      {stage.requireExactAmount && (
+                        <Badge variant="outline">Exact amount first</Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-start">
+              <Button variant="outline" size="sm" onClick={onRerunMatching}>
+                <Settings className="h-4 w-4 mr-2" />Adjust
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
         <TabsContent value="summary" className="mt-0 max-w-4xl mx-auto">
           <div className="bg-section rounded-2xl p-6 space-y-5">
 
@@ -275,33 +359,6 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                   </div>
                 ))}
               </InfoCardContent>
-            </InfoCard>
-
-            {/* Row 4: Matching Rules (collapsible) */}
-            <InfoCard className="py-3 px-4 cursor-pointer" onClick={() => setRulesExpanded(!rulesExpanded)}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Settings className="h-4 w-4" />
-                  <span>Matching rules</span>
-                </div>
-                <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform rotate-90", rulesExpanded && "rotate-[270deg]")} />
-              </div>
-              {rulesExpanded && rules && (
-                <InfoCardContent className="mt-4 pt-4 border-t border-border space-y-4">
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-4 gap-y-2">
-                    <RuleValue label="Tolerance" value={`±R ${Number(rules.amountTolerance).toFixed(2)}`} />
-                    <RuleValue label="Date Window" value={`${rules.dateWindowDays} day${rules.dateWindowDays !== 1 ? "s" : ""}`} />
-                    <RuleValue label="Time Window" value={`${rules.timeWindowMinutes} min`} />
-                    <RuleValue label="Min Confidence" value={`${rules.minimumConfidence}%`} />
-                    <RuleValue label="Auto-Match" value={`${rules.autoMatchThreshold}%`} />
-                    <RuleValue label="Invoice Group" value={rules.groupByInvoice ? "On" : "Off"} />
-                    <RuleValue label="Card Required" value={rules.requireCardMatch ? "Yes" : "No"} />
-                  </div>
-                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onRerunMatching(); }}>
-                    <Settings className="h-4 w-4 mr-2" />Adjust
-                  </Button>
-                </InfoCardContent>
-              )}
             </InfoCard>
 
           </div>

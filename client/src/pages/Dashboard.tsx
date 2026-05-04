@@ -82,6 +82,16 @@ export default function Dashboard() {
   // Pending access requests count (admin only)
   const { data: pendingRequests } = useQuery<AccessRequest[]>({
     queryKey: ["/api/admin/access-requests"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/access-requests", { credentials: "include" });
+      if (response.status === 404) {
+        return [];
+      }
+      if (!response.ok) {
+        throw new Error("Failed to fetch access requests");
+      }
+      return response.json();
+    },
     enabled: !!user?.isAdmin,
     refetchInterval: 60000, // Poll every 60s
   });

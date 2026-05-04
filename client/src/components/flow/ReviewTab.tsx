@@ -60,6 +60,13 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   // Reset search when switching sides
   useEffect(() => { setSearchQuery(""); }, [side]);
 
+  // Keep the selected side in sync with summary-card drill-downs.
+  useEffect(() => {
+    if (initialSide) {
+      setSide(initialSide);
+    }
+  }, [initialSide]);
+
   // ── Data fetching ──
   const { data: unmatchedData, isLoading: unmatchedLoading } = useQuery<PaginatedResponse>({
     queryKey: ["/api/periods", periodId, "transactions", "unmatched", "bank"],

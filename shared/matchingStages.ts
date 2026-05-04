@@ -1,0 +1,79 @@
+export interface MatchingRulesStageInput {
+  amountTolerance: number;
+  dateWindowDays: number;
+  timeWindowMinutes: number;
+  requireCardMatch: boolean;
+  minimumConfidence: number;
+  autoMatchThreshold: number;
+}
+
+export interface MatchingStage {
+  id: string;
+  name: string;
+  description: string;
+  order: number;
+  maxAmountDiff: number;
+  maxDateDiffDays: number;
+  maxTimeDiffMinutes: number | null;
+  requireExactAmount: boolean;
+  requireCardMatch: boolean;
+  minimumConfidence: number;
+  autoConfirmConfidence: number;
+}
+
+const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
+
+export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingStage[] {
+  const strictStage: MatchingStage = {
+    id: "strict_same_day_exact",
+    name: "Strict Same-Day Exact",
+    description: "Exact-amount, same-day matches first. This is the cleanest operational pass.",
+    order: 1,
+    maxAmountDiff: 0.01,
+    maxDateDiffDays: 0,
+    maxTimeDiffMinutes: Math.min(rules.timeWindowMinutes, 120),
+    requireExactAmount: true,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 85)),
+    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 90)),
+  };
+
+  const closeOperationalStage: MatchingStage = {
+    id: "operational_close_match",
+    name: "Operational Close Match",
+    description: "Then we allow small amount and timing variation for normal same-day or next-day settlement.",
+    order: 2,
+    maxAmountDiff: Math.max(0.01, rules.amountTolerance),
+    maxDateDiffDays: Math.min(Math.max(rules.dateWindowDays, 0), 1),
+    maxTimeDiffMinutes: rules.timeWindowMinutes,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence: clampPercent(Math.max(rules.minimumConfidence, rules.autoMatchThreshold - 10)),
+    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 80)),
+  };
+
+  const settlementFallbackStage: MatchingStage = {
+    id: "settlement_fallback",
+    name: "Settlement Fallback",
+    description: "Finally, we use the wider date window for delayed bank settlement and lower-confidence review candidates.",
+    order: 3,
+    maxAmountDiff: Math.max(0.01, rules.amountTolerance),
+    maxDateDiffDays: Math.max(rules.dateWindowDays, 0),
+    maxTimeDiffMinutes: null,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence: clampPercent(rules.minimumConfidence),
+    autoConfirmConfidence: clampPercent(rules.autoMatchThreshold),
+  };
+
+  return [
+    strictStage,
+    closeOperationalStage,
+    settlementFallbackStage,
+  ].filter((stage, index, stages) => {
+    if (index === 2 && stage.maxDateDiffDays <= stages[1].maxDateDiffDays) {
+      return false;
+    }
+    return true;
+  });
+}

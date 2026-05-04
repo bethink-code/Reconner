@@ -6,10 +6,11 @@ import { assertPeriodWrite } from "./routeAccess";
 import {
   groupFuelByInvoice as groupFuelByInvoiceFromReconciliation,
   parseDateToDays as parseDateToDaysFromReconciliation,
-  parseTimeToMinutes as parseTimeToMinutesFromReconciliation,
+  runSequentialMatchingStages,
   scoreBankToInvoices as scoreBankToInvoicesFromReconciliation,
   type FuelInvoice as ReconciliationFuelInvoice,
 } from "./reconciliation/matching";
+import { buildMatchingStages } from "../shared/matchingStages";
 import {
   insertMatchSchema,
   type User,
@@ -84,18 +85,7 @@ export function registerReconciliationWriteRoutes(app: Express) {
       );
 
       const fuelInvoices = groupFuelByInvoiceFromReconciliation(fuelTransactions, rules.groupByInvoice);
-
-      const invoicesByDate = new Map<number, ReconciliationFuelInvoice<any>[]>();
-      for (const invoice of fuelInvoices) {
-        const dayKey = parseDateToDaysFromReconciliation(invoice.firstDate || "");
-        if (dayKey !== null) {
-          for (let offset = -1; offset <= rules.dateWindowDays; offset++) {
-            const key = dayKey + offset;
-            if (!invoicesByDate.has(key)) invoicesByDate.set(key, []);
-            invoicesByDate.get(key)!.push(invoice);
-          }
-        }
-      }
+      const stages = buildMatchingStages(rules);
 
       let matchCount = 0;
       const skippedNonCardCount = transactions.filter(t => {
@@ -105,165 +95,42 @@ export function registerReconciliationWriteRoutes(app: Express) {
         return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
       }).length;
 
-      const matchedInvoices = new Set<string>();
       const pendingMatches: Array<{
         matchData: { periodId: string; fuelTransactionId: string; bankTransactionId: string; matchType: string; matchConfidence: string };
         bankTxId: string;
         fuelItemIds: string[];
       }> = [];
 
-      for (const bankTx of matchableBankTransactions) {
-        let bestMatch: {
-          invoice: ReconciliationFuelInvoice<any>;
-          confidence: number;
-          timeDiff: number;
-          dateDiff: number;
-          amountDiff: number;
-          reasons: string[];
-        } | null = null;
+      const stageMatches = runSequentialMatchingStages(matchableBankTransactions, fuelInvoices, stages);
+      const stageCounts = new Map<string, number>();
 
-        const bankDayKey = parseDateToDaysFromReconciliation(bankTx.transactionDate || "");
-        const candidateInvoices = bankDayKey !== null ? (invoicesByDate.get(bankDayKey) || []) : fuelInvoices;
-        const seen = new Set<string>();
+      for (const stageMatch of stageMatches) {
+        const { stage, bankTransaction, bestMatch } = stageMatch;
+        const isExact = Math.abs(bestMatch.amountDiff) < 0.005;
+        const aboveThreshold = bestMatch.confidence >= stage.autoConfirmConfidence;
+        const matchType = isExact && aboveThreshold ? "auto_exact"
+          : isExact ? "auto_exact_review"
+          : aboveThreshold ? "auto_rules"
+          : "auto_rules_review";
 
-        for (const invoice of candidateInvoices) {
-          if (seen.has(invoice.invoiceNumber)) continue;
-          seen.add(invoice.invoiceNumber);
-          if (matchedInvoices.has(invoice.invoiceNumber)) continue;
-          if (invoice.items.some(item => item.matchStatus === "matched")) continue;
+        pendingMatches.push({
+          matchData: {
+            periodId: req.params.periodId,
+            fuelTransactionId: bestMatch.invoice.items[0].id,
+            bankTransactionId: bankTransaction.id,
+            matchType,
+            matchConfidence: String(bestMatch.confidence),
+          },
+          bankTxId: bankTransaction.id,
+          fuelItemIds: bestMatch.invoice.items.map((item) => item.id),
+        });
 
-          const reasons: string[] = [];
-          const bankAmount = parseFloat(bankTx.amount);
-          const fuelAmount = invoice.totalAmount;
-          const amountDiff = Math.abs(bankAmount - fuelAmount);
+        stageCounts.set(stage.name, (stageCounts.get(stage.name) || 0) + 1);
+        matchCount++;
+      }
 
-          if (amountDiff > rules.amountTolerance) continue;
-
-          if (amountDiff === 0) {
-            reasons.push("Exact amount match");
-          } else {
-            reasons.push(`Amount within R${amountDiff.toFixed(2)} (tolerance: R${rules.amountTolerance})`);
-          }
-
-          const fuelDate = parseDateToDaysFromReconciliation(invoice.firstDate || "");
-          const bankDate = parseDateToDaysFromReconciliation(bankTx.transactionDate || "");
-
-          if (fuelDate === null || bankDate === null) continue;
-
-          const dateDiff = bankDate - fuelDate;
-          if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
-
-          const fuelTime = parseTimeToMinutesFromReconciliation(invoice.firstTime || "");
-          const bankTime = parseTimeToMinutesFromReconciliation(bankTx.transactionTime || "");
-
-          if (dateDiff === 0 && fuelTime !== null && bankTime !== null && bankTime < fuelTime) continue;
-
-          let confidence = 70;
-          if (dateDiff === 0) {
-            confidence = 85;
-            reasons.push("Same day transaction");
-          } else if (Math.abs(dateDiff) === 1) {
-            confidence = 75;
-            reasons.push("1 day difference");
-          } else if (Math.abs(dateDiff) === 2) {
-            confidence = 68;
-            reasons.push("2 days difference");
-          } else {
-            confidence = 65;
-            reasons.push(`${Math.abs(dateDiff)} days difference (weekend/holiday processing)`);
-          }
-
-          let timeDiff = 0;
-          if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-            timeDiff = bankTime - fuelTime;
-
-            if (timeDiff <= 5) {
-              confidence = 100;
-              reasons.push("Times within 5 minutes");
-            } else if (timeDiff <= 15) {
-              confidence = 95;
-              reasons.push("Times within 15 minutes");
-            } else if (timeDiff <= 30) {
-              confidence = 85;
-              reasons.push("Times within 30 minutes");
-            } else if (timeDiff <= rules.timeWindowMinutes) {
-              confidence = 75;
-              reasons.push(`Times within ${timeDiff} minutes`);
-            } else {
-              confidence = 75;
-              reasons.push(`Time difference: ${timeDiff} minutes`);
-            }
-          }
-
-          if (amountDiff > 0) {
-            const amountPenalty = Math.min(5, (amountDiff / rules.amountTolerance) * 5);
-            confidence -= amountPenalty;
-          }
-
-          let cardMatch: "yes" | "no" | "unknown" = "unknown";
-          if (rules.requireCardMatch) {
-            if (!bankTx.cardNumber || !invoice.cardNumber) continue;
-            if (bankTx.cardNumber !== invoice.cardNumber) continue;
-            cardMatch = "yes";
-            confidence += 25;
-            reasons.push("Card numbers match (required)");
-          } else if (bankTx.cardNumber && invoice.cardNumber) {
-            if (bankTx.cardNumber === invoice.cardNumber) {
-              cardMatch = "yes";
-              confidence += 25;
-              reasons.push("Card numbers match (strong)");
-            } else {
-              cardMatch = "no";
-              confidence -= 30;
-              reasons.push("Card numbers differ (penalty)");
-            }
-          }
-
-          if (invoice.items.length > 1) {
-            reasons.push(`Grouped invoice: ${invoice.items.length} items`);
-          }
-
-          confidence = Math.min(100, Math.max(0, confidence));
-          if (confidence < rules.minimumConfidence) continue;
-
-          const absDiff = Math.abs(dateDiff);
-          const cardMatchScore = cardMatch === "yes" ? 2 : cardMatch === "unknown" ? 1 : 0;
-          const bestCardScore = bestMatch ?
-            (bestMatch.reasons.some(r => r.includes("Card numbers match")) ? 2 :
-             bestMatch.reasons.some(r => r.includes("Card numbers differ")) ? 0 : 1) : -1;
-
-          if (!bestMatch ||
-              confidence > bestMatch.confidence ||
-              (confidence === bestMatch.confidence && cardMatchScore > bestCardScore) ||
-              (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff < bestMatch.dateDiff) ||
-              (confidence === bestMatch.confidence && cardMatchScore === bestCardScore && absDiff === bestMatch.dateDiff && timeDiff < bestMatch.timeDiff)) {
-            bestMatch = { invoice, confidence, timeDiff, dateDiff: absDiff, amountDiff, reasons };
-          }
-        }
-
-        if (bestMatch) {
-          const isExact = Math.abs(bestMatch.amountDiff) < 0.005;
-          const aboveThreshold = bestMatch.confidence >= rules.autoMatchThreshold;
-          const matchType = isExact && aboveThreshold ? "auto_exact"
-            : isExact ? "auto_exact_review"
-            : aboveThreshold ? "auto_rules"
-            : "auto_rules_review";
-
-          pendingMatches.push({
-            matchData: {
-              periodId: req.params.periodId,
-              fuelTransactionId: bestMatch.invoice.items[0].id,
-              bankTransactionId: bankTx.id,
-              matchType,
-              matchConfidence: String(bestMatch.confidence),
-            },
-            bankTxId: bankTx.id,
-            fuelItemIds: bestMatch.invoice.items.map(item => item.id),
-          });
-
-          matchedInvoices.add(bestMatch.invoice.invoiceNumber);
-          matchCount++;
-        }
+      for (const stage of stages) {
+        console.log(`[AUTO-MATCH] Stage ${stage.order} ${stage.name}: ${stageCounts.get(stage.name) || 0} matches`);
       }
 
       const matchedBankIds = new Set(pendingMatches.map(pm => pm.bankTxId));
@@ -336,6 +203,7 @@ export function registerReconciliationWriteRoutes(app: Express) {
         nonCardTransactionsSkipped: skippedNonCardCount,
         matchRate: `${matchRate}%`,
         rulesUsed: rules,
+        stagesUsed: stages,
         warnings: dateRangeWarning ? [dateRangeWarning] : []
       });
     } catch (error) {

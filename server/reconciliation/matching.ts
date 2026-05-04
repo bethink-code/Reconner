@@ -1,3 +1,5 @@
+import type { MatchingStage } from "../../shared/matchingStages";
+
 export interface FuelInvoice<TItem> {
   invoiceNumber: string;
   items: TItem[];
@@ -13,6 +15,7 @@ export interface MatchingRulesLike {
   timeWindowMinutes: number;
   requireCardMatch: boolean;
   minimumConfidence: number;
+  autoMatchThreshold?: number;
 }
 
 export interface BestInvoiceMatch<TItem> {
@@ -22,6 +25,12 @@ export interface BestInvoiceMatch<TItem> {
   dateDiff: number;
   amountDiff: number;
   reasons: string[];
+}
+
+export interface StageMatch<TBank, TFuel> {
+  stage: MatchingStage;
+  bankTransaction: TBank;
+  bestMatch: BestInvoiceMatch<TFuel>;
 }
 
 type FuelTxnLike = {
@@ -101,6 +110,27 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
   usedInvoices: Set<string>,
   rules: MatchingRulesLike,
 ): BestInvoiceMatch<TFuel> | null {
+  return scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, {
+    id: "single_pass",
+    name: "Single Pass",
+    description: "Legacy single-pass scoring",
+    order: 1,
+    maxAmountDiff: rules.amountTolerance,
+    maxDateDiffDays: rules.dateWindowDays,
+    maxTimeDiffMinutes: rules.timeWindowMinutes,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence: rules.minimumConfidence,
+    autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence,
+  });
+}
+
+export function scoreBankToInvoicesForStage<TBank extends BankTxnLike, TFuel extends FuelTxnLike>(
+  bankTx: TBank,
+  candidateInvoices: FuelInvoice<TFuel>[],
+  usedInvoices: Set<string>,
+  stage: MatchingStage,
+): BestInvoiceMatch<TFuel> | null {
   let bestMatch: BestInvoiceMatch<TFuel> | null = null;
   const seen = new Set<string>();
 
@@ -110,17 +140,18 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
     if (usedInvoices.has(invoice.invoiceNumber)) continue;
     if (invoice.items.some((item) => item.matchStatus === "matched")) continue;
 
-    const reasons: string[] = [];
+    const reasons: string[] = [`stage:${stage.id}`];
 
     const bankAmount = parseFloat(bankTx.amount);
     const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
-    if (amountDiff > rules.amountTolerance) continue;
+    if (amountDiff > stage.maxAmountDiff) continue;
+    if (stage.requireExactAmount && amountDiff > 0.01) continue;
 
     const fuelDate = parseDateToDays(invoice.firstDate || "");
     const bankDate = parseDateToDays(bankTx.transactionDate || "");
     if (fuelDate === null || bankDate === null) continue;
     const dateDiff = bankDate - fuelDate;
-    if (dateDiff < 0 || dateDiff > rules.dateWindowDays) continue;
+    if (dateDiff < 0 || dateDiff > stage.maxDateDiffDays) continue;
 
     const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
     const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
@@ -136,6 +167,7 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
     let timeDiff = 0;
     if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
       timeDiff = bankTime - fuelTime;
+      if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) continue;
       if (timeDiff <= 5) confidence = 100;
       else if (timeDiff <= 15) confidence = 95;
       else if (timeDiff <= 30) confidence = 85;
@@ -143,11 +175,12 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
     }
 
     if (amountDiff > 0) {
-      confidence -= Math.min(5, (amountDiff / rules.amountTolerance) * 5);
+      const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
+      confidence -= Math.min(5, (amountDiff / divisor) * 5);
     }
 
     let cardMatch: "yes" | "no" | "unknown" = "unknown";
-    if (rules.requireCardMatch) {
+    if (stage.requireCardMatch) {
       if (!bankTx.cardNumber || !invoice.cardNumber) continue;
       if (bankTx.cardNumber !== invoice.cardNumber) continue;
       cardMatch = "yes";
@@ -166,7 +199,7 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
     }
 
     confidence = Math.min(100, Math.max(0, confidence));
-    if (confidence < rules.minimumConfidence) continue;
+    if (confidence < stage.minimumConfidence) continue;
 
     const absDiff = Math.abs(dateDiff);
     const cardMatchScore = cardMatch === "yes" ? 2 : cardMatch === "unknown" ? 1 : 0;
@@ -185,4 +218,38 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
   }
 
   return bestMatch;
+}
+
+export function runSequentialMatchingStages<TBank extends BankTxnLike & { id: string }, TFuel extends FuelTxnLike>(
+  bankTransactions: TBank[],
+  fuelInvoices: FuelInvoice<TFuel>[],
+  stages: MatchingStage[],
+): StageMatch<TBank, TFuel>[] {
+  const remainingBanks = [...bankTransactions];
+  const usedInvoices = new Set<string>();
+  const stageMatches: StageMatch<TBank, TFuel>[] = [];
+
+  for (const stage of stages) {
+    const stillRemaining: TBank[] = [];
+
+    for (const bankTx of remainingBanks) {
+      const bestMatch = scoreBankToInvoicesForStage(bankTx, fuelInvoices, usedInvoices, stage);
+      if (!bestMatch) {
+        stillRemaining.push(bankTx);
+        continue;
+      }
+
+      usedInvoices.add(bestMatch.invoice.invoiceNumber);
+      stageMatches.push({
+        stage,
+        bankTransaction: bankTx,
+        bestMatch,
+      });
+    }
+
+    remainingBanks.length = 0;
+    remainingBanks.push(...stillRemaining);
+  }
+
+  return stageMatches;
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { buildMatchingStages } from "@shared/matchingStages";
 
 interface MatchingRules {
   amountTolerance: number;
@@ -208,6 +210,8 @@ export function ConfigureMatchingStep({
     setSelectedPreset("custom");
   };
 
+  const matchingStages = buildMatchingStages(customRules);
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="bg-section rounded-2xl p-8" data-testid="card-configure-matching">
@@ -286,6 +290,54 @@ export function ConfigureMatchingStep({
                 </>
               )}
             </p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Matching hierarchy</h3>
+                <p className="text-xs text-muted-foreground">
+                  These stages run in order. Earlier stages claim the cleanest matches first, and later stages only see what is left over.
+                </p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {matchingStages.map((stage) => (
+                <div
+                  key={stage.id}
+                  className="rounded-xl bg-card border border-border/60 p-4"
+                  data-testid={`matching-stage-${stage.id}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Pass {stage.order}
+                      </p>
+                      <p className="text-sm font-semibold mt-1">{stage.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{stage.description}</p>
+                    </div>
+                    <Badge variant="secondary" className="shrink-0">
+                      {stage.minimumConfidence}% min
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <Badge variant="outline">Amount +/- R{stage.maxAmountDiff.toFixed(2)}</Badge>
+                    <Badge variant="outline">
+                      {stage.maxDateDiffDays === 0 ? "Same day only" : `Up to ${stage.maxDateDiffDays} day lag`}
+                    </Badge>
+                    <Badge variant="outline">
+                      {stage.maxTimeDiffMinutes === null ? "No same-day time cap" : `${stage.maxTimeDiffMinutes} min time window`}
+                    </Badge>
+                    <Badge variant="outline">
+                      {stage.requireCardMatch ? "Card match required" : "Card match optional"}
+                    </Badge>
+                    {stage.requireExactAmount && (
+                      <Badge variant="outline">Exact amount first</Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Data Coverage Preview */}

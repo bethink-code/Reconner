@@ -32,6 +32,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { Transaction, TransactionResolution, MatchingRulesConfig } from "@shared/schema";
 import { CATEGORY_LABELS } from "@/lib/reconciliation-types";
 import type { PaginatedResponse, PotentialMatch, TransactionInsight, CategorizedTransaction } from "@/lib/reconciliation-types";
+import { buildMatchingStages } from "@shared/matchingStages";
 import { InvestigateModal } from "./InvestigateModal";
 import { TransactionRow } from "./TransactionRow";
 
@@ -177,6 +178,136 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const categorizedTransactions = useMemo((): CategorizedTransaction[] => {
     if (!unmatchedData?.transactions || !fuelData?.transactions) return [];
 
+    const matchingStages = buildMatchingStages({
+      amountTolerance: matchingRules?.amountTolerance ?? 2,
+      dateWindowDays: matchingRules?.dateWindowDays ?? 3,
+      timeWindowMinutes: matchingRules?.timeWindowMinutes ?? 60,
+      requireCardMatch: matchingRules?.requireCardMatch ?? false,
+      minimumConfidence: matchingRules?.minimumConfidence ?? 60,
+      autoMatchThreshold: matchingRules?.autoMatchThreshold ?? 85,
+    });
+
+    const parseTimeToMinutes = (timeStr: string | null | undefined): number | null => {
+      if (!timeStr) return null;
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (!match) return null;
+      return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+    };
+
+    const fuelBoundaryPositions = (() => {
+      const allFuel = [...(allFuelData?.transactions || fuelData.transactions)].filter(
+        (tx) => tx.sourceType === "fuel" && tx.isCardTransaction === "yes",
+      );
+      const grouped = new Map<string, Transaction[]>();
+      for (const tx of allFuel) {
+        const key = tx.transactionDate;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(tx);
+      }
+
+      const positions = new Map<string, "start" | "end" | "both" | "none">();
+      for (const dayTxs of grouped.values()) {
+        const sorted = [...dayTxs].sort((a, b) => {
+          const timeA = parseTimeToMinutes(a.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+          const timeB = parseTimeToMinutes(b.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+          if (timeA !== timeB) return timeA - timeB;
+          return a.id.localeCompare(b.id);
+        });
+        if (sorted.length === 0) continue;
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+        positions.set(first.id, first.id === last.id ? "both" : "start");
+        positions.set(last.id, first.id === last.id ? "both" : "end");
+      }
+      return positions;
+    })();
+
+    const stageLabelMap: Record<string, string> = {
+      strict_same_day_exact: "Strict same-day",
+      operational_close_match: "Operational close",
+      boundary_transactions: "Boundary",
+      settlement_fallback: "Settlement fallback",
+    };
+
+    const scoreSuggestion = (primaryTxn: Transaction, candidateTxn: Transaction): PotentialMatch | null => {
+      const fuelTxn = side === "fuel" ? primaryTxn : candidateTxn;
+      const bankTxn = side === "fuel" ? candidateTxn : primaryTxn;
+      const fuelAmount = parseFloat(fuelTxn.amount);
+      const bankAmount = parseFloat(bankTxn.amount);
+      const amountDiff = Math.abs(bankAmount - fuelAmount);
+      const fuelDate = new Date(fuelTxn.transactionDate).getTime();
+      const bankDate = new Date(bankTxn.transactionDate).getTime();
+      const dayDiff = Math.round((bankDate - fuelDate) / 86400000);
+      const fuelTime = parseTimeToMinutes(fuelTxn.transactionTime);
+      const bankTime = parseTimeToMinutes(bankTxn.transactionTime);
+      const boundaryPosition = fuelBoundaryPositions.get(fuelTxn.id) || "none";
+
+      for (const stage of matchingStages) {
+        if (amountDiff > stage.maxAmountDiff) continue;
+        if (stage.requireExactAmount && amountDiff > 0.01) continue;
+        if (dayDiff < stage.minDateDiffDays || dayDiff > stage.maxDateDiffDays) continue;
+
+        if (stage.boundaryMode === "boundary") {
+          const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+          const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+          const isDirectionalBoundary =
+            (dayDiff === -1 && allowsPreviousDay) ||
+            (dayDiff === 1 && allowsNextDay);
+          if (!isDirectionalBoundary) continue;
+        }
+
+        if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+          if (bankTime < fuelTime) continue;
+          const timeGap = bankTime - fuelTime;
+          if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
+        }
+
+        let confidence = 70;
+        if (dayDiff === 0) confidence = 85;
+        else if (Math.abs(dayDiff) === 1) confidence = 75;
+        else if (Math.abs(dayDiff) === 2) confidence = 68;
+        else confidence = 65;
+
+        let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
+        if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+          const timeGap = bankTime - fuelTime;
+          timeDiffLabel = timeGap <= 0 ? "Same time" : `${timeGap} min`;
+          if (timeGap <= 5) confidence = 100;
+          else if (timeGap <= 15) confidence = 95;
+          else if (timeGap <= 30) confidence = 85;
+          else confidence = 75;
+        }
+
+        if (amountDiff > 0) {
+          const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
+          confidence -= Math.min(5, (amountDiff / divisor) * 5);
+        }
+
+        if (stage.requireCardMatch) {
+          if (!bankTxn.cardNumber || !fuelTxn.cardNumber) continue;
+          if (bankTxn.cardNumber !== fuelTxn.cardNumber) continue;
+          confidence += 25;
+        } else if (bankTxn.cardNumber && fuelTxn.cardNumber) {
+          if (bankTxn.cardNumber === fuelTxn.cardNumber) confidence += 25;
+          else confidence -= 30;
+        }
+
+        confidence = Math.max(0, Math.min(100, confidence));
+        if (confidence < stage.minimumConfidence) continue;
+
+        return {
+          transaction: candidateTxn,
+          confidence,
+          timeDiff: timeDiffLabel,
+          amountDiff,
+          stageId: stage.id,
+          stageLabel: stageLabelMap[stage.id] || stage.name,
+        };
+      }
+
+      return null;
+    };
+
     // Show: unmatched transactions + user-resolved transactions (not flagged, not auto-matched)
     // Flagged go to Investigate tab. Auto-matched (no resolution) stay in Transactions tab.
     const flaggedIds = new Set(flaggedResolutions.map(r => r.transactionId));
@@ -204,44 +335,18 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
         const primaryAmount = parseFloat(primaryTxn.amount);
         const primaryDate = new Date(primaryTxn.transactionDate);
 
-        const allScored = candidateTxns.map((candidateTxn): PotentialMatch => {
-          const candidateAmount = parseFloat(candidateTxn.amount);
-          const candidateDate = new Date(candidateTxn.transactionDate);
-          const daysDiff = Math.abs((primaryDate.getTime() - candidateDate.getTime()) / (1000 * 60 * 60 * 24));
-          const amountDiff = Math.abs(primaryAmount - candidateAmount);
-
-          let confidence = 100;
-          if (daysDiff > 0) confidence -= daysDiff * 10;
-          if (amountDiff <= 1) confidence -= amountDiff * 2;
-          else if (amountDiff <= 10) confidence -= amountDiff * 1;
-          else if (amountDiff <= 50) confidence -= 10 + (amountDiff - 10) * 0.5;
-          else confidence -= 30 + (amountDiff - 50) * 0.3;
-          confidence = Math.max(0, Math.min(100, confidence));
-
-          return {
-            transaction: candidateTxn,
-            confidence,
-            timeDiff: daysDiff === 0 ? "Same day" : daysDiff < 1 ? "< 1 day" : `${Math.floor(daysDiff)} day${daysDiff >= 2 ? "s" : ""}`,
-            amountDiff,
-          };
-        });
+        const allScored = candidateTxns
+          .map((candidateTxn) => scoreSuggestion(primaryTxn, candidateTxn))
+          .filter((match): match is PotentialMatch => !!match);
 
         const potentialMatches = allScored
-          .filter(m => {
-            if (m.confidence <= 20) return false;
-            const candidateDate = new Date(m.transaction.transactionDate);
-            const days = Math.abs((primaryDate.getTime() - candidateDate.getTime()) / (1000 * 60 * 60 * 24));
-            return days <= dateWindowDays;
+          .sort((a, b) => {
+            if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+            return a.amountDiff - b.amountDiff;
           })
-          .sort((a, b) => b.confidence - a.confidence)
           .slice(0, 5);
 
         const nearestByAmount = [...allScored]
-          .filter(m => {
-            const candidateDate = new Date(m.transaction.transactionDate);
-            const days = Math.abs((primaryDate.getTime() - candidateDate.getTime()) / (1000 * 60 * 60 * 24));
-            return days <= dateWindowDays;
-          })
           .sort((a, b) => a.amountDiff - b.amountDiff)
           .slice(0, 3);
 
@@ -250,8 +355,8 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
         let category: CategorizedTransaction['category'];
         if (resolvedIds.has(primaryTxn.id)) category = 'resolved';
         else if (primaryAmount < LOW_VALUE_THRESHOLD) category = 'low_value';
-        else if (bestMatch && bestMatch.confidence >= 80) category = 'quick_win';
-        else if (bestMatch && bestMatch.confidence >= 50) category = 'investigate';
+        else if (bestMatch && bestMatch.confidence >= (matchingRules?.autoMatchThreshold ?? 85)) category = 'quick_win';
+        else if (bestMatch && bestMatch.confidence >= (matchingRules?.minimumConfidence ?? 60)) category = 'investigate';
         else category = 'no_match';
 
         const insights: TransactionInsight[] = [];
@@ -317,7 +422,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     } catch (e) { console.error('Duplicate detection error:', e); }
 
     return result;
-  }, [unmatchedData, fuelData, resolvedIds, side, dateWindowDays]);
+  }, [unmatchedData, fuelData, allFuelData, resolvedIds, side, matchingRules]);
 
   const filteredTransactions = useMemo(() => {
     if (!searchQuery.trim()) return categorizedTransactions;

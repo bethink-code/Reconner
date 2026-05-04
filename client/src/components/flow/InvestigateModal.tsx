@@ -256,6 +256,9 @@ export function InvestigateModal({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-[#166534] mb-1">Best Match</p>
+                    {item.bestMatch.stageLabel && (
+                      <p className="text-xs font-medium text-[#166534] mb-1">{item.bestMatch.stageLabel}</p>
+                    )}
                     <p className="text-base font-bold tabular-nums text-[#1A1200]">
                       {formatRand(item.bestMatch.transaction.amount)}
                       {(() => {

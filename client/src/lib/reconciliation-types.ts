@@ -64,6 +64,8 @@ export interface PotentialMatch {
   confidence: number;
   timeDiff: string;
   amountDiff: number;
+  stageId?: string;
+  stageLabel?: string;
 }
 
 export interface TransactionInsight {

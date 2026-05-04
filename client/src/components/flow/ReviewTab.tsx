@@ -37,6 +37,12 @@ import { InvestigateModal } from "./InvestigateModal";
 import { TransactionRow } from "./TransactionRow";
 
 const LOW_VALUE_THRESHOLD = 50;
+const REVIEW_STAGE_BADGE_LABELS: Record<string, string> = {
+  strict_same_day_exact: "Strict same-day",
+  operational_close_match: "Operational close",
+  boundary_transactions: "Boundary",
+  settlement_fallback: "Settlement fallback",
+};
 
 interface ReviewTabProps {
   periodId: string;
@@ -133,6 +139,182 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
 
   const flaggedResolutions = useMemo(() => (resolutions || []).filter(r => r.resolutionType === 'flagged'), [resolutions]);
   const flaggedTransactionIds = useMemo(() => new Set(flaggedResolutions.map(r => r.transactionId)), [flaggedResolutions]);
+
+  const reviewExclusivity = useMemo(() => {
+    if (!unmatchedData?.transactions || !fuelData?.transactions) {
+      return {
+        claimedBankIds: new Set<string>(),
+        visibleBankTransactions: [] as Transaction[],
+      };
+    }
+
+    const matchingStages = buildMatchingStages({
+      amountTolerance: matchingRules?.amountTolerance ?? 2,
+      dateWindowDays: matchingRules?.dateWindowDays ?? 3,
+      timeWindowMinutes: matchingRules?.timeWindowMinutes ?? 60,
+      requireCardMatch: matchingRules?.requireCardMatch ?? false,
+      minimumConfidence: matchingRules?.minimumConfidence ?? 60,
+      autoMatchThreshold: matchingRules?.autoMatchThreshold ?? 85,
+    });
+
+    const parseTimeToMinutes = (timeStr: string | null | undefined): number | null => {
+      if (!timeStr) return null;
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (!match) return null;
+      return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+    };
+
+    const allFuel = [...(allFuelData?.transactions || fuelData.transactions)].filter(
+      (tx) => tx.sourceType === "fuel" && tx.isCardTransaction === "yes",
+    );
+    const groupedByDay = new Map<string, Transaction[]>();
+    for (const tx of allFuel) {
+      const key = tx.transactionDate;
+      if (!groupedByDay.has(key)) groupedByDay.set(key, []);
+      groupedByDay.get(key)!.push(tx);
+    }
+
+    const fuelBoundaryPositions = new Map<string, "start" | "end" | "both" | "none">();
+    for (const dayTxs of groupedByDay.values()) {
+      const sorted = [...dayTxs].sort((a, b) => {
+        const timeA = parseTimeToMinutes(a.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+        const timeB = parseTimeToMinutes(b.transactionTime) ?? Number.MAX_SAFE_INTEGER;
+        if (timeA !== timeB) return timeA - timeB;
+        return a.id.localeCompare(b.id);
+      });
+      if (sorted.length === 0) continue;
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      fuelBoundaryPositions.set(first.id, first.id === last.id ? "both" : "start");
+      fuelBoundaryPositions.set(last.id, first.id === last.id ? "both" : "end");
+    }
+
+    const scoreFuelToBank = (fuelTxn: Transaction, bankTxn: Transaction): PotentialMatch | null => {
+      const fuelAmount = parseFloat(fuelTxn.amount);
+      const bankAmount = parseFloat(bankTxn.amount);
+      const amountDiff = Math.abs(bankAmount - fuelAmount);
+      const fuelDate = new Date(fuelTxn.transactionDate).getTime();
+      const bankDate = new Date(bankTxn.transactionDate).getTime();
+      const dayDiff = Math.round((bankDate - fuelDate) / 86400000);
+      const fuelTime = parseTimeToMinutes(fuelTxn.transactionTime);
+      const bankTime = parseTimeToMinutes(bankTxn.transactionTime);
+      const boundaryPosition = fuelBoundaryPositions.get(fuelTxn.id) || "none";
+
+      for (const stage of matchingStages) {
+        if (amountDiff > stage.maxAmountDiff) continue;
+        if (stage.requireExactAmount && amountDiff > 0.01) continue;
+        if (dayDiff < stage.minDateDiffDays || dayDiff > stage.maxDateDiffDays) continue;
+
+        if (stage.boundaryMode === "boundary") {
+          const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+          const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+          const isDirectionalBoundary =
+            (dayDiff === -1 && allowsPreviousDay) ||
+            (dayDiff === 1 && allowsNextDay);
+          if (!isDirectionalBoundary) continue;
+        }
+
+        if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+          if (bankTime < fuelTime) continue;
+          const timeGap = bankTime - fuelTime;
+          if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
+        }
+
+        let confidence = 70;
+        if (dayDiff === 0) confidence = 85;
+        else if (Math.abs(dayDiff) === 1) confidence = 75;
+        else if (Math.abs(dayDiff) === 2) confidence = 68;
+        else confidence = 65;
+
+        let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
+        if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+          const timeGap = bankTime - fuelTime;
+          timeDiffLabel = timeGap <= 0 ? "Same time" : `${timeGap} min`;
+          if (timeGap <= 5) confidence = 100;
+          else if (timeGap <= 15) confidence = 95;
+          else if (timeGap <= 30) confidence = 85;
+          else confidence = 75;
+        }
+
+        if (amountDiff > 0) {
+          const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
+          confidence -= Math.min(5, (amountDiff / divisor) * 5);
+        }
+
+        if (stage.requireCardMatch) {
+          if (!bankTxn.cardNumber || !fuelTxn.cardNumber) continue;
+          if (bankTxn.cardNumber !== fuelTxn.cardNumber) continue;
+          confidence += 25;
+        } else if (bankTxn.cardNumber && fuelTxn.cardNumber) {
+          if (bankTxn.cardNumber === fuelTxn.cardNumber) confidence += 25;
+          else confidence -= 30;
+        }
+
+        confidence = Math.max(0, Math.min(100, confidence));
+        if (confidence < stage.minimumConfidence) continue;
+
+        return {
+          transaction: bankTxn,
+          confidence,
+          timeDiff: timeDiffLabel,
+          amountDiff,
+          stageId: stage.id,
+          stageLabel: REVIEW_STAGE_BADGE_LABELS[stage.id] || stage.name,
+        };
+      }
+
+      return null;
+    };
+
+    const fuelPrimaryTransactions = (allFuelData?.transactions || fuelData.transactions).filter((txn) => {
+      if (flaggedTransactionIds.has(txn.id)) return false;
+      if (txn.matchStatus === "unmatched") return true;
+      if (resolvedIds.has(txn.id)) return true;
+      return false;
+    });
+
+    const unresolvedBankTransactions = unmatchedData.transactions.filter(
+      (txn) => !resolvedIds.has(txn.id) && !flaggedTransactionIds.has(txn.id),
+    );
+
+    const candidateClaims = fuelPrimaryTransactions
+      .map((fuelTxn) => {
+        const bestBank = unresolvedBankTransactions
+          .map((bankTxn) => scoreFuelToBank(fuelTxn, bankTxn))
+          .filter((match): match is PotentialMatch => !!match)
+          .sort((a, b) => {
+            if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+            return a.amountDiff - b.amountDiff;
+          })[0];
+
+        if (!bestBank) return null;
+
+        return {
+          fuelId: fuelTxn.id,
+          bankId: bestBank.transaction.id,
+          confidence: bestBank.confidence,
+          amountDiff: bestBank.amountDiff,
+        };
+      })
+      .filter((claim): claim is { fuelId: string; bankId: string; confidence: number; amountDiff: number } => !!claim)
+      .sort((a, b) => {
+        if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+        return a.amountDiff - b.amountDiff;
+      });
+
+    const usedFuelIds = new Set<string>();
+    const claimedBankIds = new Set<string>();
+    for (const claim of candidateClaims) {
+      if (usedFuelIds.has(claim.fuelId) || claimedBankIds.has(claim.bankId)) continue;
+      usedFuelIds.add(claim.fuelId);
+      claimedBankIds.add(claim.bankId);
+    }
+
+    return {
+      claimedBankIds,
+      visibleBankTransactions: unmatchedData.transactions.filter((txn) => !claimedBankIds.has(txn.id)),
+    };
+  }, [allFuelData, flaggedTransactionIds, fuelData, matchingRules, resolvedIds, unmatchedData]);
 
   const flaggedTransactions = useMemo(() => {
     if (!allSideData?.transactions) return [];
@@ -320,6 +502,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     // Filter to: unmatched OR has a user resolution (linked/reviewed/dismissed)
     const primaryTxns = allPrimary.filter(txn => {
       if (flaggedIds.has(txn.id)) return false; // flagged → Investigate tab
+      if (side === 'bank' && reviewExclusivity.claimedBankIds.has(txn.id)) return false; // fuel-led ownership keeps the same case out of contradictory views
       if (txn.matchStatus === 'unmatched') return true; // still needs review
       if (resolvedIds.has(txn.id)) return true; // user acted on it — show as resolved
       return false; // auto-matched by engine — belongs in Transactions tab
@@ -422,7 +605,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     } catch (e) { console.error('Duplicate detection error:', e); }
 
     return result;
-  }, [unmatchedData, fuelData, allFuelData, resolvedIds, side, matchingRules]);
+  }, [unmatchedData, fuelData, allFuelData, allBankData, resolvedIds, side, matchingRules, flaggedResolutions, reviewExclusivity.claimedBankIds]);
 
   const filteredTransactions = useMemo(() => {
     if (!searchQuery.trim()) return categorizedTransactions;
@@ -501,10 +684,10 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   });
 
   // ── Landing counts ──
-  const bankUnmatchedCount = unmatchedData?.transactions?.filter(t => !resolvedIds.has(t.id)).length || 0;
-  const bankUnmatchedAmount = unmatchedData?.transactions?.filter(t => !resolvedIds.has(t.id)).reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
-  const bankTotalCount = unmatchedData?.total || 0;
-  const bankTotalAmount = unmatchedData?.transactions?.reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+  const bankUnmatchedCount = reviewExclusivity.visibleBankTransactions.filter(t => !resolvedIds.has(t.id)).length || 0;
+  const bankUnmatchedAmount = reviewExclusivity.visibleBankTransactions.filter(t => !resolvedIds.has(t.id)).reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+  const bankTotalCount = reviewExclusivity.visibleBankTransactions.length || 0;
+  const bankTotalAmount = reviewExclusivity.visibleBankTransactions.reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
 
   const fuelUnmatchedCount = fuelData?.transactions?.filter(t => !resolvedIds.has(t.id)).length || 0;
   const fuelUnmatchedAmount = fuelData?.transactions?.filter(t => !resolvedIds.has(t.id)).reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
@@ -626,13 +809,15 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
               {filteredTransactions.map(item => {
                 const isResolved = item.category === 'resolved';
                 const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
+                const bestStageLabel = item.bestMatch?.stageId ? REVIEW_STAGE_BADGE_LABELS[item.bestMatch.stageId] : undefined;
+                const badgeLabel = !isResolved && bestStageLabel ? `${categoryLabel} · ${bestStageLabel}` : categoryLabel;
                 return (
                   <TransactionRow
                     key={item.transaction.id}
                     transaction={item.transaction}
                     onClick={() => openModal(item.transaction.id)}
                     dimmed={isResolved}
-                    badge={<Badge variant="outline" className={cn("text-xs", isResolved && "text-[#166534] border-[#166534]/30")}>{categoryLabel}</Badge>}
+                    badge={<Badge variant="outline" className={cn("text-xs", isResolved && "text-[#166534] border-[#166534]/30")}>{badgeLabel}</Badge>}
                     subtitle={!isResolved && item.insights.length > 0 ? item.insights[0].message : undefined}
                     subtitleColor={!isResolved && item.insights.length > 0 ? "text-[#B45309]" : undefined}
                   />

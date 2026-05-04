@@ -159,6 +159,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
               <RuleValue label="Tolerance" value={`±R ${Number(rules.amountTolerance).toFixed(2)}`} />
               <RuleValue label="Date Window" value={`${rules.dateWindowDays} day${rules.dateWindowDays !== 1 ? "s" : ""}`} />
               <RuleValue label="Time Window" value={`${rules.timeWindowMinutes} min`} />
+              <RuleValue label="Attendant Delay" value={`${rules.attendantSubmissionDelayMinutes} min`} />
               <RuleValue label="Min Confidence" value={`${rules.minimumConfidence}%`} />
               <RuleValue label="Auto-Match" value={`${rules.autoMatchThreshold}%`} />
               <RuleValue label="Invoice Group" value={rules.groupByInvoice ? "On" : "Off"} />
@@ -193,7 +194,11 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                             : `Up to ${stage.maxDateDiffDays} day lag`}
                       </Badge>
                       <Badge variant="outline">
-                        {stage.maxTimeDiffMinutes === null ? "No same-day time cap" : `${stage.maxTimeDiffMinutes} min time window`}
+                        {stage.requireExactAmount
+                          ? `${rules.attendantSubmissionDelayMinutes} min attendant submission delay`
+                          : stage.maxTimeDiffMinutes === null
+                            ? "No same-day time cap"
+                            : `${stage.maxTimeDiffMinutes} min time window`}
                       </Badge>
                       <Badge variant="outline">
                         {stage.requireCardMatch ? "Card match required" : "Card match optional"}

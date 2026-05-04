@@ -28,6 +28,7 @@ interface MatchingRules {
   amountTolerance: number;
   dateWindowDays: number;
   timeWindowMinutes: number;
+  attendantSubmissionDelayMinutes: number;
   requireCardMatch: boolean;
   groupByInvoice: boolean;
   minimumConfidence: number;
@@ -56,6 +57,7 @@ const PRESETS: PresetConfig[] = [
       amountTolerance: 0.01,
       dateWindowDays: 1,
       timeWindowMinutes: 480,
+      attendantSubmissionDelayMinutes: 120,
       minimumConfidence: 90,
       autoMatchThreshold: 95,
       groupByInvoice: true,
@@ -73,6 +75,7 @@ const PRESETS: PresetConfig[] = [
       amountTolerance: 1.0,
       dateWindowDays: 3,
       timeWindowMinutes: 720,
+      attendantSubmissionDelayMinutes: 120,
       minimumConfidence: 60,
       autoMatchThreshold: 85,
       groupByInvoice: true,
@@ -90,6 +93,7 @@ const PRESETS: PresetConfig[] = [
       amountTolerance: 2.0,
       dateWindowDays: 5,
       timeWindowMinutes: 1440,
+      attendantSubmissionDelayMinutes: 120,
       minimumConfidence: 50,
       autoMatchThreshold: 75,
       groupByInvoice: true,
@@ -144,6 +148,7 @@ export function ConfigureMatchingStep({
     amountTolerance: 1.0,
     dateWindowDays: 3,
     timeWindowMinutes: 720,
+    attendantSubmissionDelayMinutes: 120,
     requireCardMatch: false,
     groupByInvoice: true,
     minimumConfidence: 60,
@@ -162,6 +167,7 @@ export function ConfigureMatchingStep({
     const match = PRESETS.find(p =>
       p.rules.amountTolerance === existingRules.amountTolerance &&
       p.rules.dateWindowDays === existingRules.dateWindowDays &&
+      p.rules.attendantSubmissionDelayMinutes === existingRules.attendantSubmissionDelayMinutes &&
       p.rules.minimumConfidence === existingRules.minimumConfidence &&
       p.rules.autoMatchThreshold === existingRules.autoMatchThreshold &&
       p.rules.groupByInvoice === existingRules.groupByInvoice &&
@@ -329,8 +335,12 @@ export function ConfigureMatchingStep({
                           ? "Same day only"
                           : `Up to ${stage.maxDateDiffDays} day lag`}
                     </Badge>
-                    <Badge variant="outline">
-                      {stage.maxTimeDiffMinutes === null ? "No same-day time cap" : `${stage.maxTimeDiffMinutes} min time window`}
+                      <Badge variant="outline">
+                      {stage.requireExactAmount
+                        ? `${customRules.attendantSubmissionDelayMinutes} min attendant submission delay`
+                        : stage.maxTimeDiffMinutes === null
+                          ? "No same-day time cap"
+                          : `${stage.maxTimeDiffMinutes} min time window`}
                     </Badge>
                     <Badge variant="outline">
                       {stage.requireCardMatch ? "Card match required" : "Card match optional"}
@@ -504,6 +514,26 @@ export function ConfigureMatchingStep({
                   />
                   <p className="text-xs text-muted-foreground">
                     How many days can transactions differ?
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Attendant Submission Delay</Label>
+                    <span className="text-sm font-mono">
+                      {customRules.attendantSubmissionDelayMinutes} min
+                    </span>
+                  </div>
+                  <Slider
+                    value={[customRules.attendantSubmissionDelayMinutes]}
+                    onValueChange={([v]) => updateRule("attendantSubmissionDelayMinutes", v)}
+                    min={0}
+                    max={480}
+                    step={15}
+                    data-testid="slider-attendant-delay"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    How long after the fuel sale an attendant may still submit the slip to the cashier for an exact same-day match.
                   </p>
                 </div>
 

@@ -212,6 +212,9 @@ export const matchingRules = pgTable("matching_rules", {
   
   // Time window in minutes (15-180)
   timeWindowMinutes: integer("time_window_minutes").notNull().default(60),
+
+  // Attendant submission delay in minutes for exact same-day slip submission lag
+  attendantSubmissionDelayMinutes: integer("attendant_submission_delay_minutes").notNull().default(120),
   
   // Grouping options
   groupByInvoice: boolean("group_by_invoice").notNull().default(true),
@@ -242,6 +245,7 @@ export const matchingRulesConfigSchema = z.object({
   amountTolerance: z.number().min(0).max(50),
   dateWindowDays: z.number().int().min(0).max(7),
   timeWindowMinutes: z.number().int().min(15).max(1440),
+  attendantSubmissionDelayMinutes: z.number().int().min(0).max(480),
   groupByInvoice: z.boolean(),
   requireCardMatch: z.boolean(),
   minimumConfidence: z.number().int().min(0).max(100),

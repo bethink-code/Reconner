@@ -27875,6 +27875,8 @@ var matchingRules = pgTable("matching_rules", {
   dateWindowDays: integer("date_window_days").notNull().default(3),
   // Time window in minutes (15-180)
   timeWindowMinutes: integer("time_window_minutes").notNull().default(60),
+  // Attendant submission delay in minutes for exact same-day slip submission lag
+  attendantSubmissionDelayMinutes: integer("attendant_submission_delay_minutes").notNull().default(120),
   // Grouping options
   groupByInvoice: boolean("group_by_invoice").notNull().default(true),
   // Matching requirements
@@ -27895,6 +27897,7 @@ var matchingRulesConfigSchema = z.object({
   amountTolerance: z.number().min(0).max(50),
   dateWindowDays: z.number().int().min(0).max(7),
   timeWindowMinutes: z.number().int().min(15).max(1440),
+  attendantSubmissionDelayMinutes: z.number().int().min(0).max(480),
   groupByInvoice: z.boolean(),
   requireCardMatch: z.boolean(),
   minimumConfidence: z.number().int().min(0).max(100),
@@ -29235,6 +29238,7 @@ var DatabaseStorage = class {
         amountTolerance: 2,
         dateWindowDays: 3,
         timeWindowMinutes: 60,
+        attendantSubmissionDelayMinutes: 120,
         groupByInvoice: true,
         requireCardMatch: false,
         minimumConfidence: 60,
@@ -29245,6 +29249,7 @@ var DatabaseStorage = class {
       amountTolerance: parseFloat(rules.amountTolerance),
       dateWindowDays: rules.dateWindowDays,
       timeWindowMinutes: rules.timeWindowMinutes,
+      attendantSubmissionDelayMinutes: rules.attendantSubmissionDelayMinutes ?? 120,
       groupByInvoice: rules.groupByInvoice,
       requireCardMatch: rules.requireCardMatch,
       minimumConfidence: rules.minimumConfidence,
@@ -29258,6 +29263,7 @@ var DatabaseStorage = class {
       amountTolerance: String(rules.amountTolerance),
       dateWindowDays: rules.dateWindowDays,
       timeWindowMinutes: rules.timeWindowMinutes,
+      attendantSubmissionDelayMinutes: rules.attendantSubmissionDelayMinutes,
       groupByInvoice: rules.groupByInvoice,
       requireCardMatch: rules.requireCardMatch,
       minimumConfidence: rules.minimumConfidence,
@@ -29268,6 +29274,7 @@ var DatabaseStorage = class {
         amountTolerance: rulesData.amountTolerance,
         dateWindowDays: rulesData.dateWindowDays,
         timeWindowMinutes: rulesData.timeWindowMinutes,
+        attendantSubmissionDelayMinutes: rulesData.attendantSubmissionDelayMinutes,
         groupByInvoice: rulesData.groupByInvoice,
         requireCardMatch: rulesData.requireCardMatch,
         minimumConfidence: rulesData.minimumConfidence,
@@ -34089,17 +34096,22 @@ function runSequentialMatchingStages(bankTransactions, fuelInvoices, stages) {
       boundaryPositions
     );
     const matchedBankIds = assignStageMatches(candidateLists);
-    for (const { bankTransaction } of candidateLists) {
-      if (!matchedBankIds.has(bankTransaction.id)) continue;
-      const assignedMatch = matchedBankIds.get(bankTransaction.id);
+    for (const { invoice } of candidateLists) {
+      const assignedMatch = matchedBankIds.get(invoice.invoiceNumber);
+      if (!assignedMatch) continue;
       usedInvoices.add(assignedMatch.invoice.invoiceNumber);
       stageMatches.push({
         stage,
-        bankTransaction,
+        bankTransaction: assignedMatch.bankTransaction,
         bestMatch: assignedMatch
       });
     }
-    const stillRemaining = remainingBanks.filter((bankTx) => !matchedBankIds.has(bankTx.id));
+    const stillRemaining = remainingBanks.filter((bankTx) => {
+      for (const assigned of matchedBankIds.values()) {
+        if (assigned.bankTransaction.id === bankTx.id) return false;
+      }
+      return true;
+    });
     remainingBanks.length = 0;
     remainingBanks.push(...stillRemaining);
   }
@@ -34171,47 +34183,53 @@ function scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition
   };
 }
 function buildStageCandidateLists(bankTransactions, fuelInvoices, usedInvoices, stage, boundaryPositions) {
-  return bankTransactions.map((bankTransaction) => {
-    const candidates = fuelInvoices.filter((invoice) => !usedInvoices.has(invoice.invoiceNumber)).map(
-      (invoice) => scoreBankToInvoiceCandidate(
+  return fuelInvoices.filter((invoice) => !usedInvoices.has(invoice.invoiceNumber)).map((invoice) => {
+    const candidates = bankTransactions.map((bankTransaction) => {
+      const bestMatch = scoreBankToInvoiceCandidate(
         bankTransaction,
         invoice,
         stage,
         (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none"
-      )
-    ).filter((candidate) => !!candidate).sort(compareBestMatches);
-    return { bankTransaction, candidates };
+      );
+      if (!bestMatch) return null;
+      return { bankTransaction, bestMatch };
+    }).filter((candidate) => !!candidate).sort((a, b) => {
+      const comparison = compareBestMatches(a.bestMatch, b.bestMatch);
+      if (comparison !== 0) return comparison;
+      return compareBankTransactions(a.bankTransaction, b.bankTransaction);
+    });
+    return { invoice, candidates };
   }).filter((entry) => entry.candidates.length > 0).sort((a, b) => {
     if (a.candidates.length !== b.candidates.length) return a.candidates.length - b.candidates.length;
-    const topComparison = compareBestMatches(a.candidates[0], b.candidates[0]);
+    const topComparison = compareBestMatches(a.candidates[0].bestMatch, b.candidates[0].bestMatch);
     if (topComparison !== 0) return topComparison;
-    return compareBankTransactions(a.bankTransaction, b.bankTransaction);
+    return a.invoice.invoiceNumber.localeCompare(b.invoice.invoiceNumber);
   });
 }
 function assignStageMatches(candidateLists) {
-  const bankById = new Map(candidateLists.map((entry) => [entry.bankTransaction.id, entry]));
-  const invoiceAssignments = /* @__PURE__ */ new Map();
+  const invoiceByNumber = new Map(candidateLists.map((entry) => [entry.invoice.invoiceNumber, entry]));
   const bankAssignments = /* @__PURE__ */ new Map();
-  const tryAssign = (bankId, visitedInvoices) => {
-    const bankEntry = bankById.get(bankId);
-    if (!bankEntry) return false;
-    for (const candidate of bankEntry.candidates) {
-      const invoiceNumber = candidate.invoice.invoiceNumber;
-      if (visitedInvoices.has(invoiceNumber)) continue;
-      visitedInvoices.add(invoiceNumber);
-      const currentBankId = invoiceAssignments.get(invoiceNumber);
-      if (!currentBankId || tryAssign(currentBankId, visitedInvoices)) {
-        invoiceAssignments.set(invoiceNumber, bankId);
-        bankAssignments.set(bankId, candidate);
+  const invoiceAssignments = /* @__PURE__ */ new Map();
+  const tryAssign = (invoiceNumber, visitedBanks) => {
+    const invoiceEntry = invoiceByNumber.get(invoiceNumber);
+    if (!invoiceEntry) return false;
+    for (const candidate of invoiceEntry.candidates) {
+      const bankId = candidate.bankTransaction.id;
+      if (visitedBanks.has(bankId)) continue;
+      visitedBanks.add(bankId);
+      const currentInvoiceNumber = bankAssignments.get(bankId);
+      if (!currentInvoiceNumber || tryAssign(currentInvoiceNumber, visitedBanks)) {
+        bankAssignments.set(bankId, invoiceNumber);
+        invoiceAssignments.set(invoiceNumber, { ...candidate.bestMatch, bankTransaction: candidate.bankTransaction });
         return true;
       }
     }
     return false;
   };
   for (const entry of candidateLists) {
-    tryAssign(entry.bankTransaction.id, /* @__PURE__ */ new Set());
+    tryAssign(entry.invoice.invoiceNumber, /* @__PURE__ */ new Set());
   }
-  return bankAssignments;
+  return invoiceAssignments;
 }
 function getCardMatchScore(reasons) {
   if (reasons.some((reason) => reason.startsWith("card-match"))) return 2;
@@ -34261,6 +34279,8 @@ function deriveBoundaryPositions(fuelInvoices) {
 // shared/matchingStages.ts
 var clampPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
 function buildMatchingStages(rules) {
+  const minimumConfidence = clampPercent(rules.minimumConfidence);
+  const autoConfirmConfidence = clampPercent(rules.autoMatchThreshold);
   const strictStage = {
     id: "strict_same_day_exact",
     name: "Strict Same-Day Exact",
@@ -34269,11 +34289,11 @@ function buildMatchingStages(rules) {
     maxAmountDiff: 0.01,
     minDateDiffDays: 0,
     maxDateDiffDays: 0,
-    maxTimeDiffMinutes: Math.min(rules.timeWindowMinutes, 120),
+    maxTimeDiffMinutes: rules.attendantSubmissionDelayMinutes,
     requireExactAmount: true,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 85)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 90)),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "none"
   };
   const closeOperationalStage = {
@@ -34287,8 +34307,8 @@ function buildMatchingStages(rules) {
     maxTimeDiffMinutes: rules.timeWindowMinutes,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(Math.max(rules.minimumConfidence, rules.autoMatchThreshold - 10)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 80)),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "none"
   };
   const boundaryStage = {
@@ -34302,8 +34322,8 @@ function buildMatchingStages(rules) {
     maxTimeDiffMinutes: null,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(Math.max(rules.minimumConfidence, 70)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 85)),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "boundary"
   };
   const settlementFallbackStage = {
@@ -34317,8 +34337,8 @@ function buildMatchingStages(rules) {
     maxTimeDiffMinutes: null,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(rules.minimumConfidence),
-    autoConfirmConfidence: clampPercent(rules.autoMatchThreshold),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "none"
   };
   return [
@@ -34388,6 +34408,7 @@ function registerReconciliationWriteRoutes(app2) {
       );
       const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
       const stages = buildMatchingStages(rules);
+      const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
       let matchCount = 0;
       const skippedNonCardCount = transactions2.filter((t) => {
         if (t.sourceType !== "fuel" || t.isCardTransaction === "yes") return false;
@@ -34398,8 +34419,36 @@ function registerReconciliationWriteRoutes(app2) {
       const pendingMatches = [];
       const stageMatches = runSequentialMatchingStages(matchableBankTransactions, fuelInvoices, stages);
       const stageCounts = /* @__PURE__ */ new Map();
+      let competingSameDaySkipped = 0;
+      const hasCompetingSameDayCandidate = (stageId, bankTransaction, bestMatch) => {
+        if (!operationalStage) return false;
+        if (stageId !== "boundary_transactions" && stageId !== "settlement_fallback") return false;
+        const invoice = bestMatch.invoice;
+        const fuelDate = invoice.firstDate;
+        if (!fuelDate) return false;
+        const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
+        return matchableBankTransactions.some((candidateBank) => {
+          if (candidateBank.id === bankTransaction.id) return false;
+          if (candidateBank.transactionDate !== fuelDate) return false;
+          const amountDiff = Math.abs(parseFloat(candidateBank.amount) - invoice.totalAmount);
+          if (amountDiff > operationalStage.maxAmountDiff) return false;
+          const bankTime = parseTimeToMinutes(candidateBank.transactionTime || "");
+          if (fuelTime !== null && bankTime !== null && operationalStage.maxTimeDiffMinutes !== null && Math.abs(bankTime - fuelTime) > operationalStage.maxTimeDiffMinutes) {
+            return false;
+          }
+          if (operationalStage.requireCardMatch) {
+            if (!candidateBank.cardNumber || !invoice.cardNumber) return false;
+            if (candidateBank.cardNumber !== invoice.cardNumber) return false;
+          }
+          return true;
+        });
+      };
       for (const stageMatch of stageMatches) {
         const { stage, bankTransaction, bestMatch } = stageMatch;
+        if (hasCompetingSameDayCandidate(stage.id, bankTransaction, bestMatch)) {
+          competingSameDaySkipped++;
+          continue;
+        }
         const isExact = Math.abs(bestMatch.amountDiff) < 5e-3;
         const aboveThreshold = bestMatch.confidence >= stage.autoConfirmConfidence;
         const matchType = isExact && aboveThreshold ? "auto_exact" : isExact ? "auto_exact_review" : aboveThreshold ? "auto_rules" : "auto_rules_review";
@@ -34419,6 +34468,9 @@ function registerReconciliationWriteRoutes(app2) {
       }
       for (const stage of stages) {
         console.log(`[AUTO-MATCH] Stage ${stage.order} ${stage.name}: ${stageCounts.get(stage.name) || 0} matches`);
+      }
+      if (competingSameDaySkipped > 0) {
+        console.log(`[AUTO-MATCH] Competing same-day candidates held for review: ${competingSameDaySkipped}`);
       }
       const matchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
       const unmatchedInPeriodBank = matchableBankTransactions.filter((bt) => {
@@ -34482,7 +34534,10 @@ function registerReconciliationWriteRoutes(app2) {
         matchRate: `${matchRate}%`,
         rulesUsed: rules,
         stagesUsed: stages,
-        warnings: dateRangeWarning ? [dateRangeWarning] : []
+        warnings: [
+          ...dateRangeWarning ? [dateRangeWarning] : [],
+          ...competingSameDaySkipped > 0 ? [`${competingSameDaySkipped} later-pass match(es) were held back because a same-day operational candidate exists and should be reviewed manually.`] : []
+        ]
       });
     } catch (error) {
       console.error("Error auto-matching:", error);

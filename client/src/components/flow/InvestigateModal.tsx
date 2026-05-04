@@ -245,7 +245,7 @@ export function InvestigateModal({
             {matchingRules && (
               <div className="px-5 py-3 border-t border-[#E5E3DC]/40 bg-section">
                 <p className="text-xs text-muted-foreground">
-                  Current matching settings: {matchingRules.dateWindowDays} day date window, R{Number(matchingRules.amountTolerance).toFixed(0)} amount tolerance, {matchingRules.timeWindowMinutes} min time window, and {matchingRules.minimumConfidence}% minimum confidence.
+                  Current matching settings: {matchingRules.dateWindowDays} day date window, R{Number(matchingRules.amountTolerance).toFixed(0)} amount tolerance, {matchingRules.timeWindowMinutes} min close-match window, {matchingRules.attendantSubmissionDelayMinutes} min attendant submission delay, and {matchingRules.minimumConfidence}% minimum confidence. Lekana works through ordered passes rather than one blended rule.
                 </p>
               </div>
             )}

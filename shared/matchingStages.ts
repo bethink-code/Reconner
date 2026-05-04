@@ -2,6 +2,7 @@ export interface MatchingRulesStageInput {
   amountTolerance: number;
   dateWindowDays: number;
   timeWindowMinutes: number;
+  attendantSubmissionDelayMinutes: number;
   requireCardMatch: boolean;
   minimumConfidence: number;
   autoMatchThreshold: number;
@@ -26,6 +27,9 @@ export interface MatchingStage {
 const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
 
 export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingStage[] {
+  const minimumConfidence = clampPercent(rules.minimumConfidence);
+  const autoConfirmConfidence = clampPercent(rules.autoMatchThreshold);
+
   const strictStage: MatchingStage = {
     id: "strict_same_day_exact",
     name: "Strict Same-Day Exact",
@@ -34,11 +38,11 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     maxAmountDiff: 0.01,
     minDateDiffDays: 0,
     maxDateDiffDays: 0,
-    maxTimeDiffMinutes: Math.min(rules.timeWindowMinutes, 120),
+    maxTimeDiffMinutes: rules.attendantSubmissionDelayMinutes,
     requireExactAmount: true,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 85)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 90)),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "none",
   };
 
@@ -53,8 +57,8 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     maxTimeDiffMinutes: rules.timeWindowMinutes,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(Math.max(rules.minimumConfidence, rules.autoMatchThreshold - 10)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 80)),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "none",
   };
 
@@ -69,8 +73,8 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     maxTimeDiffMinutes: null,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(Math.max(rules.minimumConfidence, 70)),
-    autoConfirmConfidence: clampPercent(Math.max(rules.autoMatchThreshold, 85)),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "boundary",
   };
 
@@ -85,8 +89,8 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     maxTimeDiffMinutes: null,
     requireExactAmount: false,
     requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: clampPercent(rules.minimumConfidence),
-    autoConfirmConfidence: clampPercent(rules.autoMatchThreshold),
+    minimumConfidence,
+    autoConfirmConfidence,
     boundaryMode: "none",
   };
 

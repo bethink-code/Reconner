@@ -21,6 +21,7 @@ const PRESETS: Record<string, MatchingRulesConfig> = {
     amountTolerance: 0.01,
     dateWindowDays: 1,
     timeWindowMinutes: 30,
+    attendantSubmissionDelayMinutes: 120,
     groupByInvoice: true,
     requireCardMatch: true,
     minimumConfidence: 90,
@@ -30,6 +31,7 @@ const PRESETS: Record<string, MatchingRulesConfig> = {
     amountTolerance: 1.00,  // Handle fuel price variations and rounding
     dateWindowDays: 3,
     timeWindowMinutes: 60,
+    attendantSubmissionDelayMinutes: 120,
     groupByInvoice: true,
     requireCardMatch: false,
     minimumConfidence: 60,
@@ -39,6 +41,7 @@ const PRESETS: Record<string, MatchingRulesConfig> = {
     amountTolerance: 2.00,  // Very lenient for high match rates
     dateWindowDays: 5,
     timeWindowMinutes: 120,
+    attendantSubmissionDelayMinutes: 120,
     groupByInvoice: true,
     requireCardMatch: false,
     minimumConfidence: 50,
@@ -64,6 +67,7 @@ export default function MatchingRulesPanel({ periodId, onRulesChanged }: Matchin
       const matchedPreset = Object.entries(PRESETS).find(([, preset]) =>
         preset.amountTolerance === savedRules.amountTolerance &&
         preset.dateWindowDays === savedRules.dateWindowDays &&
+        preset.attendantSubmissionDelayMinutes === savedRules.attendantSubmissionDelayMinutes &&
         preset.minimumConfidence === savedRules.minimumConfidence
       );
       setActivePreset(matchedPreset ? matchedPreset[0] : null);

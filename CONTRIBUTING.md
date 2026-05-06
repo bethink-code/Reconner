@@ -9,13 +9,17 @@ cp .env.example .env    # Fill in your credentials
 npm run dev             # http://localhost:5000
 ```
 
+If you're running the project inside the Codex desktop app, see `LOCAL_DEV_NOTES.md` for a short note on local startup verification and a known in-app browser/background-launch quirk.
+
 ## Development Workflow
 
 1. Make changes
-2. If you changed server code: `npm run build:api`
-3. Test locally at `http://localhost:5000`
-4. Commit with a descriptive message
-5. Push to `main` — Vercel auto-deploys
+2. If you are touching reconciliation logic, run `npm run verify:reconciliation` as you go
+3. Run `npm run verify` before you wrap up
+4. If you changed server code: `npm run build:api`
+5. Test locally at `http://localhost:5000`
+6. Commit with a descriptive message
+7. Push to `main` - Vercel auto-deploys
 
 ## Code Standards
 

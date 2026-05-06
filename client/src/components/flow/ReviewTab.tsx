@@ -72,10 +72,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     });
   }, [searchQuery, sideModel]);
 
-  const totalUnresolved = useMemo(
-    () => sideModel?.transactions.filter((item) => item.category !== "resolved").length || 0,
-    [sideModel],
-  );
+  const totalUnresolved = sideModel?.transactions.length || 0;
 
   const openModal = (transactionId: string) => {
     if (!sideModel) return;
@@ -159,7 +156,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                 <div className="grid grid-cols-2 gap-2">
                   <div className={cn("rounded-lg p-2.5", isActive ? "bg-section" : "bg-white dark:bg-card")}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                      Matched by {userName}
+                      Reviewed by {userName}
                     </p>
                     <p className={cn("text-lg font-bold tabular-nums", summary.matchedCount > 0 && "text-[#166534]")}>
                       {summary.matchedCount}

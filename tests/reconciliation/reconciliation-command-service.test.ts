@@ -221,6 +221,7 @@ test("createResolution blocks linked-only resolutions from the generic command",
   const transaction = makeTransaction({ id: "fuel-1" });
   const { repository, calls } = makeRepository({
     getTransaction: async () => transaction,
+    getResolutionsByTransaction: async () => [],
   });
   const service = new ReconciliationCommandService(repository);
 
@@ -236,6 +237,42 @@ test("createResolution blocks linked-only resolutions from the generic command",
     (error: unknown) => {
       assert.ok(error instanceof ReconciliationCommandError);
       assert.equal(error.code, "linked_resolution_requires_match");
+      return true;
+    },
+  );
+
+  assert.equal(calls.createResolution.length, 0);
+});
+
+test("createResolution rejects transactions that are already linked in a match", async () => {
+  const transaction = makeTransaction({
+    id: "fuel-1",
+    matchId: "match-1",
+    matchStatus: "matched",
+  });
+  const { repository, calls } = makeRepository({
+    getTransaction: async () => transaction,
+    getResolutionsByTransaction: async () => [
+      makeResolution({
+        transactionId: transaction.id,
+        resolutionType: "linked",
+      }),
+    ],
+  });
+  const service = new ReconciliationCommandService(repository);
+
+  await assert.rejects(
+    () => service.createResolution({
+      periodId: "period-1",
+      transactionId: transaction.id,
+      resolutionType: "reviewed",
+      reason: "other",
+      notes: null,
+      actor: { id: null, name: null, email: null },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ReconciliationCommandError);
+      assert.equal(error.code, "transaction_already_linked");
       return true;
     },
   );
@@ -303,6 +340,43 @@ test("createBulkResolutions validates that every transaction belongs to the peri
     (error: unknown) => {
       assert.ok(error instanceof ReconciliationCommandError);
       assert.equal(error.code, "transaction_period_mismatch");
+      return true;
+    },
+  );
+
+  assert.equal(calls.createBulkResolutions.length, 0);
+});
+
+test("createBulkResolutions rejects items that are already linked in a match", async () => {
+  const linkedTransaction = makeTransaction({
+    id: "fuel-1",
+    periodId: "period-1",
+    matchId: "match-1",
+    matchStatus: "matched",
+  });
+  const { repository, calls } = makeRepository({
+    getTransactionsByIds: async () => [linkedTransaction],
+    getResolutionsByTransaction: async () => [
+      makeResolution({
+        transactionId: linkedTransaction.id,
+        resolutionType: "linked",
+      }),
+    ],
+  });
+  const service = new ReconciliationCommandService(repository);
+
+  await assert.rejects(
+    () => service.createBulkResolutions({
+      periodId: "period-1",
+      transactionIds: [linkedTransaction.id],
+      resolutionType: "flagged",
+      reason: null,
+      notes: null,
+      actor: { id: null, name: null, email: null },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ReconciliationCommandError);
+      assert.equal(error.code, "transaction_already_linked");
       return true;
     },
   );

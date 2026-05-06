@@ -62,6 +62,9 @@ export class DatabaseReconciliationStateWriter implements ReconciliationCommandR
     input: ManualMatchInput & { resolution?: MatchResolution | null },
   ): Promise<Match> {
     return db.transaction(async (tx) => {
+      await tx.delete(transactionResolutions)
+        .where(inArray(transactionResolutions.transactionId, [input.bankTransactionId, input.fuelTransactionId]));
+
       const [createdMatch] = await tx.insert(matches).values({
         periodId: input.periodId,
         bankTransactionId: input.bankTransactionId,
@@ -95,6 +98,9 @@ export class DatabaseReconciliationStateWriter implements ReconciliationCommandR
 
   async createResolution(input: ResolutionInput): Promise<TransactionResolution> {
     return db.transaction(async (tx) => {
+      await tx.delete(transactionResolutions)
+        .where(eq(transactionResolutions.transactionId, input.transactionId));
+
       const [resolution] = await tx.insert(transactionResolutions).values({
         transactionId: input.transactionId,
         periodId: input.periodId,
@@ -120,6 +126,9 @@ export class DatabaseReconciliationStateWriter implements ReconciliationCommandR
     if (input.transactionIds.length === 0) return 0;
 
     return db.transaction(async (tx) => {
+      await tx.delete(transactionResolutions)
+        .where(inArray(transactionResolutions.transactionId, input.transactionIds));
+
       const inserted = await tx.insert(transactionResolutions).values(
         input.transactionIds.map((transactionId) => ({
           transactionId,

@@ -115,6 +115,10 @@ function assertPeriodTransaction(
   return transaction;
 }
 
+function hasLinkedResolution(resolutions: TransactionResolution[]) {
+  return resolutions.some((resolution) => resolution.resolutionType === "linked");
+}
+
 export class ReconciliationCommandService {
   private readonly repository: ReconciliationCommandRepository;
 
@@ -124,12 +128,16 @@ export class ReconciliationCommandService {
 
   async createManualMatch(input: ManualMatchInput) {
     const [bankTransaction, fuelTransaction] = await this.loadManualMatchTransactions(input);
+    const [bankResolutions, fuelResolutions] = await Promise.all([
+      this.repository.getResolutionsByTransaction(bankTransaction.id),
+      this.repository.getResolutionsByTransaction(fuelTransaction.id),
+    ]);
 
-    if (bankTransaction.matchId || bankTransaction.matchStatus === "matched") {
+    if (bankTransaction.matchId || bankTransaction.matchStatus === "matched" || hasLinkedResolution(bankResolutions)) {
       throw new ReconciliationCommandError(409, "bank_already_matched", "The selected bank transaction is already matched");
     }
 
-    if (fuelTransaction.matchId || fuelTransaction.matchStatus === "matched") {
+    if (fuelTransaction.matchId || fuelTransaction.matchStatus === "matched" || hasLinkedResolution(fuelResolutions)) {
       throw new ReconciliationCommandError(409, "fuel_already_matched", "The selected fuel transaction is already matched");
     }
 
@@ -139,16 +147,20 @@ export class ReconciliationCommandService {
   async createReviewLink(input: ReviewLinkInput) {
     const [bankTransaction, fuelTransaction] = await this.loadManualMatchTransactions(input);
     const reviewTransactionId = input.reviewTransactionId;
+    const [bankResolutions, fuelResolutions] = await Promise.all([
+      this.repository.getResolutionsByTransaction(bankTransaction.id),
+      this.repository.getResolutionsByTransaction(fuelTransaction.id),
+    ]);
 
     if (reviewTransactionId !== bankTransaction.id && reviewTransactionId !== fuelTransaction.id) {
       throw new ReconciliationCommandError(400, "invalid_review_transaction", "The review transaction must be one of the linked transactions");
     }
 
-    if (bankTransaction.matchId || bankTransaction.matchStatus === "matched") {
+    if (bankTransaction.matchId || bankTransaction.matchStatus === "matched" || hasLinkedResolution(bankResolutions)) {
       throw new ReconciliationCommandError(409, "bank_already_matched", "The selected bank transaction is already matched");
     }
 
-    if (fuelTransaction.matchId || fuelTransaction.matchStatus === "matched") {
+    if (fuelTransaction.matchId || fuelTransaction.matchStatus === "matched" || hasLinkedResolution(fuelResolutions)) {
       throw new ReconciliationCommandError(409, "fuel_already_matched", "The selected fuel transaction is already matched");
     }
 
@@ -172,9 +184,18 @@ export class ReconciliationCommandService {
       input.periodId,
       "Selected",
     );
+    const resolutions = await this.repository.getResolutionsByTransaction(transaction.id);
 
     if (input.resolutionType === "linked") {
       throw new ReconciliationCommandError(400, "linked_resolution_requires_match", "Use the review link command to create a linked match");
+    }
+
+    if (transaction.matchId || transaction.matchStatus === "matched" || hasLinkedResolution(resolutions)) {
+      throw new ReconciliationCommandError(
+        409,
+        "transaction_already_linked",
+        "This transaction is already linked in a match. Remove the match before changing its review state",
+      );
     }
 
     if (input.linkedTransactionId) {
@@ -209,7 +230,15 @@ export class ReconciliationCommandService {
     const transactionsById = new Map(transactions.map((transaction) => [transaction.id, transaction]));
 
     for (const transactionId of requestedIds) {
-      assertPeriodTransaction(transactionsById.get(transactionId), input.periodId, "Selected");
+      const transaction = assertPeriodTransaction(transactionsById.get(transactionId), input.periodId, "Selected");
+      const resolutions = await this.repository.getResolutionsByTransaction(transaction.id);
+      if (transaction.matchId || transaction.matchStatus === "matched" || hasLinkedResolution(resolutions)) {
+        throw new ReconciliationCommandError(
+          409,
+          "transaction_already_linked",
+          "One or more selected transactions are already linked in a match",
+        );
+      }
     }
 
     return this.repository.createBulkResolutions({

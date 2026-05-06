@@ -72,5 +72,5 @@ export const CATEGORY_LABELS: Record<string, string> = {
   investigate: "Needs review",
   no_match: "No match",
   low_value: "Low value",
-  resolved: "Matched",
+  resolved: "Reviewed",
 };

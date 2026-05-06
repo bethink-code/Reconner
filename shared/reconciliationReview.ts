@@ -26,6 +26,7 @@ export interface CategorizedTransaction {
   potentialMatches: PotentialMatch[];
   nearestByAmount: PotentialMatch[];
   insights: TransactionInsight[];
+  resolution?: TransactionResolution | null;
 }
 
 export interface ReviewSideSummary {
@@ -47,6 +48,7 @@ export interface ReviewSideReadModel {
 export interface InvestigateQueueItem {
   transaction: Transaction;
   resolution: TransactionResolution | null;
+  analysis: CategorizedTransaction;
 }
 
 export interface InvestigateReadModel {

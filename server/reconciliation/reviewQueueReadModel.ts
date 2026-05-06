@@ -36,6 +36,36 @@ type SideResolutionCounts = {
   flaggedAmount: number;
 };
 
+function resolutionSortScore(resolution: TransactionResolution) {
+  const createdAt = resolution.createdAt ? new Date(resolution.createdAt).getTime() : 0;
+  return Number.isNaN(createdAt) ? 0 : createdAt;
+}
+
+function buildLatestResolutionMap(resolutions: TransactionResolution[]) {
+  const latestByTransactionId = new Map<string, TransactionResolution>();
+
+  for (const resolution of resolutions) {
+    const existing = latestByTransactionId.get(resolution.transactionId);
+    if (!existing) {
+      latestByTransactionId.set(resolution.transactionId, resolution);
+      continue;
+    }
+
+    const existingScore = resolutionSortScore(existing);
+    const nextScore = resolutionSortScore(resolution);
+    if (nextScore > existingScore) {
+      latestByTransactionId.set(resolution.transactionId, resolution);
+      continue;
+    }
+
+    if (nextScore === existingScore && resolution.id > existing.id) {
+      latestByTransactionId.set(resolution.transactionId, resolution);
+    }
+  }
+
+  return latestByTransactionId;
+}
+
 function isInPeriod(transaction: Transaction, period: ReviewPeriodLike) {
   return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
 }
@@ -117,157 +147,6 @@ function buildPerSideCounts(
   }
 
   return counts;
-}
-
-function buildReviewExclusivity(
-  unmatchedBankTransactions: Transaction[],
-  unmatchedFuelTransactions: Transaction[],
-  allFuelTransactions: Transaction[],
-  matchingRules: MatchingRulesConfig,
-  flaggedTransactionIds: Set<string>,
-  resolvedIds: Set<string>,
-) {
-  const matchingStages = buildMatchingStages({
-    amountTolerance: matchingRules.amountTolerance,
-    dateWindowDays: matchingRules.dateWindowDays,
-    timeWindowMinutes: matchingRules.timeWindowMinutes,
-    attendantSubmissionDelayMinutes: matchingRules.attendantSubmissionDelayMinutes,
-    requireCardMatch: matchingRules.requireCardMatch,
-    minimumConfidence: matchingRules.minimumConfidence,
-    autoMatchThreshold: matchingRules.autoMatchThreshold,
-  });
-
-  const fuelBoundaryPositions = buildFuelBoundaryPositions(allFuelTransactions);
-
-  const scoreFuelToBank = (fuelTransaction: Transaction, bankTransaction: Transaction): PotentialMatch | null => {
-    const fuelAmount = parseFloat(fuelTransaction.amount);
-    const bankAmount = parseFloat(bankTransaction.amount);
-    const amountDiff = Math.abs(bankAmount - fuelAmount);
-    const fuelDate = new Date(fuelTransaction.transactionDate).getTime();
-    const bankDate = new Date(bankTransaction.transactionDate).getTime();
-    const dayDiff = Math.round((bankDate - fuelDate) / 86400000);
-    const fuelTime = parseTimeToMinutes(fuelTransaction.transactionTime || "");
-    const bankTime = parseTimeToMinutes(bankTransaction.transactionTime || "");
-    const boundaryPosition = fuelBoundaryPositions.get(fuelTransaction.id) || "none";
-
-    for (const stage of matchingStages) {
-      if (amountDiff > stage.maxAmountDiff) continue;
-      if (stage.requireExactAmount && amountDiff > 0.01) continue;
-      if (dayDiff < stage.minDateDiffDays || dayDiff > stage.maxDateDiffDays) continue;
-
-      if (stage.boundaryMode === "boundary") {
-        const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
-        const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
-        const isDirectionalBoundary =
-          (dayDiff === -1 && allowsPreviousDay) ||
-          (dayDiff === 1 && allowsNextDay);
-        if (!isDirectionalBoundary) continue;
-      }
-
-      if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
-        const timeGap = Math.abs(bankTime - fuelTime);
-        if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
-      }
-
-      let confidence = 70;
-      if (dayDiff === 0) confidence = 85;
-      else if (Math.abs(dayDiff) === 1) confidence = 75;
-      else if (Math.abs(dayDiff) === 2) confidence = 68;
-      else confidence = 65;
-
-      if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
-        const timeGap = Math.abs(bankTime - fuelTime);
-        if (timeGap <= 5) confidence = 100;
-        else if (timeGap <= 15) confidence = 95;
-        else if (timeGap <= 30) confidence = 85;
-        else confidence = 75;
-      }
-
-      if (amountDiff > 0) {
-        const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
-        confidence -= Math.min(5, (amountDiff / divisor) * 5);
-      }
-
-      if (stage.requireCardMatch) {
-        if (!bankTransaction.cardNumber || !fuelTransaction.cardNumber) continue;
-        if (bankTransaction.cardNumber !== fuelTransaction.cardNumber) continue;
-        confidence += 25;
-      } else if (bankTransaction.cardNumber && fuelTransaction.cardNumber) {
-        if (bankTransaction.cardNumber === fuelTransaction.cardNumber) confidence += 25;
-        else confidence -= 30;
-      }
-
-      confidence = Math.max(0, Math.min(100, confidence));
-      if (confidence < stage.minimumConfidence) continue;
-
-      return {
-        transaction: bankTransaction,
-        confidence,
-        timeDiff: dayDiff === 0
-          ? (() => {
-              if (fuelTime === null || bankTime === null) return "Same day";
-              const timeGap = Math.abs(bankTime - fuelTime);
-              return timeGap === 0 ? "Same time" : `${timeGap} min`;
-            })()
-          : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`,
-        amountDiff,
-        stageId: stage.id,
-        stageLabel: REVIEW_STAGE_BADGE_LABELS[stage.id] || stage.name,
-      };
-    }
-
-    return null;
-  };
-
-  const fuelPrimaryTransactions = allFuelTransactions.filter((transaction) => {
-    if (flaggedTransactionIds.has(transaction.id)) return false;
-    if (transaction.matchStatus === "unmatched") return true;
-    if (resolvedIds.has(transaction.id)) return true;
-    return false;
-  });
-
-  const unresolvedBankTransactions = unmatchedBankTransactions.filter(
-    (transaction) => !resolvedIds.has(transaction.id) && !flaggedTransactionIds.has(transaction.id),
-  );
-
-  const candidateClaims = fuelPrimaryTransactions
-    .map((fuelTransaction) => {
-      const bestBank = unresolvedBankTransactions
-        .map((bankTransaction) => scoreFuelToBank(fuelTransaction, bankTransaction))
-        .filter((match): match is PotentialMatch => !!match)
-        .sort((a, b) => {
-          if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-          return a.amountDiff - b.amountDiff;
-        })[0];
-
-      if (!bestBank) return null;
-
-      return {
-        fuelId: fuelTransaction.id,
-        bankId: bestBank.transaction.id,
-        confidence: bestBank.confidence,
-        amountDiff: bestBank.amountDiff,
-      };
-    })
-    .filter((claim): claim is { fuelId: string; bankId: string; confidence: number; amountDiff: number } => !!claim)
-    .sort((a, b) => {
-      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-      return a.amountDiff - b.amountDiff;
-    });
-
-  const usedFuelIds = new Set<string>();
-  const claimedBankIds = new Set<string>();
-
-  for (const claim of candidateClaims) {
-    if (usedFuelIds.has(claim.fuelId) || claimedBankIds.has(claim.bankId)) continue;
-    usedFuelIds.add(claim.fuelId);
-    claimedBankIds.add(claim.bankId);
-  }
-
-  return {
-    claimedBankIds,
-    visibleBankTransactions: unmatchedBankTransactions.filter((transaction) => !claimedBankIds.has(transaction.id)),
-  };
 }
 
 function scoreSuggestion(
@@ -463,22 +342,12 @@ function applyDuplicateInsights(
 
 function buildCategorizedTransactions(
   side: ReviewSide,
-  allPrimaryTransactions: Transaction[],
+  primaryTransactions: Transaction[],
   candidateTransactions: Transaction[],
   matchingRules: MatchingRulesConfig,
-  resolvedIds: Set<string>,
-  flaggedTransactionIds: Set<string>,
-  claimedBankIds: Set<string>,
   fuelBoundaryPositions: Map<string, "start" | "end" | "both" | "none">,
+  latestResolutionByTransactionId: Map<string, TransactionResolution>,
 ) {
-  const primaryTransactions = allPrimaryTransactions.filter((transaction) => {
-    if (flaggedTransactionIds.has(transaction.id)) return false;
-    if (side === "bank" && claimedBankIds.has(transaction.id)) return false;
-    if (transaction.matchStatus === "unmatched") return true;
-    if (resolvedIds.has(transaction.id)) return true;
-    return false;
-  });
-
   const result = primaryTransactions
     .map((primaryTransaction): CategorizedTransaction => {
       const primaryAmount = parseFloat(primaryTransaction.amount);
@@ -505,9 +374,10 @@ function buildCategorizedTransactions(
         .slice(0, 3);
 
       const bestMatch = potentialMatches[0];
+      const resolution = latestResolutionByTransactionId.get(primaryTransaction.id) || null;
 
       let category: CategorizedTransaction["category"];
-      if (resolvedIds.has(primaryTransaction.id)) category = "resolved";
+      if (resolution && resolution.resolutionType !== "flagged") category = "resolved";
       else if (primaryAmount < LOW_VALUE_THRESHOLD) category = "low_value";
       else if (bestMatch && bestMatch.confidence >= matchingRules.autoMatchThreshold) category = "quick_win";
       else if (bestMatch && bestMatch.confidence >= matchingRules.minimumConfidence) category = "investigate";
@@ -520,6 +390,7 @@ function buildCategorizedTransactions(
         potentialMatches,
         nearestByAmount,
         insights: [],
+        resolution,
       };
 
       item.insights = buildInsights(item, side);
@@ -532,15 +403,14 @@ function buildCategorizedTransactions(
 }
 
 function buildInvestigateItems(
-  transactions: Transaction[],
-  flaggedIds: Set<string>,
-  flaggedResolutions: TransactionResolution[],
+  items: CategorizedTransaction[],
+  latestResolutionByTransactionId: Map<string, TransactionResolution>,
 ) {
-  return transactions
-    .filter((transaction) => flaggedIds.has(transaction.id))
-    .map((transaction): InvestigateQueueItem => ({
-      transaction,
-      resolution: flaggedResolutions.find((resolution) => resolution.transactionId === transaction.id) || null,
+  return items
+    .map((item): InvestigateQueueItem => ({
+      transaction: item.transaction,
+      resolution: latestResolutionByTransactionId.get(item.transaction.id) || null,
+      analysis: item,
     }))
     .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
 }
@@ -570,6 +440,8 @@ export function buildReviewQueueReadModel(
   resolutions: TransactionResolution[],
   matchingRules: MatchingRulesConfig,
 ): ReviewQueueReadModel {
+  const latestResolutionByTransactionId = buildLatestResolutionMap(resolutions);
+  const latestResolutions = [...latestResolutionByTransactionId.values()];
   const inPeriodBankTransactions = transactions.filter(
     (transaction) => isBankTransaction(transaction) && isInPeriod(transaction, period),
   );
@@ -579,43 +451,63 @@ export function buildReviewQueueReadModel(
   const unmatchedBankTransactions = inPeriodBankTransactions.filter((transaction) => transaction.matchStatus === "unmatched");
   const unmatchedFuelTransactions = inPeriodFuelTransactions.filter((transaction) => transaction.matchStatus === "unmatched");
 
-  const resolvedIds = new Set(resolutions.map((resolution) => resolution.transactionId));
-  const flaggedResolutions = resolutions.filter((resolution) => resolution.resolutionType === "flagged");
-  const flaggedTransactionIds = new Set(flaggedResolutions.map((resolution) => resolution.transactionId));
-  const perSideCounts = buildPerSideCounts(inPeriodBankTransactions, inPeriodFuelTransactions, resolutions);
+  const resolvedIds = new Set(
+    latestResolutions
+      .filter((resolution) => resolution.resolutionType !== "flagged")
+      .map((resolution) => resolution.transactionId),
+  );
+  const flaggedTransactionIds = new Set(
+    latestResolutions
+      .filter((resolution) => resolution.resolutionType === "flagged")
+      .map((resolution) => resolution.transactionId),
+  );
+  const perSideCounts = buildPerSideCounts(inPeriodBankTransactions, inPeriodFuelTransactions, latestResolutions);
   const fuelBoundaryPositions = buildFuelBoundaryPositions(inPeriodFuelTransactions);
-  const reviewExclusivity = buildReviewExclusivity(
-    unmatchedBankTransactions,
-    unmatchedFuelTransactions,
-    inPeriodFuelTransactions,
-    matchingRules,
-    flaggedTransactionIds,
-    resolvedIds,
+  const reviewFuelTransactions = unmatchedFuelTransactions.filter(
+    (transaction) => !resolvedIds.has(transaction.id) && !flaggedTransactionIds.has(transaction.id),
+  );
+  const reviewBankTransactions = unmatchedBankTransactions.filter(
+    (transaction) => !resolvedIds.has(transaction.id) && !flaggedTransactionIds.has(transaction.id),
   );
 
   const fuelTransactions = buildCategorizedTransactions(
     "fuel",
-    inPeriodFuelTransactions,
+    reviewFuelTransactions,
     unmatchedBankTransactions,
     matchingRules,
-    resolvedIds,
-    flaggedTransactionIds,
-    reviewExclusivity.claimedBankIds,
     fuelBoundaryPositions,
+    latestResolutionByTransactionId,
   );
   const bankTransactions = buildCategorizedTransactions(
     "bank",
-    inPeriodBankTransactions,
+    reviewBankTransactions,
     unmatchedFuelTransactions,
     matchingRules,
-    resolvedIds,
-    flaggedTransactionIds,
-    reviewExclusivity.claimedBankIds,
     fuelBoundaryPositions,
+    latestResolutionByTransactionId,
   );
-
-  const flaggedBank = buildInvestigateItems(inPeriodBankTransactions, flaggedTransactionIds, flaggedResolutions);
-  const flaggedFuel = buildInvestigateItems(inPeriodFuelTransactions, flaggedTransactionIds, flaggedResolutions);
+  const flaggedBank = buildInvestigateItems(
+    buildCategorizedTransactions(
+      "bank",
+      inPeriodBankTransactions.filter((transaction) => flaggedTransactionIds.has(transaction.id)),
+      unmatchedFuelTransactions,
+      matchingRules,
+      fuelBoundaryPositions,
+      latestResolutionByTransactionId,
+    ),
+    latestResolutionByTransactionId,
+  );
+  const flaggedFuel = buildInvestigateItems(
+    buildCategorizedTransactions(
+      "fuel",
+      inPeriodFuelTransactions.filter((transaction) => flaggedTransactionIds.has(transaction.id)),
+      unmatchedBankTransactions,
+      matchingRules,
+      fuelBoundaryPositions,
+      latestResolutionByTransactionId,
+    ),
+    latestResolutionByTransactionId,
+  );
   const investigateItems = [...flaggedBank, ...flaggedFuel];
 
   return {
@@ -623,14 +515,14 @@ export function buildReviewQueueReadModel(
     sides: {
       fuel: {
         summary: buildSideSummary(
-          unmatchedFuelTransactions.filter((transaction) => !resolvedIds.has(transaction.id)),
+          reviewFuelTransactions,
           perSideCounts.fuel,
         ),
         transactions: fuelTransactions,
       },
       bank: {
         summary: buildSideSummary(
-          reviewExclusivity.visibleBankTransactions.filter((transaction) => !resolvedIds.has(transaction.id)),
+          reviewBankTransactions,
           perSideCounts.bank,
         ),
         transactions: bankTransactions,

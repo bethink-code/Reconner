@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Download } from "lucide-react";
 import { formatRand } from "@/lib/format";
-import type { ReviewQueueReadModel } from "@/lib/reconciliation-types";
+import type { CategorizedTransaction, ReviewQueueReadModel } from "@/lib/reconciliation-types";
+import { InvestigateModal } from "./InvestigateModal";
 import { TransactionRow } from "./TransactionRow";
 
 interface InvestigateTabProps {
@@ -13,6 +15,10 @@ interface InvestigateTabProps {
 }
 
 export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabProps) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalItems, setModalItems] = useState<CategorizedTransaction[]>([]);
+  const [modalInitialIndex, setModalInitialIndex] = useState(0);
+  const [modalSide, setModalSide] = useState<"bank" | "fuel">("bank");
   const { data: reviewModel, isLoading } = useQuery<ReviewQueueReadModel>({
     queryKey: ["/api/periods", periodId, "review-model"],
     queryFn: async () => {
@@ -25,6 +31,18 @@ export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabP
   });
 
   const investigate = reviewModel?.investigate;
+
+  const openModal = (side: "bank" | "fuel", transactionId: string) => {
+    if (!investigate) return;
+    const sideItems = side === "bank" ? investigate.bank : investigate.fuel;
+    const index = sideItems.findIndex((item) => item.transaction.id === transactionId);
+    if (index < 0) return;
+
+    setModalSide(side);
+    setModalItems(sideItems.map((item) => item.analysis));
+    setModalInitialIndex(index);
+    setModalOpen(true);
+  };
 
   if (isLoading || !investigate) {
     return (
@@ -111,6 +129,7 @@ export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabP
               <TransactionRow
                 key={transaction.id}
                 transaction={transaction}
+                onClick={() => openModal("bank", transaction.id)}
                 subtitle={resolution?.notes || undefined}
                 subtitleColor="text-[#B45309]"
               />
@@ -147,6 +166,7 @@ export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabP
               <TransactionRow
                 key={transaction.id}
                 transaction={transaction}
+                onClick={() => openModal("fuel", transaction.id)}
                 subtitle={resolution?.notes || undefined}
                 subtitleColor="text-[#B45309]"
               />
@@ -154,6 +174,18 @@ export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabP
           </div>
         </div>
       )}
+
+      <InvestigateModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        items={modalItems}
+        initialIndex={modalInitialIndex}
+        periodId={periodId}
+        matchingRules={reviewModel?.matchingRules}
+        onResolved={() => {}}
+        hideInvestigateButton
+        side={modalSide}
+      />
     </div>
   );
 }

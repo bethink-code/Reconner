@@ -61,7 +61,13 @@ export function InvestigateModal({
   }, [initialIndex, open]);
 
   const populateFromInsights = useCallback((item: CategorizedTransaction) => {
-    if (item.insights.length > 0) {
+    if (item.resolution?.reason) {
+      setSelectedReason(item.resolution.reason);
+      setResolutionNotes(item.resolution.notes || "");
+    } else if (item.resolution?.notes) {
+      setSelectedReason("");
+      setResolutionNotes(item.resolution.notes);
+    } else if (item.insights.length > 0) {
       const primary = item.insights[0];
       setSelectedReason(INSIGHT_REASON_MAP[primary.type] || "other");
       setResolutionNotes(primary.detail || primary.message);
@@ -85,7 +91,7 @@ export function InvestigateModal({
         bankTransactionId: bankId,
         fuelTransactionId: fuelId,
         reviewTransactionId: side === 'fuel' ? fuelId : bankId,
-        notes: "Linked via review",
+        notes: resolutionNotes || "Linked via review",
       });
     },
     onSuccess: () => {
@@ -101,8 +107,14 @@ export function InvestigateModal({
     mutationFn: async (data: { transactionId: string; resolutionType: string; reason?: string; notes?: string }) => {
       return await apiRequest("POST", "/api/resolutions", { ...data, periodId });
     },
-    onSuccess: () => {
-      toast({ title: "Transaction resolved" });
+    onSuccess: (_, variables) => {
+      const title =
+        variables.resolutionType === "flagged"
+          ? "Marked for investigation"
+          : variables.resolutionType === "dismissed"
+            ? "Dismissed from review"
+            : "Marked reviewed";
+      toast({ title });
       invalidateAndAdvance();
     },
     onError: (error: Error) => {
@@ -115,7 +127,7 @@ export function InvestigateModal({
       return await apiRequest("DELETE", `/api/resolutions/${transactionId}`);
     },
     onSuccess: () => {
-      toast({ title: "Resolution removed", description: "Transaction is back to unmatched." });
+      toast({ title: "Review state removed", description: "The transaction is back in the active queue." });
       invalidateAndAdvance();
     },
     onError: (error: Error) => {
@@ -167,6 +179,7 @@ export function InvestigateModal({
   if (!item) return null;
 
   const txn = item.transaction;
+  const activeResolutionType = item.resolution?.resolutionType ?? null;
   const total = items.length;
 
   const goNext = () => {
@@ -430,7 +443,7 @@ export function InvestigateModal({
                 Investigate
               </Button>
             )}
-            {item.category === 'resolved' ? (
+            {activeResolutionType === "linked" ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -441,15 +454,28 @@ export function InvestigateModal({
                 Unmatch
               </Button>
             ) : (
-              <Button
-                size="sm"
-                onClick={handleResolve}
-                disabled={!selectedReason || isPending}
-                className="bg-[#1A1200] text-[#F5EDE6] hover:bg-[#2A2218]"
-              >
-                {isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-                Match
-              </Button>
+              <>
+                {activeResolutionType === "flagged" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => unmatchResolutionMutation.mutate(txn.id)}
+                    disabled={isPending || unmatchResolutionMutation.isPending}
+                  >
+                    {unmatchResolutionMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                    Return to review
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={handleResolve}
+                  disabled={!selectedReason || isPending}
+                  className="bg-[#1A1200] text-[#F5EDE6] hover:bg-[#2A2218]"
+                >
+                  {isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                  Mark reviewed
+                </Button>
+              </>
             )}
           </div>
         </div>

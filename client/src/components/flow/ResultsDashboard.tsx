@@ -157,8 +157,8 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
           <div className="mt-4 pt-4 border-t border-border space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3">
               <RuleValue label="Tolerance" value={`±R ${Number(rules.amountTolerance).toFixed(2)}`} />
-              <RuleValue label="Date Window" value={`${rules.dateWindowDays} day${rules.dateWindowDays !== 1 ? "s" : ""}`} />
-              <RuleValue label="Time Window" value={`${rules.timeWindowMinutes} min`} />
+              <RuleValue label="Match Window" value={`${rules.dateWindowDays} day${rules.dateWindowDays !== 1 ? "s" : ""}`} />
+              <RuleValue label="Operational Close" value={`${rules.timeWindowMinutes} min`} />
               <RuleValue label="Attendant Delay" value={`${rules.attendantSubmissionDelayMinutes} min`} />
               <RuleValue label="Min Confidence" value={`${rules.minimumConfidence}%`} />
               <RuleValue label="Auto-Match" value={`${rules.autoMatchThreshold}%`} />

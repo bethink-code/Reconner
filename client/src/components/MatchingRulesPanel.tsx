@@ -67,8 +67,12 @@ export default function MatchingRulesPanel({ periodId, onRulesChanged }: Matchin
       const matchedPreset = Object.entries(PRESETS).find(([, preset]) =>
         preset.amountTolerance === savedRules.amountTolerance &&
         preset.dateWindowDays === savedRules.dateWindowDays &&
+        preset.timeWindowMinutes === savedRules.timeWindowMinutes &&
         preset.attendantSubmissionDelayMinutes === savedRules.attendantSubmissionDelayMinutes &&
-        preset.minimumConfidence === savedRules.minimumConfidence
+        preset.minimumConfidence === savedRules.minimumConfidence &&
+        preset.autoMatchThreshold === savedRules.autoMatchThreshold &&
+        preset.groupByInvoice === savedRules.groupByInvoice &&
+        preset.requireCardMatch === savedRules.requireCardMatch
       );
       setActivePreset(matchedPreset ? matchedPreset[0] : null);
     }

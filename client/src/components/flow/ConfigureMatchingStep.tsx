@@ -41,7 +41,7 @@ interface PresetConfig {
   description: string;
   icon: React.ElementType;
   tolerance: string;
-  confidence: string;
+  timing: string;
   rules: Partial<MatchingRules>;
 }
 
@@ -49,10 +49,10 @@ const PRESETS: PresetConfig[] = [
   {
     id: "conservative",
     name: "Conservative",
-    description: "Exact amounts, same day only",
+    description: "Tight same-day control with minimal false positives",
     icon: Shield,
     tolerance: "±R0.01",
-    confidence: "90%",
+    timing: "30 min close · 120 min exact",
     rules: {
       amountTolerance: 0.01,
       dateWindowDays: 1,
@@ -70,7 +70,7 @@ const PRESETS: PresetConfig[] = [
     description: "Balanced for most stations",
     icon: Scale,
     tolerance: "±R1.00",
-    confidence: "60%",
+    timing: "60 min close · 120 min exact",
     rules: {
       amountTolerance: 1.0,
       dateWindowDays: 3,
@@ -85,10 +85,10 @@ const PRESETS: PresetConfig[] = [
   {
     id: "aggressive",
     name: "Aggressive",
-    description: "Maximum match rate",
+    description: "Wider operational recovery with more review risk",
     icon: Target,
     tolerance: "±R2.00",
-    confidence: "50%",
+    timing: "120 min close · 120 min exact",
     rules: {
       amountTolerance: 2.0,
       dateWindowDays: 5,
@@ -264,7 +264,7 @@ export function ConfigureMatchingStep({
                   <p className="text-xs text-muted-foreground mt-1">{preset.description}</p>
                   <div className="mt-3 space-y-1">
                     <p className="text-xs font-mono">{preset.tolerance}</p>
-                    <p className="text-xs text-muted-foreground">{preset.confidence} min</p>
+                    <p className="text-xs text-muted-foreground">{preset.timing}</p>
                   </div>
                 </button>
               );
@@ -276,19 +276,19 @@ export function ConfigureMatchingStep({
               {selectedPreset === "conservative" && (
                 <>
                   <span className="font-medium">Conservative</span> requires exact matches.
-                  Best for high-accuracy reconciliation with minimal false positives.
+                  Uses a 30 minute operational-close window and a 120 minute attendant exact-delay window.
                 </>
               )}
               {selectedPreset === "moderate" && (
                 <>
                   <span className="font-medium">Moderate</span> is recommended for most fuel stations.
-                  It handles small price variations while maintaining accuracy.
+                  Uses a 60 minute operational-close window and a 120 minute attendant exact-delay window.
                 </>
               )}
               {selectedPreset === "aggressive" && (
                 <>
                   <span className="font-medium">Aggressive</span> maximizes match rate.
-                  Use when transactions often have timing or amount variations.
+                  Uses a 120 minute operational-close window and a 120 minute attendant exact-delay window.
                 </>
               )}
               {selectedPreset === "custom" && (
@@ -536,6 +536,26 @@ export function ConfigureMatchingStep({
                   />
                   <p className="text-xs text-muted-foreground">
                     How long after the fuel sale an attendant may still submit the slip to the cashier for an exact same-day match.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Operational Close Time Window</Label>
+                    <span className="text-sm font-mono">
+                      {customRules.timeWindowMinutes} min
+                    </span>
+                  </div>
+                  <Slider
+                    value={[customRules.timeWindowMinutes]}
+                    onValueChange={([v]) => updateRule("timeWindowMinutes", v)}
+                    min={15}
+                    max={180}
+                    step={15}
+                    data-testid="slider-operational-close-window"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    For close same-day matches that are not exact in amount, how far apart the fuel and bank times may still be.
                   </p>
                 </div>
 

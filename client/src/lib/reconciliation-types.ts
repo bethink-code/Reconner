@@ -1,4 +1,12 @@
 import type { Transaction } from "@shared/schema";
+export type {
+  CategorizedTransaction,
+  PotentialMatch,
+  ReviewQueueReadModel,
+  ReviewSideReadModel,
+  ReviewSideSummary,
+  TransactionInsight,
+} from "../../../shared/reconciliationReview.ts";
 
 export interface PeriodSummary {
   totalTransactions: number;
@@ -57,30 +65,6 @@ export interface PaginatedResponse {
   page: number;
   limit: number;
   totalPages: number;
-}
-
-export interface PotentialMatch {
-  transaction: Transaction;
-  confidence: number;
-  timeDiff: string;
-  amountDiff: number;
-  stageId?: string;
-  stageLabel?: string;
-}
-
-export interface TransactionInsight {
-  type: 'possible_tip' | 'overfill' | 'duplicate_charge' | 'no_fuel_record';
-  message: string;
-  detail?: string;
-}
-
-export interface CategorizedTransaction {
-  transaction: Transaction;
-  category: 'quick_win' | 'investigate' | 'no_match' | 'low_value' | 'resolved';
-  bestMatch?: PotentialMatch;
-  potentialMatches: PotentialMatch[];
-  nearestByAmount: PotentialMatch[];
-  insights: TransactionInsight[];
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {

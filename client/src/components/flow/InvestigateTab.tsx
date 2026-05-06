@@ -1,15 +1,10 @@
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Check,
-  Download,
-} from "lucide-react";
+import { Check, Download } from "lucide-react";
 import { formatRand } from "@/lib/format";
-import type { TransactionResolution } from "@shared/schema";
-import type { PaginatedResponse } from "@/lib/reconciliation-types";
+import type { ReviewQueueReadModel } from "@/lib/reconciliation-types";
 import { TransactionRow } from "./TransactionRow";
 
 interface InvestigateTabProps {
@@ -18,110 +13,53 @@ interface InvestigateTabProps {
 }
 
 export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabProps) {
-  // Fetch resolutions to find flagged items
-  const { data: resolutions, isLoading: resLoading } = useQuery<TransactionResolution[]>({
-    queryKey: ["/api/periods", periodId, "resolutions"],
-    enabled: !!periodId,
-  });
-
-  // Fetch all bank transactions to find flagged ones
-  const { data: allBankData } = useQuery<PaginatedResponse>({
-    queryKey: ["/api/periods", periodId, "transactions", "all", "bank"],
+  const { data: reviewModel, isLoading } = useQuery<ReviewQueueReadModel>({
+    queryKey: ["/api/periods", periodId, "review-model"],
     queryFn: async () => {
-      const params = new URLSearchParams({ page: "1", limit: "500", sourceType: "bank" });
-      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch bank transactions");
+      const response = await fetch(`/api/periods/${periodId}/review-model`);
+      if (!response.ok) throw new Error("Failed to fetch investigate data");
       return response.json();
     },
     enabled: !!periodId,
+    refetchOnMount: false,
   });
 
-  // Fetch all fuel transactions to find flagged ones
-  const { data: allFuelData } = useQuery<PaginatedResponse>({
-    queryKey: ["/api/periods", periodId, "transactions", "all", "fuel"],
-    queryFn: async () => {
-      const params = new URLSearchParams({ page: "1", limit: "500", sourceType: "fuel", isCardTransaction: "yes" });
-      const response = await fetch(`/api/periods/${periodId}/transactions?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch fuel transactions");
-      return response.json();
-    },
-    enabled: !!periodId,
-  });
+  const investigate = reviewModel?.investigate;
 
-  const flaggedResolutions = useMemo(
-    () => (resolutions || []).filter(r => r.resolutionType === 'flagged'),
-    [resolutions]
-  );
-
-  const flaggedIds = useMemo(
-    () => new Set(flaggedResolutions.map(r => r.transactionId)),
-    [flaggedResolutions]
-  );
-
-  // Split flagged items by side
-  const flaggedBank = useMemo(() => {
-    if (!allBankData?.transactions) return [];
-    return allBankData.transactions
-      .filter(txn => flaggedIds.has(txn.id))
-      .map(txn => ({
-        transaction: txn,
-        resolution: flaggedResolutions.find(r => r.transactionId === txn.id),
-      }))
-      .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
-  }, [allBankData, flaggedIds, flaggedResolutions]);
-
-  const flaggedFuel = useMemo(() => {
-    if (!allFuelData?.transactions) return [];
-    return allFuelData.transactions
-      .filter(txn => flaggedIds.has(txn.id))
-      .map(txn => ({
-        transaction: txn,
-        resolution: flaggedResolutions.find(r => r.transactionId === txn.id),
-      }))
-      .sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
-  }, [allFuelData, flaggedIds, flaggedResolutions]);
-
-  const totalCount = flaggedBank.length + flaggedFuel.length;
-  const totalAmount = [...flaggedBank, ...flaggedFuel].reduce((s, f) => s + parseFloat(f.transaction.amount), 0);
-  const bankAmount = flaggedBank.reduce((s, f) => s + parseFloat(f.transaction.amount), 0);
-  const fuelAmount = flaggedFuel.reduce((s, f) => s + parseFloat(f.transaction.amount), 0);
-
-  if (resLoading) {
+  if (isLoading || !investigate) {
     return (
-      <div className="space-y-4 mx-auto">
+      <div className="mx-auto space-y-4">
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-32 w-full" />
       </div>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  //  EMPTY STATE — Positive outcome
-  // ═══════════════════════════════════════════════════════════
-  if (totalCount === 0) {
+  if (investigate.totalCount === 0) {
     return (
       <div className="mx-auto">
-        <div className="flex items-center justify-between mb-6 px-3 py-4">
+        <div className="mb-6 flex items-center justify-between px-3 py-4">
           <div>
             <h2 className="text-2xl font-heading font-semibold text-[#1A1200]">Investigate</h2>
             <p className="text-sm text-muted-foreground">Your real-world follow-up list</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}>
-              <Download className="h-4 w-4 mr-2" />Download all
+            <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export`, "_blank")}>
+              <Download className="mr-2 h-4 w-4" />
+              Download all
             </Button>
           </div>
         </div>
 
         <Card className="bg-section border-[#E5E3DC]">
-          <CardContent className="pt-10 pb-10">
-            <div className="flex flex-col items-center justify-center text-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-[#DCFCE7] flex items-center justify-center">
+          <CardContent className="pb-10 pt-10">
+            <div className="flex flex-col items-center justify-center gap-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#DCFCE7]">
                 <Check className="h-7 w-7 text-[#166534]" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-[#1A1200]">Nothing to follow up on</h3>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="mt-1 text-sm text-muted-foreground">
                   All transactions have been accounted for. No items need real-world investigation.
                 </p>
               </div>
@@ -132,41 +70,47 @@ export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabP
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  //  INVESTIGATE LIST — Two sections
-  // ═══════════════════════════════════════════════════════════
   return (
     <div className="mx-auto space-y-6">
-      {/* Header + downloads */}
       <div className="flex items-center justify-between px-3 py-4">
         <div>
           <h2 className="text-2xl font-heading font-semibold text-[#1A1200]">Investigate</h2>
           <p className="text-sm text-muted-foreground">
-            {totalCount} item{totalCount !== 1 ? 's' : ''} across both sides · {formatRand(totalAmount)} total · work through these offline
+            {investigate.totalCount} item{investigate.totalCount !== 1 ? "s" : ""} across both sides ·{" "}
+            {formatRand(investigate.totalAmount)} total · work through these offline
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export`, '_blank')}>
-            <Download className="h-4 w-4 mr-2" />Download all
+          <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export`, "_blank")}>
+            <Download className="mr-2 h-4 w-4" />
+            Download all
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, '_blank')}>
-            <Download className="h-4 w-4 mr-2" />Download investigate list
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`/api/periods/${periodId}/export-flagged`, "_blank")}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Download investigate list
           </Button>
         </div>
       </div>
 
-      {/* Unmatched Bank section */}
-      {flaggedBank.length > 0 && (
+      {investigate.bank.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-3">
-            <h3 className="text-sm font-semibold text-[#1A1200]">{flaggedBank.length} unmatched bank transaction{flaggedBank.length !== 1 ? 's' : ''}</h3>
-            <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatRand(bankAmount)}</span>
+            <h3 className="text-sm font-semibold text-[#1A1200]">
+              {investigate.bank.length} unmatched bank transaction{investigate.bank.length !== 1 ? "s" : ""}
+            </h3>
+            <span className="text-sm font-semibold tabular-nums text-[#B45309]">
+              {formatRand(investigate.bankAmount)}
+            </span>
           </div>
           <div className="space-y-2">
-            {flaggedBank.map(({ transaction: txn, resolution }) => (
+            {investigate.bank.map(({ transaction, resolution }) => (
               <TransactionRow
-                key={txn.id}
-                transaction={txn}
+                key={transaction.id}
+                transaction={transaction}
                 subtitle={resolution?.notes || undefined}
                 subtitleColor="text-[#B45309]"
               />
@@ -175,15 +119,19 @@ export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabP
         </div>
       )}
 
-      {/* Unmatched Fuel section */}
-      {flaggedFuel.length > 0 && (
+      {investigate.fuel.length > 0 && (
         <div className="space-y-3">
           <div className="px-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#1A1200]">{flaggedFuel.length} unmatched fuel card sales transaction{flaggedFuel.length !== 1 ? 's' : ''}</h3>
-              <span className="text-sm font-semibold text-[#B45309] tabular-nums">{formatRand(fuelAmount)}</span>
+              <h3 className="text-sm font-semibold text-[#1A1200]">
+                {investigate.fuel.length} unmatched fuel card sales transaction
+                {investigate.fuel.length !== 1 ? "s" : ""}
+              </h3>
+              <span className="text-sm font-semibold tabular-nums text-[#B45309]">
+                {formatRand(investigate.fuelAmount)}
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Unmatched fuel card sales transactions are allocated to relevant attendant.{" "}
               {onJumpToAttendants ? (
                 <button type="button" onClick={onJumpToAttendants} className="text-[#E8601C] hover:underline">
@@ -195,10 +143,10 @@ export function InvestigateTab({ periodId, onJumpToAttendants }: InvestigateTabP
             </p>
           </div>
           <div className="space-y-2">
-            {flaggedFuel.map(({ transaction: txn, resolution }) => (
+            {investigate.fuel.map(({ transaction, resolution }) => (
               <TransactionRow
-                key={txn.id}
-                transaction={txn}
+                key={transaction.id}
+                transaction={transaction}
                 subtitle={resolution?.notes || undefined}
                 subtitleColor="text-[#B45309]"
               />

@@ -2,6 +2,9 @@ import type { Express } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "./auth";
 import { computeDeclineAnalysis } from "./insights/declineInsights";
+import { buildInsightsReadModel } from "./insights/insightsReadModel.ts";
+import { buildResultsDashboardReadModel } from "./reconciliation/dashboardReadModel.ts";
+import { buildReviewQueueReadModel } from "./reconciliation/reviewQueueReadModel.ts";
 import {
   assertPeriodOwner,
   assertPeriodWrite,
@@ -398,6 +401,48 @@ export function registerReconciliationReadRoutes(app: Express) {
     }
   });
 
+  app.get("/api/periods/:periodId/insights", isAuthenticated, async (req: any, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+
+      const [summary, attendantSummary, transactions] = await Promise.all([
+        storage.getPeriodSummary(req.params.periodId),
+        storage.getAttendantSummary(req.params.periodId),
+        storage.getTransactionsByPeriod(req.params.periodId),
+      ]);
+
+      const fuelTransactions = transactions.filter((tx) => tx.sourceType === "fuel");
+      const bankTransactions = transactions.filter(
+        (tx) => tx.sourceType && tx.sourceType.startsWith("bank"),
+      );
+      const declineResult = computeDeclineAnalysis(bankTransactions, fuelTransactions);
+
+      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult));
+    } catch (error) {
+      console.error("Error fetching insights read model:", error);
+      res.status(500).json({ error: "Failed to fetch insights data" });
+    }
+  });
+
+  app.get("/api/periods/:periodId/review-model", isAuthenticated, async (req: any, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+
+      const [transactions, resolutions, matchingRules] = await Promise.all([
+        storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId),
+        storage.getMatchingRules(req.params.periodId),
+      ]);
+
+      res.json(buildReviewQueueReadModel(period, transactions, resolutions, matchingRules));
+    } catch (error) {
+      console.error("Error fetching review read model:", error);
+      res.status(500).json({ error: "Failed to fetch review data" });
+    }
+  });
+
   app.get("/api/periods/:periodId/summary", isAuthenticated, async (req: any, res) => {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
@@ -407,6 +452,23 @@ export function registerReconciliationReadRoutes(app: Express) {
     } catch (error) {
       console.error("Error fetching period summary:", error);
       res.status(500).json({ error: "Failed to fetch period summary" });
+    }
+  });
+
+  app.get("/api/periods/:periodId/dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+
+      const [summary, resolutions] = await Promise.all([
+        storage.getPeriodSummary(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId),
+      ]);
+
+      res.json(buildResultsDashboardReadModel(summary, resolutions));
+    } catch (error) {
+      console.error("Error fetching dashboard read model:", error);
+      res.status(500).json({ error: "Failed to fetch dashboard data" });
     }
   });
 

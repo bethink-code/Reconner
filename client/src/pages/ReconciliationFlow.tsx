@@ -12,7 +12,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import { formatPeriodRange } from "@/lib/format";
-import type { ReconciliationPeriod, UploadedFile } from "@shared/schema";
+import { deriveCompletionMetrics } from "@shared/reconciliationCompletion";
+import { deriveAutoMatchProgressMetrics } from "@shared/reconciliationProgress";
+import type { ResultsDashboardReadModel } from "@shared/reconciliationDashboard";
+import type { MatchingRulesConfig, ReconciliationPeriod, UploadedFile } from "@shared/schema";
 import { Eye } from "lucide-react";
 
 import { FuelUploadStep } from "@/components/flow/FuelUploadStep";
@@ -42,7 +45,7 @@ export default function ReconciliationFlow() {
     matchRate: string;
     warnings: string[];
   } | null>(null);
-  const [txCounts, setTxCounts] = useState<{ bank: number; fuel: number } | null>(null);
+  const [txCounts, setTxCounts] = useState<{ bank: number; fuel: number; fuelLabel: string } | null>(null);
 
   const [bankSubStep, setBankSubStep] = useState<BankSubStep>("status");
   const [currentBankName, setCurrentBankName] = useState<string>("");
@@ -77,6 +80,16 @@ export default function ReconciliationFlow() {
     enabled: !!periodId && !!matchResult,
   });
 
+  const { data: completionDashboard } = useQuery<ResultsDashboardReadModel>({
+    queryKey: ["/api/periods", periodId, "dashboard"],
+    enabled: !!periodId && !!matchResult,
+  });
+
+  const { data: matchingRules } = useQuery<MatchingRulesConfig>({
+    queryKey: ["/api/periods", periodId, "matching-rules"],
+    enabled: !!periodId,
+  });
+
   const autoMatchMutation = useMutation({
     mutationFn: async () => {
       setIsAutoMatching(true);
@@ -86,10 +99,7 @@ export default function ReconciliationFlow() {
         const summaryRes = await fetch(`/api/periods/${periodId}/verification-summary`, { credentials: "include" });
         if (summaryRes.ok) {
           const summary = await summaryRes.json();
-          setTxCounts({
-            bank: summary.overview?.bankStatements?.totalTransactions || 0,
-            fuel: summary.overview?.fuelSystem?.matchableInvoices || summary.overview?.fuelSystem?.cardTransactions || 0,
-          });
+          setTxCounts(deriveAutoMatchProgressMetrics(summary.overview, matchingRules));
         }
       } catch { /* non-critical */ }
       const response = await apiRequest("POST", `/api/periods/${periodId}/auto-match`, {});
@@ -211,6 +221,10 @@ export default function ReconciliationFlow() {
       });
     }
   }, [files, fuelFile, bankFiles.length]);
+
+  const completionMetrics = completionDashboard
+    ? deriveCompletionMetrics(completionDashboard)
+    : null;
 
   const handleStepClick = (step: ReconciliationStep) => {
     const fuelProcessed = !!fuelFile;
@@ -402,7 +416,7 @@ export default function ReconciliationFlow() {
                   </div>
                   <div className="rounded-lg bg-muted/50 p-3">
                     <p className="text-2xl font-semibold">{txCounts.fuel}</p>
-                    <p className="text-xs text-muted-foreground">Fuel card transactions</p>
+                    <p className="text-xs text-muted-foreground">{txCounts.fuelLabel}</p>
                   </div>
                 </div>
               )}
@@ -420,20 +434,34 @@ export default function ReconciliationFlow() {
               <CardTitle className="text-2xl">Matching Complete</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Hero: the answer to "how well did my period match?" */}
-              <div className="text-center space-y-1">
-                <p className="text-5xl font-heading font-bold text-[#1A1200] dark:text-[#F0EAE0]">{matchResult.matchRate}</p>
-                <p className="text-lg font-medium">of your {period?.name || "period"} bank transactions verified</p>
-                {matchResult.bankTransactionsMatchable - matchResult.matchesCreated > 0 ? (
-                  <p className="text-base font-medium text-[#B45309]">
-                    {matchResult.matchesCreated} of {matchResult.bankTransactionsMatchable} transactions automatically matched — {matchResult.bankTransactionsMatchable - matchResult.matchesCreated} need review
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {matchResult.matchesCreated} of {matchResult.bankTransactionsMatchable} transactions automatically matched to fuel records
-                  </p>
-                )}
-              </div>
+              {completionMetrics ? (
+                <>
+                  {/* Hero: the answer to "how well did my period match?" */}
+                  <div className="text-center space-y-1">
+                    <p className="text-5xl font-heading font-bold text-[#1A1200] dark:text-[#F0EAE0]">{completionMetrics.headlineRate}%</p>
+                    <p className="text-lg font-medium">of your fuel card sales matched</p>
+                    {completionMetrics.unmatchedFuelTransactions > 0 || completionMetrics.unmatchedBankTransactions > 0 ? (
+                      <p className="text-base font-medium text-[#B45309]">
+                        {completionMetrics.matchedCardTransactions} of {completionMetrics.totalCardTransactions} card transactions matched - {completionMetrics.unmatchedFuelTransactions} fuel and {completionMetrics.unmatchedBankTransactions} bank items need review
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {completionMetrics.matchedCardTransactions} of {completionMetrics.totalCardTransactions} card transactions matched to bank records
+                      </p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {completionMetrics.bankApprovedTransactions} of {completionMetrics.totalInPeriodBankTransactions} in-period bank transactions approved
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <Skeleton className="h-12 w-28 mx-auto" />
+                  <Skeleton className="h-5 w-64 mx-auto" />
+                  <Skeleton className="h-5 w-80 mx-auto" />
+                  <Skeleton className="h-4 w-56 mx-auto" />
+                </div>
+              )}
 
               {/* Fuel sales breakdown */}
               {verSummary && (
@@ -457,30 +485,38 @@ export default function ReconciliationFlow() {
               )}
 
               {/* Key stats */}
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className={cn(
-                  "rounded-lg p-3",
-                  matchResult.matchesCreated > 0
-                    ? "bg-[#DCFCE7] dark:bg-emerald-950/30"
-                    : "bg-section"
-                )}>
-                  <p className={cn(
-                    "text-2xl font-semibold",
-                    matchResult.matchesCreated > 0
-                      ? "text-[#166534] dark:text-emerald-400"
-                      : "text-[#1A1200] dark:text-foreground"
-                  )}>{matchResult.matchesCreated}</p>
-                  <p className="text-xs text-muted-foreground">Verified</p>
+              {completionMetrics ? (
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className={cn(
+                    "rounded-lg p-3",
+                    completionMetrics.matchedCardTransactions > 0
+                      ? "bg-[#DCFCE7] dark:bg-emerald-950/30"
+                      : "bg-section"
+                  )}>
+                    <p className={cn(
+                      "text-2xl font-semibold",
+                      completionMetrics.matchedCardTransactions > 0
+                        ? "text-[#166534] dark:text-emerald-400"
+                        : "text-[#1A1200] dark:text-foreground"
+                    )}>{completionMetrics.matchedCardTransactions}</p>
+                    <p className="text-xs text-muted-foreground">Matched Card Sales</p>
+                  </div>
+                  <div className="rounded-lg bg-[#FEF9C3] dark:bg-amber-950/30 p-3">
+                    <p className="text-2xl font-semibold text-[#B45309] dark:text-amber-400">{completionMetrics.unmatchedFuelTransactions}</p>
+                    <p className="text-xs text-muted-foreground">Review Fuel</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-2xl font-semibold">{completionMetrics.unmatchedBankTransactions}</p>
+                    <p className="text-xs text-muted-foreground">Review Bank</p>
+                  </div>
                 </div>
-                <div className="rounded-lg bg-[#FEF9C3] dark:bg-amber-950/30 p-3">
-                  <p className="text-2xl font-semibold text-[#B45309] dark:text-amber-400">{matchResult.bankTransactionsMatchable - matchResult.matchesCreated}</p>
-                  <p className="text-xs text-muted-foreground">To Investigate</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  <Skeleton className="h-20 rounded-lg" />
+                  <Skeleton className="h-20 rounded-lg" />
+                  <Skeleton className="h-20 rounded-lg" />
                 </div>
-                <div className="rounded-lg bg-muted/50 p-3">
-                  <p className="text-2xl font-semibold">{matchResult.invoicesCreated}</p>
-                  <p className="text-xs text-muted-foreground">Fuel Invoices</p>
-                </div>
-              </div>
+              )}
 
               {/* Secondary info: data outside range */}
               {matchResult.bankTransactionsUnmatchable > 0 && (

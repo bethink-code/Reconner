@@ -1,4 +1,4 @@
-import type { MatchingStage } from "../../shared/matchingStages";
+import type { MatchingStage } from "../../shared/matchingStages.ts";
 
 export interface FuelInvoice<TItem> {
   invoiceNumber: string;
@@ -46,16 +46,16 @@ type BoundaryPosition = "start" | "end" | "both" | "none";
 type FuelTxnLike = {
   id: string;
   amount: string;
-  transactionDate: string;
+  transactionDate: string | null;
   transactionTime: string | null;
   cardNumber: string | null;
   referenceNumber: string | null;
-  matchStatus: string;
+  matchStatus: string | null;
 };
 
 type BankTxnLike = {
   amount: string;
-  transactionDate: string;
+  transactionDate: string | null;
   transactionTime: string | null;
   cardNumber: string | null;
 };
@@ -69,7 +69,7 @@ export function groupFuelByInvoice<T extends FuelTxnLike>(
       invoiceNumber: tx.id,
       items: [tx],
       totalAmount: parseFloat(tx.amount),
-      firstDate: tx.transactionDate,
+      firstDate: tx.transactionDate || "",
       firstTime: tx.transactionTime,
       cardNumber: tx.cardNumber,
     }));
@@ -85,7 +85,7 @@ export function groupFuelByInvoice<T extends FuelTxnLike>(
         invoiceNumber: invoiceNum,
         items: [],
         totalAmount: 0,
-        firstDate: tx.transactionDate,
+        firstDate: tx.transactionDate || "",
         firstTime: tx.transactionTime,
         cardNumber: tx.cardNumber,
       };
@@ -213,7 +213,7 @@ function scoreBankToInvoiceCandidate<TBank extends BankTxnLike, TFuel extends Fu
   stage: MatchingStage,
   getBoundaryPosition?: (invoice: FuelInvoice<TFuel>) => BoundaryPosition,
 ): BestInvoiceMatch<TFuel> | null {
-  if (invoice.items.some((item) => item.matchStatus === "matched")) return null;
+  if (invoice.items.some((item) => item.matchStatus === "excluded")) return null;
 
   const reasons: string[] = [`stage:${stage.id}`];
   const bankAmount = parseFloat(bankTx.amount);

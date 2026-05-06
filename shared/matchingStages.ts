@@ -84,7 +84,7 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     description: "Finally, we use the wider date window for delayed bank settlement and lower-confidence review candidates.",
     order: 4,
     maxAmountDiff: Math.max(0.01, rules.amountTolerance),
-    minDateDiffDays: 1,
+    minDateDiffDays: 0,
     maxDateDiffDays: Math.max(rules.dateWindowDays, 0),
     maxTimeDiffMinutes: null,
     requireExactAmount: false,

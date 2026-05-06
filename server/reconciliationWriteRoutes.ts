@@ -1,21 +1,74 @@
 import type { Express } from "express";
+import { z } from "zod";
 import { isAuthenticated } from "./auth";
 import { audit } from "./auditLog";
 import { storage } from "./storage";
 import { assertPeriodWrite } from "./routeAccess";
+import { planAutoMatch } from "./reconciliation/autoMatchPlanner.ts";
 import {
-  groupFuelByInvoice as groupFuelByInvoiceFromReconciliation,
-  parseDateToDays as parseDateToDaysFromReconciliation,
-  parseTimeToMinutes as parseTimeToMinutesFromReconciliation,
-  runSequentialMatchingStages,
-  scoreBankToInvoices as scoreBankToInvoicesFromReconciliation,
-  type FuelInvoice as ReconciliationFuelInvoice,
-} from "./reconciliation/matching";
-import { buildMatchingStages } from "../shared/matchingStages";
+  ReconciliationCommandError,
+  ReconciliationCommandService,
+  type ReconciliationActor,
+} from "./reconciliation/reconciliationCommandService.ts";
+import { reconciliationStateWriter } from "./reconciliation/reconciliationStateWriter.ts";
 import {
   insertMatchSchema,
   type User,
 } from "../shared/schema";
+
+const reconciliationCommandService = new ReconciliationCommandService(reconciliationStateWriter);
+const resolutionTypeSchema = z.enum(["linked", "reviewed", "dismissed", "flagged", "partial"]);
+
+const reviewLinkSchema = z.object({
+  bankTransactionId: z.string().min(1),
+  fuelTransactionId: z.string().min(1),
+  reviewTransactionId: z.string().min(1),
+  notes: z.string().trim().optional().nullable(),
+});
+
+const resolutionSchema = z.object({
+  transactionId: z.string().min(1),
+  periodId: z.string().min(1),
+  resolutionType: resolutionTypeSchema,
+  reason: z.string().trim().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+  linkedTransactionId: z.string().trim().optional().nullable(),
+  assignee: z.string().trim().optional().nullable(),
+});
+
+const bulkResolutionSchema = z.object({
+  transactionIds: z.array(z.string().min(1)).min(1),
+  periodId: z.string().min(1),
+});
+
+const bulkConfirmSchema = z.object({
+  matches: z.array(z.object({
+    bankId: z.string().min(1),
+    fuelId: z.string().min(1),
+  })).min(1),
+  periodId: z.string().min(1),
+});
+
+function buildActor(user: User | undefined): ReconciliationActor {
+  return {
+    id: user?.id || null,
+    name: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
+    email: user?.email || null,
+  };
+}
+
+function handleWriteError(res: any, error: unknown, fallbackMessage: string) {
+  if (error instanceof ReconciliationCommandError) {
+    return res.status(error.status).json({ error: error.code, message: error.message });
+  }
+
+  if (error instanceof z.ZodError) {
+    return res.status(400).json({ error: "invalid_request", message: "Invalid request data" });
+  }
+
+  console.error(fallbackMessage, error);
+  return res.status(500).json({ error: "internal_error", message: fallbackMessage });
+}
 
 export function registerReconciliationWriteRoutes(app: Express) {
   app.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req: any, res) => {
@@ -25,246 +78,68 @@ export function registerReconciliationWriteRoutes(app: Express) {
 
       const rules = await storage.getMatchingRules(req.params.periodId);
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      const plan = planAutoMatch({
+        id: req.params.periodId,
+        name: period.name,
+        startDate: period.startDate,
+        endDate: period.endDate,
+      }, rules, transactions);
 
-      const periodStartDay = new Date(period.startDate + "T00:00:00").getTime();
-      const periodEndDay = new Date(period.endDate + "T00:00:00").getTime();
-      const dateBufferMs = rules.dateWindowDays * 86400000;
-
-      const toDateOnly = (d: number) => {
-        const dt = new Date(d);
-        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
-      };
-
-      const isDebtorTx = (t: typeof transactions[0]) =>
-        t.paymentType?.toLowerCase().includes("debtor") ||
-        t.paymentType?.toLowerCase().includes("account") ||
-        t.paymentType?.toLowerCase().includes("fleet");
-
-      const fuelTransactions = transactions.filter(t => {
-        if (t.sourceType !== "fuel" || t.isCardTransaction !== "yes" || isDebtorTx(t) || t.matchStatus !== "unmatched") return false;
-        if (!t.transactionDate) return false;
-        const day = toDateOnly(new Date(t.transactionDate).getTime());
-        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
-      });
-
-      const bankTransactions = transactions.filter(t =>
-        t.sourceType &&
-        t.sourceType.startsWith("bank") &&
-        t.matchStatus === "unmatched"
-      );
-
-      console.log(`[AUTO-MATCH] Period: ${period.name} (${period.startDate} to ${period.endDate}), Fuel txns: ${fuelTransactions.length}, Bank txns: ${bankTransactions.length}`);
-      if (fuelTransactions.length > 0) {
-        const fuelDateSet = new Set(fuelTransactions.map(t => t.transactionDate?.substring(0, 10)));
-        console.log(`[AUTO-MATCH] Fuel dates: ${[...fuelDateSet].sort().join(", ")}`);
-      }
-      if (bankTransactions.length > 0) {
-        const bankDateSet = new Set(bankTransactions.map(t => t.transactionDate?.substring(0, 10)));
-        console.log(`[AUTO-MATCH] Bank dates: ${[...bankDateSet].sort().join(", ")}`);
-      }
-
-      let unmatchableBankTransactions: typeof bankTransactions = [];
-      let dateRangeWarning = "";
-
-      unmatchableBankTransactions = bankTransactions.filter(t => {
-        if (!t.transactionDate) return false;
-        const bankTime = new Date(t.transactionDate).getTime();
-        if (isNaN(bankTime)) return false;
-        const bankDay = toDateOnly(bankTime);
-        return bankDay > periodEndDay + dateBufferMs || bankDay < periodStartDay - 86400000;
-      });
-
-      if (unmatchableBankTransactions.length > 0) {
-        dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside the period date range (${period.startDate} to ${period.endDate}) + ${rules.dateWindowDays}-day window and cannot be matched.`;
-        await storage.updateTransactionsBatch(
-          unmatchableBankTransactions.map(tx => ({ id: tx.id, data: { matchStatus: "unmatchable", matchId: null } }))
-        );
-      }
-
-      const matchableBankTransactions = bankTransactions.filter(
-        t => !unmatchableBankTransactions.includes(t)
-      );
-
-      const fuelInvoices = groupFuelByInvoiceFromReconciliation(fuelTransactions, rules.groupByInvoice);
-      const stages = buildMatchingStages(rules);
-      const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
-
-      let matchCount = 0;
-      const skippedNonCardCount = transactions.filter(t => {
-        if (t.sourceType !== "fuel" || t.isCardTransaction === "yes") return false;
-        if (!t.transactionDate) return false;
-        const day = toDateOnly(new Date(t.transactionDate).getTime());
-        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
-      }).length;
-
-      const pendingMatches: Array<{
-        matchData: { periodId: string; fuelTransactionId: string; bankTransactionId: string; matchType: string; matchConfidence: string };
-        bankTxId: string;
-        fuelItemIds: string[];
-      }> = [];
-
-      const stageMatches = runSequentialMatchingStages(matchableBankTransactions, fuelInvoices, stages);
-      const stageCounts = new Map<string, number>();
-      let competingSameDaySkipped = 0;
-
-      const hasCompetingSameDayCandidate = (
-        stageId: string,
-        bankTransaction: typeof matchableBankTransactions[number],
-        bestMatch: (typeof stageMatches)[number]["bestMatch"],
-      ) => {
-        if (!operationalStage) return false;
-        if (stageId !== "boundary_transactions" && stageId !== "settlement_fallback") return false;
-
-        const invoice = bestMatch.invoice;
-        const fuelDate = invoice.firstDate;
-        if (!fuelDate) return false;
-
-        const fuelTime = parseTimeToMinutesFromReconciliation(invoice.firstTime || "");
-
-        return matchableBankTransactions.some((candidateBank) => {
-          if (candidateBank.id === bankTransaction.id) return false;
-          if (candidateBank.transactionDate !== fuelDate) return false;
-
-          const amountDiff = Math.abs(parseFloat(candidateBank.amount) - invoice.totalAmount);
-          if (amountDiff > operationalStage.maxAmountDiff) return false;
-
-          const bankTime = parseTimeToMinutesFromReconciliation(candidateBank.transactionTime || "");
-          if (
-            fuelTime !== null &&
-            bankTime !== null &&
-            operationalStage.maxTimeDiffMinutes !== null &&
-            Math.abs(bankTime - fuelTime) > operationalStage.maxTimeDiffMinutes
-          ) {
-            return false;
-          }
-
-          if (operationalStage.requireCardMatch) {
-            if (!candidateBank.cardNumber || !invoice.cardNumber) return false;
-            if (candidateBank.cardNumber !== invoice.cardNumber) return false;
-          }
-
-          return true;
-        });
-      };
-
-      for (const stageMatch of stageMatches) {
-        const { stage, bankTransaction, bestMatch } = stageMatch;
-        if (hasCompetingSameDayCandidate(stage.id, bankTransaction, bestMatch)) {
-          competingSameDaySkipped++;
-          continue;
-        }
-
-        const isExact = Math.abs(bestMatch.amountDiff) < 0.005;
-        const aboveThreshold = bestMatch.confidence >= stage.autoConfirmConfidence;
-        const matchType = isExact && aboveThreshold ? "auto_exact"
-          : isExact ? "auto_exact_review"
-          : aboveThreshold ? "auto_rules"
-          : "auto_rules_review";
-
-        pendingMatches.push({
-          matchData: {
-            periodId: req.params.periodId,
-            fuelTransactionId: bestMatch.invoice.items[0].id,
-            bankTransactionId: bankTransaction.id,
-            matchType,
-            matchConfidence: String(bestMatch.confidence),
-          },
-          bankTxId: bankTransaction.id,
-          fuelItemIds: bestMatch.invoice.items.map((item) => item.id),
-        });
-
-        stageCounts.set(stage.name, (stageCounts.get(stage.name) || 0) + 1);
-        matchCount++;
-      }
-
-      for (const stage of stages) {
-        console.log(`[AUTO-MATCH] Stage ${stage.order} ${stage.name}: ${stageCounts.get(stage.name) || 0} matches`);
-      }
-      if (competingSameDaySkipped > 0) {
-        console.log(`[AUTO-MATCH] Competing same-day candidates held for review: ${competingSameDaySkipped}`);
-      }
-
-      const matchedBankIds = new Set(pendingMatches.map(pm => pm.bankTxId));
-      const unmatchedInPeriodBank = matchableBankTransactions.filter(bt => {
-        if (matchedBankIds.has(bt.id)) return false;
-        if (!bt.transactionDate) return false;
-        const day = toDateOnly(new Date(bt.transactionDate).getTime());
-        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
-      });
-
-      const outOfPeriodCardFuel = transactions.filter(t => {
-        if (t.sourceType !== "fuel" || t.isCardTransaction !== "yes" || isDebtorTx(t)) return false;
-        if (t.matchStatus === "matched" || t.matchStatus === "excluded") return false;
-        if (!t.transactionDate) return false;
-        const day = toDateOnly(new Date(t.transactionDate).getTime());
-        if (isNaN(day)) return false;
-        return day < periodStartDay || day > periodEndDay;
-      });
-
-      const outOfPeriodInvoices = groupFuelByInvoiceFromReconciliation(outOfPeriodCardFuel, rules.groupByInvoice);
-      const outOfPeriodByDate = new Map<number, ReconciliationFuelInvoice<any>[]>();
-      for (const invoice of outOfPeriodInvoices) {
-        const dayKey = parseDateToDaysFromReconciliation(invoice.firstDate || "");
-        if (dayKey !== null) {
-          for (let offset = -1; offset <= rules.dateWindowDays; offset++) {
-            const key = dayKey + offset;
-            if (!outOfPeriodByDate.has(key)) outOfPeriodByDate.set(key, []);
-            outOfPeriodByDate.get(key)!.push(invoice);
-          }
-        }
-      }
-
-      const lagUsedInvoices = new Set<string>();
-      const lagExplainedBankIds: string[] = [];
-      for (const bankTx of unmatchedInPeriodBank) {
-        const bankDayKey = parseDateToDaysFromReconciliation(bankTx.transactionDate || "");
-        const candidates = bankDayKey !== null ? (outOfPeriodByDate.get(bankDayKey) || []) : outOfPeriodInvoices;
-        const bestMatch = scoreBankToInvoicesFromReconciliation(bankTx, candidates, lagUsedInvoices, rules);
-        if (bestMatch) {
-          lagExplainedBankIds.push(bankTx.id);
-          lagUsedInvoices.add(bestMatch.invoice.invoiceNumber);
-        }
-      }
-      console.log(`[AUTO-MATCH] Lag-explained bank: ${lagExplainedBankIds.length} of ${unmatchedInPeriodBank.length} in-period unmatched`);
-
-      console.log(`[MATCH] Applying ${pendingMatches.length} matches with transactional state updates...`);
+      console.log(`[MATCH] Applying ${plan.pendingMatches.length} matches with transactional state updates...`);
+      await reconciliationCommandService.clearPeriodResolutions(req.params.periodId);
       await storage.applyAutoMatchResults(
         req.params.periodId,
-        pendingMatches,
-        lagExplainedBankIds,
-        unmatchableBankTransactions.map(tx => tx.id),
+        plan.pendingMatches,
+        plan.lagExplainedBankIds,
+        plan.unmatchableBankIds,
       );
 
-      const matchableCount = matchableBankTransactions.length;
-      const matchRate = matchableCount > 0
-        ? ((matchCount / matchableCount) * 100).toFixed(1)
-        : "0";
-
-      audit(req, { action: "reconciliation.run", resourceType: "period", resourceId: req.params.periodId, detail: `${matchCount} matches created` });
+      audit(req, {
+        action: "reconciliation.run",
+        resourceType: "period",
+        resourceId: req.params.periodId,
+        detail: `${plan.metrics.matchesCreated} matches created`,
+      });
 
       res.json({
         success: true,
-        matchesCreated: matchCount,
-        cardTransactionsProcessed: fuelTransactions.length,
-        invoicesCreated: fuelInvoices.length,
-        bankTransactionsTotal: bankTransactions.length,
-        bankTransactionsMatchable: matchableCount,
-        bankTransactionsUnmatchable: unmatchableBankTransactions.length,
-        bankTransactionsLagExplained: lagExplainedBankIds.length,
-        nonCardTransactionsSkipped: skippedNonCardCount,
-        matchRate: `${matchRate}%`,
+        ...plan.metrics,
         rulesUsed: rules,
-        stagesUsed: stages,
-        warnings: [
-          ...(dateRangeWarning ? [dateRangeWarning] : []),
-          ...(competingSameDaySkipped > 0
-            ? [`${competingSameDaySkipped} later-pass match(es) were held back because a same-day operational candidate exists and should be reviewed manually.`]
-            : []),
-        ]
+        stagesUsed: plan.stages,
+        warnings: plan.warnings,
       });
     } catch (error) {
       console.error("Error auto-matching:", error);
       res.status(500).json({ error: "Failed to auto-match transactions" });
+    }
+  });
+
+  app.post("/api/periods/:periodId/review/link", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
+      if (!period) return;
+
+      const input = reviewLinkSchema.parse(req.body);
+      const match = await reconciliationCommandService.createReviewLink({
+        periodId: req.params.periodId,
+        bankTransactionId: input.bankTransactionId,
+        fuelTransactionId: input.fuelTransactionId,
+        reviewTransactionId: input.reviewTransactionId,
+        notes: input.notes ?? null,
+        actor: buildActor(user),
+      });
+
+      audit(req, {
+        action: "match.review_link",
+        resourceType: "match",
+        resourceId: match.id,
+        detail: `Fuel ${input.fuelTransactionId.slice(0, 8)}... -> Bank ${input.bankTransactionId.slice(0, 8)}...`,
+      });
+
+      res.json({ success: true, match });
+    } catch (error) {
+      handleWriteError(res, error, "Failed to create review link");
     }
   });
 
@@ -275,17 +150,21 @@ export function registerReconciliationWriteRoutes(app: Express) {
       const period = await assertPeriodWrite(matchInput.periodId, req, res);
       if (!period) return;
 
-      const match = await storage.createMatchBundle({
-        ...matchInput,
-        matchType: "user_confirmed",
-        matchConfidence: "100",
+      const match = await reconciliationCommandService.createManualMatch({
+        periodId: matchInput.periodId,
+        bankTransactionId: matchInput.bankTransactionId,
+        fuelTransactionId: matchInput.fuelTransactionId,
       });
 
-      audit(req, { action: "match.manual", resourceType: "match", resourceId: match.id, detail: `Fuel ${matchInput.fuelTransactionId.slice(0, 8)}... -> Bank ${matchInput.bankTransactionId.slice(0, 8)}...` });
+      audit(req, {
+        action: "match.manual",
+        resourceType: "match",
+        resourceId: match.id,
+        detail: `Fuel ${matchInput.fuelTransactionId.slice(0, 8)}... -> Bank ${matchInput.bankTransactionId.slice(0, 8)}...`,
+      });
       res.json({ success: true, match });
     } catch (error) {
-      console.error("Error creating manual match:", error);
-      res.status(400).json({ error: "Failed to create manual match" });
+      handleWriteError(res, error, "Failed to create manual match");
     }
   });
 
@@ -299,149 +178,123 @@ export function registerReconciliationWriteRoutes(app: Express) {
       const period = await assertPeriodWrite(match.periodId, req, res);
       if (!period) return;
 
-      await storage.deleteMatchBundle(req.params.matchId, match.fuelTransactionId, match.bankTransactionId);
+      await reconciliationCommandService.deleteMatch(match.periodId, req.params.matchId);
       audit(req, { action: "match.delete", resourceType: "match", resourceId: req.params.matchId });
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting match:", error);
-      res.status(500).json({ error: "Failed to delete match" });
+      handleWriteError(res, error, "Failed to delete match");
     }
   });
 
   app.post("/api/resolutions", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
-      const { transactionId, periodId, resolutionType, reason, notes, linkedTransactionId, assignee } = req.body;
+      const input = resolutionSchema.parse(req.body);
 
-      if (!transactionId || !periodId || !resolutionType) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      const period = await assertPeriodWrite(periodId, req, res);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
 
-      const resolution = await storage.createResolution({
-        transactionId,
-        periodId,
-        resolutionType,
-        reason: reason || null,
-        notes: notes || null,
-        userId: user?.id || null,
-        userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-        userEmail: user?.email || null,
-        linkedTransactionId: linkedTransactionId || null,
-        assignee: assignee || null,
+      const resolution = await reconciliationCommandService.createResolution({
+        periodId: input.periodId,
+        transactionId: input.transactionId,
+        resolutionType: input.resolutionType,
+        reason: input.reason ?? null,
+        notes: input.notes ?? null,
+        linkedTransactionId: input.linkedTransactionId ?? null,
+        assignee: input.assignee ?? null,
+        actor: buildActor(user),
       });
 
-      if (resolutionType !== "linked") {
-        await storage.updateTransaction(transactionId, {
-          matchStatus: "resolved"
-        });
-      }
-
-      audit(req, { action: `resolution.${resolutionType}`, resourceType: "transaction", resourceId: transactionId, detail: reason || notes || undefined });
+      audit(req, {
+        action: `resolution.${input.resolutionType}`,
+        resourceType: "transaction",
+        resourceId: input.transactionId,
+        detail: input.reason || input.notes || undefined,
+      });
       res.json({ success: true, resolution });
     } catch (error) {
-      console.error("Error creating resolution:", error);
-      res.status(500).json({ error: "Failed to create resolution" });
+      handleWriteError(res, error, "Failed to create resolution");
     }
   });
 
   app.post("/api/resolutions/bulk-dismiss", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
-      const { transactionIds, periodId } = req.body;
+      const input = bulkResolutionSchema.parse(req.body);
 
-      if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      const period = await assertPeriodWrite(periodId, req, res);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
 
-      const resolutions = [];
-      for (const transactionId of transactionIds) {
-        const resolution = await storage.createResolution({
-          transactionId,
-          periodId,
-          resolutionType: "dismissed",
-          reason: "test_transaction",
-          notes: "Bulk dismissed as low-value transaction",
-          userId: user?.id || null,
-          userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-          userEmail: user?.email || null,
-          linkedTransactionId: null,
-          assignee: null,
-        });
-        resolutions.push(resolution);
+      const count = await reconciliationCommandService.createBulkResolutions({
+        periodId: input.periodId,
+        transactionIds: input.transactionIds,
+        resolutionType: "dismissed",
+        reason: "test_transaction",
+        notes: "Bulk dismissed as low-value transaction",
+        actor: buildActor(user),
+      });
 
-        await storage.updateTransaction(transactionId, {
-          matchStatus: "resolved"
-        });
-      }
-
-      audit(req, { action: "resolution.bulk_dismiss", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions dismissed` });
-      res.json({ success: true, count: resolutions.length });
+      audit(req, {
+        action: "resolution.bulk_dismiss",
+        resourceType: "period",
+        resourceId: input.periodId,
+        detail: `${count} transactions dismissed`,
+      });
+      res.json({ success: true, count });
     } catch (error) {
-      console.error("Error bulk dismissing:", error);
-      res.status(500).json({ error: "Failed to bulk dismiss transactions" });
+      handleWriteError(res, error, "Failed to bulk dismiss transactions");
     }
   });
 
   app.post("/api/resolutions/bulk-flag", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
-      const { transactionIds, periodId } = req.body;
+      const input = bulkResolutionSchema.parse(req.body);
 
-      if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      const period = await assertPeriodWrite(periodId, req, res);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
 
-      const resolutions = [];
-      for (const transactionId of transactionIds) {
-        const resolution = await storage.createResolution({
-          transactionId,
-          periodId,
-          resolutionType: "flagged",
-          reason: null,
-          notes: "Flagged for manager review",
-          userId: user?.id || null,
-          userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-          userEmail: user?.email || null,
-          linkedTransactionId: null,
-          assignee: null,
-        });
-        resolutions.push(resolution);
+      const count = await reconciliationCommandService.createBulkResolutions({
+        periodId: input.periodId,
+        transactionIds: input.transactionIds,
+        resolutionType: "flagged",
+        reason: null,
+        notes: "Flagged for manager review",
+        actor: buildActor(user),
+      });
 
-        await storage.updateTransaction(transactionId, {
-          matchStatus: "resolved"
-        });
-      }
-
-      audit(req, { action: "resolution.bulk_flag", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions flagged` });
-      res.json({ success: true, count: resolutions.length });
+      audit(req, {
+        action: "resolution.bulk_flag",
+        resourceType: "period",
+        resourceId: input.periodId,
+        detail: `${count} transactions flagged`,
+      });
+      res.json({ success: true, count });
     } catch (error) {
-      console.error("Error bulk flagging:", error);
-      res.status(500).json({ error: "Failed to bulk flag transactions" });
+      handleWriteError(res, error, "Failed to bulk flag transactions");
     }
   });
 
   app.delete("/api/resolutions/:transactionId", isAuthenticated, async (req: any, res) => {
     try {
-      const tx = await storage.getTransaction(req.params.transactionId);
-      if (!tx) return res.status(404).json({ error: "Transaction not found" });
-      const period = await assertPeriodWrite(tx.periodId, req, res);
+      const transaction = await storage.getTransaction(req.params.transactionId);
+      if (!transaction) return res.status(404).json({ error: "Transaction not found" });
+
+      const period = await assertPeriodWrite(transaction.periodId, req, res);
       if (!period) return;
-      const count = await storage.deleteResolutionByTransaction(req.params.transactionId);
-      if (count === 0) return res.status(404).json({ error: "No resolution found" });
-      res.json({ success: true, count });
+
+      const result = await reconciliationCommandService.removeResolution(transaction.periodId, transaction.id);
+      audit(req, {
+        action: "resolution.delete",
+        resourceType: "transaction",
+        resourceId: transaction.id,
+        detail: result.mode,
+      });
+
+      res.json({ success: true, count: result.count, mode: result.mode });
     } catch (error) {
-      console.error("Error deleting resolution:", error);
-      res.status(500).json({ error: "Failed to delete resolution" });
+      handleWriteError(res, error, "Failed to delete resolution");
     }
   });
 
@@ -449,58 +302,50 @@ export function registerReconciliationWriteRoutes(app: Express) {
     try {
       const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
-      const count = await storage.clearResolutionsByPeriod(req.params.periodId);
+
+      const count = await reconciliationCommandService.clearPeriodResolutions(req.params.periodId);
+      audit(req, {
+        action: "resolution.clear_period",
+        resourceType: "period",
+        resourceId: req.params.periodId,
+        detail: `${count} resolutions cleared`,
+      });
       res.json({ success: true, count });
     } catch (error) {
-      console.error("Error clearing resolutions:", error);
-      res.status(500).json({ error: "Failed to clear resolutions" });
+      handleWriteError(res, error, "Failed to clear resolutions");
     }
   });
 
   app.post("/api/matches/bulk-confirm", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
-      const { matches, periodId } = req.body;
+      const input = bulkConfirmSchema.parse(req.body);
 
-      if (!matches || !Array.isArray(matches) || !periodId) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      const period = await assertPeriodWrite(periodId, req, res);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
 
-      const createdMatches = [];
-      for (const { bankId, fuelId } of matches) {
-        try {
-          const match = await storage.createMatchBundle({
-            periodId,
-            bankTransactionId: bankId,
-            fuelTransactionId: fuelId,
-            matchType: "user_confirmed",
-            matchConfidence: "100",
-          }, {
-            transactionId: bankId,
-            periodId,
-            resolutionType: "linked",
-            reason: null,
-            notes: "Bulk confirmed as quick win match",
-            userId: user?.id || null,
-            userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-            userEmail: user?.email || null,
-            linkedTransactionId: fuelId,
-            assignee: null,
-          });
-          createdMatches.push(match);
-        } catch (matchError) {
-          console.error(`Error creating match for bank ${bankId}:`, matchError);
-        }
+      let count = 0;
+      for (const match of input.matches) {
+        await reconciliationCommandService.createReviewLink({
+          periodId: input.periodId,
+          bankTransactionId: match.bankId,
+          fuelTransactionId: match.fuelId,
+          reviewTransactionId: match.bankId,
+          notes: "Bulk confirmed as quick win match",
+          actor: buildActor(user),
+        });
+        count += 1;
       }
 
-      audit(req, { action: "match.bulk_confirm", resourceType: "period", resourceId: periodId, detail: `${createdMatches.length} matches confirmed` });
-      res.json({ success: true, count: createdMatches.length });
+      audit(req, {
+        action: "match.bulk_confirm",
+        resourceType: "period",
+        resourceId: input.periodId,
+        detail: `${count} matches confirmed`,
+      });
+      res.json({ success: true, count });
     } catch (error) {
-      console.error("Error bulk confirming:", error);
-      res.status(500).json({ error: "Failed to bulk confirm matches" });
+      handleWriteError(res, error, "Failed to bulk confirm matches");
     }
   });
 }

@@ -275,11 +275,11 @@ var require_dommatrix = __commonJS({
           });
           var x = components[0];
           var y = components[1];
-          var z4 = components[2];
+          var z5 = components[2];
           var a = components[3];
-          var xyz = [x, y, z4];
-          var xyza = [x, y, z4, a];
-          if (prop === "perspective" && x && [y, z4].every(function(n) {
+          var xyz = [x, y, z5];
+          var xyza = [x, y, z5, a];
+          if (prop === "perspective" && x && [y, z5].every(function(n) {
             return n === void 0;
           })) {
             m.m34 = -1 / x;
@@ -293,14 +293,14 @@ var require_dommatrix = __commonJS({
           } else if (prop === "translate3d" && xyz.every(function(n) {
             return !Number.isNaN(+n);
           })) {
-            m = m.translate(x, y, z4);
-          } else if (prop === "translate" && x && z4 === void 0) {
+            m = m.translate(x, y, z5);
+          } else if (prop === "translate" && x && z5 === void 0) {
             m = m.translate(x, y || 0, 0);
           } else if (prop === "rotate3d" && xyza.every(function(n) {
             return !Number.isNaN(+n);
           }) && a) {
-            m = m.rotateAxisAngle(x, y, z4, a);
-          } else if (prop === "rotate" && x && [y, z4].every(function(n) {
+            m = m.rotateAxisAngle(x, y, z5, a);
+          } else if (prop === "rotate" && x && [y, z5].every(function(n) {
             return n === void 0;
           })) {
             m = m.rotate(0, 0, x);
@@ -309,15 +309,15 @@ var require_dommatrix = __commonJS({
           }) && xyz.some(function(n) {
             return n !== 1;
           })) {
-            m = m.scale(x, y, z4);
-          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z4 === void 0) {
+            m = m.scale(x, y, z5);
+          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z5 === void 0) {
             var nosy = Number.isNaN(+y);
             var sy = nosy ? x : y;
             m = m.scale(x, sy, 1);
-          } else if (prop === "skew" && x && z4 === void 0) {
+          } else if (prop === "skew" && x && z5 === void 0) {
             m = m.skewX(x);
             m = y ? m.skewY(y) : m;
-          } else if (/[XYZ]/.test(prop) && x && [y, z4].every(function(n) {
+          } else if (/[XYZ]/.test(prop) && x && [y, z5].every(function(n) {
             return n === void 0;
           }) && ["translate", "rotate", "scale", "skew"].some(function(p) {
             return prop.includes(p);
@@ -341,13 +341,13 @@ var require_dommatrix = __commonJS({
         });
         return m;
       }
-      function Translate(x, y, z4) {
+      function Translate(x, y, z5) {
         var m = new CSSMatrix();
         m.m41 = x;
         m.e = x;
         m.m42 = y;
         m.f = y;
-        m.m43 = z4;
+        m.m43 = z5;
         return m;
       }
       function Rotate(rx, ry, rz) {
@@ -381,16 +381,16 @@ var require_dommatrix = __commonJS({
         m.m33 = cosx * cosy;
         return m;
       }
-      function RotateAxisAngle(x, y, z4, alpha) {
+      function RotateAxisAngle(x, y, z5, alpha) {
         var m = new CSSMatrix();
         var angle = alpha * (Math.PI / 360);
         var sinA = Math.sin(angle);
         var cosA = Math.cos(angle);
         var sinA2 = sinA * sinA;
-        var length = Math.sqrt(x * x + y * y + z4 * z4);
+        var length = Math.sqrt(x * x + y * y + z5 * z5);
         var X = x;
         var Y = y;
-        var Z = z4;
+        var Z = z5;
         if (length === 0) {
           X = 0;
           Y = 0;
@@ -422,13 +422,13 @@ var require_dommatrix = __commonJS({
         m.m33 = 1 - 2 * (x2 + y2) * sinA2;
         return m;
       }
-      function Scale(x, y, z4) {
+      function Scale(x, y, z5) {
         var m = new CSSMatrix();
         m.m11 = x;
         m.a = x;
         m.m22 = y;
         m.d = y;
-        m.m33 = z4;
+        m.m33 = z5;
         return m;
       }
       function SkewX(angle) {
@@ -594,10 +594,10 @@ var require_dommatrix = __commonJS({
       CSSMatrix.prototype.multiply = function multiply(m2) {
         return Multiply(this, m2);
       };
-      CSSMatrix.prototype.translate = function translate(x, y, z4) {
+      CSSMatrix.prototype.translate = function translate(x, y, z5) {
         var X = x;
         var Y = y;
-        var Z = z4;
+        var Z = z5;
         if (Z === void 0) {
           Z = 0;
         }
@@ -606,10 +606,10 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Translate(X, Y, Z));
       };
-      CSSMatrix.prototype.scale = function scale(x, y, z4) {
+      CSSMatrix.prototype.scale = function scale(x, y, z5) {
         var X = x;
         var Y = y;
-        var Z = z4;
+        var Z = z5;
         if (Y === void 0) {
           Y = x;
         }
@@ -631,13 +631,13 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Rotate(RX, RY, RZ));
       };
-      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z4, angle) {
-        if ([x, y, z4, angle].some(function(n) {
+      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z5, angle) {
+        if ([x, y, z5, angle].some(function(n) {
           return Number.isNaN(n);
         })) {
           throw new TypeError("CSSMatrix: expecting 4 values");
         }
-        return Multiply(this, RotateAxisAngle(x, y, z4, angle));
+        return Multiply(this, RotateAxisAngle(x, y, z5, angle));
       };
       CSSMatrix.prototype.skewX = function skewX(angle) {
         return Multiply(this, SkewX(angle));
@@ -661,12 +661,12 @@ var require_dommatrix = __commonJS({
         var m = this;
         var x = m.m11 * t.x + m.m12 * t.y + m.m13 * t.z + m.m14 * t.w;
         var y = m.m21 * t.x + m.m22 * t.y + m.m23 * t.z + m.m24 * t.w;
-        var z4 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
+        var z5 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
         var w = m.m41 * t.x + m.m42 * t.y + m.m43 * t.z + m.m44 * t.w;
         return {
           x: x / w,
           y: y / w,
-          z: z4 / w,
+          z: z5 / w,
           w
         };
       };
@@ -29955,6 +29955,446 @@ function registerAccountRoutes(app2) {
   });
 }
 
+// shared/reconciliationDerivedStats.ts
+function deriveSummaryStats(summary) {
+  const unmatchableBank = summary.unmatchableBankTransactions || 0;
+  const excludedBank = summary.excludedBankTransactions || 0;
+  const matchableBankTotal = summary.bankTransactions - unmatchableBank - excludedBank;
+  const unmatchedBank = summary.unmatchedBankTransactions;
+  const matchedCardCount = summary.scopedMatchedCount;
+  const cardMatchPct = summary.cardFuelTransactions > 0 ? Math.round(matchedCardCount / summary.cardFuelTransactions * 100) : 0;
+  const unmatchedFuelCount = summary.unmatchedCardTransactions;
+  const cardOnly = summary.cardFuelTransactions;
+  const cardOnlyAmount = summary.cardFuelAmount;
+  const bankApprovedAmount = summary.matchedBankAmount + (summary.unmatchedBankAmount || 0) + (summary.lagExplainedBankAmount || 0);
+  const fileSurplus = bankApprovedAmount - cardOnlyAmount;
+  const matchedSurplus = summary.matchedBankAmount - summary.matchedFuelAmount;
+  const unmatchedBankAmt = summary.unmatchedBankAmount || 0;
+  const unmatchedFuelCardAmount = summary.unmatchedCardAmount || 0;
+  const totalFuelCardReconciled = summary.matchedFuelAmount + unmatchedFuelCardAmount;
+  const reconSurplus = unmatchedFuelCardAmount + fileSurplus;
+  const outsideRangeAmt = summary.unmatchableBankAmount || 0;
+  const matchedFuelInPeriod = summary.matchedFuelAmountInPeriod ?? summary.matchedFuelAmount;
+  const lagFuelAmount = summary.lagFuelAmount ?? 0;
+  const unmatchedFuelCoveredAmount = summary.unmatchedFuelCoveredAmount ?? 0;
+  const unmatchedFuelUncoveredAmount = summary.unmatchedFuelUncoveredAmount ?? 0;
+  const lagExplainedBankAmount = summary.lagExplainedBankAmount ?? 0;
+  const matchedVariance = summary.matchedBankAmount - matchedFuelInPeriod;
+  const tenantBankCoverage = summary.tenantBankCoverage;
+  return {
+    unmatchableBank,
+    excludedBank,
+    matchableBankTotal,
+    unmatchedBank,
+    cardMatchPct,
+    matchedCardCount,
+    unmatchedFuelCount,
+    cardOnly,
+    cardOnlyAmount,
+    bankApprovedAmount,
+    fileSurplus,
+    matchedSurplus,
+    unmatchedBankAmt,
+    unmatchedFuelCardAmount,
+    totalFuelCardReconciled,
+    reconSurplus,
+    outsideRangeAmt,
+    // 6-bucket fields
+    matchedFuelInPeriod,
+    lagFuelAmount,
+    unmatchedFuelCoveredAmount,
+    unmatchedFuelUncoveredAmount,
+    lagExplainedBankAmount,
+    matchedVariance,
+    tenantBankCoverage
+  };
+}
+
+// server/export/readModelWorkbook.ts
+function fmt(value) {
+  return parseFloat(value.toFixed(2));
+}
+function fmtPeriodDate(value) {
+  return new Date(value).toLocaleDateString("en-ZA", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+}
+function buildReconciliationSummaryRows(params) {
+  const { period, matchingRules: matchingRules2, dashboard, review } = params;
+  const summary = dashboard.summary;
+  const stats = deriveSummaryStats(summary);
+  const bankBreakdown = summary.perBankBreakdown || [];
+  const matchedBankCount = summary.matchedPairs;
+  const cardMatchRateLabel = summary.cardFuelTransactions > 0 ? `${stats.cardMatchPct}% (${stats.matchedCardCount}/${summary.cardFuelTransactions})` : "-";
+  const bankMatchRatePct = stats.matchableBankTotal > 0 ? Math.round(matchedBankCount / stats.matchableBankTotal * 100) : 0;
+  const bankMatchRateLabel = stats.matchableBankTotal > 0 ? `${bankMatchRatePct}% (${matchedBankCount}/${stats.matchableBankTotal})` : "-";
+  const periodDates = period.startDate === period.endDate ? fmtPeriodDate(period.startDate) : `${fmtPeriodDate(period.startDate)} - ${fmtPeriodDate(period.endDate)}`;
+  const rows = [
+    { Metric: "Period", Count: "", Amount: period.name },
+    { Metric: "Period dates", Count: "", Amount: periodDates },
+    { Metric: "" },
+    { Metric: "FUEL TRANSACTIONS", Count: "Count", Amount: "Amount" },
+    { Metric: "  Card", Count: summary.cardFuelTransactions, Amount: fmt(summary.cardFuelAmount) }
+  ];
+  if (summary.debtorFuelTransactions > 0) {
+    rows.push({
+      Metric: "  Debtor / Account",
+      Count: summary.debtorFuelTransactions,
+      Amount: fmt(summary.debtorFuelAmount)
+    });
+  }
+  rows.push(
+    { Metric: "  Cash", Count: summary.cashFuelTransactions, Amount: fmt(summary.cashFuelAmount) },
+    { Metric: "  Total", Count: summary.fuelTransactions, Amount: fmt(summary.totalFuelAmount) },
+    { Metric: "" },
+    { Metric: "BANK TRANSACTIONS" },
+    { Metric: "  Total bank transactions", Count: summary.bankTransactions },
+    { Metric: "  Matchable bank transactions", Count: stats.matchableBankTotal },
+    {
+      Metric: "  Outside date range",
+      Count: stats.unmatchableBank,
+      Amount: stats.outsideRangeAmt > 0 ? fmt(stats.outsideRangeAmt) : void 0
+    },
+    {
+      Metric: "  Excluded (reversed/declined/cancelled)",
+      Count: summary.excludedBankTransactions || 0,
+      Amount: (summary.excludedBankAmount || 0) > 0 ? fmt(summary.excludedBankAmount || 0) : void 0
+    }
+  );
+  if (bankBreakdown.length > 0) {
+    rows.push({ Metric: "" });
+    const header = { Metric: "" };
+    for (const bank of bankBreakdown) {
+      header[bank.bankName] = bank.bankName;
+    }
+    header.Total = "Total";
+    rows.push(header);
+    for (const rowLabel of [
+      {
+        metric: "Number of Declined transactions",
+        getCount: (bank) => bank.declinedCount
+      },
+      {
+        metric: "Total amount for Declined transactions",
+        getCount: (bank) => bank.declinedAmount
+      },
+      {
+        metric: "Number of Cancelled transactions",
+        getCount: (bank) => bank.cancelledCount
+      },
+      {
+        metric: "Total amount for Cancelled transactions",
+        getCount: (bank) => bank.cancelledAmount
+      },
+      {
+        metric: "Number of Approved transactions",
+        getCount: (bank) => bank.approvedCount
+      },
+      {
+        metric: "Total amount for Approved transactions",
+        getCount: (bank) => bank.approvedAmount
+      }
+    ]) {
+      const section = { Metric: rowLabel.metric };
+      let total = 0;
+      for (const bank of bankBreakdown) {
+        const value = rowLabel.getCount(bank);
+        section[bank.bankName] = value || "-";
+        total += value;
+      }
+      section.Total = total || "-";
+      rows.push(section);
+    }
+  }
+  rows.push(
+    { Metric: "" },
+    { Metric: "FUEL CARD SALES MATCHING" },
+    { Metric: "  Fuel card sales match rate", Count: cardMatchRateLabel },
+    { Metric: "  Matched fuel card sales transactions", Count: stats.matchedCardCount },
+    { Metric: "  Unmatched fuel card sales transactions", Count: stats.unmatchedFuelCount },
+    { Metric: "" },
+    { Metric: "BANK PAYMENT MATCHING" },
+    { Metric: "  Bank payment match rate", Count: bankMatchRateLabel },
+    { Metric: "  Matched bank transactions", Count: matchedBankCount },
+    { Metric: "  Unmatched bank transactions", Count: summary.unmatchedBankTransactions }
+  );
+  if (matchingRules2) {
+    rows.push(
+      { Metric: "" },
+      { Metric: "MATCHING RULES" },
+      { Metric: "  Amount tolerance", Count: `+/-R ${Number(matchingRules2.amountTolerance).toFixed(2)}` },
+      { Metric: "  Date window", Count: `${matchingRules2.dateWindowDays} day${matchingRules2.dateWindowDays !== 1 ? "s" : ""}` },
+      { Metric: "  Time window", Count: `${matchingRules2.timeWindowMinutes} min` },
+      { Metric: "  Operational close window", Count: `${matchingRules2.attendantSubmissionDelayMinutes} min` },
+      { Metric: "  Minimum confidence", Count: `${matchingRules2.minimumConfidence}%` },
+      { Metric: "  Auto-match threshold", Count: `${matchingRules2.autoMatchThreshold}%` },
+      { Metric: "  Invoice grouping", Count: matchingRules2.groupByInvoice ? "On" : "Off" },
+      { Metric: "  Card required", Count: matchingRules2.requireCardMatch ? "Yes" : "No" }
+    );
+  }
+  rows.push(
+    { Metric: "" },
+    { Metric: "REVIEW PROGRESS" },
+    { Metric: "  Matched with reason", Count: dashboard.counts.linked },
+    { Metric: "  Flagged to investigate", Count: dashboard.counts.flagged },
+    { Metric: "  Dismissed", Count: dashboard.counts.dismissed },
+    { Metric: "  Total review actions", Count: dashboard.counts.linked + dashboard.counts.flagged + dashboard.counts.dismissed },
+    { Metric: "  Unmatched bank still to review", Count: review.sides.bank.summary.unresolvedCount },
+    { Metric: "  Unmatched fuel card sales still to review", Count: review.sides.fuel.summary.unresolvedCount }
+  );
+  rows.push(
+    { Metric: "" },
+    { Metric: "FUEL CARD SALES RECONCILIATION", Count: "", Amount: "Amount" },
+    { Metric: "  Bank approved amount", Amount: fmt(stats.bankApprovedAmount) },
+    { Metric: "  Fuel card sales amount", Amount: fmt(stats.cardOnlyAmount) },
+    { Metric: "  Surplus / shortfall", Amount: fmt(stats.fileSurplus) },
+    { Metric: "" },
+    { Metric: "SURPLUS / SHORTFALL ANALYSIS" },
+    { Metric: "" },
+    { Metric: "  Matched amount variance:" },
+    { Metric: "    Matched fuel amount (both sides in period)", Amount: fmt(stats.matchedFuelInPeriod) },
+    { Metric: "    Matched bank amount", Amount: fmt(summary.matchedBankAmount) },
+    { Metric: "    Variance", Amount: fmt(stats.matchedVariance) },
+    { Metric: "" },
+    { Metric: "  Fuel matched to bank outside period", Amount: stats.lagFuelAmount > 0 ? fmt(stats.lagFuelAmount) : "-" },
+    { Metric: "" },
+    {
+      Metric: "  Fuel card sales with no bank match, within bank coverage",
+      Amount: stats.unmatchedFuelCoveredAmount > 0 ? fmt(stats.unmatchedFuelCoveredAmount) : "-"
+    },
+    { Metric: "" },
+    {
+      Metric: "  Fuel card sales with no bank match, outside bank coverage",
+      Amount: stats.unmatchedFuelUncoveredAmount > 0 ? fmt(stats.unmatchedFuelUncoveredAmount) : "-"
+    },
+    summary.tenantBankCoverage ? { Metric: `    Bank coverage: ${summary.tenantBankCoverage.min} to ${summary.tenantBankCoverage.max}` } : { Metric: "    No bank data uploaded for this property" },
+    { Metric: "" },
+    { Metric: "  Bank with no fuel match", Amount: stats.unmatchedBankAmt > 0 ? fmt(stats.unmatchedBankAmt) : "-" },
+    { Metric: "" },
+    {
+      Metric: "  Bank matched to fuel outside period (lag-explained)",
+      Amount: stats.lagExplainedBankAmount > 0 ? fmt(stats.lagExplainedBankAmount) : "-"
+    },
+    { Metric: "" },
+    {
+      Metric: "  Total surplus / shortfall",
+      Amount: fmt(
+        stats.matchedVariance - stats.lagFuelAmount - stats.unmatchedFuelCoveredAmount - stats.unmatchedFuelUncoveredAmount + stats.unmatchedBankAmt + stats.lagExplainedBankAmount
+      )
+    },
+    { Metric: "" },
+    { Metric: "  Excluded bank amount", Amount: fmt(summary.excludedBankAmount || 0) }
+  );
+  return rows;
+}
+function buildAttendantSummaryRows(attendants) {
+  if (attendants.state === "no_fuel_data") {
+    return [{ Metric: "No fuel transaction data found" }];
+  }
+  if (attendants.state === "no_attendant_data") {
+    return [
+      { Metric: "No attendant data available for this period." },
+      { Metric: "Map the attendant column when uploading fuel data to see this report." }
+    ];
+  }
+  const summary = attendants.summary;
+  if (!summary) {
+    return [];
+  }
+  const rows = [
+    { Metric: "ATTENDANT ACCOUNTABILITY", Count: "", Amount: "" },
+    { Metric: "  Fuel card sales", Count: summary.fuelCardSalesCount, Amount: fmt(summary.fuelCardSalesAmount) },
+    {
+      Metric: "  less Matched fuel card sales",
+      Count: summary.matchedFuelCardSalesCount,
+      Amount: fmt(summary.matchedFuelCardSalesAmount)
+    },
+    {
+      Metric: "  Unmatched fuel card sales",
+      Count: summary.unmatchedFuelCardSalesCount,
+      Amount: fmt(summary.unmatchedFuelCardSalesAmount)
+    },
+    {
+      Metric: `    (across ${summary.unmatchedAttendantCount} attendant${summary.unmatchedAttendantCount !== 1 ? "s" : ""})`
+    },
+    { Metric: "  plus Pump calibration error", Count: "", Amount: fmt(summary.pumpCalibrationError) },
+    { Metric: "  Total shortfall allocated to attendants", Count: "", Amount: fmt(summary.totalShortfall) },
+    {},
+    { Metric: "VERIFIED FUEL CARD SALES BY ATTENDANT" },
+    {}
+  ];
+  for (const attendant of attendants.verified) {
+    rows.push({
+      Metric: `${attendant.attendant} (${attendant.verifiedSaleCount} verified sale${attendant.verifiedSaleCount !== 1 ? "s" : ""})`
+    });
+    rows.push({
+      Metric: "  Total card sales",
+      Count: attendant.totalCardSalesCount,
+      Amount: fmt(attendant.totalCardSalesAmount)
+    });
+    rows.push({
+      Metric: "  Matched card sales",
+      Count: attendant.matchedCardSalesCount,
+      Amount: fmt(attendant.matchedCardSalesAmount)
+    });
+    rows.push({
+      Metric: "  Matched bank amount",
+      Count: attendant.matchedCardSalesCount,
+      Amount: fmt(attendant.matchedBankAmount)
+    });
+    if (attendant.banks.length >= 2) {
+      for (const bank of attendant.banks) {
+        rows.push({
+          Metric: `    ${bank.bankName}`,
+          Count: bank.count,
+          Amount: fmt(bank.amount)
+        });
+      }
+    }
+    if (attendant.debtorCount > 0) {
+      rows.push({
+        Metric: "  Debtor / Account",
+        Count: attendant.debtorCount,
+        Amount: fmt(attendant.debtorAmount)
+      });
+    }
+    if (attendant.declines) {
+      rows.push({
+        Metric: "  Declined transactions",
+        Count: attendant.declines.totalCount,
+        Amount: fmt(attendant.declines.totalAmount)
+      });
+      if (attendant.declines.recoveredCount > 0) {
+        rows.push({
+          Metric: "    Recovered",
+          Count: attendant.declines.recoveredCount,
+          Amount: fmt(attendant.declines.totalAmount - attendant.declines.unrecoveredAmount)
+        });
+      }
+      if (attendant.declines.unrecoveredCount > 0) {
+        rows.push({
+          Metric: "    Unrecovered",
+          Count: attendant.declines.unrecoveredCount,
+          Amount: fmt(attendant.declines.unrecoveredAmount)
+        });
+      }
+    }
+    if (attendant.unmatchedCardSalesCount > 0 || Math.abs(attendant.pumpCalibrationError) >= 0.01) {
+      if (attendant.unmatchedCardSalesCount > 0) {
+        rows.push({
+          Metric: "  Unmatched card sales",
+          Count: attendant.unmatchedCardSalesCount,
+          Amount: fmt(attendant.unmatchedCardSalesAmount)
+        });
+      }
+      if (Math.abs(attendant.pumpCalibrationError) >= 0.01) {
+        rows.push({
+          Metric: "  Pump calibration error",
+          Count: "",
+          Amount: fmt(attendant.pumpCalibrationError)
+        });
+      }
+      rows.push({
+        Metric: "  Attendant shortfall",
+        Count: "",
+        Amount: fmt(attendant.attendantShortfall)
+      });
+    }
+    rows.push({});
+  }
+  rows.push({
+    Metric: "Total",
+    Count: summary.matchedFuelCardSalesCount,
+    Amount: fmt(summary.matchedBankAmount)
+  });
+  if (attendants.unmatchedOnly.length > 0) {
+    rows.push({});
+    rows.push({ Metric: "NO VERIFIED FUEL CARD SALES" });
+    for (const attendant of attendants.unmatchedOnly) {
+      rows.push({
+        Metric: `  ${attendant.attendant}`,
+        Count: attendant.unmatchedCardSalesCount,
+        Amount: fmt(attendant.unmatchedCardSalesAmount)
+      });
+    }
+  }
+  if (attendants.unmatchedBank.count > 0) {
+    rows.push({});
+    rows.push({
+      Metric: "UNMATCHED BANK TRANSACTIONS",
+      Count: attendants.unmatchedBank.count,
+      Amount: fmt(attendants.unmatchedBank.amount)
+    });
+    rows.push({ Metric: "  These could not be attributed to any attendant - see Unmatched bank sheet" });
+  }
+  return rows;
+}
+function buildDeclinedRows(declines) {
+  if (!declines.hasDeclined) {
+    return [{ Metric: "No declined or cancelled transactions in this period." }];
+  }
+  const rows = [
+    { Metric: "DECLINE SUMMARY", Count: "", Amount: "" },
+    {
+      Metric: "  Total declined / cancelled",
+      Count: declines.summary.totalDeclined,
+      Amount: fmt(declines.summary.totalDeclinedAmount)
+    }
+  ];
+  for (const bank of declines.banks) {
+    rows.push({
+      Metric: `    ${bank.bankName}`,
+      Count: bank.count,
+      Amount: fmt(bank.amount)
+    });
+  }
+  rows.push(
+    {
+      Metric: "  Resubmitted successfully",
+      Count: declines.summary.resubmittedCount,
+      Amount: fmt(declines.summary.resubmittedAmount)
+    },
+    {
+      Metric: "  Net unrecovered",
+      Count: declines.summary.unrecoveredCount,
+      Amount: fmt(declines.summary.netUnrecoveredAmount)
+    },
+    {},
+    { Metric: "TRANSACTION DETAIL BY CARD" },
+    {}
+  );
+  for (const group of declines.groups) {
+    const headerParts = [
+      `Card ${group.cardLabel}`,
+      `${group.bankName} | ${group.transactionCount} transaction${group.transactionCount !== 1 ? "s" : ""}`,
+      group.attendant ? `Attendant: ${group.attendant}` : null,
+      group.statusLabel,
+      ...group.badges.map((badge) => badge.label)
+    ].filter(Boolean);
+    rows.push({ Metric: headerParts.join(" | ") });
+    for (const item of group.items) {
+      rows.push({
+        Metric: `  ${item.type} at ${item.time}`,
+        Count: "",
+        Amount: fmt(item.amount),
+        Type: item.type
+      });
+      if (item.outcomeLabel) {
+        rows.push({
+          Metric: `    ${item.outcomeLabel}`,
+          Count: "",
+          Amount: item.outcomeType === "shortfall" ? fmt(item.shortfall) : item.recoveredAmount > 0 ? fmt(item.recoveredAmount) : "",
+          Type: item.outcomeType === "shortfall" ? "Shortfall" : item.recoveredAmount > 0 ? "Recovered" : ""
+        });
+      }
+    }
+    rows.push({});
+  }
+  return rows;
+}
+
 // server/insights/declineInsights.ts
 function findNearestFuelForDecline(tx, fuelTxns) {
   if (!tx.transactionTime) return null;
@@ -30172,13 +30612,1250 @@ function computeDeclineAnalysis(bankTxns, fuelTxns) {
   };
 }
 
+// server/insights/attendantsReport.ts
+function buildAttendantDeclineMap(declineTransactions) {
+  const declines = /* @__PURE__ */ new Map();
+  for (const transaction of declineTransactions) {
+    const attendant = transaction.attendant?.trim() || "Unknown";
+    const current = declines.get(attendant) || {
+      totalCount: 0,
+      totalAmount: 0,
+      recoveredCount: 0,
+      unrecoveredCount: 0,
+      unrecoveredAmount: 0
+    };
+    current.totalCount += 1;
+    current.totalAmount += transaction.amount;
+    if (transaction.isRecovered) {
+      current.recoveredCount += 1;
+    } else {
+      current.unrecoveredCount += 1;
+      current.unrecoveredAmount += transaction.amount - (transaction.recoveredAmount || 0);
+    }
+    declines.set(attendant, current);
+  }
+  return declines;
+}
+function buildAttendantsReport(params) {
+  const { attendants, declineTransactions, unmatchedBankCount, unmatchedBankAmount } = params;
+  if (attendants.length === 0) {
+    return {
+      state: "no_fuel_data",
+      summary: null,
+      verified: [],
+      unmatchedOnly: [],
+      unmatchedBank: {
+        count: unmatchedBankCount,
+        amount: unmatchedBankAmount
+      }
+    };
+  }
+  const allUnknown = attendants.length === 1 && attendants.every((attendant) => attendant.attendant === "Unknown");
+  if (allUnknown) {
+    return {
+      state: "no_attendant_data",
+      summary: null,
+      verified: [],
+      unmatchedOnly: [],
+      unmatchedBank: {
+        count: unmatchedBankCount,
+        amount: unmatchedBankAmount
+      }
+    };
+  }
+  const declineByAttendant = buildAttendantDeclineMap(declineTransactions);
+  const verified = attendants.filter((attendant) => attendant.matchedCount > 0).sort((left, right) => right.matchedBankAmount - left.matchedBankAmount).map((attendant) => {
+    const declineSummary = declineByAttendant.get(attendant.attendant) || (attendant.declinedCount > 0 ? {
+      totalCount: attendant.declinedCount,
+      totalAmount: attendant.declinedAmount,
+      recoveredCount: 0,
+      unrecoveredCount: attendant.declinedCount,
+      unrecoveredAmount: attendant.declinedAmount
+    } : null);
+    const totalCardSalesCount = attendant.matchedCount + attendant.unmatchedCount;
+    const totalCardSalesAmount = attendant.matchedAmount + attendant.unmatchedAmount;
+    const calibrationError = attendant.matchedAmount - attendant.matchedBankAmount;
+    const attendantShortfall = attendant.unmatchedAmount + calibrationError;
+    return {
+      attendant: attendant.attendant,
+      verifiedSaleCount: attendant.matchedCount,
+      totalCardSalesCount,
+      totalCardSalesAmount,
+      matchedCardSalesCount: attendant.matchedCount,
+      matchedCardSalesAmount: attendant.matchedAmount,
+      matchedBankAmount: attendant.matchedBankAmount,
+      banks: attendant.banks,
+      debtorCount: attendant.debtorCount,
+      debtorAmount: attendant.debtorAmount,
+      declines: declineSummary,
+      unmatchedCardSalesCount: attendant.unmatchedCount,
+      unmatchedCardSalesAmount: attendant.unmatchedAmount,
+      pumpCalibrationError: calibrationError,
+      attendantShortfall
+    };
+  });
+  const unmatchedOnly = attendants.filter((attendant) => attendant.matchedCount === 0 && attendant.unmatchedCount > 0).map((attendant) => ({
+    attendant: attendant.attendant,
+    unmatchedCardSalesCount: attendant.unmatchedCount,
+    unmatchedCardSalesAmount: attendant.unmatchedAmount
+  }));
+  const matchedFuelCardSalesCount = verified.reduce(
+    (sum, attendant) => sum + attendant.matchedCardSalesCount,
+    0
+  );
+  const matchedFuelCardSalesAmount = verified.reduce(
+    (sum, attendant) => sum + attendant.matchedCardSalesAmount,
+    0
+  );
+  const matchedBankAmount = verified.reduce(
+    (sum, attendant) => sum + attendant.matchedBankAmount,
+    0
+  );
+  const unmatchedFuelCardSalesCount = attendants.reduce(
+    (sum, attendant) => sum + attendant.unmatchedCount,
+    0
+  );
+  const unmatchedFuelCardSalesAmount = attendants.reduce(
+    (sum, attendant) => sum + attendant.unmatchedAmount,
+    0
+  );
+  const fuelCardSalesCount = matchedFuelCardSalesCount + unmatchedFuelCardSalesCount;
+  const fuelCardSalesAmount = matchedFuelCardSalesAmount + unmatchedFuelCardSalesAmount;
+  const pumpCalibrationError = matchedFuelCardSalesAmount - matchedBankAmount;
+  const unmatchedAttendantCount = attendants.filter(
+    (attendant) => attendant.unmatchedCount > 0
+  ).length;
+  return {
+    state: "ready",
+    summary: {
+      fuelCardSalesCount,
+      fuelCardSalesAmount,
+      matchedFuelCardSalesCount,
+      matchedFuelCardSalesAmount,
+      matchedBankAmount,
+      unmatchedFuelCardSalesCount,
+      unmatchedFuelCardSalesAmount,
+      unmatchedAttendantCount,
+      pumpCalibrationError,
+      totalShortfall: unmatchedFuelCardSalesAmount + pumpCalibrationError,
+      hasAnyDeclines: declineTransactions.length > 0
+    },
+    verified,
+    unmatchedOnly,
+    unmatchedBank: {
+      count: unmatchedBankCount,
+      amount: unmatchedBankAmount
+    }
+  };
+}
+
+// server/insights/declinedTransactionsReport.ts
+function chooseHigherSeverity(current, next) {
+  const rank = { high: 0, medium: 1, low: 2 };
+  if (!current) return next;
+  return rank[next] < rank[current] ? next : current;
+}
+function buildDeclineBadges(cardNumber, transactions2, suspiciousByCard) {
+  const badges = Array.from(suspiciousByCard.get(cardNumber)?.entries() || []).map(
+    ([label, severity]) => ({ label, severity })
+  );
+  const hasLateNight = transactions2.some((transaction) => {
+    if (!transaction.time) return false;
+    const hour = parseInt(transaction.time.split(":")[0] || "0", 10);
+    return hour >= 22 || hour < 5;
+  });
+  if (hasLateNight) {
+    badges.push({ label: "Late-night decline", severity: "low" });
+  }
+  return badges;
+}
+function stripShortfallSuffix(note) {
+  return note.split(/\s+(?:---|--|—|â€”|-)\s+shortfall/i)[0] || note;
+}
+function buildDeclineGroups(declineResult) {
+  const suspiciousByCard = /* @__PURE__ */ new Map();
+  for (const suspicious of declineResult.suspicious) {
+    if (!suspicious.cardNumber) continue;
+    if (!suspiciousByCard.has(suspicious.cardNumber)) {
+      suspiciousByCard.set(suspicious.cardNumber, /* @__PURE__ */ new Map());
+    }
+    const existing = suspiciousByCard.get(suspicious.cardNumber);
+    existing.set(
+      suspicious.pattern,
+      chooseHigherSeverity(existing.get(suspicious.pattern), suspicious.severity)
+    );
+  }
+  const grouped = /* @__PURE__ */ new Map();
+  for (const transaction of declineResult.transactions) {
+    const cardKey = transaction.cardNumber || transaction.id;
+    if (!grouped.has(cardKey)) {
+      grouped.set(cardKey, []);
+    }
+    grouped.get(cardKey).push(transaction);
+  }
+  return Array.from(grouped.entries()).sort((left, right) => {
+    const leftUnrecovered = left[1].some((transaction) => !transaction.isRecovered);
+    const rightUnrecovered = right[1].some((transaction) => !transaction.isRecovered);
+    if (leftUnrecovered !== rightUnrecovered) return leftUnrecovered ? -1 : 1;
+    return right[1].length - left[1].length;
+  }).map(([cardKey, transactions2]) => {
+    const hasUnrecovered = transactions2.some((transaction) => !transaction.isRecovered);
+    const attendant = transactions2.find((transaction) => transaction.attendant)?.attendant || null;
+    const items = [...transactions2].sort((left, right) => left.time.localeCompare(right.time)).map((transaction) => {
+      const shortfall = transaction.amount - transaction.recoveredAmount;
+      const isPartial = shortfall > 0.5 && transaction.recoveredAmount > 0;
+      const outcomeType = isPartial ? "shortfall" : transaction.recoveredAmount > 0 ? "recovered" : "none";
+      return {
+        id: transaction.id,
+        time: transaction.time,
+        type: transaction.type,
+        amount: transaction.amount,
+        note: transaction.note,
+        outcomeLabel: transaction.note ? isPartial ? `${stripShortfallSuffix(transaction.note)} of R ${transaction.recoveredAmount.toFixed(2)}` : transaction.note : null,
+        recoveredAmount: transaction.recoveredAmount,
+        shortfall,
+        isRecovered: transaction.isRecovered,
+        outcomeType
+      };
+    });
+    return {
+      cardLabel: cardKey,
+      bankName: transactions2[0]?.bank || "Bank",
+      transactionCount: transactions2.length,
+      attendant,
+      statusLabel: hasUnrecovered ? "Unrecovered" : "Recovered",
+      badges: buildDeclineBadges(cardKey, transactions2, suspiciousByCard),
+      items
+    };
+  });
+}
+function buildDeclinedTransactionsReport(declineResult) {
+  const banks = /* @__PURE__ */ new Map();
+  for (const transaction of declineResult.transactions) {
+    const key = transaction.bank || "Unknown";
+    const current = banks.get(key) || { count: 0, amount: 0 };
+    current.count += 1;
+    current.amount += transaction.amount;
+    banks.set(key, current);
+  }
+  return {
+    hasDeclined: declineResult.summary.totalDeclined > 0,
+    summary: {
+      totalDeclined: declineResult.summary.totalDeclined,
+      totalDeclinedAmount: declineResult.summary.totalDeclinedAmount,
+      resubmittedCount: declineResult.summary.resubmittedCount,
+      resubmittedAmount: declineResult.summary.totalDeclinedAmount - declineResult.summary.netUnrecoveredAmount,
+      unrecoveredCount: declineResult.summary.unrecoveredCount,
+      netUnrecoveredAmount: declineResult.summary.netUnrecoveredAmount
+    },
+    banks: Array.from(banks.entries()).map(([bankName, stats]) => ({
+      bankName,
+      count: stats.count,
+      amount: stats.amount
+    })).sort((left, right) => right.count - left.count),
+    groups: buildDeclineGroups(declineResult)
+  };
+}
+
+// server/insights/reconciliationOverviewReport.ts
+function buildBankBreakdown(summary) {
+  const stats = deriveSummaryStats(summary);
+  const byBank = summary.perBankBreakdown || [];
+  const totals = byBank.reduce(
+    (acc, bank) => ({
+      approvedCount: acc.approvedCount + bank.approvedCount,
+      approvedAmount: acc.approvedAmount + bank.approvedAmount,
+      declinedCount: acc.declinedCount + bank.declinedCount,
+      declinedAmount: acc.declinedAmount + bank.declinedAmount,
+      cancelledCount: acc.cancelledCount + bank.cancelledCount,
+      cancelledAmount: acc.cancelledAmount + bank.cancelledAmount,
+      totalCount: acc.totalCount + bank.totalCount,
+      totalAmount: acc.totalAmount + bank.totalAmount
+    }),
+    {
+      approvedCount: 0,
+      approvedAmount: 0,
+      declinedCount: 0,
+      declinedAmount: 0,
+      cancelledCount: 0,
+      cancelledAmount: 0,
+      totalCount: 0,
+      totalAmount: 0
+    }
+  );
+  return {
+    totalCount: summary.bankTransactions,
+    matchableCount: stats.matchableBankTotal,
+    outsideDateRange: {
+      count: stats.unmatchableBank,
+      amount: stats.outsideRangeAmt
+    },
+    excluded: {
+      count: stats.excludedBank,
+      amount: summary.excludedBankAmount || 0
+    },
+    byBank: byBank.map((bank) => ({
+      bankName: bank.bankName,
+      approvedCount: bank.approvedCount,
+      approvedAmount: bank.approvedAmount,
+      declinedCount: bank.declinedCount,
+      declinedAmount: bank.declinedAmount,
+      cancelledCount: bank.cancelledCount,
+      cancelledAmount: bank.cancelledAmount,
+      totalCount: bank.totalCount,
+      totalAmount: bank.totalAmount
+    })),
+    totals
+  };
+}
+function buildReconciliationOverviewReport(summary) {
+  const stats = deriveSummaryStats(summary);
+  return {
+    fuelSales: {
+      card: {
+        count: stats.cardOnly,
+        amount: stats.cardOnlyAmount
+      },
+      debtor: {
+        count: summary.debtorFuelTransactions,
+        amount: summary.debtorFuelAmount
+      },
+      cash: {
+        count: summary.cashFuelTransactions,
+        amount: summary.cashFuelAmount
+      },
+      total: {
+        count: summary.fuelTransactions,
+        amount: summary.totalFuelAmount
+      }
+    },
+    bankTransactions: buildBankBreakdown(summary),
+    matching: {
+      cardMatchPct: stats.cardMatchPct,
+      matchedCardCount: stats.matchedCardCount,
+      unmatchedCardCount: stats.unmatchedFuelCount
+    },
+    reconciliation: {
+      bankApprovedAmount: stats.bankApprovedAmount,
+      fuelCardSalesAmount: stats.cardOnlyAmount,
+      fileSurplus: stats.fileSurplus
+    },
+    surplusAnalysis: {
+      matchedFuelInPeriod: stats.matchedFuelInPeriod,
+      matchedBankAmount: summary.matchedBankAmount,
+      matchedVariance: stats.matchedVariance,
+      lagFuelAmount: stats.lagFuelAmount,
+      unmatchedFuelCoveredAmount: stats.unmatchedFuelCoveredAmount,
+      unmatchedFuelUncoveredAmount: stats.unmatchedFuelUncoveredAmount,
+      unmatchedBankAmount: stats.unmatchedBankAmt,
+      lagExplainedBankAmount: stats.lagExplainedBankAmount,
+      excludedBankAmount: summary.excludedBankAmount || 0,
+      totalSurplusShortfall: stats.matchedVariance - stats.lagFuelAmount - stats.unmatchedFuelCoveredAmount - stats.unmatchedFuelUncoveredAmount + stats.unmatchedBankAmt + stats.lagExplainedBankAmount,
+      tenantBankCoverage: stats.tenantBankCoverage
+    }
+  };
+}
+
+// server/insights/insightsReadModel.ts
+function buildInsightsReadModel(summary, attendantSummary, declineResult) {
+  return {
+    detail: buildReconciliationOverviewReport(summary),
+    attendants: buildAttendantsReport({
+      attendants: attendantSummary,
+      declineTransactions: declineResult.transactions,
+      unmatchedBankCount: summary.unmatchedBankTransactions,
+      unmatchedBankAmount: summary.unmatchedBankAmount
+    }),
+    declines: buildDeclinedTransactionsReport(declineResult)
+  };
+}
+
+// server/reconciliation/dashboardReadModel.ts
+function buildResolutionCounts(summary, resolutions) {
+  const linked = resolutions.filter((resolution) => resolution.resolutionType === "linked").length;
+  const flagged = resolutions.filter((resolution) => resolution.resolutionType === "flagged").length;
+  const dismissed = resolutions.filter((resolution) => resolution.resolutionType === "dismissed").length;
+  const partial = resolutions.filter((resolution) => resolution.resolutionType === "partial").length;
+  const resolved = resolutions.filter((resolution) => resolution.resolutionType !== "flagged").length;
+  const review = Math.max(
+    0,
+    summary.unmatchedBankTransactions + Math.max(0, summary.unmatchedCardTransactions) - resolved - flagged
+  );
+  return {
+    total: resolutions.length,
+    linked,
+    flagged,
+    dismissed,
+    partial,
+    resolved,
+    review,
+    investigate: flagged
+  };
+}
+function buildResultsDashboardReadModel(summary, resolutions) {
+  const stats = deriveSummaryStats(summary);
+  const counts = buildResolutionCounts(summary, resolutions);
+  return {
+    summary,
+    stats: {
+      bankApprovedAmount: stats.bankApprovedAmount,
+      cardMatchPct: stats.cardMatchPct,
+      cardOnlyAmount: stats.cardOnlyAmount,
+      excludedBank: stats.excludedBank,
+      fileSurplus: stats.fileSurplus,
+      matchedCardCount: stats.matchedCardCount,
+      matchableBankTotal: stats.matchableBankTotal,
+      unmatchedBank: stats.unmatchedBank,
+      unmatchedFuelCount: stats.unmatchedFuelCount,
+      unmatchableBank: stats.unmatchableBank
+    },
+    counts
+  };
+}
+
+// shared/matchingStages.ts
+var clampPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
+function buildMatchingStages(rules) {
+  const minimumConfidence = clampPercent(rules.minimumConfidence);
+  const autoConfirmConfidence = clampPercent(rules.autoMatchThreshold);
+  const strictStage = {
+    id: "strict_same_day_exact",
+    name: "Strict Same-Day Exact",
+    description: "Exact-amount, same-day matches first. This is the cleanest operational pass.",
+    order: 1,
+    maxAmountDiff: 0.01,
+    minDateDiffDays: 0,
+    maxDateDiffDays: 0,
+    maxTimeDiffMinutes: rules.attendantSubmissionDelayMinutes,
+    requireExactAmount: true,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence,
+    autoConfirmConfidence,
+    boundaryMode: "none"
+  };
+  const closeOperationalStage = {
+    id: "operational_close_match",
+    name: "Operational Close Match",
+    description: "Then we allow small amount and timing variation for normal same-day settlement only.",
+    order: 2,
+    maxAmountDiff: Math.max(0.01, rules.amountTolerance),
+    minDateDiffDays: 0,
+    maxDateDiffDays: 0,
+    maxTimeDiffMinutes: rules.timeWindowMinutes,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence,
+    autoConfirmConfidence,
+    boundaryMode: "none"
+  };
+  const boundaryStage = {
+    id: "boundary_transactions",
+    name: "Boundary Transactions",
+    description: "Checks first-of-day fuel sales against the previous bank day, and last-of-day fuel sales against the next bank day, before broad fallback matching.",
+    order: 3,
+    maxAmountDiff: Math.max(0.01, Math.min(rules.amountTolerance, 1)),
+    minDateDiffDays: -1,
+    maxDateDiffDays: 1,
+    maxTimeDiffMinutes: null,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence,
+    autoConfirmConfidence,
+    boundaryMode: "boundary"
+  };
+  const settlementFallbackStage = {
+    id: "settlement_fallback",
+    name: "Settlement Fallback",
+    description: "Finally, we use the wider date window for delayed bank settlement and lower-confidence review candidates.",
+    order: 4,
+    maxAmountDiff: Math.max(0.01, rules.amountTolerance),
+    minDateDiffDays: 0,
+    maxDateDiffDays: Math.max(rules.dateWindowDays, 0),
+    maxTimeDiffMinutes: null,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence,
+    autoConfirmConfidence,
+    boundaryMode: "none"
+  };
+  return [
+    strictStage,
+    closeOperationalStage,
+    boundaryStage,
+    settlementFallbackStage
+  ].filter((stage, index2, stages) => {
+    if (stage.id === "settlement_fallback" && stage.maxDateDiffDays <= stages[1].maxDateDiffDays) {
+      return false;
+    }
+    return true;
+  });
+}
+
+// server/reconciliation/matching.ts
+function groupFuelByInvoice(fuelTransactions, groupByInvoice) {
+  if (!groupByInvoice) {
+    return fuelTransactions.map((tx) => ({
+      invoiceNumber: tx.id,
+      items: [tx],
+      totalAmount: parseFloat(tx.amount),
+      firstDate: tx.transactionDate || "",
+      firstTime: tx.transactionTime,
+      cardNumber: tx.cardNumber
+    }));
+  }
+  const invoices = {};
+  for (const tx of fuelTransactions) {
+    const invoiceNum = tx.referenceNumber || tx.id;
+    if (!invoices[invoiceNum]) {
+      invoices[invoiceNum] = {
+        invoiceNumber: invoiceNum,
+        items: [],
+        totalAmount: 0,
+        firstDate: tx.transactionDate || "",
+        firstTime: tx.transactionTime,
+        cardNumber: tx.cardNumber
+      };
+    }
+    invoices[invoiceNum].items.push(tx);
+    invoices[invoiceNum].totalAmount += parseFloat(tx.amount);
+  }
+  return Object.values(invoices);
+}
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  return hours * 60 + minutes;
+}
+function parseDateToDays(dateStr) {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return null;
+  return Math.floor(date.getTime() / (1e3 * 60 * 60 * 24));
+}
+function scoreBankToInvoices(bankTx, candidateInvoices, usedInvoices, rules) {
+  return scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, {
+    id: "single_pass",
+    name: "Single Pass",
+    description: "Legacy single-pass scoring",
+    order: 1,
+    maxAmountDiff: rules.amountTolerance,
+    minDateDiffDays: 0,
+    maxDateDiffDays: rules.dateWindowDays,
+    maxTimeDiffMinutes: rules.timeWindowMinutes,
+    requireExactAmount: false,
+    requireCardMatch: rules.requireCardMatch,
+    minimumConfidence: rules.minimumConfidence,
+    autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence,
+    boundaryMode: "none"
+  });
+}
+function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, stage, getBoundaryPosition) {
+  let bestMatch = null;
+  const seen = /* @__PURE__ */ new Set();
+  for (const invoice of candidateInvoices) {
+    if (seen.has(invoice.invoiceNumber)) continue;
+    seen.add(invoice.invoiceNumber);
+    const candidate = scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition);
+    if (!candidate) continue;
+    if (usedInvoices.has(invoice.invoiceNumber)) continue;
+    if (!bestMatch || compareBestMatches(candidate, bestMatch) < 0) {
+      bestMatch = candidate;
+    }
+  }
+  return bestMatch;
+}
+function runSequentialMatchingStages(bankTransactions, fuelInvoices, stages) {
+  const remainingBanks = [...bankTransactions];
+  const usedInvoices = /* @__PURE__ */ new Set();
+  const stageMatches = [];
+  const boundaryPositions = deriveBoundaryPositions(fuelInvoices);
+  for (const stage of stages) {
+    const candidateLists = buildStageCandidateLists(
+      remainingBanks,
+      fuelInvoices,
+      usedInvoices,
+      stage,
+      boundaryPositions
+    );
+    const matchedBankIds = assignStageMatches(candidateLists);
+    for (const { invoice } of candidateLists) {
+      const assignedMatch = matchedBankIds.get(invoice.invoiceNumber);
+      if (!assignedMatch) continue;
+      usedInvoices.add(assignedMatch.invoice.invoiceNumber);
+      stageMatches.push({
+        stage,
+        bankTransaction: assignedMatch.bankTransaction,
+        bestMatch: assignedMatch
+      });
+    }
+    const stillRemaining = remainingBanks.filter((bankTx) => {
+      for (const assigned of matchedBankIds.values()) {
+        if (assigned.bankTransaction.id === bankTx.id) return false;
+      }
+      return true;
+    });
+    remainingBanks.length = 0;
+    remainingBanks.push(...stillRemaining);
+  }
+  return stageMatches;
+}
+function scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition) {
+  if (invoice.items.some((item) => item.matchStatus === "excluded")) return null;
+  const reasons = [`stage:${stage.id}`];
+  const bankAmount = parseFloat(bankTx.amount);
+  const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
+  if (amountDiff > stage.maxAmountDiff) return null;
+  if (stage.requireExactAmount && amountDiff > 0.01) return null;
+  const fuelDate = parseDateToDays(invoice.firstDate || "");
+  const bankDate = parseDateToDays(bankTx.transactionDate || "");
+  if (fuelDate === null || bankDate === null) return null;
+  const dateDiff = bankDate - fuelDate;
+  if (dateDiff < stage.minDateDiffDays || dateDiff > stage.maxDateDiffDays) return null;
+  const boundaryPosition = getBoundaryPosition ? getBoundaryPosition(invoice) : "none";
+  if (stage.boundaryMode === "boundary") {
+    const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+    const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+    const isDirectionalBoundary = dateDiff === -1 && allowsPreviousDay || dateDiff === 1 && allowsNextDay;
+    if (!isDirectionalBoundary) return null;
+    reasons.push(dateDiff === -1 ? "boundary-previous-day" : "boundary-next-day");
+  }
+  const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
+  const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
+  let confidence = 70;
+  if (dateDiff === 0) confidence = 85;
+  else if (Math.abs(dateDiff) === 1) confidence = 75;
+  else if (Math.abs(dateDiff) === 2) confidence = 68;
+  else confidence = 65;
+  let timeDiff = 0;
+  if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+    timeDiff = Math.abs(bankTime - fuelTime);
+    if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) return null;
+    if (timeDiff <= 5) confidence = 100;
+    else if (timeDiff <= 15) confidence = 95;
+    else if (timeDiff <= 30) confidence = 85;
+    else confidence = 75;
+  }
+  if (amountDiff > 0) {
+    const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
+    confidence -= Math.min(5, amountDiff / divisor * 5);
+  }
+  if (stage.requireCardMatch) {
+    if (!bankTx.cardNumber || !invoice.cardNumber) return null;
+    if (bankTx.cardNumber !== invoice.cardNumber) return null;
+    confidence += 25;
+    reasons.push("card-match-required");
+  } else if (bankTx.cardNumber && invoice.cardNumber) {
+    if (bankTx.cardNumber === invoice.cardNumber) {
+      confidence += 25;
+      reasons.push("card-match-strong");
+    } else {
+      confidence -= 30;
+      reasons.push("card-differ");
+    }
+  }
+  confidence = Math.min(100, Math.max(0, confidence));
+  if (confidence < stage.minimumConfidence) return null;
+  return {
+    invoice,
+    confidence,
+    timeDiff,
+    dateDiff: Math.abs(dateDiff),
+    amountDiff,
+    reasons
+  };
+}
+function buildStageCandidateLists(bankTransactions, fuelInvoices, usedInvoices, stage, boundaryPositions) {
+  return fuelInvoices.filter((invoice) => !usedInvoices.has(invoice.invoiceNumber)).map((invoice) => {
+    const candidates = bankTransactions.map((bankTransaction) => {
+      const bestMatch = scoreBankToInvoiceCandidate(
+        bankTransaction,
+        invoice,
+        stage,
+        (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none"
+      );
+      if (!bestMatch) return null;
+      return { bankTransaction, bestMatch };
+    }).filter((candidate) => !!candidate).sort((a, b) => {
+      const comparison = compareBestMatches(a.bestMatch, b.bestMatch);
+      if (comparison !== 0) return comparison;
+      return compareBankTransactions(a.bankTransaction, b.bankTransaction);
+    });
+    return { invoice, candidates };
+  }).filter((entry) => entry.candidates.length > 0).sort((a, b) => {
+    if (a.candidates.length !== b.candidates.length) return a.candidates.length - b.candidates.length;
+    const topComparison = compareBestMatches(a.candidates[0].bestMatch, b.candidates[0].bestMatch);
+    if (topComparison !== 0) return topComparison;
+    return a.invoice.invoiceNumber.localeCompare(b.invoice.invoiceNumber);
+  });
+}
+function assignStageMatches(candidateLists) {
+  const invoiceByNumber = new Map(candidateLists.map((entry) => [entry.invoice.invoiceNumber, entry]));
+  const bankAssignments = /* @__PURE__ */ new Map();
+  const invoiceAssignments = /* @__PURE__ */ new Map();
+  const tryAssign = (invoiceNumber, visitedBanks) => {
+    const invoiceEntry = invoiceByNumber.get(invoiceNumber);
+    if (!invoiceEntry) return false;
+    for (const candidate of invoiceEntry.candidates) {
+      const bankId = candidate.bankTransaction.id;
+      if (visitedBanks.has(bankId)) continue;
+      visitedBanks.add(bankId);
+      const currentInvoiceNumber = bankAssignments.get(bankId);
+      if (!currentInvoiceNumber || tryAssign(currentInvoiceNumber, visitedBanks)) {
+        bankAssignments.set(bankId, invoiceNumber);
+        invoiceAssignments.set(invoiceNumber, { ...candidate.bestMatch, bankTransaction: candidate.bankTransaction });
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const entry of candidateLists) {
+    tryAssign(entry.invoice.invoiceNumber, /* @__PURE__ */ new Set());
+  }
+  return invoiceAssignments;
+}
+function getCardMatchScore(reasons) {
+  if (reasons.some((reason) => reason.startsWith("card-match"))) return 2;
+  if (reasons.some((reason) => reason === "card-differ")) return 0;
+  return 1;
+}
+function compareBestMatches(a, b) {
+  if (a.confidence !== b.confidence) return b.confidence - a.confidence;
+  const cardScoreDiff = getCardMatchScore(b.reasons) - getCardMatchScore(a.reasons);
+  if (cardScoreDiff !== 0) return cardScoreDiff;
+  if (a.dateDiff !== b.dateDiff) return a.dateDiff - b.dateDiff;
+  if (a.timeDiff !== b.timeDiff) return a.timeDiff - b.timeDiff;
+  if (a.amountDiff !== b.amountDiff) return a.amountDiff - b.amountDiff;
+  return a.invoice.invoiceNumber.localeCompare(b.invoice.invoiceNumber);
+}
+function compareBankTransactions(a, b) {
+  const dateComparison = (parseDateToDays(a.transactionDate || "") ?? Number.MAX_SAFE_INTEGER) - (parseDateToDays(b.transactionDate || "") ?? Number.MAX_SAFE_INTEGER);
+  if (dateComparison !== 0) return dateComparison;
+  const timeComparison = (parseTimeToMinutes(a.transactionTime || "") ?? Number.MAX_SAFE_INTEGER) - (parseTimeToMinutes(b.transactionTime || "") ?? Number.MAX_SAFE_INTEGER);
+  if (timeComparison !== 0) return timeComparison;
+  return a.id.localeCompare(b.id);
+}
+function deriveBoundaryPositions(fuelInvoices) {
+  const grouped = /* @__PURE__ */ new Map();
+  for (const invoice of fuelInvoices) {
+    const key = invoice.firstDate || "";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(invoice);
+  }
+  const positions = /* @__PURE__ */ new Map();
+  for (const invoices of grouped.values()) {
+    const sorted = [...invoices].sort((a, b) => {
+      const timeA = parseTimeToMinutes(a.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
+      const timeB = parseTimeToMinutes(b.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
+      if (timeA !== timeB) return timeA - timeB;
+      return a.invoiceNumber.localeCompare(b.invoiceNumber);
+    });
+    if (sorted.length === 0) continue;
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    positions.set(first.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "start");
+    positions.set(last.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "end");
+  }
+  return positions;
+}
+
+// server/reconciliation/reviewQueueReadModel.ts
+var LOW_VALUE_THRESHOLD = 50;
+var REVIEW_STAGE_BADGE_LABELS = {
+  strict_same_day_exact: "Strict same-day",
+  operational_close_match: "Operational close",
+  boundary_transactions: "Boundary",
+  settlement_fallback: "Settlement fallback"
+};
+function isInPeriod(transaction, period) {
+  return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
+}
+function isBankTransaction(transaction) {
+  return !!transaction.sourceType?.startsWith("bank");
+}
+function isFuelCardTransaction(transaction) {
+  return transaction.sourceType === "fuel" && transaction.isCardTransaction === "yes";
+}
+function buildFuelBoundaryPositions(transactions2) {
+  const grouped = /* @__PURE__ */ new Map();
+  for (const transaction of transactions2) {
+    if (!isFuelCardTransaction(transaction)) continue;
+    const key = transaction.transactionDate;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)?.push(transaction);
+  }
+  const positions = /* @__PURE__ */ new Map();
+  for (const dayTransactions of grouped.values()) {
+    const sorted = [...dayTransactions].sort((a, b) => {
+      const timeA = parseTimeToMinutes(a.transactionTime || "") ?? Number.MAX_SAFE_INTEGER;
+      const timeB = parseTimeToMinutes(b.transactionTime || "") ?? Number.MAX_SAFE_INTEGER;
+      if (timeA !== timeB) return timeA - timeB;
+      return a.id.localeCompare(b.id);
+    });
+    if (sorted.length === 0) continue;
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    positions.set(first.id, first.id === last.id ? "both" : "start");
+    positions.set(last.id, first.id === last.id ? "both" : "end");
+  }
+  return positions;
+}
+function buildPerSideCounts(bankTransactions, fuelTransactions, resolutions) {
+  const counts = {
+    bank: { matched: 0, matchedAmount: 0, flagged: 0, flaggedAmount: 0 },
+    fuel: { matched: 0, matchedAmount: 0, flagged: 0, flaggedAmount: 0 }
+  };
+  const transactionLookup = /* @__PURE__ */ new Map();
+  for (const transaction of bankTransactions) {
+    transactionLookup.set(transaction.id, {
+      side: "bank",
+      amount: parseFloat(transaction.amount) || 0
+    });
+  }
+  for (const transaction of fuelTransactions) {
+    transactionLookup.set(transaction.id, {
+      side: "fuel",
+      amount: parseFloat(transaction.amount) || 0
+    });
+  }
+  for (const resolution of resolutions) {
+    const transaction = transactionLookup.get(resolution.transactionId);
+    if (!transaction) continue;
+    if (resolution.resolutionType === "flagged") {
+      counts[transaction.side].flagged += 1;
+      counts[transaction.side].flaggedAmount += transaction.amount;
+    } else {
+      counts[transaction.side].matched += 1;
+      counts[transaction.side].matchedAmount += transaction.amount;
+    }
+  }
+  return counts;
+}
+function buildReviewExclusivity(unmatchedBankTransactions, unmatchedFuelTransactions, allFuelTransactions, matchingRules2, flaggedTransactionIds, resolvedIds) {
+  const matchingStages = buildMatchingStages({
+    amountTolerance: matchingRules2.amountTolerance,
+    dateWindowDays: matchingRules2.dateWindowDays,
+    timeWindowMinutes: matchingRules2.timeWindowMinutes,
+    attendantSubmissionDelayMinutes: matchingRules2.attendantSubmissionDelayMinutes,
+    requireCardMatch: matchingRules2.requireCardMatch,
+    minimumConfidence: matchingRules2.minimumConfidence,
+    autoMatchThreshold: matchingRules2.autoMatchThreshold
+  });
+  const fuelBoundaryPositions = buildFuelBoundaryPositions(allFuelTransactions);
+  const scoreFuelToBank = (fuelTransaction, bankTransaction) => {
+    const fuelAmount = parseFloat(fuelTransaction.amount);
+    const bankAmount = parseFloat(bankTransaction.amount);
+    const amountDiff = Math.abs(bankAmount - fuelAmount);
+    const fuelDate = new Date(fuelTransaction.transactionDate).getTime();
+    const bankDate = new Date(bankTransaction.transactionDate).getTime();
+    const dayDiff = Math.round((bankDate - fuelDate) / 864e5);
+    const fuelTime = parseTimeToMinutes(fuelTransaction.transactionTime || "");
+    const bankTime = parseTimeToMinutes(bankTransaction.transactionTime || "");
+    const boundaryPosition = fuelBoundaryPositions.get(fuelTransaction.id) || "none";
+    for (const stage of matchingStages) {
+      if (amountDiff > stage.maxAmountDiff) continue;
+      if (stage.requireExactAmount && amountDiff > 0.01) continue;
+      if (dayDiff < stage.minDateDiffDays || dayDiff > stage.maxDateDiffDays) continue;
+      if (stage.boundaryMode === "boundary") {
+        const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+        const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+        const isDirectionalBoundary = dayDiff === -1 && allowsPreviousDay || dayDiff === 1 && allowsNextDay;
+        if (!isDirectionalBoundary) continue;
+      }
+      if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+        const timeGap = Math.abs(bankTime - fuelTime);
+        if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
+      }
+      let confidence = 70;
+      if (dayDiff === 0) confidence = 85;
+      else if (Math.abs(dayDiff) === 1) confidence = 75;
+      else if (Math.abs(dayDiff) === 2) confidence = 68;
+      else confidence = 65;
+      if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+        const timeGap = Math.abs(bankTime - fuelTime);
+        if (timeGap <= 5) confidence = 100;
+        else if (timeGap <= 15) confidence = 95;
+        else if (timeGap <= 30) confidence = 85;
+        else confidence = 75;
+      }
+      if (amountDiff > 0) {
+        const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
+        confidence -= Math.min(5, amountDiff / divisor * 5);
+      }
+      if (stage.requireCardMatch) {
+        if (!bankTransaction.cardNumber || !fuelTransaction.cardNumber) continue;
+        if (bankTransaction.cardNumber !== fuelTransaction.cardNumber) continue;
+        confidence += 25;
+      } else if (bankTransaction.cardNumber && fuelTransaction.cardNumber) {
+        if (bankTransaction.cardNumber === fuelTransaction.cardNumber) confidence += 25;
+        else confidence -= 30;
+      }
+      confidence = Math.max(0, Math.min(100, confidence));
+      if (confidence < stage.minimumConfidence) continue;
+      return {
+        transaction: bankTransaction,
+        confidence,
+        timeDiff: dayDiff === 0 ? (() => {
+          if (fuelTime === null || bankTime === null) return "Same day";
+          const timeGap = Math.abs(bankTime - fuelTime);
+          return timeGap === 0 ? "Same time" : `${timeGap} min`;
+        })() : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`,
+        amountDiff,
+        stageId: stage.id,
+        stageLabel: REVIEW_STAGE_BADGE_LABELS[stage.id] || stage.name
+      };
+    }
+    return null;
+  };
+  const fuelPrimaryTransactions = allFuelTransactions.filter((transaction) => {
+    if (flaggedTransactionIds.has(transaction.id)) return false;
+    if (transaction.matchStatus === "unmatched") return true;
+    if (resolvedIds.has(transaction.id)) return true;
+    return false;
+  });
+  const unresolvedBankTransactions = unmatchedBankTransactions.filter(
+    (transaction) => !resolvedIds.has(transaction.id) && !flaggedTransactionIds.has(transaction.id)
+  );
+  const candidateClaims = fuelPrimaryTransactions.map((fuelTransaction) => {
+    const bestBank = unresolvedBankTransactions.map((bankTransaction) => scoreFuelToBank(fuelTransaction, bankTransaction)).filter((match) => !!match).sort((a, b) => {
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+      return a.amountDiff - b.amountDiff;
+    })[0];
+    if (!bestBank) return null;
+    return {
+      fuelId: fuelTransaction.id,
+      bankId: bestBank.transaction.id,
+      confidence: bestBank.confidence,
+      amountDiff: bestBank.amountDiff
+    };
+  }).filter((claim) => !!claim).sort((a, b) => {
+    if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+    return a.amountDiff - b.amountDiff;
+  });
+  const usedFuelIds = /* @__PURE__ */ new Set();
+  const claimedBankIds = /* @__PURE__ */ new Set();
+  for (const claim of candidateClaims) {
+    if (usedFuelIds.has(claim.fuelId) || claimedBankIds.has(claim.bankId)) continue;
+    usedFuelIds.add(claim.fuelId);
+    claimedBankIds.add(claim.bankId);
+  }
+  return {
+    claimedBankIds,
+    visibleBankTransactions: unmatchedBankTransactions.filter((transaction) => !claimedBankIds.has(transaction.id))
+  };
+}
+function scoreSuggestion(primaryTransaction, candidateTransaction, side, matchingRules2, fuelBoundaryPositions) {
+  const matchingStages = buildMatchingStages({
+    amountTolerance: matchingRules2.amountTolerance,
+    dateWindowDays: matchingRules2.dateWindowDays,
+    timeWindowMinutes: matchingRules2.timeWindowMinutes,
+    attendantSubmissionDelayMinutes: matchingRules2.attendantSubmissionDelayMinutes,
+    requireCardMatch: matchingRules2.requireCardMatch,
+    minimumConfidence: matchingRules2.minimumConfidence,
+    autoMatchThreshold: matchingRules2.autoMatchThreshold
+  });
+  const primaryAmount = parseFloat(primaryTransaction.amount);
+  const candidateAmount = parseFloat(candidateTransaction.amount);
+  const amountDiff = Math.abs(candidateAmount - primaryAmount);
+  const primaryDate = new Date(primaryTransaction.transactionDate).getTime();
+  const candidateDate = new Date(candidateTransaction.transactionDate).getTime();
+  const dayDiff = Math.round((candidateDate - primaryDate) / 864e5);
+  const bankTransaction = side === "fuel" ? candidateTransaction : primaryTransaction;
+  const fuelTransaction = side === "fuel" ? primaryTransaction : candidateTransaction;
+  const fuelTime = parseTimeToMinutes(fuelTransaction.transactionTime || "");
+  const bankTime = parseTimeToMinutes(bankTransaction.transactionTime || "");
+  const boundaryPosition = fuelBoundaryPositions.get(fuelTransaction.id) || "none";
+  for (const stage of matchingStages) {
+    if (amountDiff > stage.maxAmountDiff) continue;
+    if (stage.requireExactAmount && amountDiff > 0.01) continue;
+    if (dayDiff < stage.minDateDiffDays || dayDiff > stage.maxDateDiffDays) continue;
+    if (stage.boundaryMode === "boundary") {
+      const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
+      const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
+      const isDirectionalBoundary = dayDiff === -1 && allowsPreviousDay || dayDiff === 1 && allowsNextDay;
+      if (!isDirectionalBoundary) continue;
+    }
+    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+      const timeGap = Math.abs(bankTime - fuelTime);
+      if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
+    }
+    let confidence = 70;
+    if (dayDiff === 0) confidence = 85;
+    else if (Math.abs(dayDiff) === 1) confidence = 75;
+    else if (Math.abs(dayDiff) === 2) confidence = 68;
+    else confidence = 65;
+    let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
+    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+      const timeGap = Math.abs(bankTime - fuelTime);
+      timeDiffLabel = timeGap === 0 ? "Same time" : `${timeGap} min`;
+      if (timeGap <= 5) confidence = 100;
+      else if (timeGap <= 15) confidence = 95;
+      else if (timeGap <= 30) confidence = 85;
+      else confidence = 75;
+    }
+    if (amountDiff > 0) {
+      const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
+      confidence -= Math.min(5, amountDiff / divisor * 5);
+    }
+    if (stage.requireCardMatch) {
+      if (!bankTransaction.cardNumber || !fuelTransaction.cardNumber) continue;
+      if (bankTransaction.cardNumber !== fuelTransaction.cardNumber) continue;
+      confidence += 25;
+    } else if (bankTransaction.cardNumber && fuelTransaction.cardNumber) {
+      if (bankTransaction.cardNumber === fuelTransaction.cardNumber) confidence += 25;
+      else confidence -= 30;
+    }
+    confidence = Math.max(0, Math.min(100, confidence));
+    if (confidence < stage.minimumConfidence) continue;
+    return {
+      transaction: candidateTransaction,
+      confidence,
+      timeDiff: timeDiffLabel,
+      amountDiff,
+      stageId: stage.id,
+      stageLabel: REVIEW_STAGE_BADGE_LABELS[stage.id] || stage.name
+    };
+  }
+  return null;
+}
+function buildInsights(item, side) {
+  const insights = [];
+  const primaryAmount = parseFloat(item.transaction.amount);
+  const nearest = item.nearestByAmount[0];
+  if (!nearest || item.category !== "no_match" && item.category !== "investigate") {
+    return insights;
+  }
+  const diff = primaryAmount - parseFloat(nearest.transaction.amount);
+  const absDiff = Math.abs(diff);
+  if (absDiff > 2 && absDiff <= 25) {
+    if (side === "fuel") {
+      insights.push(diff > 0 ? {
+        type: "overfill",
+        message: `Fuel sale R${absDiff.toFixed(2)} more than bank payment`,
+        detail: `Bank: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} \u2014 possible overfill by attendant`
+      } : {
+        type: "possible_tip",
+        message: `Bank payment R${absDiff.toFixed(2)} more than fuel sale`,
+        detail: `Bank: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} \u2014 difference may include attendant tip`
+      });
+    } else {
+      insights.push(diff > 0 ? {
+        type: "possible_tip",
+        message: `Bank paid R${absDiff.toFixed(2)} more than fuel record`,
+        detail: `Fuel: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} \u2014 difference may include attendant tip`
+      } : {
+        type: "overfill",
+        message: `Fuel record R${absDiff.toFixed(2)} more than bank payment`,
+        detail: `Fuel: R${parseFloat(nearest.transaction.amount).toFixed(2)} on ${nearest.transaction.transactionDate} \u2014 possible overfill by attendant`
+      });
+    }
+  } else if (absDiff > 25) {
+    insights.push(side === "fuel" ? {
+      type: "no_fuel_record",
+      message: `Nearest bank payment is R${absDiff.toFixed(2)} away`,
+      detail: "No close bank match found \u2014 may not have settled yet"
+    } : {
+      type: "no_fuel_record",
+      message: `Nearest fuel record is R${absDiff.toFixed(2)} away`,
+      detail: "No close fuel match found \u2014 may be a non-fuel POS charge or missing fuel record"
+    });
+  }
+  return insights;
+}
+function applyDuplicateInsights(result, side, candidateTransactions) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const item of result) {
+    const key = `${parseFloat(item.transaction.amount).toFixed(2)}_${item.transaction.transactionDate}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)?.push(item);
+  }
+  for (const group of groups.values()) {
+    if (group.length <= 1) continue;
+    const amount = parseFloat(group[0].transaction.amount);
+    const date = group[0].transaction.transactionDate;
+    const candidatesOnDate = candidateTransactions.filter((transaction) => {
+      const diff = Math.abs(parseFloat(transaction.amount) - amount);
+      return diff < 15 && transaction.transactionDate === date;
+    }).length;
+    const chargeLabel = side === "fuel" ? "fuel sales" : "bank charges";
+    const recordLabel = side === "fuel" ? "bank payment" : "fuel record";
+    for (const item of group) {
+      item.insights.unshift({
+        type: "duplicate_charge",
+        message: `${group.length} identical ${chargeLabel} of R${amount.toFixed(2)} on this date`,
+        detail: candidatesOnDate < group.length ? `Only ${candidatesOnDate} matching ${recordLabel}${candidatesOnDate !== 1 ? "s" : ""} found \u2014 ${group.length - candidatesOnDate} may be duplicate ${chargeLabel} or missing ${recordLabel}s` : `${candidatesOnDate} ${recordLabel}s found at similar amounts`
+      });
+    }
+  }
+}
+function buildCategorizedTransactions(side, allPrimaryTransactions, candidateTransactions, matchingRules2, resolvedIds, flaggedTransactionIds, claimedBankIds, fuelBoundaryPositions) {
+  const primaryTransactions = allPrimaryTransactions.filter((transaction) => {
+    if (flaggedTransactionIds.has(transaction.id)) return false;
+    if (side === "bank" && claimedBankIds.has(transaction.id)) return false;
+    if (transaction.matchStatus === "unmatched") return true;
+    if (resolvedIds.has(transaction.id)) return true;
+    return false;
+  });
+  const result = primaryTransactions.map((primaryTransaction) => {
+    const primaryAmount = parseFloat(primaryTransaction.amount);
+    const allScored = candidateTransactions.map((candidateTransaction) => scoreSuggestion(
+      primaryTransaction,
+      candidateTransaction,
+      side,
+      matchingRules2,
+      fuelBoundaryPositions
+    )).filter((match) => !!match);
+    const potentialMatches = [...allScored].sort((a, b) => {
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+      return a.amountDiff - b.amountDiff;
+    }).slice(0, 5);
+    const nearestByAmount = [...allScored].sort((a, b) => a.amountDiff - b.amountDiff).slice(0, 3);
+    const bestMatch = potentialMatches[0];
+    let category;
+    if (resolvedIds.has(primaryTransaction.id)) category = "resolved";
+    else if (primaryAmount < LOW_VALUE_THRESHOLD) category = "low_value";
+    else if (bestMatch && bestMatch.confidence >= matchingRules2.autoMatchThreshold) category = "quick_win";
+    else if (bestMatch && bestMatch.confidence >= matchingRules2.minimumConfidence) category = "investigate";
+    else category = "no_match";
+    const item = {
+      transaction: primaryTransaction,
+      category,
+      bestMatch,
+      potentialMatches,
+      nearestByAmount,
+      insights: []
+    };
+    item.insights = buildInsights(item, side);
+    return item;
+  }).sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
+  applyDuplicateInsights(result, side, candidateTransactions);
+  return result;
+}
+function buildInvestigateItems(transactions2, flaggedIds, flaggedResolutions) {
+  return transactions2.filter((transaction) => flaggedIds.has(transaction.id)).map((transaction) => ({
+    transaction,
+    resolution: flaggedResolutions.find((resolution) => resolution.transactionId === transaction.id) || null
+  })).sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
+}
+function buildSideSummary(unresolvedTransactions, counts) {
+  const unresolvedCount = unresolvedTransactions.length;
+  const unresolvedAmount = unresolvedTransactions.reduce((sum, transaction) => sum + parseFloat(transaction.amount), 0);
+  return {
+    unresolvedCount,
+    unresolvedAmount,
+    originalCount: unresolvedCount + counts.matched + counts.flagged,
+    originalAmount: unresolvedAmount + counts.matchedAmount + counts.flaggedAmount,
+    matchedCount: counts.matched,
+    matchedAmount: counts.matchedAmount,
+    flaggedCount: counts.flagged,
+    flaggedAmount: counts.flaggedAmount
+  };
+}
+function buildReviewQueueReadModel(period, transactions2, resolutions, matchingRules2) {
+  const inPeriodBankTransactions = transactions2.filter(
+    (transaction) => isBankTransaction(transaction) && isInPeriod(transaction, period)
+  );
+  const inPeriodFuelTransactions = transactions2.filter(
+    (transaction) => isFuelCardTransaction(transaction) && isInPeriod(transaction, period)
+  );
+  const unmatchedBankTransactions = inPeriodBankTransactions.filter((transaction) => transaction.matchStatus === "unmatched");
+  const unmatchedFuelTransactions = inPeriodFuelTransactions.filter((transaction) => transaction.matchStatus === "unmatched");
+  const resolvedIds = new Set(resolutions.map((resolution) => resolution.transactionId));
+  const flaggedResolutions = resolutions.filter((resolution) => resolution.resolutionType === "flagged");
+  const flaggedTransactionIds = new Set(flaggedResolutions.map((resolution) => resolution.transactionId));
+  const perSideCounts = buildPerSideCounts(inPeriodBankTransactions, inPeriodFuelTransactions, resolutions);
+  const fuelBoundaryPositions = buildFuelBoundaryPositions(inPeriodFuelTransactions);
+  const reviewExclusivity = buildReviewExclusivity(
+    unmatchedBankTransactions,
+    unmatchedFuelTransactions,
+    inPeriodFuelTransactions,
+    matchingRules2,
+    flaggedTransactionIds,
+    resolvedIds
+  );
+  const fuelTransactions = buildCategorizedTransactions(
+    "fuel",
+    inPeriodFuelTransactions,
+    unmatchedBankTransactions,
+    matchingRules2,
+    resolvedIds,
+    flaggedTransactionIds,
+    reviewExclusivity.claimedBankIds,
+    fuelBoundaryPositions
+  );
+  const bankTransactions = buildCategorizedTransactions(
+    "bank",
+    inPeriodBankTransactions,
+    unmatchedFuelTransactions,
+    matchingRules2,
+    resolvedIds,
+    flaggedTransactionIds,
+    reviewExclusivity.claimedBankIds,
+    fuelBoundaryPositions
+  );
+  const flaggedBank = buildInvestigateItems(inPeriodBankTransactions, flaggedTransactionIds, flaggedResolutions);
+  const flaggedFuel = buildInvestigateItems(inPeriodFuelTransactions, flaggedTransactionIds, flaggedResolutions);
+  const investigateItems = [...flaggedBank, ...flaggedFuel];
+  return {
+    matchingRules: matchingRules2,
+    sides: {
+      fuel: {
+        summary: buildSideSummary(
+          unmatchedFuelTransactions.filter((transaction) => !resolvedIds.has(transaction.id)),
+          perSideCounts.fuel
+        ),
+        transactions: fuelTransactions
+      },
+      bank: {
+        summary: buildSideSummary(
+          reviewExclusivity.visibleBankTransactions.filter((transaction) => !resolvedIds.has(transaction.id)),
+          perSideCounts.bank
+        ),
+        transactions: bankTransactions
+      }
+    },
+    investigate: {
+      totalCount: investigateItems.length,
+      totalAmount: investigateItems.reduce((sum, item) => sum + parseFloat(item.transaction.amount), 0),
+      bankAmount: flaggedBank.reduce((sum, item) => sum + parseFloat(item.transaction.amount), 0),
+      fuelAmount: flaggedFuel.reduce((sum, item) => sum + parseFloat(item.transaction.amount), 0),
+      bank: flaggedBank,
+      fuel: flaggedFuel
+    }
+  };
+}
+
 // server/exportRoutes.ts
+function matchTypeLabel(matchType) {
+  if (matchType === "auto_exact" || matchType === "auto_exact_review") {
+    return "Lekana (Exact)";
+  }
+  if (matchType === "auto_rules" || matchType === "auto_rules_review" || matchType === "auto" || matchType === "auto_review") {
+    return "Lekana (Rules)";
+  }
+  if (matchType === "user_confirmed" || matchType === "manual") {
+    return "User (Confirmed)";
+  }
+  if (matchType === "linked") {
+    return "User (With reason)";
+  }
+  return matchType || "Lekana (Rules)";
+}
 function registerExportRoutes(app2) {
   app2.get("/api/periods/:periodId/export", isAuthenticated, async (req, res) => {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
-      const [allTransactions, matchesData, resolutions, attendantSummary, matchingRulesData, periodSummary] = await Promise.all([
+      const [
+        allTransactions,
+        matchesData,
+        resolutions,
+        attendantSummary,
+        matchingRulesData,
+        periodSummary
+      ] = await Promise.all([
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getMatchesByPeriod(req.params.periodId),
         storage.getResolutionsByPeriod(req.params.periodId),
@@ -30194,7 +31871,9 @@ function registerExportRoutes(app2) {
         matchMap.set(match.bankTransactionId, match);
         matchMap.set(match.fuelTransactionId, match);
       }
-      const resolutionMap = new Map(resolutions.map((resolution) => [resolution.transactionId, resolution]));
+      const resolutionMap = new Map(
+        resolutions.map((resolution) => [resolution.transactionId, resolution])
+      );
       const txMap = new Map(transactions2.map((transaction) => [transaction.id, transaction]));
       const fuelByMatchId = /* @__PURE__ */ new Map();
       for (const transaction of transactions2) {
@@ -30205,221 +31884,69 @@ function registerExportRoutes(app2) {
           fuelByMatchId.get(transaction.matchId).push(transaction);
         }
       }
-      const bankTxns = transactions2.filter((transaction) => transaction.sourceType?.startsWith("bank"));
+      const bankTxns = transactions2.filter(
+        (transaction) => transaction.sourceType?.startsWith("bank")
+      );
       const fuelTxns = transactions2.filter((transaction) => transaction.sourceType === "fuel");
+      const allBankTransactions = allTransactions.filter(
+        (transaction) => transaction.sourceType?.startsWith("bank")
+      );
+      const allFuelTransactions = allTransactions.filter(
+        (transaction) => transaction.sourceType === "fuel"
+      );
       const matchedBank = bankTxns.filter((transaction) => transaction.matchStatus === "matched");
-      const unmatchedBank = bankTxns.filter((transaction) => transaction.matchStatus === "unmatched" && parseFloat(transaction.amount) > 0);
-      const excludedBank = bankTxns.filter((transaction) => transaction.matchStatus === "excluded");
-      const outsideRange = bankTxns.filter((transaction) => transaction.matchStatus === "unmatchable");
-      const matchableBank = bankTxns.filter((transaction) => transaction.matchStatus === "matched" || transaction.matchStatus === "unmatched");
+      const unmatchedBank = bankTxns.filter(
+        (transaction) => transaction.matchStatus === "unmatched" && parseFloat(transaction.amount) > 0
+      );
+      const outsideRange = bankTxns.filter(
+        (transaction) => transaction.matchStatus === "unmatchable"
+      );
+      const dashboardModel = buildResultsDashboardReadModel(periodSummary, resolutions);
+      const reviewModel = buildReviewQueueReadModel(
+        period,
+        allTransactions,
+        resolutions,
+        matchingRulesData
+      );
+      const declineResult = computeDeclineAnalysis(
+        allBankTransactions,
+        allFuelTransactions
+      );
+      const insightsModel = buildInsightsReadModel(
+        periodSummary,
+        attendantSummary,
+        declineResult
+      );
       const XLSX2 = await import("xlsx");
       const wb = XLSX2.utils.book_new();
-      const isDebtor = (transaction) => transaction.paymentType?.toLowerCase().includes("debtor") || transaction.paymentType?.toLowerCase().includes("account") || transaction.paymentType?.toLowerCase().includes("fleet");
-      const debtorFuel = fuelTxns.filter((transaction) => isDebtor(transaction));
-      const cardOnlyFuel = fuelTxns.filter((transaction) => transaction.isCardTransaction === "yes" && !isDebtor(transaction));
-      const cashFuel = fuelTxns.filter((transaction) => transaction.isCardTransaction === "no" && !isDebtor(transaction));
+      const fmt2 = (value) => parseFloat(value.toFixed(2));
       const sumAmount = (rows) => rows.reduce((sum, row) => sum + parseFloat(row.amount), 0);
-      const cardOnlyAmount = sumAmount(cardOnlyFuel);
-      const debtorAmount = sumAmount(debtorFuel);
-      const cashAmount = sumAmount(cashFuel);
-      const totalFuelAmount = sumAmount(fuelTxns);
-      const matchedBankAmount = sumAmount(matchedBank);
-      const unmatchedBankAmount = sumAmount(unmatchedBank);
-      const excludedBankAmount = sumAmount(excludedBank);
-      const matchedFuelAmount = matchesData.reduce((sum, match) => {
-        const allFuelItems = fuelByMatchId.get(match.id) || [];
-        if (allFuelItems.length > 0) {
-          return sum + allFuelItems.reduce((fuelSum, fuel2) => fuelSum + parseFloat(fuel2.amount), 0);
-        }
-        const fuel = txMap.get(match.fuelTransactionId);
-        return sum + (fuel ? parseFloat(fuel.amount) : 0);
-      }, 0);
-      const cardOnlyFuelAmount = cardOnlyAmount;
-      const lagExplainedBankAmount = periodSummary.lagExplainedBankAmount || 0;
-      const bankApprovedAmount = matchedBankAmount + unmatchedBankAmount + lagExplainedBankAmount;
-      const fileSurplus = bankApprovedAmount - cardOnlyFuelAmount;
-      const matchedFuelInPeriod = periodSummary.matchedFuelAmountInPeriod ?? matchedFuelAmount;
-      const lagFuelAmount = periodSummary.lagFuelAmount ?? 0;
-      const unmatchedFuelCoveredAmount = periodSummary.unmatchedFuelCoveredAmount ?? 0;
-      const unmatchedFuelUncoveredAmount = periodSummary.unmatchedFuelUncoveredAmount ?? 0;
-      const matchedVariance = matchedBankAmount - matchedFuelInPeriod;
-      const tenantBankCoverage = periodSummary.tenantBankCoverage;
-      const unmatchedFuelCard = fuelTxns.filter(
-        (transaction) => transaction.isCardTransaction === "yes" && !isDebtor(transaction) && transaction.matchStatus !== "matched" && parseFloat(transaction.amount) > 0
-      );
-      const unmatchedFuelCardAmount = sumAmount(unmatchedFuelCard);
-      const outsideRangeAmount = sumAmount(outsideRange);
-      const cardFuelMatchedCount = periodSummary.scopedMatchedCount;
-      const cardFuelTotalCount = periodSummary.cardFuelTransactions;
-      const cardFuelUnmatchedCount = periodSummary.unmatchedCardTransactions;
-      const matchRate = cardFuelTotalCount > 0 ? Math.round(cardFuelMatchedCount / cardFuelTotalCount * 100) : 0;
-      const bankBySource = /* @__PURE__ */ new Map();
-      for (const transaction of bankTxns) {
-        const name = transaction.sourceName || "Bank";
-        if (!bankBySource.has(name)) {
-          bankBySource.set(name, { approved: [], declined: [], cancelled: [] });
-        }
-        const entry = bankBySource.get(name);
-        if (transaction.matchStatus === "excluded") {
-          const desc3 = (transaction.description || "").toLowerCase();
-          if (desc3.includes("declined")) entry.declined.push(transaction);
-          else entry.cancelled.push(transaction);
-        } else {
-          entry.approved.push(transaction);
-        }
-      }
-      const fmt = (value) => parseFloat(value.toFixed(2));
-      const fmtPeriodDate = (value) => new Date(value).toLocaleDateString("en-ZA", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
+      const summaryRows = buildReconciliationSummaryRows({
+        period,
+        matchingRules: matchingRulesData,
+        dashboard: dashboardModel,
+        review: reviewModel
       });
-      const periodDatesStr = period.startDate === period.endDate ? fmtPeriodDate(period.startDate) : `${fmtPeriodDate(period.startDate)} - ${fmtPeriodDate(period.endDate)}`;
-      const summaryRows = [
-        { Metric: "Period", Count: "", Amount: period.name },
-        { Metric: "Period dates", Count: "", Amount: periodDatesStr },
-        { Metric: "" },
-        { Metric: "FUEL TRANSACTIONS", Count: "Count", Amount: "Amount" },
-        { Metric: "  Card", Count: cardOnlyFuel.length, Amount: fmt(cardOnlyAmount) }
-      ];
-      if (debtorFuel.length > 0) {
-        summaryRows.push({ Metric: "  Debtor / Account", Count: debtorFuel.length, Amount: fmt(debtorAmount) });
-      }
-      summaryRows.push(
-        { Metric: "  Cash", Count: cashFuel.length, Amount: fmt(cashAmount) },
-        { Metric: "  Total", Count: fuelTxns.length, Amount: fmt(totalFuelAmount) },
-        { Metric: "" },
-        { Metric: "BANK TRANSACTIONS" },
-        { Metric: "  Total bank transactions", Count: bankTxns.length },
-        { Metric: "  Matchable bank transactions", Count: matchableBank.length },
-        { Metric: "  Outside date range", Count: outsideRange.length, Amount: outsideRangeAmount > 0 ? fmt(outsideRangeAmount) : void 0 },
-        { Metric: "  Excluded (reversed/declined/cancelled)", Count: excludedBank.length }
-      );
-      if (bankBySource.size > 0) {
-        summaryRows.push({ Metric: "" });
-        const bankNames = Array.from(bankBySource.keys()).sort();
-        const headerRow = { Metric: "" };
-        for (const name of bankNames) headerRow[name] = name;
-        headerRow.Total = "Total";
-        summaryRows.push(headerRow);
-        for (const { label, getter } of [
-          { label: "Declined", getter: (entry) => entry.declined },
-          { label: "Cancelled", getter: (entry) => entry.cancelled },
-          { label: "Approved", getter: (entry) => entry.approved }
-        ]) {
-          const countRow = { Metric: `Number of ${label} transactions` };
-          let totalCount = 0;
-          for (const name of bankNames) {
-            const count = getter(bankBySource.get(name)).length;
-            countRow[name] = count;
-            totalCount += count;
-          }
-          countRow.Total = totalCount;
-          summaryRows.push(countRow);
-          const amountRow = { Metric: `Total amount for ${label} transactions` };
-          let totalAmount = 0;
-          for (const name of bankNames) {
-            const amount = sumAmount(getter(bankBySource.get(name)));
-            amountRow[name] = amount > 0 ? fmt(amount) : "-";
-            totalAmount += amount;
-          }
-          amountRow.Total = totalAmount > 0 ? fmt(totalAmount) : "-";
-          summaryRows.push(amountRow);
-        }
-      }
-      const linkedResolutions = resolutions.filter((resolution) => resolution.resolutionType === "linked").length;
-      const flaggedResolutions = resolutions.filter((resolution) => resolution.resolutionType === "flagged").length;
-      const dismissedResolutions = resolutions.filter((resolution) => resolution.resolutionType === "dismissed").length;
-      const totalReviewActions = linkedResolutions + flaggedResolutions + dismissedResolutions;
-      const cardMatchRateLabel = cardFuelTotalCount > 0 ? `${matchRate}% (${cardFuelMatchedCount}/${cardFuelTotalCount})` : "-";
-      const bankMatchRatePct = matchableBank.length > 0 ? Math.round(matchedBank.length / matchableBank.length * 100) : 0;
-      const bankMatchRateLabel = matchableBank.length > 0 ? `${bankMatchRatePct}% (${matchedBank.length}/${matchableBank.length})` : "-";
-      summaryRows.push(
-        { Metric: "" },
-        { Metric: "FUEL CARD SALES MATCHING" },
-        { Metric: "  Fuel card sales match rate", Count: cardMatchRateLabel },
-        { Metric: "  Matched fuel card sales transactions", Count: cardFuelMatchedCount },
-        { Metric: "  Unmatched fuel card sales transactions", Count: cardFuelUnmatchedCount },
-        { Metric: "" },
-        { Metric: "BANK PAYMENT MATCHING" },
-        { Metric: "  Bank payment match rate", Count: bankMatchRateLabel },
-        { Metric: "  Matched bank transactions", Count: matchedBank.length },
-        { Metric: "  Unmatched bank transactions", Count: unmatchedBank.length }
-      );
-      if (matchingRulesData) {
-        summaryRows.push(
-          { Metric: "" },
-          { Metric: "MATCHING RULES" },
-          { Metric: "  Amount tolerance", Count: `+/-R ${Number(matchingRulesData.amountTolerance).toFixed(2)}` },
-          { Metric: "  Date window", Count: `${matchingRulesData.dateWindowDays} day${matchingRulesData.dateWindowDays !== 1 ? "s" : ""}` },
-          { Metric: "  Time window", Count: `${matchingRulesData.timeWindowMinutes} min` },
-          { Metric: "  Minimum confidence", Count: `${matchingRulesData.minimumConfidence}%` },
-          { Metric: "  Auto-match threshold", Count: `${matchingRulesData.autoMatchThreshold}%` },
-          { Metric: "  Invoice grouping", Count: matchingRulesData.groupByInvoice ? "On" : "Off" },
-          { Metric: "  Card required", Count: matchingRulesData.requireCardMatch ? "Yes" : "No" }
-        );
-      }
-      summaryRows.push(
-        { Metric: "" },
-        { Metric: "REVIEW PROGRESS" },
-        { Metric: "  Matched with reason", Count: linkedResolutions },
-        { Metric: "  Flagged to investigate", Count: flaggedResolutions },
-        { Metric: "  Dismissed", Count: dismissedResolutions },
-        { Metric: "  Total review actions", Count: totalReviewActions },
-        { Metric: "  Unmatched bank still to review", Count: unmatchedBank.filter((transaction) => !resolutionMap.has(transaction.id)).length },
-        { Metric: "  Unmatched fuel card sales still to review", Count: unmatchedFuelCard.filter((transaction) => !resolutionMap.has(transaction.id)).length }
-      );
-      const analysisTotal = fmt(
-        matchedVariance - lagFuelAmount - unmatchedFuelCoveredAmount - unmatchedFuelUncoveredAmount + unmatchedBankAmount + lagExplainedBankAmount
-      );
-      summaryRows.push(
-        { Metric: "" },
-        { Metric: "FUEL CARD SALES RECONCILIATION", Count: "", Amount: "Amount" },
-        { Metric: "  Bank approved amount", Amount: fmt(bankApprovedAmount) },
-        { Metric: "  Fuel card sales amount", Amount: fmt(cardOnlyFuelAmount) },
-        { Metric: "  Surplus / shortfall", Amount: fmt(fileSurplus) },
-        { Metric: "" },
-        { Metric: "SURPLUS / SHORTFALL ANALYSIS" },
-        { Metric: "" },
-        { Metric: "  Matched amount variance:" },
-        { Metric: "    Matched fuel amount (both sides in period)", Amount: fmt(matchedFuelInPeriod) },
-        { Metric: "    Matched bank amount", Amount: fmt(matchedBankAmount) },
-        { Metric: "    Variance", Amount: fmt(matchedVariance) },
-        { Metric: "" },
-        { Metric: "  Fuel matched to bank outside period", Amount: lagFuelAmount > 0 ? fmt(lagFuelAmount) : "-" },
-        { Metric: "" },
-        { Metric: "  Fuel card sales with no bank match, within bank coverage", Amount: unmatchedFuelCoveredAmount > 0 ? fmt(unmatchedFuelCoveredAmount) : "-" },
-        { Metric: "" },
-        { Metric: "  Fuel card sales with no bank match, outside bank coverage", Amount: unmatchedFuelUncoveredAmount > 0 ? fmt(unmatchedFuelUncoveredAmount) : "-" },
-        tenantBankCoverage ? { Metric: `    Bank coverage: ${tenantBankCoverage.min} to ${tenantBankCoverage.max}` } : { Metric: "    No bank data uploaded for this property" },
-        { Metric: "" },
-        { Metric: "  Bank with no fuel match", Amount: unmatchedBankAmount > 0 ? fmt(unmatchedBankAmount) : "-" },
-        { Metric: "" },
-        { Metric: "  Bank matched to fuel outside period (lag-explained)", Amount: lagExplainedBankAmount > 0 ? fmt(lagExplainedBankAmount) : "-" },
-        { Metric: "" },
-        { Metric: "  Total surplus / shortfall", Amount: analysisTotal },
-        { Metric: "" },
-        { Metric: "  Excluded bank amount", Amount: fmt(excludedBankAmount) }
-      );
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(summaryRows), "Summary");
-      const matchTypeLabel = (matchType) => matchType === "auto_exact" || matchType === "auto_exact_review" ? "Lekana (Exact)" : matchType === "auto_rules" || matchType === "auto_rules_review" || matchType === "auto" || matchType === "auto_review" ? "Lekana (Rules)" : matchType === "user_confirmed" || matchType === "manual" ? "User (Confirmed)" : matchType === "linked" ? "User (With reason)" : matchType || "Lekana (Rules)";
       const matchedRows = matchesData.map((match) => {
         const bank = txMap.get(match.bankTransactionId);
         const fuel = txMap.get(match.fuelTransactionId);
         const allFuelItems = fuelByMatchId.get(match.id) || [];
-        const bankAmt = bank ? parseFloat(bank.amount) : 0;
-        const fuelAmt = allFuelItems.length > 0 ? allFuelItems.reduce((sum, fuelItem) => sum + parseFloat(fuelItem.amount), 0) : fuel ? parseFloat(fuel.amount) : 0;
+        const bankAmount = bank ? parseFloat(bank.amount) : 0;
+        const fuelAmount = allFuelItems.length > 0 ? allFuelItems.reduce((sum, fuelItem) => sum + parseFloat(fuelItem.amount), 0) : fuel ? parseFloat(fuel.amount) : 0;
         return {
           Date: bank?.transactionDate || fuel?.transactionDate || "",
           "Bank Time": bank?.transactionTime || "",
           "Fuel Time": fuel?.transactionTime || "",
-          "Bank Amount": bankAmt,
-          "Fuel Amount": fuelAmt,
+          "Bank Amount": bankAmount,
+          "Fuel Amount": fuelAmount,
           "Fuel Items": allFuelItems.length > 1 ? allFuelItems.length : 1,
-          Difference: Math.round((bankAmt - fuelAmt) * 100) / 100,
+          Difference: Math.round((bankAmount - fuelAmount) * 100) / 100,
           "Bank Source": bank?.sourceName || "",
           "Bank Description": bank?.description || "",
-          "Fuel Description": allFuelItems.length > 1 ? allFuelItems.map((fuelItem) => `${fuelItem.description || ""} (${parseFloat(fuelItem.amount).toFixed(2)})`).join("; ") : fuel?.description || "",
+          "Fuel Description": allFuelItems.length > 1 ? allFuelItems.map(
+            (fuelItem) => `${fuelItem.description || ""} (${parseFloat(fuelItem.amount).toFixed(2)})`
+          ).join("; ") : fuel?.description || "",
           "Card Number": bank?.cardNumber || "",
           "Payment Type": fuel?.paymentType || "",
           Attendant: fuel?.attendant || "",
@@ -30457,11 +31984,15 @@ function registerExportRoutes(app2) {
           "Card Number": transaction.cardNumber || "",
           Description: transaction.description || ""
         }));
-        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(outsideRows), "Outside date range");
+        XLSX2.utils.book_append_sheet(
+          wb,
+          XLSX2.utils.json_to_sheet(outsideRows),
+          "Outside date range"
+        );
       }
       const fuelRows = fuelTxns.map((transaction) => {
         const match = matchMap.get(transaction.id);
-        const bankTx = match ? txMap.get(match.bankTransactionId) : null;
+        const bankTransaction = match ? txMap.get(match.bankTransactionId) : null;
         return {
           Date: transaction.transactionDate,
           Time: transaction.transactionTime || "",
@@ -30473,12 +32004,14 @@ function registerExportRoutes(app2) {
           Pump: transaction.pump || "",
           Description: transaction.description || "",
           Matched: match ? "Yes" : "No",
-          "Bank Match Amount": bankTx ? parseFloat(bankTx.amount) : "",
-          "Bank Source": bankTx?.sourceName || ""
+          "Bank Match Amount": bankTransaction ? parseFloat(bankTransaction.amount) : "",
+          "Bank Source": bankTransaction?.sourceName || ""
         };
       });
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(fuelRows), "Fuel Transactions");
-      const unmatchedFuel = fuelTxns.filter((transaction) => transaction.isCardTransaction === "yes" && transaction.matchStatus !== "matched");
+      const unmatchedFuel = fuelTxns.filter(
+        (transaction) => transaction.isCardTransaction === "yes" && transaction.matchStatus !== "matched"
+      );
       if (unmatchedFuel.length > 0) {
         const unmatchedFuelRows = unmatchedFuel.map((transaction) => {
           const resolution = resolutionMap.get(transaction.id);
@@ -30508,212 +32041,36 @@ function registerExportRoutes(app2) {
         }
         unmatchedFuelRows.push({});
         unmatchedFuelRows.push({ Attendant: "BY ATTENDANT" });
-        for (const [name, stats] of Array.from(attendantTotals.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-          unmatchedFuelRows.push({ Attendant: `  ${name}`, Amount: fmt(stats.amount) });
+        for (const [name, stats] of Array.from(attendantTotals.entries()).sort(
+          (a, b) => a[0].localeCompare(b[0])
+        )) {
+          unmatchedFuelRows.push({ Attendant: `  ${name}`, Amount: fmt2(stats.amount) });
         }
-        unmatchedFuelRows.push({ Attendant: "Total unmatched fuel card sales", Amount: fmt(unmatchedFuelCardAmount) });
-        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(unmatchedFuelRows), "Unmatched fuel");
-      }
-      const declineResult = computeDeclineAnalysis(bankTxns, fuelTxns);
-      if (declineResult.summary.totalDeclined > 0) {
-        const declinedRows = [];
-        const byBank = /* @__PURE__ */ new Map();
-        for (const transaction of declineResult.transactions) {
-          const key = transaction.bank || "Unknown";
-          const existing = byBank.get(key) || { count: 0, amount: 0 };
-          existing.count += 1;
-          existing.amount += transaction.amount;
-          byBank.set(key, existing);
-        }
-        declinedRows.push({ Metric: "DECLINE SUMMARY", Count: "", Amount: "" });
-        declinedRows.push({
-          Metric: "  Total declined / cancelled",
-          Count: declineResult.summary.totalDeclined,
-          Amount: fmt(declineResult.summary.totalDeclinedAmount)
+        unmatchedFuelRows.push({
+          Attendant: "Total unmatched fuel card sales",
+          Amount: fmt2(sumAmount(unmatchedFuel))
         });
-        for (const [bankName, stats] of Array.from(byBank.entries()).sort((a, b) => b[1].count - a[1].count)) {
-          declinedRows.push({
-            Metric: `    ${bankName}`,
-            Count: stats.count,
-            Amount: fmt(stats.amount)
-          });
-        }
-        declinedRows.push({
-          Metric: "  Resubmitted successfully",
-          Count: declineResult.summary.resubmittedCount,
-          Amount: fmt(declineResult.summary.totalDeclinedAmount - declineResult.summary.netUnrecoveredAmount)
-        });
-        declinedRows.push({
-          Metric: "  Net unrecovered",
-          Count: declineResult.summary.unrecoveredCount,
-          Amount: fmt(declineResult.summary.netUnrecoveredAmount)
-        });
-        declinedRows.push({});
-        const txByCard = /* @__PURE__ */ new Map();
-        for (const transaction of declineResult.transactions) {
-          const key = transaction.cardNumber || transaction.id;
-          if (!txByCard.has(key)) txByCard.set(key, []);
-          txByCard.get(key).push(transaction);
-        }
-        const cardGroups = Array.from(txByCard.entries()).sort((a, b) => {
-          const aUnrec = a[1].some((transaction) => !transaction.isRecovered);
-          const bUnrec = b[1].some((transaction) => !transaction.isRecovered);
-          if (aUnrec !== bUnrec) return aUnrec ? -1 : 1;
-          return b[1].length - a[1].length;
-        });
-        const patternsByCard = /* @__PURE__ */ new Map();
-        for (const suspicious of declineResult.suspicious) {
-          if (!suspicious.cardNumber) continue;
-          const existing = patternsByCard.get(suspicious.cardNumber) || [];
-          if (!existing.includes(suspicious.pattern)) existing.push(suspicious.pattern);
-          patternsByCard.set(suspicious.cardNumber, existing);
-        }
-        const isLateNight = (time) => {
-          if (!time) return false;
-          const hour = parseInt(time.split(":")[0]);
-          return hour >= 22 || hour < 5;
-        };
-        declinedRows.push({ Metric: "TRANSACTION DETAIL BY CARD" });
-        declinedRows.push({});
-        for (const [card, transactionsByCard] of cardGroups) {
-          const hasUnrecovered = transactionsByCard.some((transaction) => !transaction.isRecovered);
-          const attendant = transactionsByCard.find((transaction) => transaction.attendant)?.attendant;
-          const patterns = [...patternsByCard.get(card) || []];
-          if (transactionsByCard.some((transaction) => isLateNight(transaction.time))) {
-            patterns.push("Late-night decline");
-          }
-          const header = [
-            `Card ${card}`,
-            `${transactionsByCard[0].bank} \xB7 ${transactionsByCard.length} transaction${transactionsByCard.length !== 1 ? "s" : ""}`,
-            attendant ? `Attendant: ${attendant}` : null,
-            hasUnrecovered ? "Unrecovered" : "Recovered",
-            ...patterns
-          ].filter(Boolean).join(" \xB7 ");
-          declinedRows.push({ Metric: header });
-          const sortedTxns = [...transactionsByCard].sort((a, b) => a.time.localeCompare(b.time));
-          for (const transaction of sortedTxns) {
-            const shortfall = transaction.amount - transaction.recoveredAmount;
-            const isPartial = shortfall > 0.5 && transaction.recoveredAmount > 0;
-            declinedRows.push({
-              Metric: `  ${transaction.type} at ${transaction.time}`,
-              Count: "",
-              Amount: fmt(transaction.amount),
-              Type: transaction.type
-            });
-            if (transaction.note) {
-              const outcomeLabel = isPartial ? `${transaction.note.split(" - shortfall")[0]} of R ${transaction.recoveredAmount.toFixed(2)}` : transaction.note;
-              declinedRows.push({
-                Metric: `    ${outcomeLabel}`,
-                Count: "",
-                Amount: isPartial ? fmt(shortfall) : transaction.recoveredAmount > 0 ? fmt(transaction.recoveredAmount) : "",
-                Type: isPartial ? "Shortfall" : transaction.recoveredAmount > 0 ? "Recovered" : ""
-              });
-            }
-          }
-          declinedRows.push({});
-        }
-        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(declinedRows), "Declined card transactions");
-      }
-      if (attendantSummary.length > 0) {
-        const declinedBankTxns = bankTxns.filter(
-          (transaction) => transaction.matchStatus === "excluded" && (transaction.description || "").toLowerCase().includes("declined")
+        XLSX2.utils.book_append_sheet(
+          wb,
+          XLSX2.utils.json_to_sheet(unmatchedFuelRows),
+          "Unmatched fuel"
         );
-        const declinedByAttendant = /* @__PURE__ */ new Map();
-        for (const declined of declinedBankTxns) {
-          const fuel = findNearestFuelForDecline(declined, fuelTxns);
-          const attendantName = fuel?.attendant && fuel.attendant.trim() || "Unknown";
-          const existing = declinedByAttendant.get(attendantName) || { count: 0, amount: 0 };
-          existing.count += 1;
-          existing.amount += parseFloat(declined.amount);
-          declinedByAttendant.set(attendantName, existing);
-        }
-        for (const attendant of attendantSummary) {
-          const override = declinedByAttendant.get(attendant.attendant) || { count: 0, amount: 0 };
-          attendant.declinedCount = override.count;
-          attendant.declinedAmount = override.amount;
-        }
-        const withVerified = attendantSummary.filter((attendant) => attendant.matchedCount > 0).sort((a, b) => b.matchedBankAmount - a.matchedBankAmount);
-        const unverified = attendantSummary.filter((attendant) => attendant.matchedCount === 0 && attendant.unmatchedCount > 0);
-        const totalFuelCardSales = withVerified.reduce((sum, attendant) => sum + attendant.matchedAmount + attendant.unmatchedAmount, 0);
-        const totalFuelCardSalesCount = withVerified.reduce((sum, attendant) => sum + attendant.matchedCount + attendant.unmatchedCount, 0);
-        const totalMatchedFuelCardSales = withVerified.reduce((sum, attendant) => sum + attendant.matchedAmount, 0);
-        const totalMatchedFuelCardSalesCount = withVerified.reduce((sum, attendant) => sum + attendant.matchedCount, 0);
-        const totalMatchedBankAmount = withVerified.reduce((sum, attendant) => sum + attendant.matchedBankAmount, 0);
-        const totalUnmatchedCardCount = attendantSummary.reduce((sum, attendant) => sum + attendant.unmatchedCount, 0);
-        const totalUnmatchedCardAmount = attendantSummary.reduce((sum, attendant) => sum + attendant.unmatchedAmount, 0);
-        const totalCalibrationError = totalMatchedFuelCardSales - totalMatchedBankAmount;
-        const totalShortfallToAttendants = totalUnmatchedCardAmount + totalCalibrationError;
-        const unmatchedAttendantCount = attendantSummary.filter((attendant) => attendant.unmatchedCount > 0).length;
-        const attendantRows = [];
-        attendantRows.push({ Metric: "ATTENDANT ACCOUNTABILITY", Count: "", Amount: "" });
-        attendantRows.push({ Metric: "  Fuel card sales", Count: totalFuelCardSalesCount, Amount: fmt(totalFuelCardSales) });
-        attendantRows.push({ Metric: "  less Matched fuel card sales", Count: totalMatchedFuelCardSalesCount, Amount: fmt(totalMatchedFuelCardSales) });
-        attendantRows.push({ Metric: "  Unmatched fuel card sales", Count: totalUnmatchedCardCount, Amount: fmt(totalUnmatchedCardAmount) });
-        attendantRows.push({ Metric: `    (across ${unmatchedAttendantCount} attendant${unmatchedAttendantCount !== 1 ? "s" : ""})` });
-        attendantRows.push({ Metric: "  plus Pump calibration error", Count: "", Amount: fmt(totalCalibrationError) });
-        attendantRows.push({ Metric: "  Total shortfall allocated to attendants", Count: "", Amount: fmt(totalShortfallToAttendants) });
-        attendantRows.push({});
-        attendantRows.push({ Metric: "VERIFIED FUEL CARD SALES BY ATTENDANT" });
-        attendantRows.push({});
-        for (const attendant of withVerified) {
-          const totalCardSales = attendant.matchedAmount + attendant.unmatchedAmount;
-          const matchedCardSales = attendant.matchedAmount;
-          const matchedBank2 = attendant.matchedBankAmount;
-          const unmatchedCardSales = attendant.unmatchedAmount;
-          const calibrationErr = attendant.matchedAmount - attendant.matchedBankAmount;
-          const attendantShortfall = unmatchedCardSales + calibrationErr;
-          attendantRows.push({ Metric: `${attendant.attendant} (${attendant.matchedCount} verified sale${attendant.matchedCount !== 1 ? "s" : ""})` });
-          attendantRows.push({ Metric: "  Total card sales", Count: attendant.matchedCount + attendant.unmatchedCount, Amount: fmt(totalCardSales) });
-          attendantRows.push({ Metric: "  Matched card sales", Count: attendant.matchedCount, Amount: fmt(matchedCardSales) });
-          attendantRows.push({ Metric: "  Matched bank amount", Count: attendant.matchedCount, Amount: fmt(matchedBank2) });
-          if (attendant.banks.length >= 2) {
-            for (const bank of attendant.banks) {
-              attendantRows.push({ Metric: `    ${bank.bankName}`, Count: bank.count, Amount: fmt(bank.amount) });
-            }
-          }
-          if (attendant.debtorCount > 0) {
-            attendantRows.push({ Metric: "  Debtor / Account", Count: attendant.debtorCount, Amount: fmt(attendant.debtorAmount) });
-          }
-          if (attendant.declinedCount > 0) {
-            attendantRows.push({ Metric: "  Declined transactions", Count: attendant.declinedCount, Amount: fmt(attendant.declinedAmount) });
-          }
-          if (attendant.unmatchedCount > 0 || Math.abs(calibrationErr) >= 0.01) {
-            if (attendant.unmatchedCount > 0) {
-              attendantRows.push({ Metric: "  Unmatched card sales", Count: attendant.unmatchedCount, Amount: fmt(unmatchedCardSales) });
-            }
-            if (Math.abs(calibrationErr) >= 0.01) {
-              attendantRows.push({ Metric: "  Pump calibration error", Count: "", Amount: fmt(calibrationErr) });
-            }
-            attendantRows.push({ Metric: "  Attendant shortfall", Count: "", Amount: fmt(attendantShortfall) });
-          }
-          attendantRows.push({});
-        }
-        attendantRows.push({
-          Metric: "Total",
-          Count: withVerified.reduce((sum, attendant) => sum + attendant.matchedCount, 0),
-          Amount: fmt(totalMatchedBankAmount)
-        });
-        if (unverified.length > 0) {
-          attendantRows.push({});
-          attendantRows.push({ Metric: "NO VERIFIED FUEL CARD SALES" });
-          for (const attendant of unverified) {
-            attendantRows.push({
-              Metric: `  ${attendant.attendant}`,
-              Count: attendant.unmatchedCount,
-              Amount: fmt(attendant.unmatchedAmount)
-            });
-          }
-        }
-        if (unmatchedBank.length > 0) {
-          attendantRows.push({});
-          attendantRows.push({
-            Metric: "UNMATCHED BANK TRANSACTIONS",
-            Count: unmatchedBank.length,
-            Amount: fmt(unmatchedBankAmount)
-          });
-          attendantRows.push({ Metric: "  These could not be attributed to any attendant - see Unmatched bank sheet" });
-        }
-        XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(attendantRows), "Attendant Summary");
+      }
+      if (insightsModel.declines.hasDeclined) {
+        const declinedRows = buildDeclinedRows(insightsModel.declines);
+        XLSX2.utils.book_append_sheet(
+          wb,
+          XLSX2.utils.json_to_sheet(declinedRows),
+          "Declined card transactions"
+        );
+      }
+      const attendantRows = buildAttendantSummaryRows(insightsModel.attendants);
+      if (attendantRows.length > 0) {
+        XLSX2.utils.book_append_sheet(
+          wb,
+          XLSX2.utils.json_to_sheet(attendantRows),
+          "Attendant Summary"
+        );
       }
       const allRows = transactions2.map((transaction) => ({
         Date: transaction.transactionDate,
@@ -30756,12 +32113,16 @@ function registerExportRoutes(app2) {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
       const resolutions = await storage.getResolutionsByPeriod(req.params.periodId);
-      const flaggedResolutions = resolutions.filter((resolution) => resolution.resolutionType === "flagged");
+      const flaggedResolutions = resolutions.filter(
+        (resolution) => resolution.resolutionType === "flagged"
+      );
       if (flaggedResolutions.length === 0) {
         return res.status(404).json({ error: "No flagged transactions found" });
       }
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
-      const transactionMap = new Map(transactions2.map((transaction) => [transaction.id, transaction]));
+      const transactionMap = new Map(
+        transactions2.map((transaction) => [transaction.id, transaction])
+      );
       const flaggedData = flaggedResolutions.map((resolution) => {
         const transaction = transactionMap.get(resolution.transactionId);
         return {
@@ -32850,6 +34211,394 @@ var DataQualityValidator = class {
 };
 var dataQualityValidator = new DataQualityValidator();
 
+// server/reconciliation/reconciliationCommandService.ts
+var ReconciliationCommandError = class extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.name = "ReconciliationCommandError";
+    this.status = status;
+    this.code = code;
+  }
+};
+function uniqueIds(ids) {
+  return [...new Set(ids)];
+}
+function isBankTransaction2(transaction) {
+  return !!transaction.sourceType?.startsWith("bank");
+}
+function isFuelTransaction(transaction) {
+  return transaction.sourceType === "fuel";
+}
+function assertPeriodTransaction(transaction, periodId, label) {
+  if (!transaction) {
+    throw new ReconciliationCommandError(404, "transaction_not_found", `${label} transaction was not found`);
+  }
+  if (transaction.periodId !== periodId) {
+    throw new ReconciliationCommandError(400, "transaction_period_mismatch", `${label} transaction is not in this reconciliation period`);
+  }
+  return transaction;
+}
+var ReconciliationCommandService = class {
+  constructor(repository) {
+    this.repository = repository;
+  }
+  async createManualMatch(input) {
+    const [bankTransaction, fuelTransaction] = await this.loadManualMatchTransactions(input);
+    if (bankTransaction.matchId || bankTransaction.matchStatus === "matched") {
+      throw new ReconciliationCommandError(409, "bank_already_matched", "The selected bank transaction is already matched");
+    }
+    if (fuelTransaction.matchId || fuelTransaction.matchStatus === "matched") {
+      throw new ReconciliationCommandError(409, "fuel_already_matched", "The selected fuel transaction is already matched");
+    }
+    return this.repository.createManualMatch(input);
+  }
+  async createReviewLink(input) {
+    const [bankTransaction, fuelTransaction] = await this.loadManualMatchTransactions(input);
+    const reviewTransactionId = input.reviewTransactionId;
+    if (reviewTransactionId !== bankTransaction.id && reviewTransactionId !== fuelTransaction.id) {
+      throw new ReconciliationCommandError(400, "invalid_review_transaction", "The review transaction must be one of the linked transactions");
+    }
+    if (bankTransaction.matchId || bankTransaction.matchStatus === "matched") {
+      throw new ReconciliationCommandError(409, "bank_already_matched", "The selected bank transaction is already matched");
+    }
+    if (fuelTransaction.matchId || fuelTransaction.matchStatus === "matched") {
+      throw new ReconciliationCommandError(409, "fuel_already_matched", "The selected fuel transaction is already matched");
+    }
+    return this.repository.createManualMatch({
+      periodId: input.periodId,
+      bankTransactionId: bankTransaction.id,
+      fuelTransactionId: fuelTransaction.id,
+      resolution: {
+        transactionId: reviewTransactionId,
+        linkedTransactionId: reviewTransactionId === bankTransaction.id ? fuelTransaction.id : bankTransaction.id,
+        reason: "manual_match",
+        notes: input.notes ?? "Linked via review",
+        actor: input.actor
+      }
+    });
+  }
+  async createResolution(input) {
+    const transaction = assertPeriodTransaction(
+      await this.repository.getTransaction(input.transactionId),
+      input.periodId,
+      "Selected"
+    );
+    if (input.resolutionType === "linked") {
+      throw new ReconciliationCommandError(400, "linked_resolution_requires_match", "Use the review link command to create a linked match");
+    }
+    if (input.linkedTransactionId) {
+      assertPeriodTransaction(
+        await this.repository.getTransaction(input.linkedTransactionId),
+        input.periodId,
+        "Linked"
+      );
+    }
+    return this.repository.createResolution({
+      ...input,
+      transactionId: transaction.id,
+      reason: input.reason ?? null,
+      notes: input.notes ?? null,
+      linkedTransactionId: input.linkedTransactionId ?? null,
+      assignee: input.assignee ?? null
+    });
+  }
+  async createBulkResolutions(input) {
+    if (input.transactionIds.length === 0) {
+      throw new ReconciliationCommandError(400, "missing_transactions", "At least one transaction is required");
+    }
+    if (input.resolutionType === "linked") {
+      throw new ReconciliationCommandError(400, "linked_resolution_requires_match", "Linked resolutions must be created through a match command");
+    }
+    const requestedIds = uniqueIds(input.transactionIds);
+    const transactions2 = await this.repository.getTransactionsByIds(requestedIds);
+    const transactionsById = new Map(transactions2.map((transaction) => [transaction.id, transaction]));
+    for (const transactionId of requestedIds) {
+      assertPeriodTransaction(transactionsById.get(transactionId), input.periodId, "Selected");
+    }
+    return this.repository.createBulkResolutions({
+      ...input,
+      transactionIds: requestedIds,
+      reason: input.reason ?? null,
+      notes: input.notes ?? null,
+      linkedTransactionId: input.linkedTransactionId ?? null,
+      assignee: input.assignee ?? null
+    });
+  }
+  async removeResolution(periodId, transactionId) {
+    const transaction = assertPeriodTransaction(
+      await this.repository.getTransaction(transactionId),
+      periodId,
+      "Selected"
+    );
+    const resolutions = await this.repository.getResolutionsByTransaction(transaction.id);
+    if (resolutions.length === 0) {
+      throw new ReconciliationCommandError(404, "resolution_not_found", "No resolution was found for this transaction");
+    }
+    const hasLinkedResolution = resolutions.some((resolution) => resolution.resolutionType === "linked");
+    if (hasLinkedResolution && transaction.matchId) {
+      const bundleTransactions = await this.repository.getTransactionsByMatchId(transaction.matchId);
+      const transactionIds = uniqueIds(
+        bundleTransactions.length > 0 ? bundleTransactions.map((item) => item.id) : [transaction.id]
+      );
+      await this.repository.unlinkMatchBundle(transaction.matchId, transactionIds);
+      return { count: resolutions.length, mode: "unlinked_match" };
+    }
+    const count = await this.repository.clearStandaloneResolutions([transaction.id]);
+    return { count, mode: "removed_resolution" };
+  }
+  async deleteMatch(periodId, matchId) {
+    const match = await this.repository.getMatch(matchId);
+    if (!match) {
+      throw new ReconciliationCommandError(404, "match_not_found", "Match not found");
+    }
+    if (match.periodId !== periodId) {
+      throw new ReconciliationCommandError(400, "match_period_mismatch", "This match does not belong to the selected reconciliation period");
+    }
+    const bundleTransactions = await this.repository.getTransactionsByMatchId(match.id);
+    const transactionIds = uniqueIds(
+      bundleTransactions.length > 0 ? bundleTransactions.map((transaction) => transaction.id) : [match.bankTransactionId, match.fuelTransactionId]
+    );
+    await this.repository.unlinkMatchBundle(match.id, transactionIds);
+  }
+  async clearPeriodResolutions(periodId) {
+    const resolutions = await this.repository.getResolutionsByPeriod(periodId);
+    if (resolutions.length === 0) return 0;
+    const resolutionIds = uniqueIds(resolutions.map((resolution) => resolution.transactionId));
+    const transactions2 = await this.repository.getTransactionsByIds(resolutionIds);
+    const transactionsById = new Map(transactions2.map((transaction) => [transaction.id, transaction]));
+    const linkedMatchIds = /* @__PURE__ */ new Set();
+    const linkedFallbackTransactions = /* @__PURE__ */ new Map();
+    const standaloneIds = [];
+    for (const resolution of resolutions) {
+      const transaction = assertPeriodTransaction(
+        transactionsById.get(resolution.transactionId),
+        periodId,
+        "Resolved"
+      );
+      if (resolution.resolutionType === "linked" && transaction.matchId) {
+        linkedMatchIds.add(transaction.matchId);
+        if (!linkedFallbackTransactions.has(transaction.matchId)) {
+          linkedFallbackTransactions.set(transaction.matchId, transaction.id);
+        }
+      } else if (resolution.resolutionType !== "linked") {
+        standaloneIds.push(transaction.id);
+      }
+    }
+    for (const matchId of linkedMatchIds) {
+      const bundleTransactions = await this.repository.getTransactionsByMatchId(matchId);
+      const transactionIds = uniqueIds(
+        bundleTransactions.length > 0 ? bundleTransactions.map((transaction) => transaction.id) : [linkedFallbackTransactions.get(matchId) || ""].filter(Boolean)
+      );
+      if (transactionIds.length > 0) {
+        await this.repository.unlinkMatchBundle(matchId, transactionIds);
+      }
+    }
+    const remainingStandaloneIds = uniqueIds(
+      standaloneIds.filter((transactionId) => {
+        const transaction = transactionsById.get(transactionId);
+        return !transaction?.matchId || !linkedMatchIds.has(transaction.matchId);
+      })
+    );
+    if (remainingStandaloneIds.length > 0) {
+      await this.repository.clearStandaloneResolutions(remainingStandaloneIds);
+    }
+    return resolutions.length;
+  }
+  async clearFileTransactions(periodId, fileId) {
+    const file = await this.repository.getFile(fileId);
+    if (!file) {
+      throw new ReconciliationCommandError(404, "file_not_found", "File not found");
+    }
+    if (file.periodId !== periodId) {
+      throw new ReconciliationCommandError(400, "file_period_mismatch", "This file does not belong to the selected reconciliation period");
+    }
+    const transactions2 = await this.repository.getTransactionsByFile(fileId);
+    const linkedMatchIds = /* @__PURE__ */ new Set();
+    const linkedFallbackTransactions = /* @__PURE__ */ new Map();
+    const standaloneResolutionIds = /* @__PURE__ */ new Set();
+    for (const transaction of transactions2) {
+      assertPeriodTransaction(transaction, periodId, "File");
+      if (transaction.matchId) {
+        linkedMatchIds.add(transaction.matchId);
+        if (!linkedFallbackTransactions.has(transaction.matchId)) {
+          linkedFallbackTransactions.set(transaction.matchId, transaction.id);
+        }
+      } else {
+        const resolutions = await this.repository.getResolutionsByTransaction(transaction.id);
+        if (resolutions.length > 0) {
+          standaloneResolutionIds.add(transaction.id);
+        }
+      }
+    }
+    for (const matchId of linkedMatchIds) {
+      const bundleTransactions = await this.repository.getTransactionsByMatchId(matchId);
+      const transactionIds = uniqueIds(
+        bundleTransactions.length > 0 ? bundleTransactions.map((transaction) => transaction.id) : [linkedFallbackTransactions.get(matchId) || ""].filter(Boolean)
+      );
+      if (transactionIds.length > 0) {
+        await this.repository.unlinkMatchBundle(matchId, transactionIds);
+      }
+    }
+    if (standaloneResolutionIds.size > 0) {
+      await this.repository.clearStandaloneResolutions([...standaloneResolutionIds]);
+    }
+    await this.repository.deleteTransactionsByFile(fileId);
+    return {
+      file,
+      deletedTransactionCount: transactions2.length
+    };
+  }
+  async deleteFileAndState(periodId, fileId) {
+    const result = await this.clearFileTransactions(periodId, fileId);
+    await this.repository.deleteFile(fileId);
+    return result;
+  }
+  async loadManualMatchTransactions(input) {
+    const transactions2 = await this.repository.getTransactionsByIds(
+      uniqueIds([input.bankTransactionId, input.fuelTransactionId])
+    );
+    const transactionsById = new Map(transactions2.map((transaction) => [transaction.id, transaction]));
+    const bankTransaction = assertPeriodTransaction(
+      transactionsById.get(input.bankTransactionId),
+      input.periodId,
+      "Selected bank"
+    );
+    const fuelTransaction = assertPeriodTransaction(
+      transactionsById.get(input.fuelTransactionId),
+      input.periodId,
+      "Selected fuel"
+    );
+    if (!isBankTransaction2(bankTransaction)) {
+      throw new ReconciliationCommandError(400, "invalid_bank_transaction", "The selected bank transaction is not a bank transaction");
+    }
+    if (!isFuelTransaction(fuelTransaction)) {
+      throw new ReconciliationCommandError(400, "invalid_fuel_transaction", "The selected fuel transaction is not a fuel transaction");
+    }
+    return [bankTransaction, fuelTransaction];
+  }
+};
+
+// server/reconciliation/reconciliationStateWriter.ts
+import { eq as eq4, inArray as inArray2 } from "drizzle-orm";
+var DatabaseReconciliationStateWriter = class {
+  async getFile(id) {
+    const [file] = await db.select().from(uploadedFiles).where(eq4(uploadedFiles.id, id));
+    return file || void 0;
+  }
+  async getMatch(id) {
+    const [match] = await db.select().from(matches).where(eq4(matches.id, id));
+    return match || void 0;
+  }
+  async getTransaction(id) {
+    const [transaction] = await db.select().from(transactions).where(eq4(transactions.id, id));
+    return transaction || void 0;
+  }
+  async getTransactionsByIds(ids) {
+    if (ids.length === 0) return [];
+    return db.select().from(transactions).where(inArray2(transactions.id, ids));
+  }
+  async getTransactionsByFile(fileId) {
+    return db.select().from(transactions).where(eq4(transactions.fileId, fileId));
+  }
+  async getTransactionsByMatchId(matchId) {
+    return db.select().from(transactions).where(eq4(transactions.matchId, matchId));
+  }
+  async getResolutionsByPeriod(periodId) {
+    return db.select().from(transactionResolutions).where(eq4(transactionResolutions.periodId, periodId));
+  }
+  async getResolutionsByTransaction(transactionId) {
+    return db.select().from(transactionResolutions).where(eq4(transactionResolutions.transactionId, transactionId));
+  }
+  async createManualMatch(input) {
+    return db.transaction(async (tx) => {
+      const [createdMatch] = await tx.insert(matches).values({
+        periodId: input.periodId,
+        bankTransactionId: input.bankTransactionId,
+        fuelTransactionId: input.fuelTransactionId,
+        matchType: "user_confirmed",
+        matchConfidence: "100"
+      }).returning();
+      await tx.update(transactions).set({ matchStatus: "matched", matchId: createdMatch.id }).where(inArray2(transactions.id, [input.bankTransactionId, input.fuelTransactionId]));
+      if (input.resolution) {
+        await tx.insert(transactionResolutions).values({
+          transactionId: input.resolution.transactionId,
+          periodId: input.periodId,
+          resolutionType: "linked",
+          reason: input.resolution.reason,
+          notes: input.resolution.notes,
+          userId: input.resolution.actor.id,
+          userName: input.resolution.actor.name,
+          userEmail: input.resolution.actor.email,
+          linkedTransactionId: input.resolution.linkedTransactionId,
+          assignee: null
+        });
+      }
+      return createdMatch;
+    });
+  }
+  async createResolution(input) {
+    return db.transaction(async (tx) => {
+      const [resolution] = await tx.insert(transactionResolutions).values({
+        transactionId: input.transactionId,
+        periodId: input.periodId,
+        resolutionType: input.resolutionType,
+        reason: input.reason ?? null,
+        notes: input.notes ?? null,
+        userId: input.actor.id,
+        userName: input.actor.name,
+        userEmail: input.actor.email,
+        linkedTransactionId: input.linkedTransactionId ?? null,
+        assignee: input.assignee ?? null
+      }).returning();
+      await tx.update(transactions).set({ matchStatus: "resolved" }).where(eq4(transactions.id, input.transactionId));
+      return resolution;
+    });
+  }
+  async createBulkResolutions(input) {
+    if (input.transactionIds.length === 0) return 0;
+    return db.transaction(async (tx) => {
+      const inserted = await tx.insert(transactionResolutions).values(
+        input.transactionIds.map((transactionId) => ({
+          transactionId,
+          periodId: input.periodId,
+          resolutionType: input.resolutionType,
+          reason: input.reason ?? null,
+          notes: input.notes ?? null,
+          userId: input.actor.id,
+          userName: input.actor.name,
+          userEmail: input.actor.email,
+          linkedTransactionId: input.linkedTransactionId ?? null,
+          assignee: input.assignee ?? null
+        }))
+      ).returning({ id: transactionResolutions.id });
+      await tx.update(transactions).set({ matchStatus: "resolved" }).where(inArray2(transactions.id, input.transactionIds));
+      return inserted.length;
+    });
+  }
+  async clearStandaloneResolutions(transactionIds) {
+    if (transactionIds.length === 0) return 0;
+    return db.transaction(async (tx) => {
+      await tx.update(transactions).set({ matchStatus: "unmatched", matchId: null }).where(inArray2(transactions.id, transactionIds));
+      const result = await tx.delete(transactionResolutions).where(inArray2(transactionResolutions.transactionId, transactionIds));
+      return result.rowCount ?? 0;
+    });
+  }
+  async deleteTransactionsByFile(fileId) {
+    await db.delete(transactions).where(eq4(transactions.fileId, fileId));
+  }
+  async deleteFile(fileId) {
+    await db.delete(uploadedFiles).where(eq4(uploadedFiles.id, fileId));
+  }
+  async unlinkMatchBundle(matchId, transactionIds) {
+    await db.transaction(async (tx) => {
+      await tx.update(transactions).set({ matchStatus: "unmatched", matchId: null }).where(inArray2(transactions.id, transactionIds));
+      await tx.delete(transactionResolutions).where(inArray2(transactionResolutions.transactionId, transactionIds));
+      await tx.delete(matches).where(eq4(matches.id, matchId));
+    });
+  }
+};
+var reconciliationStateWriter = new DatabaseReconciliationStateWriter();
+
 // server/fileWorkflowRoutes.ts
 function inferUploadFileType(file) {
   const lower = file.originalname.toLowerCase();
@@ -32884,6 +34633,7 @@ async function readFileBuffer2(file) {
   const [buffer] = await objectFile.download();
   return buffer;
 }
+var reconciliationCommandService = new ReconciliationCommandService(reconciliationStateWriter);
 function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
   app2.post(
     "/api/periods/:periodId/files/upload",
@@ -33063,9 +34813,7 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
             `Cleaning up replaced file: ${fileToReplace.fileName} (${fileToReplace.id})`
           );
           try {
-            await storage.deleteMatchesByFile(fileToReplace.id);
-            await storage.deleteTransactionsByFile(fileToReplace.id);
-            await storage.deleteFile(fileToReplace.id);
+            await reconciliationCommandService.deleteFileAndState(req.params.periodId, fileToReplace.id);
             await objectStorageService.deleteFile(fileToReplace.fileUrl);
             console.log(
               "Successfully cleaned up old file, its transactions, and related matches"
@@ -33114,7 +34862,7 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
         if (!file.columnMapping) {
           return res.status(400).json({ error: "Column mapping not set" });
         }
-        await storage.deleteTransactionsByFile(file.id);
+        await reconciliationCommandService.clearFileTransactions(req.params.periodId, file.id);
         const buffer = await readFileBuffer2(file);
         const parsed = await fileParser.parse(buffer, file.fileType);
         if (parsed.rowCount > 5e5) {
@@ -33230,12 +34978,10 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
     try {
       const file = await assertFileWrite(req.params.fileId, req, res);
       if (!file) return;
-      await storage.deleteMatchesByFile(file.id);
-      await storage.deleteTransactionsByFile(file.id);
+      await reconciliationCommandService.deleteFileAndState(file.periodId, file.id);
       if (file.fileUrl) {
         await objectStorageService.deleteFile(file.fileUrl);
       }
-      await storage.deleteFile(file.id);
       audit(req, {
         action: "file.delete",
         resourceType: "file",
@@ -33755,11 +35501,11 @@ function registerReconciliationReadRoutes(app2) {
       const linkedResolutionTransactionIds = new Set(
         resolutions.filter((resolution) => resolution.resolutionType === "linked").map((resolution) => resolution.transactionId)
       );
-      const isInPeriod = (transaction) => {
+      const isInPeriod2 = (transaction) => {
         if (!transaction?.transactionDate) return false;
         return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
       };
-      const isCanonicalFuel = (transaction) => !!transaction && transaction.sourceType === "fuel" && isInPeriod(transaction);
+      const isCanonicalFuel = (transaction) => !!transaction && transaction.sourceType === "fuel" && isInPeriod2(transaction);
       const parseTimeToMinutes2 = (timeStr) => {
         if (!timeStr) return null;
         const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -33881,7 +35627,7 @@ function registerReconciliationReadRoutes(app2) {
           }
         }
         if (transaction.sourceType?.startsWith("bank")) {
-          if (!isInPeriod(transaction)) return [];
+          if (!isInPeriod2(transaction)) return [];
           if (transaction.matchStatus === "unmatched" || transaction.matchStatus === "lag_explained" || transaction.matchStatus === "unmatchable") {
             return [{
               match: {
@@ -33982,6 +35728,41 @@ function registerReconciliationReadRoutes(app2) {
       res.status(500).json({ error: "Failed to fetch decline analysis" });
     }
   });
+  app2.get("/api/periods/:periodId/insights", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const [summary, attendantSummary, transactions2] = await Promise.all([
+        storage.getPeriodSummary(req.params.periodId),
+        storage.getAttendantSummary(req.params.periodId),
+        storage.getTransactionsByPeriod(req.params.periodId)
+      ]);
+      const fuelTransactions = transactions2.filter((tx) => tx.sourceType === "fuel");
+      const bankTransactions = transactions2.filter(
+        (tx) => tx.sourceType && tx.sourceType.startsWith("bank")
+      );
+      const declineResult = computeDeclineAnalysis(bankTransactions, fuelTransactions);
+      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult));
+    } catch (error) {
+      console.error("Error fetching insights read model:", error);
+      res.status(500).json({ error: "Failed to fetch insights data" });
+    }
+  });
+  app2.get("/api/periods/:periodId/review-model", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const [transactions2, resolutions, matchingRules2] = await Promise.all([
+        storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId),
+        storage.getMatchingRules(req.params.periodId)
+      ]);
+      res.json(buildReviewQueueReadModel(period, transactions2, resolutions, matchingRules2));
+    } catch (error) {
+      console.error("Error fetching review read model:", error);
+      res.status(500).json({ error: "Failed to fetch review data" });
+    }
+  });
   app2.get("/api/periods/:periodId/summary", isAuthenticated, async (req, res) => {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
@@ -33991,6 +35772,20 @@ function registerReconciliationReadRoutes(app2) {
     } catch (error) {
       console.error("Error fetching period summary:", error);
       res.status(500).json({ error: "Failed to fetch period summary" });
+    }
+  });
+  app2.get("/api/periods/:periodId/dashboard", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const [summary, resolutions] = await Promise.all([
+        storage.getPeriodSummary(req.params.periodId),
+        storage.getResolutionsByPeriod(req.params.periodId)
+      ]);
+      res.json(buildResultsDashboardReadModel(summary, resolutions));
+    } catch (error) {
+      console.error("Error fetching dashboard read model:", error);
+      res.status(500).json({ error: "Failed to fetch dashboard data" });
     }
   });
   app2.get("/api/periods/:periodId/attendant-summary", isAuthenticated, async (req, res) => {
@@ -34006,355 +35801,222 @@ function registerReconciliationReadRoutes(app2) {
   });
 }
 
-// server/reconciliation/matching.ts
-function groupFuelByInvoice(fuelTransactions, groupByInvoice) {
-  if (!groupByInvoice) {
-    return fuelTransactions.map((tx) => ({
-      invoiceNumber: tx.id,
-      items: [tx],
-      totalAmount: parseFloat(tx.amount),
-      firstDate: tx.transactionDate,
-      firstTime: tx.transactionTime,
-      cardNumber: tx.cardNumber
-    }));
-  }
-  const invoices = {};
-  for (const tx of fuelTransactions) {
-    const invoiceNum = tx.referenceNumber || tx.id;
-    if (!invoices[invoiceNum]) {
-      invoices[invoiceNum] = {
-        invoiceNumber: invoiceNum,
-        items: [],
-        totalAmount: 0,
-        firstDate: tx.transactionDate,
-        firstTime: tx.transactionTime,
-        cardNumber: tx.cardNumber
-      };
+// server/reconciliationWriteRoutes.ts
+import { z as z4 } from "zod";
+
+// server/reconciliation/autoMatchPlanner.ts
+function toDateOnly(timestampMs) {
+  const date = new Date(timestampMs);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+function isDebtorTransaction(transaction) {
+  const paymentType = transaction.paymentType?.toLowerCase();
+  return paymentType?.includes("debtor") || paymentType?.includes("account") || paymentType?.includes("fleet");
+}
+function isWithinPeriodDay(day, startDay, endDay) {
+  return !Number.isNaN(day) && day >= startDay && day <= endDay;
+}
+function planAutoMatch(period, rules, transactions2) {
+  const periodStartDay = (/* @__PURE__ */ new Date(`${period.startDate}T00:00:00`)).getTime();
+  const periodEndDay = (/* @__PURE__ */ new Date(`${period.endDate}T00:00:00`)).getTime();
+  const dateBufferMs = rules.dateWindowDays * 864e5;
+  const fuelTransactions = transactions2.filter((transaction) => {
+    if (transaction.sourceType !== "fuel" || transaction.isCardTransaction !== "yes" || isDebtorTransaction(transaction) || transaction.matchStatus === "excluded" || !transaction.transactionDate) {
+      return false;
     }
-    invoices[invoiceNum].items.push(tx);
-    invoices[invoiceNum].totalAmount += parseFloat(tx.amount);
-  }
-  return Object.values(invoices);
-}
-function parseTimeToMinutes(timeStr) {
-  if (!timeStr) return null;
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-  if (!match) return null;
-  const hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  return hours * 60 + minutes;
-}
-function parseDateToDays(dateStr) {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return null;
-  return Math.floor(date.getTime() / (1e3 * 60 * 60 * 24));
-}
-function scoreBankToInvoices(bankTx, candidateInvoices, usedInvoices, rules) {
-  return scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, {
-    id: "single_pass",
-    name: "Single Pass",
-    description: "Legacy single-pass scoring",
-    order: 1,
-    maxAmountDiff: rules.amountTolerance,
-    minDateDiffDays: 0,
-    maxDateDiffDays: rules.dateWindowDays,
-    maxTimeDiffMinutes: rules.timeWindowMinutes,
-    requireExactAmount: false,
-    requireCardMatch: rules.requireCardMatch,
-    minimumConfidence: rules.minimumConfidence,
-    autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence,
-    boundaryMode: "none"
+    const day = toDateOnly(new Date(transaction.transactionDate).getTime());
+    return isWithinPeriodDay(day, periodStartDay, periodEndDay);
   });
-}
-function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, stage, getBoundaryPosition) {
-  let bestMatch = null;
-  const seen = /* @__PURE__ */ new Set();
-  for (const invoice of candidateInvoices) {
-    if (seen.has(invoice.invoiceNumber)) continue;
-    seen.add(invoice.invoiceNumber);
-    const candidate = scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition);
-    if (!candidate) continue;
-    if (usedInvoices.has(invoice.invoiceNumber)) continue;
-    if (!bestMatch || compareBestMatches(candidate, bestMatch) < 0) {
-      bestMatch = candidate;
-    }
-  }
-  return bestMatch;
-}
-function runSequentialMatchingStages(bankTransactions, fuelInvoices, stages) {
-  const remainingBanks = [...bankTransactions];
-  const usedInvoices = /* @__PURE__ */ new Set();
-  const stageMatches = [];
-  const boundaryPositions = deriveBoundaryPositions(fuelInvoices);
-  for (const stage of stages) {
-    const candidateLists = buildStageCandidateLists(
-      remainingBanks,
-      fuelInvoices,
-      usedInvoices,
-      stage,
-      boundaryPositions
-    );
-    const matchedBankIds = assignStageMatches(candidateLists);
-    for (const { invoice } of candidateLists) {
-      const assignedMatch = matchedBankIds.get(invoice.invoiceNumber);
-      if (!assignedMatch) continue;
-      usedInvoices.add(assignedMatch.invoice.invoiceNumber);
-      stageMatches.push({
-        stage,
-        bankTransaction: assignedMatch.bankTransaction,
-        bestMatch: assignedMatch
-      });
-    }
-    const stillRemaining = remainingBanks.filter((bankTx) => {
-      for (const assigned of matchedBankIds.values()) {
-        if (assigned.bankTransaction.id === bankTx.id) return false;
+  const bankTransactions = transactions2.filter(
+    (transaction) => transaction.sourceType?.startsWith("bank") && transaction.matchStatus !== "excluded"
+  );
+  const unmatchableBankTransactions = bankTransactions.filter((transaction) => {
+    if (!transaction.transactionDate) return false;
+    const bankTime = new Date(transaction.transactionDate).getTime();
+    if (Number.isNaN(bankTime)) return false;
+    const bankDay = toDateOnly(bankTime);
+    return bankDay > periodEndDay + dateBufferMs || bankDay < periodStartDay - 864e5;
+  });
+  const matchableBankTransactions = bankTransactions.filter(
+    (transaction) => !unmatchableBankTransactions.includes(transaction)
+  );
+  const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
+  const stages = buildMatchingStages(rules);
+  const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
+  const stageMatches = runSequentialMatchingStages(
+    matchableBankTransactions,
+    fuelInvoices,
+    stages
+  );
+  const hasCompetingSameDayCandidate = (stageId, bankTransaction, bestMatch) => {
+    if (!operationalStage) return false;
+    if (stageId !== "boundary_transactions" && stageId !== "settlement_fallback") return false;
+    const fuelDate = bestMatch.invoice.firstDate;
+    if (!fuelDate) return false;
+    const fuelTime = parseTimeToMinutes(bestMatch.invoice.firstTime || "");
+    return matchableBankTransactions.some((candidateBank) => {
+      if (candidateBank.id === bankTransaction.id) return false;
+      if (candidateBank.transactionDate !== fuelDate) return false;
+      const amountDiff = Math.abs(parseFloat(candidateBank.amount) - bestMatch.invoice.totalAmount);
+      if (amountDiff > operationalStage.maxAmountDiff) return false;
+      const bankTime = parseTimeToMinutes(candidateBank.transactionTime || "");
+      if (fuelTime !== null && bankTime !== null && operationalStage.maxTimeDiffMinutes !== null && Math.abs(bankTime - fuelTime) > operationalStage.maxTimeDiffMinutes) {
+        return false;
+      }
+      if (operationalStage.requireCardMatch) {
+        if (!candidateBank.cardNumber || !bestMatch.invoice.cardNumber) return false;
+        if (candidateBank.cardNumber !== bestMatch.invoice.cardNumber) return false;
       }
       return true;
     });
-    remainingBanks.length = 0;
-    remainingBanks.push(...stillRemaining);
-  }
-  return stageMatches;
-}
-function scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition) {
-  if (invoice.items.some((item) => item.matchStatus === "matched")) return null;
-  const reasons = [`stage:${stage.id}`];
-  const bankAmount = parseFloat(bankTx.amount);
-  const amountDiff = Math.abs(bankAmount - invoice.totalAmount);
-  if (amountDiff > stage.maxAmountDiff) return null;
-  if (stage.requireExactAmount && amountDiff > 0.01) return null;
-  const fuelDate = parseDateToDays(invoice.firstDate || "");
-  const bankDate = parseDateToDays(bankTx.transactionDate || "");
-  if (fuelDate === null || bankDate === null) return null;
-  const dateDiff = bankDate - fuelDate;
-  if (dateDiff < stage.minDateDiffDays || dateDiff > stage.maxDateDiffDays) return null;
-  const boundaryPosition = getBoundaryPosition ? getBoundaryPosition(invoice) : "none";
-  if (stage.boundaryMode === "boundary") {
-    const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
-    const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
-    const isDirectionalBoundary = dateDiff === -1 && allowsPreviousDay || dateDiff === 1 && allowsNextDay;
-    if (!isDirectionalBoundary) return null;
-    reasons.push(dateDiff === -1 ? "boundary-previous-day" : "boundary-next-day");
-  }
-  const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
-  const bankTime = parseTimeToMinutes(bankTx.transactionTime || "");
-  let confidence = 70;
-  if (dateDiff === 0) confidence = 85;
-  else if (Math.abs(dateDiff) === 1) confidence = 75;
-  else if (Math.abs(dateDiff) === 2) confidence = 68;
-  else confidence = 65;
-  let timeDiff = 0;
-  if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
-    timeDiff = Math.abs(bankTime - fuelTime);
-    if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) return null;
-    if (timeDiff <= 5) confidence = 100;
-    else if (timeDiff <= 15) confidence = 95;
-    else if (timeDiff <= 30) confidence = 85;
-    else confidence = 75;
-  }
-  if (amountDiff > 0) {
-    const divisor = stage.maxAmountDiff <= 0 ? 0.01 : stage.maxAmountDiff;
-    confidence -= Math.min(5, amountDiff / divisor * 5);
-  }
-  if (stage.requireCardMatch) {
-    if (!bankTx.cardNumber || !invoice.cardNumber) return null;
-    if (bankTx.cardNumber !== invoice.cardNumber) return null;
-    confidence += 25;
-    reasons.push("card-match-required");
-  } else if (bankTx.cardNumber && invoice.cardNumber) {
-    if (bankTx.cardNumber === invoice.cardNumber) {
-      confidence += 25;
-      reasons.push("card-match-strong");
-    } else {
-      confidence -= 30;
-      reasons.push("card-differ");
-    }
-  }
-  confidence = Math.min(100, Math.max(0, confidence));
-  if (confidence < stage.minimumConfidence) return null;
-  return {
-    invoice,
-    confidence,
-    timeDiff,
-    dateDiff: Math.abs(dateDiff),
-    amountDiff,
-    reasons
   };
-}
-function buildStageCandidateLists(bankTransactions, fuelInvoices, usedInvoices, stage, boundaryPositions) {
-  return fuelInvoices.filter((invoice) => !usedInvoices.has(invoice.invoiceNumber)).map((invoice) => {
-    const candidates = bankTransactions.map((bankTransaction) => {
-      const bestMatch = scoreBankToInvoiceCandidate(
-        bankTransaction,
-        invoice,
-        stage,
-        (candidateInvoice) => boundaryPositions.get(candidateInvoice.invoiceNumber) || "none"
-      );
-      if (!bestMatch) return null;
-      return { bankTransaction, bestMatch };
-    }).filter((candidate) => !!candidate).sort((a, b) => {
-      const comparison = compareBestMatches(a.bestMatch, b.bestMatch);
-      if (comparison !== 0) return comparison;
-      return compareBankTransactions(a.bankTransaction, b.bankTransaction);
+  let competingSameDaySkipped = 0;
+  const pendingMatches = [];
+  for (const stageMatch of stageMatches) {
+    const { stage, bankTransaction, bestMatch } = stageMatch;
+    if (hasCompetingSameDayCandidate(stage.id, bankTransaction, bestMatch)) {
+      competingSameDaySkipped += 1;
+      continue;
+    }
+    const isExact = Math.abs(bestMatch.amountDiff) < 5e-3;
+    const isStrictExactStage = stage.id === "strict_same_day_exact" && isExact;
+    const aboveThreshold = bestMatch.confidence >= stage.autoConfirmConfidence;
+    const matchType = isStrictExactStage && aboveThreshold ? "auto_exact" : isStrictExactStage ? "auto_exact_review" : aboveThreshold ? "auto_rules" : "auto_rules_review";
+    pendingMatches.push({
+      matchData: {
+        periodId: period.id,
+        fuelTransactionId: bestMatch.invoice.items[0].id,
+        bankTransactionId: bankTransaction.id,
+        matchType,
+        matchConfidence: String(bestMatch.confidence)
+      },
+      bankTxId: bankTransaction.id,
+      fuelItemIds: bestMatch.invoice.items.map((item) => item.id),
+      stageId: stage.id
     });
-    return { invoice, candidates };
-  }).filter((entry) => entry.candidates.length > 0).sort((a, b) => {
-    if (a.candidates.length !== b.candidates.length) return a.candidates.length - b.candidates.length;
-    const topComparison = compareBestMatches(a.candidates[0].bestMatch, b.candidates[0].bestMatch);
-    if (topComparison !== 0) return topComparison;
-    return a.invoice.invoiceNumber.localeCompare(b.invoice.invoiceNumber);
+  }
+  const matchedBankIds = new Set(pendingMatches.map((match) => match.bankTxId));
+  const unmatchedInPeriodBank = matchableBankTransactions.filter((transaction) => {
+    if (matchedBankIds.has(transaction.id)) return false;
+    if (!transaction.transactionDate) return false;
+    const day = toDateOnly(new Date(transaction.transactionDate).getTime());
+    return isWithinPeriodDay(day, periodStartDay, periodEndDay);
   });
-}
-function assignStageMatches(candidateLists) {
-  const invoiceByNumber = new Map(candidateLists.map((entry) => [entry.invoice.invoiceNumber, entry]));
-  const bankAssignments = /* @__PURE__ */ new Map();
-  const invoiceAssignments = /* @__PURE__ */ new Map();
-  const tryAssign = (invoiceNumber, visitedBanks) => {
-    const invoiceEntry = invoiceByNumber.get(invoiceNumber);
-    if (!invoiceEntry) return false;
-    for (const candidate of invoiceEntry.candidates) {
-      const bankId = candidate.bankTransaction.id;
-      if (visitedBanks.has(bankId)) continue;
-      visitedBanks.add(bankId);
-      const currentInvoiceNumber = bankAssignments.get(bankId);
-      if (!currentInvoiceNumber || tryAssign(currentInvoiceNumber, visitedBanks)) {
-        bankAssignments.set(bankId, invoiceNumber);
-        invoiceAssignments.set(invoiceNumber, { ...candidate.bestMatch, bankTransaction: candidate.bankTransaction });
-        return true;
-      }
-    }
-    return false;
-  };
-  for (const entry of candidateLists) {
-    tryAssign(entry.invoice.invoiceNumber, /* @__PURE__ */ new Set());
-  }
-  return invoiceAssignments;
-}
-function getCardMatchScore(reasons) {
-  if (reasons.some((reason) => reason.startsWith("card-match"))) return 2;
-  if (reasons.some((reason) => reason === "card-differ")) return 0;
-  return 1;
-}
-function compareBestMatches(a, b) {
-  if (a.confidence !== b.confidence) return b.confidence - a.confidence;
-  const cardScoreDiff = getCardMatchScore(b.reasons) - getCardMatchScore(a.reasons);
-  if (cardScoreDiff !== 0) return cardScoreDiff;
-  if (a.dateDiff !== b.dateDiff) return a.dateDiff - b.dateDiff;
-  if (a.timeDiff !== b.timeDiff) return a.timeDiff - b.timeDiff;
-  if (a.amountDiff !== b.amountDiff) return a.amountDiff - b.amountDiff;
-  return a.invoice.invoiceNumber.localeCompare(b.invoice.invoiceNumber);
-}
-function compareBankTransactions(a, b) {
-  const dateComparison = (parseDateToDays(a.transactionDate || "") ?? Number.MAX_SAFE_INTEGER) - (parseDateToDays(b.transactionDate || "") ?? Number.MAX_SAFE_INTEGER);
-  if (dateComparison !== 0) return dateComparison;
-  const timeComparison = (parseTimeToMinutes(a.transactionTime || "") ?? Number.MAX_SAFE_INTEGER) - (parseTimeToMinutes(b.transactionTime || "") ?? Number.MAX_SAFE_INTEGER);
-  if (timeComparison !== 0) return timeComparison;
-  return a.id.localeCompare(b.id);
-}
-function deriveBoundaryPositions(fuelInvoices) {
-  const grouped = /* @__PURE__ */ new Map();
-  for (const invoice of fuelInvoices) {
-    const key = invoice.firstDate || "";
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key).push(invoice);
-  }
-  const positions = /* @__PURE__ */ new Map();
-  for (const invoices of grouped.values()) {
-    const sorted = [...invoices].sort((a, b) => {
-      const timeA = parseTimeToMinutes(a.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
-      const timeB = parseTimeToMinutes(b.firstTime || "") ?? Number.MAX_SAFE_INTEGER;
-      if (timeA !== timeB) return timeA - timeB;
-      return a.invoiceNumber.localeCompare(b.invoiceNumber);
-    });
-    if (sorted.length === 0) continue;
-    const first = sorted[0];
-    const last = sorted[sorted.length - 1];
-    positions.set(first.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "start");
-    positions.set(last.invoiceNumber, first.invoiceNumber === last.invoiceNumber ? "both" : "end");
-  }
-  return positions;
-}
-
-// shared/matchingStages.ts
-var clampPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
-function buildMatchingStages(rules) {
-  const minimumConfidence = clampPercent(rules.minimumConfidence);
-  const autoConfirmConfidence = clampPercent(rules.autoMatchThreshold);
-  const strictStage = {
-    id: "strict_same_day_exact",
-    name: "Strict Same-Day Exact",
-    description: "Exact-amount, same-day matches first. This is the cleanest operational pass.",
-    order: 1,
-    maxAmountDiff: 0.01,
-    minDateDiffDays: 0,
-    maxDateDiffDays: 0,
-    maxTimeDiffMinutes: rules.attendantSubmissionDelayMinutes,
-    requireExactAmount: true,
-    requireCardMatch: rules.requireCardMatch,
-    minimumConfidence,
-    autoConfirmConfidence,
-    boundaryMode: "none"
-  };
-  const closeOperationalStage = {
-    id: "operational_close_match",
-    name: "Operational Close Match",
-    description: "Then we allow small amount and timing variation for normal same-day settlement only.",
-    order: 2,
-    maxAmountDiff: Math.max(0.01, rules.amountTolerance),
-    minDateDiffDays: 0,
-    maxDateDiffDays: 0,
-    maxTimeDiffMinutes: rules.timeWindowMinutes,
-    requireExactAmount: false,
-    requireCardMatch: rules.requireCardMatch,
-    minimumConfidence,
-    autoConfirmConfidence,
-    boundaryMode: "none"
-  };
-  const boundaryStage = {
-    id: "boundary_transactions",
-    name: "Boundary Transactions",
-    description: "Checks first-of-day fuel sales against the previous bank day, and last-of-day fuel sales against the next bank day, before broad fallback matching.",
-    order: 3,
-    maxAmountDiff: Math.max(0.01, Math.min(rules.amountTolerance, 1)),
-    minDateDiffDays: -1,
-    maxDateDiffDays: 1,
-    maxTimeDiffMinutes: null,
-    requireExactAmount: false,
-    requireCardMatch: rules.requireCardMatch,
-    minimumConfidence,
-    autoConfirmConfidence,
-    boundaryMode: "boundary"
-  };
-  const settlementFallbackStage = {
-    id: "settlement_fallback",
-    name: "Settlement Fallback",
-    description: "Finally, we use the wider date window for delayed bank settlement and lower-confidence review candidates.",
-    order: 4,
-    maxAmountDiff: Math.max(0.01, rules.amountTolerance),
-    minDateDiffDays: 1,
-    maxDateDiffDays: Math.max(rules.dateWindowDays, 0),
-    maxTimeDiffMinutes: null,
-    requireExactAmount: false,
-    requireCardMatch: rules.requireCardMatch,
-    minimumConfidence,
-    autoConfirmConfidence,
-    boundaryMode: "none"
-  };
-  return [
-    strictStage,
-    closeOperationalStage,
-    boundaryStage,
-    settlementFallbackStage
-  ].filter((stage, index2, stages) => {
-    if (stage.id === "settlement_fallback" && stage.maxDateDiffDays <= stages[1].maxDateDiffDays) {
+  const outOfPeriodCardFuel = transactions2.filter((transaction) => {
+    if (transaction.sourceType !== "fuel" || transaction.isCardTransaction !== "yes" || isDebtorTransaction(transaction) || transaction.matchStatus === "excluded" || !transaction.transactionDate) {
       return false;
     }
-    return true;
+    const day = toDateOnly(new Date(transaction.transactionDate).getTime());
+    if (Number.isNaN(day)) return false;
+    return day < periodStartDay || day > periodEndDay;
   });
+  const outOfPeriodInvoices = groupFuelByInvoice(outOfPeriodCardFuel, rules.groupByInvoice);
+  const outOfPeriodByDate = /* @__PURE__ */ new Map();
+  for (const invoice of outOfPeriodInvoices) {
+    const dayKey = parseDateToDays(invoice.firstDate || "");
+    if (dayKey === null) continue;
+    for (let offset = -1; offset <= rules.dateWindowDays; offset += 1) {
+      const key = dayKey + offset;
+      if (!outOfPeriodByDate.has(key)) outOfPeriodByDate.set(key, []);
+      outOfPeriodByDate.get(key)?.push(invoice);
+    }
+  }
+  const lagUsedInvoices = /* @__PURE__ */ new Set();
+  const lagExplainedBankIds = [];
+  for (const bankTransaction of unmatchedInPeriodBank) {
+    const bankDayKey = parseDateToDays(bankTransaction.transactionDate || "");
+    const candidates = bankDayKey !== null ? outOfPeriodByDate.get(bankDayKey) || [] : outOfPeriodInvoices;
+    const bestMatch = scoreBankToInvoices(
+      bankTransaction,
+      candidates,
+      lagUsedInvoices,
+      rules
+    );
+    if (!bestMatch) continue;
+    lagExplainedBankIds.push(bankTransaction.id);
+    lagUsedInvoices.add(bestMatch.invoice.invoiceNumber);
+  }
+  const matchableCount = matchableBankTransactions.length;
+  const matchCount = pendingMatches.length;
+  const matchRate = matchableCount > 0 ? (matchCount / matchableCount * 100).toFixed(1) : "0";
+  const skippedNonCardCount = transactions2.filter((transaction) => {
+    if (transaction.sourceType !== "fuel" || transaction.isCardTransaction === "yes" || !transaction.transactionDate) {
+      return false;
+    }
+    const day = toDateOnly(new Date(transaction.transactionDate).getTime());
+    return isWithinPeriodDay(day, periodStartDay, periodEndDay);
+  }).length;
+  const warnings = [
+    ...unmatchableBankTransactions.length > 0 ? [`${unmatchableBankTransactions.length} bank transaction(s) are outside the period date range (${period.startDate} to ${period.endDate}) + ${rules.dateWindowDays}-day window and cannot be matched.`] : [],
+    ...competingSameDaySkipped > 0 ? [`${competingSameDaySkipped} later-pass match(es) were held back because a same-day operational candidate exists and should be reviewed manually.`] : []
+  ];
+  return {
+    pendingMatches,
+    lagExplainedBankIds,
+    unmatchableBankIds: unmatchableBankTransactions.map((transaction) => transaction.id),
+    warnings,
+    stages,
+    metrics: {
+      matchesCreated: matchCount,
+      cardTransactionsProcessed: fuelTransactions.length,
+      invoicesCreated: fuelInvoices.length,
+      bankTransactionsTotal: bankTransactions.length,
+      bankTransactionsMatchable: matchableCount,
+      bankTransactionsUnmatchable: unmatchableBankTransactions.length,
+      bankTransactionsLagExplained: lagExplainedBankIds.length,
+      nonCardTransactionsSkipped: skippedNonCardCount,
+      matchRate: `${matchRate}%`,
+      competingSameDaySkipped
+    }
+  };
 }
 
 // server/reconciliationWriteRoutes.ts
+var reconciliationCommandService2 = new ReconciliationCommandService(reconciliationStateWriter);
+var resolutionTypeSchema = z4.enum(["linked", "reviewed", "dismissed", "flagged", "partial"]);
+var reviewLinkSchema = z4.object({
+  bankTransactionId: z4.string().min(1),
+  fuelTransactionId: z4.string().min(1),
+  reviewTransactionId: z4.string().min(1),
+  notes: z4.string().trim().optional().nullable()
+});
+var resolutionSchema = z4.object({
+  transactionId: z4.string().min(1),
+  periodId: z4.string().min(1),
+  resolutionType: resolutionTypeSchema,
+  reason: z4.string().trim().optional().nullable(),
+  notes: z4.string().trim().optional().nullable(),
+  linkedTransactionId: z4.string().trim().optional().nullable(),
+  assignee: z4.string().trim().optional().nullable()
+});
+var bulkResolutionSchema = z4.object({
+  transactionIds: z4.array(z4.string().min(1)).min(1),
+  periodId: z4.string().min(1)
+});
+var bulkConfirmSchema = z4.object({
+  matches: z4.array(z4.object({
+    bankId: z4.string().min(1),
+    fuelId: z4.string().min(1)
+  })).min(1),
+  periodId: z4.string().min(1)
+});
+function buildActor(user) {
+  return {
+    id: user?.id || null,
+    name: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
+    email: user?.email || null
+  };
+}
+function handleWriteError(res, error, fallbackMessage) {
+  if (error instanceof ReconciliationCommandError) {
+    return res.status(error.status).json({ error: error.code, message: error.message });
+  }
+  if (error instanceof z4.ZodError) {
+    return res.status(400).json({ error: "invalid_request", message: "Invalid request data" });
+  }
+  console.error(fallbackMessage, error);
+  return res.status(500).json({ error: "internal_error", message: fallbackMessage });
+}
 function registerReconciliationWriteRoutes(app2) {
   app2.post("/api/periods/:periodId/auto-match", isAuthenticated, async (req, res) => {
     try {
@@ -34362,186 +36024,61 @@ function registerReconciliationWriteRoutes(app2) {
       if (!period) return;
       const rules = await storage.getMatchingRules(req.params.periodId);
       const transactions2 = await storage.getTransactionsByPeriod(req.params.periodId);
-      const periodStartDay = (/* @__PURE__ */ new Date(period.startDate + "T00:00:00")).getTime();
-      const periodEndDay = (/* @__PURE__ */ new Date(period.endDate + "T00:00:00")).getTime();
-      const dateBufferMs = rules.dateWindowDays * 864e5;
-      const toDateOnly = (d) => {
-        const dt = new Date(d);
-        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
-      };
-      const isDebtorTx = (t) => t.paymentType?.toLowerCase().includes("debtor") || t.paymentType?.toLowerCase().includes("account") || t.paymentType?.toLowerCase().includes("fleet");
-      const fuelTransactions = transactions2.filter((t) => {
-        if (t.sourceType !== "fuel" || t.isCardTransaction !== "yes" || isDebtorTx(t) || t.matchStatus !== "unmatched") return false;
-        if (!t.transactionDate) return false;
-        const day = toDateOnly(new Date(t.transactionDate).getTime());
-        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
-      });
-      const bankTransactions = transactions2.filter(
-        (t) => t.sourceType && t.sourceType.startsWith("bank") && t.matchStatus === "unmatched"
-      );
-      console.log(`[AUTO-MATCH] Period: ${period.name} (${period.startDate} to ${period.endDate}), Fuel txns: ${fuelTransactions.length}, Bank txns: ${bankTransactions.length}`);
-      if (fuelTransactions.length > 0) {
-        const fuelDateSet = new Set(fuelTransactions.map((t) => t.transactionDate?.substring(0, 10)));
-        console.log(`[AUTO-MATCH] Fuel dates: ${[...fuelDateSet].sort().join(", ")}`);
-      }
-      if (bankTransactions.length > 0) {
-        const bankDateSet = new Set(bankTransactions.map((t) => t.transactionDate?.substring(0, 10)));
-        console.log(`[AUTO-MATCH] Bank dates: ${[...bankDateSet].sort().join(", ")}`);
-      }
-      let unmatchableBankTransactions = [];
-      let dateRangeWarning = "";
-      unmatchableBankTransactions = bankTransactions.filter((t) => {
-        if (!t.transactionDate) return false;
-        const bankTime = new Date(t.transactionDate).getTime();
-        if (isNaN(bankTime)) return false;
-        const bankDay = toDateOnly(bankTime);
-        return bankDay > periodEndDay + dateBufferMs || bankDay < periodStartDay - 864e5;
-      });
-      if (unmatchableBankTransactions.length > 0) {
-        dateRangeWarning = `${unmatchableBankTransactions.length} bank transaction(s) are outside the period date range (${period.startDate} to ${period.endDate}) + ${rules.dateWindowDays}-day window and cannot be matched.`;
-        await storage.updateTransactionsBatch(
-          unmatchableBankTransactions.map((tx) => ({ id: tx.id, data: { matchStatus: "unmatchable", matchId: null } }))
-        );
-      }
-      const matchableBankTransactions = bankTransactions.filter(
-        (t) => !unmatchableBankTransactions.includes(t)
-      );
-      const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
-      const stages = buildMatchingStages(rules);
-      const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
-      let matchCount = 0;
-      const skippedNonCardCount = transactions2.filter((t) => {
-        if (t.sourceType !== "fuel" || t.isCardTransaction === "yes") return false;
-        if (!t.transactionDate) return false;
-        const day = toDateOnly(new Date(t.transactionDate).getTime());
-        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
-      }).length;
-      const pendingMatches = [];
-      const stageMatches = runSequentialMatchingStages(matchableBankTransactions, fuelInvoices, stages);
-      const stageCounts = /* @__PURE__ */ new Map();
-      let competingSameDaySkipped = 0;
-      const hasCompetingSameDayCandidate = (stageId, bankTransaction, bestMatch) => {
-        if (!operationalStage) return false;
-        if (stageId !== "boundary_transactions" && stageId !== "settlement_fallback") return false;
-        const invoice = bestMatch.invoice;
-        const fuelDate = invoice.firstDate;
-        if (!fuelDate) return false;
-        const fuelTime = parseTimeToMinutes(invoice.firstTime || "");
-        return matchableBankTransactions.some((candidateBank) => {
-          if (candidateBank.id === bankTransaction.id) return false;
-          if (candidateBank.transactionDate !== fuelDate) return false;
-          const amountDiff = Math.abs(parseFloat(candidateBank.amount) - invoice.totalAmount);
-          if (amountDiff > operationalStage.maxAmountDiff) return false;
-          const bankTime = parseTimeToMinutes(candidateBank.transactionTime || "");
-          if (fuelTime !== null && bankTime !== null && operationalStage.maxTimeDiffMinutes !== null && Math.abs(bankTime - fuelTime) > operationalStage.maxTimeDiffMinutes) {
-            return false;
-          }
-          if (operationalStage.requireCardMatch) {
-            if (!candidateBank.cardNumber || !invoice.cardNumber) return false;
-            if (candidateBank.cardNumber !== invoice.cardNumber) return false;
-          }
-          return true;
-        });
-      };
-      for (const stageMatch of stageMatches) {
-        const { stage, bankTransaction, bestMatch } = stageMatch;
-        if (hasCompetingSameDayCandidate(stage.id, bankTransaction, bestMatch)) {
-          competingSameDaySkipped++;
-          continue;
-        }
-        const isExact = Math.abs(bestMatch.amountDiff) < 5e-3;
-        const aboveThreshold = bestMatch.confidence >= stage.autoConfirmConfidence;
-        const matchType = isExact && aboveThreshold ? "auto_exact" : isExact ? "auto_exact_review" : aboveThreshold ? "auto_rules" : "auto_rules_review";
-        pendingMatches.push({
-          matchData: {
-            periodId: req.params.periodId,
-            fuelTransactionId: bestMatch.invoice.items[0].id,
-            bankTransactionId: bankTransaction.id,
-            matchType,
-            matchConfidence: String(bestMatch.confidence)
-          },
-          bankTxId: bankTransaction.id,
-          fuelItemIds: bestMatch.invoice.items.map((item) => item.id)
-        });
-        stageCounts.set(stage.name, (stageCounts.get(stage.name) || 0) + 1);
-        matchCount++;
-      }
-      for (const stage of stages) {
-        console.log(`[AUTO-MATCH] Stage ${stage.order} ${stage.name}: ${stageCounts.get(stage.name) || 0} matches`);
-      }
-      if (competingSameDaySkipped > 0) {
-        console.log(`[AUTO-MATCH] Competing same-day candidates held for review: ${competingSameDaySkipped}`);
-      }
-      const matchedBankIds = new Set(pendingMatches.map((pm) => pm.bankTxId));
-      const unmatchedInPeriodBank = matchableBankTransactions.filter((bt) => {
-        if (matchedBankIds.has(bt.id)) return false;
-        if (!bt.transactionDate) return false;
-        const day = toDateOnly(new Date(bt.transactionDate).getTime());
-        return !isNaN(day) && day >= periodStartDay && day <= periodEndDay;
-      });
-      const outOfPeriodCardFuel = transactions2.filter((t) => {
-        if (t.sourceType !== "fuel" || t.isCardTransaction !== "yes" || isDebtorTx(t)) return false;
-        if (t.matchStatus === "matched" || t.matchStatus === "excluded") return false;
-        if (!t.transactionDate) return false;
-        const day = toDateOnly(new Date(t.transactionDate).getTime());
-        if (isNaN(day)) return false;
-        return day < periodStartDay || day > periodEndDay;
-      });
-      const outOfPeriodInvoices = groupFuelByInvoice(outOfPeriodCardFuel, rules.groupByInvoice);
-      const outOfPeriodByDate = /* @__PURE__ */ new Map();
-      for (const invoice of outOfPeriodInvoices) {
-        const dayKey = parseDateToDays(invoice.firstDate || "");
-        if (dayKey !== null) {
-          for (let offset = -1; offset <= rules.dateWindowDays; offset++) {
-            const key = dayKey + offset;
-            if (!outOfPeriodByDate.has(key)) outOfPeriodByDate.set(key, []);
-            outOfPeriodByDate.get(key).push(invoice);
-          }
-        }
-      }
-      const lagUsedInvoices = /* @__PURE__ */ new Set();
-      const lagExplainedBankIds = [];
-      for (const bankTx of unmatchedInPeriodBank) {
-        const bankDayKey = parseDateToDays(bankTx.transactionDate || "");
-        const candidates = bankDayKey !== null ? outOfPeriodByDate.get(bankDayKey) || [] : outOfPeriodInvoices;
-        const bestMatch = scoreBankToInvoices(bankTx, candidates, lagUsedInvoices, rules);
-        if (bestMatch) {
-          lagExplainedBankIds.push(bankTx.id);
-          lagUsedInvoices.add(bestMatch.invoice.invoiceNumber);
-        }
-      }
-      console.log(`[AUTO-MATCH] Lag-explained bank: ${lagExplainedBankIds.length} of ${unmatchedInPeriodBank.length} in-period unmatched`);
-      console.log(`[MATCH] Applying ${pendingMatches.length} matches with transactional state updates...`);
+      const plan = planAutoMatch({
+        id: req.params.periodId,
+        name: period.name,
+        startDate: period.startDate,
+        endDate: period.endDate
+      }, rules, transactions2);
+      console.log(`[MATCH] Applying ${plan.pendingMatches.length} matches with transactional state updates...`);
+      await reconciliationCommandService2.clearPeriodResolutions(req.params.periodId);
       await storage.applyAutoMatchResults(
         req.params.periodId,
-        pendingMatches,
-        lagExplainedBankIds,
-        unmatchableBankTransactions.map((tx) => tx.id)
+        plan.pendingMatches,
+        plan.lagExplainedBankIds,
+        plan.unmatchableBankIds
       );
-      const matchableCount = matchableBankTransactions.length;
-      const matchRate = matchableCount > 0 ? (matchCount / matchableCount * 100).toFixed(1) : "0";
-      audit(req, { action: "reconciliation.run", resourceType: "period", resourceId: req.params.periodId, detail: `${matchCount} matches created` });
+      audit(req, {
+        action: "reconciliation.run",
+        resourceType: "period",
+        resourceId: req.params.periodId,
+        detail: `${plan.metrics.matchesCreated} matches created`
+      });
       res.json({
         success: true,
-        matchesCreated: matchCount,
-        cardTransactionsProcessed: fuelTransactions.length,
-        invoicesCreated: fuelInvoices.length,
-        bankTransactionsTotal: bankTransactions.length,
-        bankTransactionsMatchable: matchableCount,
-        bankTransactionsUnmatchable: unmatchableBankTransactions.length,
-        bankTransactionsLagExplained: lagExplainedBankIds.length,
-        nonCardTransactionsSkipped: skippedNonCardCount,
-        matchRate: `${matchRate}%`,
+        ...plan.metrics,
         rulesUsed: rules,
-        stagesUsed: stages,
-        warnings: [
-          ...dateRangeWarning ? [dateRangeWarning] : [],
-          ...competingSameDaySkipped > 0 ? [`${competingSameDaySkipped} later-pass match(es) were held back because a same-day operational candidate exists and should be reviewed manually.`] : []
-        ]
+        stagesUsed: plan.stages,
+        warnings: plan.warnings
       });
     } catch (error) {
       console.error("Error auto-matching:", error);
       res.status(500).json({ error: "Failed to auto-match transactions" });
+    }
+  });
+  app2.post("/api/periods/:periodId/review/link", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user;
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
+      if (!period) return;
+      const input = reviewLinkSchema.parse(req.body);
+      const match = await reconciliationCommandService2.createReviewLink({
+        periodId: req.params.periodId,
+        bankTransactionId: input.bankTransactionId,
+        fuelTransactionId: input.fuelTransactionId,
+        reviewTransactionId: input.reviewTransactionId,
+        notes: input.notes ?? null,
+        actor: buildActor(user)
+      });
+      audit(req, {
+        action: "match.review_link",
+        resourceType: "match",
+        resourceId: match.id,
+        detail: `Fuel ${input.fuelTransactionId.slice(0, 8)}... -> Bank ${input.bankTransactionId.slice(0, 8)}...`
+      });
+      res.json({ success: true, match });
+    } catch (error) {
+      handleWriteError(res, error, "Failed to create review link");
     }
   });
   app2.post("/api/matches/manual", isAuthenticated, async (req, res) => {
@@ -34549,16 +36086,20 @@ function registerReconciliationWriteRoutes(app2) {
       const matchInput = insertMatchSchema.omit({ matchType: true, matchConfidence: true }).parse(req.body);
       const period = await assertPeriodWrite(matchInput.periodId, req, res);
       if (!period) return;
-      const match = await storage.createMatchBundle({
-        ...matchInput,
-        matchType: "user_confirmed",
-        matchConfidence: "100"
+      const match = await reconciliationCommandService2.createManualMatch({
+        periodId: matchInput.periodId,
+        bankTransactionId: matchInput.bankTransactionId,
+        fuelTransactionId: matchInput.fuelTransactionId
       });
-      audit(req, { action: "match.manual", resourceType: "match", resourceId: match.id, detail: `Fuel ${matchInput.fuelTransactionId.slice(0, 8)}... -> Bank ${matchInput.bankTransactionId.slice(0, 8)}...` });
+      audit(req, {
+        action: "match.manual",
+        resourceType: "match",
+        resourceId: match.id,
+        detail: `Fuel ${matchInput.fuelTransactionId.slice(0, 8)}... -> Bank ${matchInput.bankTransactionId.slice(0, 8)}...`
+      });
       res.json({ success: true, match });
     } catch (error) {
-      console.error("Error creating manual match:", error);
-      res.status(400).json({ error: "Failed to create manual match" });
+      handleWriteError(res, error, "Failed to create manual match");
     }
   });
   app2.delete("/api/matches/:matchId", isAuthenticated, async (req, res) => {
@@ -34569,182 +36110,151 @@ function registerReconciliationWriteRoutes(app2) {
       }
       const period = await assertPeriodWrite(match.periodId, req, res);
       if (!period) return;
-      await storage.deleteMatchBundle(req.params.matchId, match.fuelTransactionId, match.bankTransactionId);
+      await reconciliationCommandService2.deleteMatch(match.periodId, req.params.matchId);
       audit(req, { action: "match.delete", resourceType: "match", resourceId: req.params.matchId });
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting match:", error);
-      res.status(500).json({ error: "Failed to delete match" });
+      handleWriteError(res, error, "Failed to delete match");
     }
   });
   app2.post("/api/resolutions", isAuthenticated, async (req, res) => {
     try {
       const user = req.user;
-      const { transactionId, periodId, resolutionType, reason, notes, linkedTransactionId, assignee } = req.body;
-      if (!transactionId || !periodId || !resolutionType) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-      const period = await assertPeriodWrite(periodId, req, res);
+      const input = resolutionSchema.parse(req.body);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
-      const resolution = await storage.createResolution({
-        transactionId,
-        periodId,
-        resolutionType,
-        reason: reason || null,
-        notes: notes || null,
-        userId: user?.id || null,
-        userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-        userEmail: user?.email || null,
-        linkedTransactionId: linkedTransactionId || null,
-        assignee: assignee || null
+      const resolution = await reconciliationCommandService2.createResolution({
+        periodId: input.periodId,
+        transactionId: input.transactionId,
+        resolutionType: input.resolutionType,
+        reason: input.reason ?? null,
+        notes: input.notes ?? null,
+        linkedTransactionId: input.linkedTransactionId ?? null,
+        assignee: input.assignee ?? null,
+        actor: buildActor(user)
       });
-      if (resolutionType !== "linked") {
-        await storage.updateTransaction(transactionId, {
-          matchStatus: "resolved"
-        });
-      }
-      audit(req, { action: `resolution.${resolutionType}`, resourceType: "transaction", resourceId: transactionId, detail: reason || notes || void 0 });
+      audit(req, {
+        action: `resolution.${input.resolutionType}`,
+        resourceType: "transaction",
+        resourceId: input.transactionId,
+        detail: input.reason || input.notes || void 0
+      });
       res.json({ success: true, resolution });
     } catch (error) {
-      console.error("Error creating resolution:", error);
-      res.status(500).json({ error: "Failed to create resolution" });
+      handleWriteError(res, error, "Failed to create resolution");
     }
   });
   app2.post("/api/resolutions/bulk-dismiss", isAuthenticated, async (req, res) => {
     try {
       const user = req.user;
-      const { transactionIds, periodId } = req.body;
-      if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-      const period = await assertPeriodWrite(periodId, req, res);
+      const input = bulkResolutionSchema.parse(req.body);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
-      const resolutions = [];
-      for (const transactionId of transactionIds) {
-        const resolution = await storage.createResolution({
-          transactionId,
-          periodId,
-          resolutionType: "dismissed",
-          reason: "test_transaction",
-          notes: "Bulk dismissed as low-value transaction",
-          userId: user?.id || null,
-          userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-          userEmail: user?.email || null,
-          linkedTransactionId: null,
-          assignee: null
-        });
-        resolutions.push(resolution);
-        await storage.updateTransaction(transactionId, {
-          matchStatus: "resolved"
-        });
-      }
-      audit(req, { action: "resolution.bulk_dismiss", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions dismissed` });
-      res.json({ success: true, count: resolutions.length });
+      const count = await reconciliationCommandService2.createBulkResolutions({
+        periodId: input.periodId,
+        transactionIds: input.transactionIds,
+        resolutionType: "dismissed",
+        reason: "test_transaction",
+        notes: "Bulk dismissed as low-value transaction",
+        actor: buildActor(user)
+      });
+      audit(req, {
+        action: "resolution.bulk_dismiss",
+        resourceType: "period",
+        resourceId: input.periodId,
+        detail: `${count} transactions dismissed`
+      });
+      res.json({ success: true, count });
     } catch (error) {
-      console.error("Error bulk dismissing:", error);
-      res.status(500).json({ error: "Failed to bulk dismiss transactions" });
+      handleWriteError(res, error, "Failed to bulk dismiss transactions");
     }
   });
   app2.post("/api/resolutions/bulk-flag", isAuthenticated, async (req, res) => {
     try {
       const user = req.user;
-      const { transactionIds, periodId } = req.body;
-      if (!transactionIds || !Array.isArray(transactionIds) || !periodId) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-      const period = await assertPeriodWrite(periodId, req, res);
+      const input = bulkResolutionSchema.parse(req.body);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
-      const resolutions = [];
-      for (const transactionId of transactionIds) {
-        const resolution = await storage.createResolution({
-          transactionId,
-          periodId,
-          resolutionType: "flagged",
-          reason: null,
-          notes: "Flagged for manager review",
-          userId: user?.id || null,
-          userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-          userEmail: user?.email || null,
-          linkedTransactionId: null,
-          assignee: null
-        });
-        resolutions.push(resolution);
-        await storage.updateTransaction(transactionId, {
-          matchStatus: "resolved"
-        });
-      }
-      audit(req, { action: "resolution.bulk_flag", resourceType: "period", resourceId: periodId, detail: `${resolutions.length} transactions flagged` });
-      res.json({ success: true, count: resolutions.length });
+      const count = await reconciliationCommandService2.createBulkResolutions({
+        periodId: input.periodId,
+        transactionIds: input.transactionIds,
+        resolutionType: "flagged",
+        reason: null,
+        notes: "Flagged for manager review",
+        actor: buildActor(user)
+      });
+      audit(req, {
+        action: "resolution.bulk_flag",
+        resourceType: "period",
+        resourceId: input.periodId,
+        detail: `${count} transactions flagged`
+      });
+      res.json({ success: true, count });
     } catch (error) {
-      console.error("Error bulk flagging:", error);
-      res.status(500).json({ error: "Failed to bulk flag transactions" });
+      handleWriteError(res, error, "Failed to bulk flag transactions");
     }
   });
   app2.delete("/api/resolutions/:transactionId", isAuthenticated, async (req, res) => {
     try {
-      const tx = await storage.getTransaction(req.params.transactionId);
-      if (!tx) return res.status(404).json({ error: "Transaction not found" });
-      const period = await assertPeriodWrite(tx.periodId, req, res);
+      const transaction = await storage.getTransaction(req.params.transactionId);
+      if (!transaction) return res.status(404).json({ error: "Transaction not found" });
+      const period = await assertPeriodWrite(transaction.periodId, req, res);
       if (!period) return;
-      const count = await storage.deleteResolutionByTransaction(req.params.transactionId);
-      if (count === 0) return res.status(404).json({ error: "No resolution found" });
-      res.json({ success: true, count });
+      const result = await reconciliationCommandService2.removeResolution(transaction.periodId, transaction.id);
+      audit(req, {
+        action: "resolution.delete",
+        resourceType: "transaction",
+        resourceId: transaction.id,
+        detail: result.mode
+      });
+      res.json({ success: true, count: result.count, mode: result.mode });
     } catch (error) {
-      console.error("Error deleting resolution:", error);
-      res.status(500).json({ error: "Failed to delete resolution" });
+      handleWriteError(res, error, "Failed to delete resolution");
     }
   });
   app2.delete("/api/periods/:periodId/resolutions", isAuthenticated, async (req, res) => {
     try {
       const period = await assertPeriodWrite(req.params.periodId, req, res);
       if (!period) return;
-      const count = await storage.clearResolutionsByPeriod(req.params.periodId);
+      const count = await reconciliationCommandService2.clearPeriodResolutions(req.params.periodId);
+      audit(req, {
+        action: "resolution.clear_period",
+        resourceType: "period",
+        resourceId: req.params.periodId,
+        detail: `${count} resolutions cleared`
+      });
       res.json({ success: true, count });
     } catch (error) {
-      console.error("Error clearing resolutions:", error);
-      res.status(500).json({ error: "Failed to clear resolutions" });
+      handleWriteError(res, error, "Failed to clear resolutions");
     }
   });
   app2.post("/api/matches/bulk-confirm", isAuthenticated, async (req, res) => {
     try {
       const user = req.user;
-      const { matches: matches2, periodId } = req.body;
-      if (!matches2 || !Array.isArray(matches2) || !periodId) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-      const period = await assertPeriodWrite(periodId, req, res);
+      const input = bulkConfirmSchema.parse(req.body);
+      const period = await assertPeriodWrite(input.periodId, req, res);
       if (!period) return;
-      const createdMatches = [];
-      for (const { bankId, fuelId } of matches2) {
-        try {
-          const match = await storage.createMatchBundle({
-            periodId,
-            bankTransactionId: bankId,
-            fuelTransactionId: fuelId,
-            matchType: "user_confirmed",
-            matchConfidence: "100"
-          }, {
-            transactionId: bankId,
-            periodId,
-            resolutionType: "linked",
-            reason: null,
-            notes: "Bulk confirmed as quick win match",
-            userId: user?.id || null,
-            userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : null,
-            userEmail: user?.email || null,
-            linkedTransactionId: fuelId,
-            assignee: null
-          });
-          createdMatches.push(match);
-        } catch (matchError) {
-          console.error(`Error creating match for bank ${bankId}:`, matchError);
-        }
+      let count = 0;
+      for (const match of input.matches) {
+        await reconciliationCommandService2.createReviewLink({
+          periodId: input.periodId,
+          bankTransactionId: match.bankId,
+          fuelTransactionId: match.fuelId,
+          reviewTransactionId: match.bankId,
+          notes: "Bulk confirmed as quick win match",
+          actor: buildActor(user)
+        });
+        count += 1;
       }
-      audit(req, { action: "match.bulk_confirm", resourceType: "period", resourceId: periodId, detail: `${createdMatches.length} matches confirmed` });
-      res.json({ success: true, count: createdMatches.length });
+      audit(req, {
+        action: "match.bulk_confirm",
+        resourceType: "period",
+        resourceId: input.periodId,
+        detail: `${count} matches confirmed`
+      });
+      res.json({ success: true, count });
     } catch (error) {
-      console.error("Error bulk confirming:", error);
-      res.status(500).json({ error: "Failed to bulk confirm matches" });
+      handleWriteError(res, error, "Failed to bulk confirm matches");
     }
   });
 }

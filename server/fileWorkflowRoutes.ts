@@ -10,6 +10,8 @@ import {
 } from "./fileParser";
 import { dataQualityValidator } from "./dataQualityValidator";
 import { objectStorageService } from "./objectStorage";
+import { ReconciliationCommandService } from "./reconciliation/reconciliationCommandService.ts";
+import { reconciliationStateWriter } from "./reconciliation/reconciliationStateWriter.ts";
 import { assertFileWrite, assertPeriodWrite } from "./routeAccess";
 import { storage } from "./storage";
 
@@ -63,6 +65,8 @@ async function readFileBuffer(file: any): Promise<Buffer> {
   const [buffer] = await objectFile.download();
   return buffer;
 }
+
+const reconciliationCommandService = new ReconciliationCommandService(reconciliationStateWriter);
 
 export function registerFileWorkflowRoutes(
   app: Express,
@@ -287,9 +291,7 @@ export function registerFileWorkflowRoutes(
             `Cleaning up replaced file: ${fileToReplace.fileName} (${fileToReplace.id})`,
           );
           try {
-            await storage.deleteMatchesByFile(fileToReplace.id);
-            await storage.deleteTransactionsByFile(fileToReplace.id);
-            await storage.deleteFile(fileToReplace.id);
+            await reconciliationCommandService.deleteFileAndState(req.params.periodId, fileToReplace.id);
             await objectStorageService.deleteFile(fileToReplace.fileUrl);
             console.log(
               "Successfully cleaned up old file, its transactions, and related matches",
@@ -347,7 +349,7 @@ export function registerFileWorkflowRoutes(
           return res.status(400).json({ error: "Column mapping not set" });
         }
 
-        await storage.deleteTransactionsByFile(file.id);
+        await reconciliationCommandService.clearFileTransactions(req.params.periodId, file.id);
         const buffer = await readFileBuffer(file);
         const parsed = await fileParser.parse(buffer, file.fileType);
 
@@ -479,12 +481,10 @@ export function registerFileWorkflowRoutes(
       const file = await assertFileWrite(req.params.fileId, req, res);
       if (!file) return;
 
-      await storage.deleteMatchesByFile(file.id);
-      await storage.deleteTransactionsByFile(file.id);
+      await reconciliationCommandService.deleteFileAndState(file.periodId, file.id);
       if (file.fileUrl) {
         await objectStorageService.deleteFile(file.fileUrl);
       }
-      await storage.deleteFile(file.id);
 
       audit(req, {
         action: "file.delete",

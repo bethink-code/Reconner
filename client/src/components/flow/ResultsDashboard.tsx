@@ -14,10 +14,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRand } from "@/lib/format";
-import type { MatchingRulesConfig, TransactionResolution } from "@shared/schema";
-import type { PeriodSummary } from "@/lib/reconciliation-types";
-import { deriveSummaryStats } from "@/lib/reconciliation-utils";
+import type { MatchingRulesConfig } from "@shared/schema";
+import type { ResultsDashboardReadModel } from "@shared/reconciliationDashboard";
+import type { ReviewQueueReadModel } from "@shared/reconciliationReview";
 import { buildMatchingStages } from "@shared/matchingStages";
+import { deriveResultsDashboardQueueMetrics } from "@shared/reconciliationResultsView";
 import { MatchedPairsTab } from "./MatchedPairsTab";
 import { ReviewTab } from "./ReviewTab";
 import { InvestigateTab } from "./InvestigateTab";
@@ -44,8 +45,13 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   const [insightsView, setInsightsView] = useState<'landing' | 'detail' | 'attendants' | 'declined'>('landing');
   const [rulesExpanded, setRulesExpanded] = useState(false);
 
-  const { data: summary, isLoading } = useQuery<PeriodSummary>({
-    queryKey: ["/api/periods", periodId, "summary"],
+  const { data: dashboard, isLoading: isDashboardLoading } = useQuery<ResultsDashboardReadModel>({
+    queryKey: ["/api/periods", periodId, "dashboard"],
+    enabled: !!periodId,
+  });
+
+  const { data: reviewModel, isLoading: isReviewLoading } = useQuery<ReviewQueueReadModel>({
+    queryKey: ["/api/periods", periodId, "review-model"],
     enabled: !!periodId,
   });
 
@@ -62,36 +68,35 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
     refetchOnMount: "always",
   });
 
-  // Resolutions query for badge counts
-  const { data: resolutions } = useQuery<TransactionResolution[]>({
-    queryKey: ["/api/periods", periodId, "resolutions"],
-    enabled: !!periodId,
-  });
-
   // Decline analysis for net unrecovered amount
   const { data: declineData } = useQuery<{
     summary: { totalDeclined: number; resubmittedCount: number; unrecoveredCount: number; netUnrecoveredAmount: number };
   }>({
     queryKey: ["/api/periods", periodId, "decline-analysis"],
-    enabled: !!periodId && (summary?.excludedBankTransactions || 0) > 0,
+    enabled: !!periodId && (dashboard?.summary.excludedBankTransactions || 0) > 0,
   });
 
-  if (isLoading || !summary) {
-    return (
-      <div className="space-y-4 max-w-2xl mx-auto">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+  if (isDashboardLoading || isReviewLoading || !dashboard || !reviewModel) {
+    return <ResultsDashboardSkeleton />;
   }
 
-  // ── Calculations ──
-  const { unmatchableBank, excludedBank, matchableBankTotal, unmatchedBank, cardMatchPct, matchedCardCount, unmatchedFuelCount, cardOnlyAmount, bankApprovedAmount, fileSurplus } = deriveSummaryStats(summary);
-
-  // Badge counts — subtract resolved/flagged transactions from unmatched totals
-  const resolvedCount = resolutions?.filter(r => r.resolutionType !== 'flagged').length || 0;
-  const flaggedCount = resolutions?.filter(r => r.resolutionType === 'flagged').length || 0;
-  const reviewCount = Math.max(0, unmatchedBank + Math.max(0, unmatchedFuelCount) - resolvedCount - flaggedCount);
+  const { summary, stats } = dashboard;
+  const queueMetrics = deriveResultsDashboardQueueMetrics(reviewModel);
+  const {
+    bankApprovedAmount,
+    cardMatchPct,
+    cardOnlyAmount,
+    excludedBank,
+    fileSurplus,
+    matchedCardCount,
+    matchableBankTotal,
+  } = stats;
+  const flaggedCount = queueMetrics.investigateCount;
+  const reviewCount = queueMetrics.reviewCount;
+  const unmatchedBank = queueMetrics.unmatchedBankCount;
+  const unmatchedBankAmount = queueMetrics.unmatchedBankAmount;
+  const unmatchedFuelCount = queueMetrics.unmatchedFuelCount;
+  const unmatchedFuelAmount = queueMetrics.unmatchedFuelAmount;
   const matchingStages = rules ? buildMatchingStages(rules) : [];
 
   const tabTriggerClass = "text-sm px-1 pb-2.5 -mb-px text-[#6B7280] border-b-2 border-transparent rounded-none bg-transparent shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-[#1A1200] data-[state=active]:!font-semibold data-[state=active]:!text-base data-[state=active]:!border-[#1A1200] data-[state=active]:!shadow-none hover:text-[#1A1200] transition-colors";
@@ -250,9 +255,9 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                 <InfoCardLabel>Review Fuel</InfoCardLabel>
                 <p className="text-xs text-muted-foreground mt-0.5">Fuel card sales with no approved card payment</p>
                 <div className="flex-1 flex items-center gap-3 mt-3">
-                  <span className={cn("text-3xl font-bold tabular-nums", unmatchedFuelCount > 0 ? "text-[#B45309]" : "text-[#166534]")}>{Math.max(0, unmatchedFuelCount)}</span>
+                    <span className={cn("text-3xl font-bold tabular-nums", unmatchedFuelCount > 0 ? "text-[#B45309]" : "text-[#166534]")}>{Math.max(0, unmatchedFuelCount)}</span>
                   <div>
-                    <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedCardAmount || 0)}</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatRand(unmatchedFuelAmount)}</p>
                     <p className="text-xs text-muted-foreground">{unmatchedFuelCount === 1 ? 'card transaction' : 'card transactions'}</p>
                   </div>
                 </div>
@@ -270,7 +275,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                 <div className="flex-1 flex items-center gap-3 mt-3">
                   <span className={cn("text-3xl font-bold tabular-nums", unmatchedBank > 0 ? "text-[#B45309]" : "text-[#166534]")}>{unmatchedBank}</span>
                   <div>
-                    <p className="text-sm font-semibold tabular-nums">{formatRand(summary.unmatchedBankAmount || 0)}</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatRand(unmatchedBankAmount)}</p>
                     <p className="text-xs text-muted-foreground">{unmatchedBank === 1 ? 'bank transaction' : 'bank transactions'}</p>
                   </div>
                 </div>
@@ -388,6 +393,32 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
           <InsightsTab periodId={periodId} initialView={insightsView} key={insightsView} />
         </TabsContent>
     </Tabs>
+  );
+}
+
+function ResultsDashboardSkeleton() {
+  return (
+    <div className="space-y-4 max-w-4xl mx-auto">
+      <div className="bg-section rounded-2xl px-6 pt-5 pb-3">
+        <Skeleton className="h-8 w-full" />
+      </div>
+      <div className="bg-section rounded-2xl p-6">
+        <Skeleton className="h-20 w-full" />
+      </div>
+      <div className="bg-section rounded-2xl p-6 space-y-4">
+        <div className="grid grid-cols-3 gap-4">
+          <Skeleton className="h-52 w-full" />
+          <Skeleton className="h-52 w-full" />
+          <Skeleton className="h-52 w-full" />
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+        <Skeleton className="h-32 w-full" />
+      </div>
+    </div>
   );
 }
 

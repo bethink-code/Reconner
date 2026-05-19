@@ -16,7 +16,7 @@ app.use(helmet({
 // CORS — restrict to known origins
 app.use(cors({
   origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production'
-    ? 'https://reconner.vercel.app'
+    ? 'https://work.lekana.app'
     : 'http://localhost:5000'),
   credentials: true,
 }));

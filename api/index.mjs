@@ -275,11 +275,11 @@ var require_dommatrix = __commonJS({
           });
           var x = components[0];
           var y = components[1];
-          var z5 = components[2];
+          var z6 = components[2];
           var a = components[3];
-          var xyz = [x, y, z5];
-          var xyza = [x, y, z5, a];
-          if (prop === "perspective" && x && [y, z5].every(function(n) {
+          var xyz = [x, y, z6];
+          var xyza = [x, y, z6, a];
+          if (prop === "perspective" && x && [y, z6].every(function(n) {
             return n === void 0;
           })) {
             m.m34 = -1 / x;
@@ -293,14 +293,14 @@ var require_dommatrix = __commonJS({
           } else if (prop === "translate3d" && xyz.every(function(n) {
             return !Number.isNaN(+n);
           })) {
-            m = m.translate(x, y, z5);
-          } else if (prop === "translate" && x && z5 === void 0) {
+            m = m.translate(x, y, z6);
+          } else if (prop === "translate" && x && z6 === void 0) {
             m = m.translate(x, y || 0, 0);
           } else if (prop === "rotate3d" && xyza.every(function(n) {
             return !Number.isNaN(+n);
           }) && a) {
-            m = m.rotateAxisAngle(x, y, z5, a);
-          } else if (prop === "rotate" && x && [y, z5].every(function(n) {
+            m = m.rotateAxisAngle(x, y, z6, a);
+          } else if (prop === "rotate" && x && [y, z6].every(function(n) {
             return n === void 0;
           })) {
             m = m.rotate(0, 0, x);
@@ -309,15 +309,15 @@ var require_dommatrix = __commonJS({
           }) && xyz.some(function(n) {
             return n !== 1;
           })) {
-            m = m.scale(x, y, z5);
-          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z5 === void 0) {
+            m = m.scale(x, y, z6);
+          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z6 === void 0) {
             var nosy = Number.isNaN(+y);
             var sy = nosy ? x : y;
             m = m.scale(x, sy, 1);
-          } else if (prop === "skew" && x && z5 === void 0) {
+          } else if (prop === "skew" && x && z6 === void 0) {
             m = m.skewX(x);
             m = y ? m.skewY(y) : m;
-          } else if (/[XYZ]/.test(prop) && x && [y, z5].every(function(n) {
+          } else if (/[XYZ]/.test(prop) && x && [y, z6].every(function(n) {
             return n === void 0;
           }) && ["translate", "rotate", "scale", "skew"].some(function(p) {
             return prop.includes(p);
@@ -341,13 +341,13 @@ var require_dommatrix = __commonJS({
         });
         return m;
       }
-      function Translate(x, y, z5) {
+      function Translate(x, y, z6) {
         var m = new CSSMatrix();
         m.m41 = x;
         m.e = x;
         m.m42 = y;
         m.f = y;
-        m.m43 = z5;
+        m.m43 = z6;
         return m;
       }
       function Rotate(rx, ry, rz) {
@@ -381,16 +381,16 @@ var require_dommatrix = __commonJS({
         m.m33 = cosx * cosy;
         return m;
       }
-      function RotateAxisAngle(x, y, z5, alpha) {
+      function RotateAxisAngle(x, y, z6, alpha) {
         var m = new CSSMatrix();
         var angle = alpha * (Math.PI / 360);
         var sinA = Math.sin(angle);
         var cosA = Math.cos(angle);
         var sinA2 = sinA * sinA;
-        var length = Math.sqrt(x * x + y * y + z5 * z5);
+        var length = Math.sqrt(x * x + y * y + z6 * z6);
         var X = x;
         var Y = y;
-        var Z = z5;
+        var Z = z6;
         if (length === 0) {
           X = 0;
           Y = 0;
@@ -422,13 +422,13 @@ var require_dommatrix = __commonJS({
         m.m33 = 1 - 2 * (x2 + y2) * sinA2;
         return m;
       }
-      function Scale(x, y, z5) {
+      function Scale(x, y, z6) {
         var m = new CSSMatrix();
         m.m11 = x;
         m.a = x;
         m.m22 = y;
         m.d = y;
-        m.m33 = z5;
+        m.m33 = z6;
         return m;
       }
       function SkewX(angle) {
@@ -594,10 +594,10 @@ var require_dommatrix = __commonJS({
       CSSMatrix.prototype.multiply = function multiply(m2) {
         return Multiply(this, m2);
       };
-      CSSMatrix.prototype.translate = function translate(x, y, z5) {
+      CSSMatrix.prototype.translate = function translate(x, y, z6) {
         var X = x;
         var Y = y;
-        var Z = z5;
+        var Z = z6;
         if (Z === void 0) {
           Z = 0;
         }
@@ -606,10 +606,10 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Translate(X, Y, Z));
       };
-      CSSMatrix.prototype.scale = function scale(x, y, z5) {
+      CSSMatrix.prototype.scale = function scale(x, y, z6) {
         var X = x;
         var Y = y;
-        var Z = z5;
+        var Z = z6;
         if (Y === void 0) {
           Y = x;
         }
@@ -631,13 +631,13 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Rotate(RX, RY, RZ));
       };
-      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z5, angle) {
-        if ([x, y, z5, angle].some(function(n) {
+      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z6, angle) {
+        if ([x, y, z6, angle].some(function(n) {
           return Number.isNaN(n);
         })) {
           throw new TypeError("CSSMatrix: expecting 4 values");
         }
-        return Multiply(this, RotateAxisAngle(x, y, z5, angle));
+        return Multiply(this, RotateAxisAngle(x, y, z6, angle));
       };
       CSSMatrix.prototype.skewX = function skewX(angle) {
         return Multiply(this, SkewX(angle));
@@ -661,12 +661,12 @@ var require_dommatrix = __commonJS({
         var m = this;
         var x = m.m11 * t.x + m.m12 * t.y + m.m13 * t.z + m.m14 * t.w;
         var y = m.m21 * t.x + m.m22 * t.y + m.m23 * t.z + m.m24 * t.w;
-        var z5 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
+        var z6 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
         var w = m.m41 * t.x + m.m42 * t.y + m.m43 * t.z + m.m44 * t.w;
         return {
           x: x / w,
           y: y / w,
-          z: z5 / w,
+          z: z6 / w,
           w
         };
       };
@@ -27658,7 +27658,7 @@ import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-import rateLimit2 from "express-rate-limit";
+import rateLimit3 from "express-rate-limit";
 
 // server/routes.ts
 import { createServer } from "http";
@@ -36215,6 +36215,80 @@ function registerReconciliationWriteRoutes(app2) {
   });
 }
 
+// server/requestAccessRoutes.ts
+import rateLimit2 from "express-rate-limit";
+import { z as z5 } from "zod";
+var submissionSchema = z5.object({
+  name: z5.string().trim().min(1, "Your name is required").max(120),
+  email: z5.string().trim().email("A valid email is required").max(200),
+  cell: z5.string().trim().min(1, "A cell number is required").max(40),
+  business: z5.string().trim().max(200).optional().default("")
+});
+var RESEND_API_KEY = process.env.RESEND_API_KEY;
+var FROM = process.env.REQUEST_ACCESS_FROM || "lekana <noreply@lekana.app>";
+var TO = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page").split(",").map((address) => address.trim()).filter(Boolean);
+async function sendNotification(data) {
+  if (!RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+  const text2 = [
+    "New lekana access request",
+    "",
+    `Name:     ${data.name}`,
+    `Email:    ${data.email}`,
+    `Cell:     ${data.cell}`,
+    `Business: ${data.business || "-"}`
+  ].join("\n");
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: FROM,
+      to: TO,
+      reply_to: data.email,
+      subject: `lekana access request \u2014 ${data.name}`,
+      text: text2
+    })
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Resend responded ${response.status}: ${body}`);
+  }
+}
+function registerRequestAccessRoutes(app2) {
+  const limiter = rateLimit2({
+    windowMs: 60 * 60 * 1e3,
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, error: "Too many requests. Please try again later." }
+  });
+  app2.post("/api/request-access", limiter, async (req, res) => {
+    const parsed = submissionSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message || "Invalid submission";
+      return res.status(400).json({ ok: false, error: message });
+    }
+    const data = parsed.data;
+    console.log(
+      `[request-access] ${data.name} <${data.email}> cell=${data.cell} business=${data.business || "-"}`
+    );
+    try {
+      await sendNotification(data);
+    } catch (err) {
+      console.error("[request-access] email delivery failed:", err);
+      return res.status(502).json({
+        ok: false,
+        error: "Could not send your request. Please email garth@bethink.co.za directly."
+      });
+    }
+    return res.json({ ok: true });
+  });
+}
+
 // server/routes.ts
 function computeContentHash(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -36235,6 +36309,7 @@ async function registerRoutes(app2) {
   registerPeriodRoutes(app2);
   registerReconciliationReadRoutes(app2);
   registerReconciliationWriteRoutes(app2);
+  registerRequestAccessRoutes(app2);
   const httpServer = createServer(app2);
   return httpServer;
 }
@@ -36243,10 +36318,10 @@ async function registerRoutes(app2) {
 var app = express();
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "https://reconner.vercel.app",
+  origin: process.env.CORS_ORIGIN || "https://work.lekana.app",
   credentials: true
 }));
-var apiLimiter = rateLimit2({
+var apiLimiter = rateLimit3({
   windowMs: 15 * 60 * 1e3,
   // 15 minutes
   max: 200,

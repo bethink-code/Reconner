@@ -11,6 +11,7 @@ import { registerPdfConversionRoutes } from "./pdfConversionRoutes";
 import { registerPeriodRoutes } from "./periodRoutes";
 import { registerReconciliationReadRoutes } from "./reconciliationReadRoutes";
 import { registerReconciliationWriteRoutes } from "./reconciliationWriteRoutes";
+import { registerRequestAccessRoutes } from "./requestAccessRoutes";
 
 function computeContentHash(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -34,6 +35,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPeriodRoutes(app);
   registerReconciliationReadRoutes(app);
   registerReconciliationWriteRoutes(app);
+  registerRequestAccessRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

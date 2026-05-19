@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary -->
+  <title>lekana - bank to point-of-sale reconciliation. A day's work in 5 minutes.</title>
+  <meta name="description" content="lekana matches your bank transactions to your point-of-sale. Across every bank. In five minutes. The things a spreadsheet hides, lekana finds. For South African fuel station operators.">
+  <meta name="keywords" content="reconciliation software, bank reconciliation, point of sale reconciliation, fuel station software, fuel reconciliation, POS reconciliation, South Africa, FNB, ABSA, Standard Bank, Nedbank, lekana, Bethink, TimeWarp">
+  <meta name="author" content="Bethink (Pty) Ltd">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <meta name="googlebot" content="index, follow">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://lekana.app/">
+
+  <!-- Geo / locale -->
+  <meta name="geo.region" content="ZA">
+  <meta name="geo.placename" content="South Africa">
+  <meta http-equiv="content-language" content="en-ZA">
+
+  <!-- Theme / appearance -->
+  <meta name="theme-color" content="#F5C400">
+  <meta name="color-scheme" content="light">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="lekana">
+  <meta property="og:title" content="lekana - a day's work in 5 minutes">
+  <meta property="og:description" content="Bank to point-of-sale reconciliation for South African operators. In five minutes. The things a spreadsheet hides, lekana finds.">
+  <meta property="og:url" content="https://lekana.app/">
+  <meta property="og:image" content="https://lekana.app/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="lekana - bank to point-of-sale reconciliation">
+  <meta property="og:locale" content="en_ZA">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="lekana - a day's work in 5 minutes">
+  <meta name="twitter:description" content="Bank to point-of-sale reconciliation for South African operators. In five minutes.">
+  <meta name="twitter:image" content="https://lekana.app/og-image.png">
+  <meta name="twitter:image:alt" content="lekana - bank to point-of-sale reconciliation">
+
+  <!-- Favicon set (dev to produce these files) -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+
+  <!-- Preconnect for performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500&family=Nunito:wght@300;400;600&display=swap" rel="stylesheet">
+
+  <!-- Structured data: Organisation -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": "https://lekana.app/#organization",
+    "name": "Bethink",
+    "legalName": "Bethink (Pty) Ltd",
+    "url": "https://lekana.app/",
+    "logo": "https://lekana.app/lekana-mark.png",
+    "description": "Bethink (Pty) Ltd builds lekana, a bank to point-of-sale reconciliation product for South African operators. lekana is a TimeWarp product by Bethink.",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "ZA"
+    },
+    "email": "garth@bethink.co.za",
+    "areaServed": {
+      "@type": "Country",
+      "name": "South Africa"
+    }
+  }
+  </script>
+
+  <!-- Structured data: SoftwareApplication with Offers (pre-alpha pricing) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "@id": "https://lekana.app/#software",
+    "name": "lekana",
+    "alternateName": "lekana fuel",
+    "applicationCategory": "BusinessApplication",
+    "applicationSubCategory": "FinanceApplication",
+    "operatingSystem": "Web",
+    "description": "lekana matches your bank transactions to your point-of-sale. Across every bank. In five minutes. The things a spreadsheet hides, lekana finds.",
+    "url": "https://lekana.app/",
+    "image": "https://lekana.app/og-image.png",
+    "publisher": {
+      "@id": "https://lekana.app/#organization"
+    },
+    "featureList": [
+      "Card, cash and debtor matching",
+      "Multi-bank support (FNB, ABSA, Standard Bank, Nedbank)",
+      "Configurable matching tolerance",
+      "Complete audit trail",
+      "Reconciliation overview report",
+      "Attendant accountability report",
+      "Declined card transaction report"
+    ],
+    "offers": [
+      {
+        "@type": "Offer",
+        "name": "Reconciliation (pre-alpha pricing)",
+        "description": "Full reconciliation capability for up to 3 service stations. Card, cash and debtor matching across FNB, ABSA, Standard Bank and Nedbank. Pre-alpha pricing: 50% off the standard R 5 000 / month rate.",
+        "price": "2500",
+        "priceCurrency": "ZAR",
+        "priceSpecification": {
+          "@type": "UnitPriceSpecification",
+          "price": "2500",
+          "priceCurrency": "ZAR",
+          "unitText": "MONTH",
+          "valueAddedTaxIncluded": false
+        },
+        "availability": "https://schema.org/PreOrder",
+        "url": "https://lekana.app/#pricing"
+      },
+      {
+        "@type": "Offer",
+        "name": "Reconciliation + Insights (pre-alpha pricing)",
+        "description": "Everything in Reconciliation, plus the Insights report bundle. Pre-alpha pricing: 50% off the standard R 10 000 / month rate.",
+        "price": "5000",
+        "priceCurrency": "ZAR",
+        "priceSpecification": {
+          "@type": "UnitPriceSpecification",
+          "price": "5000",
+          "priceCurrency": "ZAR",
+          "unitText": "MONTH",
+          "valueAddedTaxIncluded": false
+        },
+        "availability": "https://schema.org/PreOrder",
+        "url": "https://lekana.app/#pricing"
+      }
+    ]
+  }
+  </script>
+
+  <!-- Structured data: FAQ for rich results -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How long does a reconciliation take with lekana?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Under five minutes for a full period. lekana replaces a manual process that typically takes a full working day."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which South African banks does lekana support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "FNB, ABSA, Standard Bank and Nedbank. Multiple banks can be reconciled together in the same period."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How much does lekana cost?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Pre-alpha pricing is R 2 500 per month for Reconciliation and R 5 000 per month for Reconciliation + Insights, both excluding VAT and both 50 percent off the standard rate. Standard pricing is R 5 000 and R 10 000 per month respectively. A per-station add-on applies above 3 sites."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What kinds of transactions can lekana match?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Card transactions match individually. Cash matches as daily totals. Debtors match on monthly cycles. Configurable tolerance handles small variances."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is lekana suitable for businesses other than fuel stations?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "lekana fuel is available now. lekana retail and lekana butchery are in development. The matching engine is the same across verticals, with domain-specific reports and data formats."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What kind of reports does lekana Insights provide?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Three reports are live today: Reconciliation overview, Attendants (per-person accountability), and Declined card transactions (pattern detection). Trends and Pump performance reports are in development."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is my financial data secure with lekana?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Authentication runs through Google OAuth, so we never see or store your password. Every decision the engine makes is logged. The audit trail is the record, not a feature. Data is handled in line with POPIA requirements."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- Structured data: WebSite -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "url": "https://lekana.app/",
+    "name": "lekana",
+    "description": "Bank to point-of-sale reconciliation. A day's work in 5 minutes.",
+    "publisher": {
+      "@id": "https://lekana.app/#organization"
+    },
+    "inLanguage": "en-ZA"
+  }
+  </script>
+
+  <style>
+    /* ============================================================
+       lekana.app marketing site - v3
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --lk-sunshine:    #F5C400;
+      --lk-dark:        #1A1200;
+      --lk-cream:       #F5EDE6;
+      --lk-page-bg:     #F4F4F0;
+      --lk-orange:      #FC6722;
+      --lk-white:       #FFFFFF;
+      --lk-hair:        #E5E3DC;
+      --lk-muted:       #6B7280;
+      --lk-verified:    #166534;
+      --lk-investigate: #B45309;
+
+      --font-display:   'Nunito', system-ui, sans-serif;
+      --font-body:      'Figtree', system-ui, sans-serif;
+
+      --ease-default:   cubic-bezier(0.2, 0.7, 0.2, 1);
+      --dur-fast:       120ms;
+      --dur-base:       200ms;
+
+      --max-w:          1120px;
+      --max-w-narrow:   880px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--lk-page-bg);
+      color: var(--lk-dark);
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 15px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    img { display: block; max-width: 100%; height: auto; }
+
+    /* Visually hidden but accessible to screen readers */
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    /* Skip link for keyboard / screen-reader users */
+    .skip-link {
+      position: absolute;
+      top: -100px;
+      left: 16px;
+      background: var(--lk-dark);
+      color: var(--lk-cream);
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-weight: 500;
+      font-size: 14px;
+      z-index: 100;
+      transition: top var(--dur-base) var(--ease-default);
+    }
+    .skip-link:focus { top: 16px; }
+
+    /* Type primitives */
+    .hero-title {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: clamp(44px, 6vw, 72px);
+      letter-spacing: -0.02em;
+      line-height: 1.05;
+      color: var(--lk-dark);
+    }
+    .h1 {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: clamp(32px, 4vw, 44px);
+      letter-spacing: -0.015em;
+      line-height: 1.15;
+      color: var(--lk-dark);
+    }
+    .h2 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 28px;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+      color: var(--lk-dark);
+    }
+    .h3 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 20px;
+      letter-spacing: -0.005em;
+      line-height: 1.3;
+      color: var(--lk-dark);
+    }
+    .label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--lk-muted);
+    }
+    .body-lg {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--lk-dark);
+    }
+    .body {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--lk-dark);
+    }
+    .body-muted {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--lk-dark);
+      opacity: 0.65;
+    }
+    .caption {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--lk-muted);
+    }
+
+    /* Layout */
+    .container {
+      width: 100%;
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .container-narrow {
+      width: 100%;
+      max-width: var(--max-w-narrow);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Top bar */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: var(--lk-sunshine);
+      transition: background var(--dur-base) var(--ease-default);
+    }
+    .topbar.scrolled {
+      background: var(--lk-page-bg);
+      border-bottom: 1px solid var(--lk-hair);
+    }
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-mark {
+      width: 48px;
+      height: 24px;
+    }
+    .brand-word {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 22px;
+      letter-spacing: -0.01em;
+      color: var(--lk-dark);
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    .nav a {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--lk-dark);
+      opacity: 0.75;
+      transition: opacity var(--dur-fast) var(--ease-default);
+    }
+    .nav a:hover { opacity: 1; }
+    @media (max-width: 720px) {
+      .nav { gap: 16px; }
+      .nav a:not(.btn) { display: none; }
+    }
+
+    /* Top-nav button - cream on yellow (canvas), dark on scrolled state */
+    .nav .btn-nav {
+      background: var(--lk-cream);
+      color: var(--lk-dark);
+      opacity: 1;
+      transition: background var(--dur-fast) var(--ease-default),
+                  color var(--dur-fast) var(--ease-default);
+    }
+    .nav .btn-nav:hover { background: #FFFFFF; }
+    .topbar.scrolled .nav .btn-nav {
+      background: var(--lk-dark);
+      color: var(--lk-cream);
+    }
+    .topbar.scrolled .nav .btn-nav:hover { background: #000; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-weight: 500;
+      font-size: 14px;
+      letter-spacing: 0.005em;
+      transition: background var(--dur-fast) var(--ease-default),
+                  transform var(--dur-fast) var(--ease-default);
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--lk-dark); color: var(--lk-cream); }
+    .btn-primary:hover { background: #000; }
+    .btn-primary:active { transform: translateY(1px); }
+    .btn-ghost { background: transparent; color: var(--lk-dark); padding: 12px 8px; }
+    .btn-ghost:hover { opacity: 0.7; }
+    .btn-orange { background: var(--lk-orange); color: var(--lk-cream); }
+    .btn-orange:hover { background: #E55C1A; }
+    .btn-orange:active { transform: translateY(1px); }
+    .btn-cream { background: var(--lk-cream); color: var(--lk-dark); }
+    .btn-cream:hover { background: #EDE3D9; }
+
+    /* Hero */
+    .hero {
+      background: var(--lk-sunshine);
+      padding: 64px 0 96px;
+    }
+    .hero-inner {
+      max-width: 760px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .hero-eyebrow {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--lk-dark);
+      opacity: 0.55;
+      margin-bottom: 28px;
+    }
+    .hero-title { margin-bottom: 28px; }
+    .hero-sub {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--lk-dark);
+      opacity: 0.82;
+      max-width: 580px;
+      margin: 0 auto 40px;
+    }
+    .hero-cta {
+      display: inline-flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    /* Section primitives */
+    .section { padding: 96px 0; }
+    .section-tight { padding: 64px 0; }
+    .section-head {
+      max-width: 720px;
+      margin: 0 auto 56px;
+      text-align: center;
+    }
+    .section-head .label {
+      display: block;
+      margin-bottom: 16px;
+    }
+    .section-head h2 { margin-bottom: 16px; }
+    .section-head p {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 17px;
+      line-height: 1.55;
+      color: var(--lk-dark);
+      opacity: 0.7;
+    }
+
+    /* Two-column layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .two-col.reverse { direction: rtl; }
+    .two-col.reverse > * { direction: ltr; }
+    @media (max-width: 880px) {
+      .two-col { grid-template-columns: 1fr; gap: 40px; direction: ltr; }
+      .two-col.reverse { direction: ltr; }
+    }
+    .col-copy .label { margin-bottom: 16px; display: block; }
+    .col-copy h2 { margin-bottom: 20px; }
+    .col-copy p { margin-bottom: 16px; }
+    .col-copy ul {
+      list-style: none;
+      margin-top: 24px;
+    }
+    .col-copy ul li {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--lk-hair);
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 15px;
+      color: var(--lk-dark);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      line-height: 1.5;
+    }
+    .col-copy ul li:last-child { border-bottom: 0; }
+    .col-copy ul li .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--lk-dark);
+      flex-shrink: 0;
+    }
+
+    /* Screenshot frames */
+    .shot {
+      background: var(--lk-white);
+      border-radius: 14px;
+      padding: 12px;
+      overflow: hidden;
+    }
+    .shot img {
+      width: 100%;
+      border-radius: 6px;
+      display: block;
+    }
+    .shot-caption {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 12px;
+      color: var(--lk-muted);
+      text-align: center;
+      margin-top: 16px;
+    }
+    .shot-wide {
+      max-width: 980px;
+      margin: 0 auto;
+      background: var(--lk-white);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .shot-wide img {
+      width: 100%;
+      border-radius: 6px;
+      display: block;
+    }
+
+    /* Pivot - dark canvas */
+    .pivot {
+      background: var(--lk-dark);
+      color: var(--lk-cream);
+      padding: 120px 0;
+    }
+    .pivot-inner {
+      max-width: 720px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .pivot .label {
+      color: var(--lk-cream);
+      opacity: 0.5;
+      margin-bottom: 24px;
+      display: block;
+    }
+    .pivot h2 {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: clamp(32px, 4.5vw, 48px);
+      line-height: 1.15;
+      letter-spacing: -0.015em;
+      color: var(--lk-cream);
+      margin-bottom: 20px;
+    }
+    .pivot p {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 18px;
+      line-height: 1.55;
+      color: var(--lk-cream);
+      opacity: 0.72;
+    }
+
+    /* Proof point */
+    .proof {
+      background: var(--lk-dark);
+      color: var(--lk-cream);
+      padding: 96px 0 112px;
+      position: relative;
+    }
+    .proof::before {
+      content: '';
+      display: block;
+      height: 1px;
+      background: rgba(245, 237, 230, 0.1);
+      max-width: 80px;
+      margin: 0 auto 64px;
+    }
+    .proof-inner {
+      max-width: 760px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .proof .label {
+      color: var(--lk-cream);
+      opacity: 0.5;
+      margin-bottom: 24px;
+      display: block;
+    }
+    .proof h2 {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.2;
+      letter-spacing: -0.015em;
+      color: var(--lk-cream);
+      margin-bottom: 24px;
+    }
+    .proof-inner > p {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 17px;
+      line-height: 1.6;
+      color: var(--lk-cream);
+      opacity: 0.72;
+      max-width: 620px;
+      margin: 0 auto 56px;
+    }
+    .proof-range {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: 0;
+      max-width: 640px;
+      margin: 0 auto 40px;
+      padding: 32px 0;
+      border-top: 1px solid rgba(245, 237, 230, 0.12);
+      border-bottom: 1px solid rgba(245, 237, 230, 0.12);
+    }
+    .proof-stat { flex: 1; text-align: center; }
+    .proof-stat-value {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: clamp(28px, 3.5vw, 36px);
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: var(--lk-cream);
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 10px;
+    }
+    .proof-stat-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--lk-cream);
+      opacity: 0.5;
+    }
+    .proof-stat-divider {
+      width: 1px;
+      background: rgba(245, 237, 230, 0.12);
+      flex-shrink: 0;
+    }
+    @media (max-width: 720px) {
+      .proof-range {
+        flex-direction: column;
+        gap: 28px;
+        padding: 28px 0;
+      }
+      .proof-stat-divider {
+        width: 60px;
+        height: 1px;
+        margin: 0 auto;
+      }
+    }
+    .proof-note {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--lk-cream);
+      opacity: 0.45;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    /* Insights cards */
+    .reports-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 880px) {
+      .reports-grid { grid-template-columns: 1fr; }
+    }
+    .report-card {
+      background: var(--lk-white);
+      border-radius: 12px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .report-card .status {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--lk-verified);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .report-card .status::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--lk-verified);
+    }
+    .report-card.soon .status { color: var(--lk-muted); }
+    .report-card.soon .status::before { background: var(--lk-muted); }
+    .report-card h3 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 19px;
+      letter-spacing: -0.005em;
+      line-height: 1.3;
+      color: var(--lk-dark);
+    }
+    .report-card p {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--lk-dark);
+      opacity: 0.72;
+    }
+    .report-soon-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 720px) {
+      .report-soon-grid { grid-template-columns: 1fr; }
+    }
+    .report-deep { margin-top: 80px; }
+    .report-deep:first-of-type { margin-top: 0; }
+
+    /* How it works */
+    .steps-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 80px;
+    }
+    .step-row {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 48px;
+      align-items: center;
+    }
+    .step-row.flip { grid-template-columns: 1.4fr 1fr; }
+    @media (max-width: 880px) {
+      .step-row, .step-row.flip { grid-template-columns: 1fr; gap: 24px; }
+    }
+    .step-num {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: 64px;
+      line-height: 1;
+      color: var(--lk-dark);
+      opacity: 0.25;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .step-copy h3 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 26px;
+      color: var(--lk-dark);
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .step-copy p {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 16px;
+      line-height: 1.55;
+      color: var(--lk-dark);
+      opacity: 0.72;
+    }
+
+    /* Modules */
+    .modules-list {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 720px) {
+      .modules-list { grid-template-columns: 1fr; }
+    }
+    .module {
+      background: var(--lk-white);
+      border-radius: 12px;
+      padding: 28px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .module-name {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 18px;
+      color: var(--lk-dark);
+      letter-spacing: -0.005em;
+    }
+    .module-desc {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 13px;
+      color: var(--lk-dark);
+      opacity: 0.65;
+      margin-top: 6px;
+    }
+    .module-status {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--lk-muted);
+      padding: 5px 9px;
+      background: var(--lk-page-bg);
+      border-radius: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .module-status.live { color: var(--lk-verified); }
+
+    /* Banks */
+    .banks {
+      background: var(--lk-white);
+      border-radius: 12px;
+      padding: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+    .bank-name {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 22px;
+      color: var(--lk-dark);
+      letter-spacing: -0.005em;
+      opacity: 0.85;
+    }
+    @media (max-width: 720px) {
+      .banks { flex-direction: column; padding: 32px; }
+    }
+
+    /* Pre-alpha pricing banner */
+    .pre-alpha-banner {
+      max-width: 720px;
+      margin: 0 auto 40px;
+      padding: 18px 24px;
+      background: var(--lk-dark);
+      color: var(--lk-cream);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      text-align: center;
+    }
+    .pre-alpha-banner .ba-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--lk-sunshine);
+      color: var(--lk-dark);
+      border-radius: 6px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .pre-alpha-banner .ba-copy {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--lk-cream);
+      line-height: 1.5;
+    }
+
+    /* Pricing */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 880px) {
+      .pricing-grid { grid-template-columns: 1fr; }
+    }
+    .price-card {
+      background: var(--lk-white);
+      border-radius: 12px;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .price-card.dark {
+      background: var(--lk-dark);
+      color: var(--lk-cream);
+    }
+    .price-card.dark .price-name,
+    .price-card.dark .price-amount,
+    .price-card.dark .price-features li {
+      color: var(--lk-cream);
+    }
+    .price-card.dark .price-amount-suffix,
+    .price-card.dark .price-tagline,
+    .price-card.dark .price-was {
+      color: var(--lk-cream);
+      opacity: 0.55;
+    }
+    .price-card.dark .price-features li::before {
+      background: var(--lk-cream);
+      opacity: 0.55;
+    }
+    .price-card.dark .price-divider {
+      background: var(--lk-cream);
+      opacity: 0.15;
+    }
+
+    .price-flag {
+      position: absolute;
+      top: -10px;
+      right: 28px;
+      padding: 5px 11px;
+      background: var(--lk-sunshine);
+      color: var(--lk-dark);
+      border-radius: 6px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .price-name {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 22px;
+      color: var(--lk-dark);
+      margin-bottom: 6px;
+      letter-spacing: -0.005em;
+    }
+    .price-tagline {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 13px;
+      color: var(--lk-muted);
+      margin-bottom: 32px;
+    }
+    .price-was {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--lk-muted);
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+      margin-bottom: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .price-amount {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: 48px;
+      color: var(--lk-dark);
+      letter-spacing: -0.02em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .price-amount-suffix {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 13px;
+      color: var(--lk-muted);
+      margin-top: 8px;
+    }
+    .price-divider {
+      height: 1px;
+      background: var(--lk-hair);
+      margin: 28px 0;
+    }
+    .price-features {
+      list-style: none;
+      margin-bottom: 28px;
+      flex: 1;
+    }
+    .price-features li {
+      padding: 9px 0;
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--lk-dark);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      line-height: 1.5;
+    }
+    .price-features li::before {
+      content: '';
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--lk-dark);
+      flex-shrink: 0;
+      margin-top: 8px;
+      opacity: 0.55;
+    }
+    .price-fineprint {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 11px;
+      color: var(--lk-muted);
+      line-height: 1.55;
+      margin-bottom: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--lk-hair);
+    }
+    .price-card.dark .price-fineprint {
+      color: var(--lk-cream);
+      opacity: 0.45;
+      border-top-color: rgba(245, 237, 230, 0.15);
+    }
+    .price-note {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 12px;
+      color: var(--lk-muted);
+      text-align: center;
+      margin-top: 32px;
+      max-width: 620px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.6;
+    }
+
+    /* Security */
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 720px) {
+      .security-grid { grid-template-columns: 1fr; }
+    }
+    .sec-card {
+      background: var(--lk-white);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    .sec-card .label { display: block; margin-bottom: 12px; }
+    .sec-card h3 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 17px;
+      color: var(--lk-dark);
+      margin-bottom: 8px;
+      letter-spacing: -0.005em;
+    }
+    .sec-card p {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--lk-dark);
+      opacity: 0.7;
+    }
+
+    /* Request access */
+    .cta-section {
+      background: var(--lk-sunshine);
+      padding: 96px 0;
+    }
+    .cta-card {
+      max-width: 520px;
+      margin: 0 auto;
+      background: var(--lk-white);
+      border-radius: 12px;
+      padding: 40px;
+    }
+    .cta-card h2 {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: 32px;
+      letter-spacing: -0.015em;
+      color: var(--lk-dark);
+      margin-bottom: 12px;
+      line-height: 1.15;
+    }
+    .cta-card > p {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--lk-dark);
+      opacity: 0.7;
+      margin-bottom: 24px;
+      line-height: 1.55;
+    }
+    .form-field { margin-bottom: 14px; }
+    .form-field label {
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--lk-muted);
+      margin-bottom: 6px;
+    }
+    .form-field input {
+      width: 100%;
+      background: var(--lk-cream);
+      border: 0;
+      border-radius: 8px;
+      padding: 13px 16px;
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--lk-dark);
+      transition: background var(--dur-fast) var(--ease-default);
+    }
+    .form-field input:focus {
+      outline: 2px solid var(--lk-dark);
+      outline-offset: 2px;
+    }
+    .cta-card .btn-orange {
+      width: 100%;
+      margin-top: 12px;
+      padding: 14px 24px;
+    }
+    .cta-card .legal {
+      margin-top: 16px;
+      text-align: center;
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 11px;
+      color: var(--lk-muted);
+      line-height: 1.5;
+    }
+    .approval-note {
+      margin-bottom: 24px;
+      padding: 14px 16px;
+      background: var(--lk-cream);
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--lk-dark);
+      opacity: 0.85;
+    }
+    .approval-note strong {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--lk-dark);
+      opacity: 1;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* Footer */
+    footer {
+      background: var(--lk-dark);
+      color: var(--lk-cream);
+      padding: 56px 0 40px;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 40px;
+    }
+    @media (max-width: 720px) {
+      .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+    }
+    .footer-brand .brand-word { color: var(--lk-cream); }
+    .footer-brand p {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 13px;
+      color: var(--lk-cream);
+      opacity: 0.6;
+      margin-top: 12px;
+      max-width: 320px;
+    }
+    .footer-col h4 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--lk-cream);
+      opacity: 0.5;
+      margin-bottom: 14px;
+    }
+    .footer-col a {
+      display: block;
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 13px;
+      color: var(--lk-cream);
+      opacity: 0.8;
+      margin-bottom: 8px;
+      transition: opacity var(--dur-fast) var(--ease-default);
+    }
+    .footer-col a:hover { opacity: 1; }
+    .footer-bottom {
+      border-top: 1px solid rgba(245, 237, 230, 0.1);
+      padding-top: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer-bottom .credit {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 12px;
+      color: var(--lk-cream);
+      opacity: 0.5;
+    }
+    .bethink-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--lk-cream);
+      letter-spacing: -0.01em;
+      opacity: 0.85;
+    }
+    .bethink-mark .b-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--lk-orange);
+      margin-left: 1px;
+    }
+
+    /* Pre-alpha badge */
+    .pre-alpha {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(26, 18, 0, 0.08);
+      border-radius: 6px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--lk-dark);
+    }
+    .pre-alpha-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--lk-dark);
+    }
+  </style>
+</head>
+<body>
+
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+  <header class="topbar" id="topbar" role="banner">
+    <div class="container">
+      <div class="topbar-inner">
+        <a class="brand" href="#top" aria-label="lekana home">
+          <svg class="brand-mark" viewBox="0 0 80 40" fill="none" aria-hidden="true" focusable="false">
+            <circle cx="10" cy="20" r="6" fill="#1A1200"/>
+            <rect x="38" y="6" width="4" height="28" rx="2" fill="#1A1200"/>
+            <circle cx="70" cy="20" r="6" fill="#1A1200"/>
+          </svg>
+          <span class="brand-word">lekana</span>
+        </a>
+        <nav class="nav" aria-label="Primary">
+          <a href="#how">How it works</a>
+          <a href="#insights">Insights</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#request" class="btn btn-nav">Request access</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+
+  <section class="hero" id="top" aria-labelledby="hero-heading">
+    <div class="container">
+      <div class="hero-inner">
+        <div class="hero-eyebrow">
+          <span class="pre-alpha">
+            <span class="pre-alpha-dot" aria-hidden="true"></span>
+            Pre-alpha
+          </span>
+        </div>
+        <h1 class="hero-title" id="hero-heading">A day's work in 5 minutes.</h1>
+        <p class="hero-sub">
+          lekana matches your bank transactions to your point-of-sale. Across every bank. In five minutes. The things a spreadsheet hides, lekana finds.
+        </p>
+        <div class="hero-cta">
+          <a href="#request" class="btn btn-primary">Request access</a>
+          <a href="#how" class="btn btn-ghost">See how it works</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="reconciliation" aria-labelledby="recon-heading">
+    <div class="container">
+      <div class="two-col">
+        <div class="col-copy">
+          <span class="label">The base. Reconciliation.</span>
+          <h2 class="h1" id="recon-heading">Every transaction matched. Nothing missed.</h2>
+          <p class="body-lg">
+            Reconciliation is the slow, careful work most operators put off. lekana does it in one pass. Upload your point-of-sale data, upload your bank, the engine matches them.
+          </p>
+          <p class="body-muted">
+            What used to take a full day takes under five minutes. Card transactions match individually. Cash matches as daily totals. Debtors match on monthly cycles. The matching rules belong to your business, not ours.
+          </p>
+          <ul>
+            <li><span class="dot" aria-hidden="true"></span>Card, cash and debtor matching, all in one run</li>
+            <li><span class="dot" aria-hidden="true"></span>Configurable tolerance for the edge cases</li>
+            <li><span class="dot" aria-hidden="true"></span>Every unmatched item flagged, with the closest match shown</li>
+            <li><span class="dot" aria-hidden="true"></span>A full audit trail of every decision</li>
+          </ul>
+        </div>
+
+        <figure>
+          <div class="shot">
+            <img src="assets/screenshots/summary.png" alt="lekana Results dashboard Summary tab. A May 2026 reconciliation showing a 92 percent fuel card sales match rate, R 3 608.55 fuel-side items to review, R 3 126.05 bank-side items to review, and a R 10 077.70 shortfall between fuel sales and bank approved amounts.">
+          </div>
+          <figcaption class="shot-caption">The Summary tab. Real result from a May 2026 reconciliation.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="human-in-loop" style="background: var(--lk-cream); padding-top: 64px; padding-bottom: 64px;" aria-labelledby="human-heading">
+    <div class="container">
+      <div class="two-col reverse">
+        <div class="col-copy">
+          <span class="label">Human in the loop</span>
+          <h2 class="h1" id="human-heading">You confirm what lekana cannot.</h2>
+          <p class="body-lg">
+            lekana matches what it can match with confidence. What is left, you decide. Every transaction is either matched by the engine, confirmed by you, or sent to Investigate for follow-up.
+          </p>
+          <p class="body-muted">
+            This is the difference between a reconciliation tool and a reconciliation partner. The system does the work it is good at. You do the work that needs judgement. Nothing is ever silently discarded.
+          </p>
+          <ul>
+            <li><span class="dot" aria-hidden="true"></span>Strict same-day, operational close, boundary, and settlement fallback passes</li>
+            <li><span class="dot" aria-hidden="true"></span>Confidence score on every match</li>
+            <li><span class="dot" aria-hidden="true"></span>One-click unmatch, with reason logged</li>
+            <li><span class="dot" aria-hidden="true"></span>Everything you do is recorded against your name</li>
+          </ul>
+        </div>
+
+        <figure>
+          <div class="shot">
+            <img src="assets/screenshots/transactions.png" alt="lekana Transactions tab listing 310 transactions: 112 matched automatically by lekana, 178 excluded, 20 to be reviewed by a human. Each transaction row shows the fuel side, the matching pass used, the match confidence percentage, and the bank side.">
+          </div>
+          <figcaption class="shot-caption">The Transactions tab. lekana matched 112. You handle the 20 that need review.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="pivot" aria-labelledby="pivot-heading">
+    <div class="container">
+      <div class="pivot-inner">
+        <span class="label">Then.</span>
+        <h2 id="pivot-heading">Once everything matches, the data has more to tell you.</h2>
+        <p>
+          Reconciliation answers a question you already ask. Insights answers the questions you didn't know to ask.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="proof" aria-labelledby="proof-heading">
+    <div class="container">
+      <div class="proof-inner">
+        <span class="label">From the pilot. Six months in.</span>
+        <h2 id="proof-heading">For one operator, the leakage was<br>R 42 000 to R 100 000 a month.</h2>
+        <p>
+          Revenue that was slipping through. Reprint scams. Repeated card declines never resubmitted. Pump shortfalls that the daily totals could not show. Once the reconciliation ran, the patterns surfaced. Then they could be fixed.
+        </p>
+        <dl class="proof-range" aria-label="Pilot leakage figures">
+          <div class="proof-stat">
+            <dt class="proof-stat-label">Lowest month</dt>
+            <dd class="proof-stat-value">R 42 000</dd>
+          </div>
+          <div class="proof-stat-divider" aria-hidden="true"></div>
+          <div class="proof-stat">
+            <dt class="proof-stat-label">Highest month</dt>
+            <dd class="proof-stat-value">R 100 000</dd>
+          </div>
+          <div class="proof-stat-divider" aria-hidden="true"></div>
+          <div class="proof-stat">
+            <dt class="proof-stat-label">Continuous pilot</dt>
+            <dd class="proof-stat-value">6 months</dd>
+          </div>
+        </dl>
+        <p class="proof-note">
+          One site. One operator. Numbers shared with their permission, anonymised here. Your figures will differ. The patterns will not.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="insights" aria-labelledby="insights-heading">
+    <div class="container">
+      <div class="section-head">
+        <span class="label">The upgrade. Insights.</span>
+        <h2 class="h1" id="insights-heading">Reports built on the same data.</h2>
+        <p>
+          Once the reconciliation runs, the data is ready to answer a different kind of question. Three reports live today. Two more are on the way.
+        </p>
+      </div>
+
+      <div class="reports-grid">
+        <article class="report-card">
+          <span class="status">Live</span>
+          <h3>Reconciliation overview</h3>
+          <p>The full picture of one period. Fuel sales split by card, debtor and cash. Bank transactions by bank. Match rate, surplus and shortfall, formatted for your accountant.</p>
+        </article>
+        <article class="report-card">
+          <span class="status">Live</span>
+          <h3>Attendants</h3>
+          <p>Performance by attendant. Total sales, matched sales, declined transactions, unmatched amounts, and the shortfall allocated to each person. Per name. Per period.</p>
+        </article>
+        <article class="report-card">
+          <span class="status">Live</span>
+          <h3>Declined card transactions</h3>
+          <p>Every declined card grouped by card number. The system flags repeated decline attempts, late-night declines, and recoveries. The reprint scam visible at a glance.</p>
+        </article>
+      </div>
+
+      <div class="report-soon-grid">
+        <article class="report-card soon">
+          <span class="status">Soon</span>
+          <h3>Trends</h3>
+          <p>Match rate and discrepancy patterns over time, across reconciliation periods. See whether things are getting better or worse.</p>
+        </article>
+        <article class="report-card soon">
+          <span class="status">Soon</span>
+          <h3>Pump performance</h3>
+          <p>Sales and discrepancies broken down by pump number. Find the pumps that consistently produce variance.</p>
+        </article>
+      </div>
+
+      <div style="margin-top: 96px;">
+
+        <article class="report-deep" aria-labelledby="insights-landing-heading">
+          <div class="section-head" style="margin-bottom: 32px;">
+            <span class="label">The Insights tab</span>
+            <h3 class="h2" id="insights-landing-heading">All reports, one place.</h3>
+          </div>
+          <figure class="shot-wide">
+            <img src="assets/screenshots/insights.png" alt="lekana Insights tab landing screen showing five report tiles: Reconciliation overview, Attendants, and Declined card transactions are live and openable. Trends and Pump performance are marked Coming Soon.">
+          </figure>
+        </article>
+
+        <article class="report-deep" aria-labelledby="report-overview-heading">
+          <div class="two-col">
+            <div class="col-copy">
+              <span class="label">Report 01</span>
+              <h3 class="h2" id="report-overview-heading">Reconciliation overview.</h3>
+              <p class="body-lg">
+                The whole period on one page. Fuel sales by type. Bank transactions by bank. Match rate as a clear bar.
+              </p>
+              <p class="body-muted">
+                The figures your accountant asks for, in the order they ask for them. No spreadsheet acrobatics. No copy-paste. Download it as a PDF or hand it over straight from the screen.
+              </p>
+            </div>
+            <figure>
+              <div class="shot">
+                <img src="assets/screenshots/insights-overview.png" alt="Reconciliation overview report. Top section: Fuel Sales horizontal bar segmented by Card (R 133 011.50), Debtor (R 50 047.80) and Cash (R 32 996.10) totaling R 216 055.40 across 280 transactions. Middle section: Bank Transactions bar segmented by ABSA, FNB and Standard Bank. Bottom section: Fuel Card Sales Matching bar showing 112 matched and 10 unmatched, for a 92 percent match rate.">
+              </div>
+            </figure>
+          </div>
+        </article>
+
+        <article class="report-deep" aria-labelledby="report-attendants-heading">
+          <div class="two-col reverse">
+            <div class="col-copy">
+              <span class="label">Report 02</span>
+              <h3 class="h2" id="report-attendants-heading">Attendants.</h3>
+              <p class="body-lg">
+                Who is consistent. Who is slipping. The shortfall, allocated to the people who handled the transactions.
+              </p>
+              <p class="body-muted">
+                Total sales per attendant, matched amount, unmatched amount, declined transactions and the calibration error contribution. The pump calibration error is split out separately because that is not the attendant's fault. The rest is.
+              </p>
+            </div>
+            <figure>
+              <div class="shot">
+                <img src="assets/screenshots/insights-attendants.png" alt="Attendants report showing attendant accountability. Top summary card lists fuel card sales of R 133 011.50, matched fuel card sales of R 129 402.95, unmatched fuel card sales of R 3 608.55 across 10 transactions and 5 attendants, plus a R 8.20 pump calibration error, totaling R 3 616.75 shortfall allocated to attendants. Below, an attendant-level breakdown is shown for T2-Security: 36 verified sales, R 46 946.85 total card sales, R 46 296.60 matched, declined transactions broken into recovered and unrecovered amounts, ending in a R 3 458.20 attendant shortfall.">
+              </div>
+            </figure>
+          </div>
+        </article>
+
+        <article class="report-deep" aria-labelledby="report-declined-heading">
+          <div class="two-col">
+            <div class="col-copy">
+              <span class="label">Report 03</span>
+              <h3 class="h2" id="report-declined-heading">Declined card transactions.</h3>
+              <p class="body-lg">
+                Every declined card, grouped by card number. The system flags the patterns that matter.
+              </p>
+              <p class="body-muted">
+                Repeated decline attempts in a short window. Late-night declines on the same card. Cards that decline and then mysteriously recover. The fraud patterns that hide in a transaction log become visible the moment the data is grouped properly.
+              </p>
+            </div>
+            <figure>
+              <div class="shot">
+                <img src="assets/screenshots/insights-declined.png" alt="Declined card transactions report. Decline summary shows 59 total declines totaling R 77 843.60, with 17 resubmitted successfully and 42 net unrecovered worth R 65 835.65. Below, Card 0077 is grouped showing 7 ABSA declines from attendant T2-Security flagged as Repeated decline attempts, each for R 4 819.90. Card 8866 shows 4 ABSA declines flagged Repeated decline attempts and Late-night decline, with one R 500 decline at 04:57 followed by a R 1 000 recovery at 03:14.">
+              </div>
+            </figure>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background: var(--lk-cream);" id="how" aria-labelledby="how-heading">
+    <div class="container">
+      <div class="section-head">
+        <span class="label">How it works</span>
+        <h2 class="h1" id="how-heading">Four steps, in order.</h2>
+        <p>
+          lekana is a flow, not a dashboard. You move from upload to result in a single pass. The stepper changes colour at each step. Sunshine is earned.
+        </p>
+      </div>
+
+      <ol class="steps-stack" style="list-style: none; padding: 0;">
+
+        <li class="step-row">
+          <div class="step-copy">
+            <div class="step-num" aria-hidden="true">01</div>
+            <h3>Upload your fuel data.</h3>
+            <p>Export from your fuel management system. Drop it in. Format is auto-detected. Plum is step one.</p>
+          </div>
+          <figure>
+            <div class="shot">
+              <img src="assets/screenshots/step1-fuel.png" alt="Step 1 of the lekana reconciliation flow on a plum-coloured stepper band. Title reads Reconciliation, Step 1 of 4. The screen confirms Fuel Data Ready, with the file MasterFuel Sales Transactions CSV imported with 280 transactions. A primary Continue to Bank Data button is shown.">
+            </div>
+          </figure>
+        </li>
+
+        <li class="step-row flip">
+          <figure>
+            <div class="shot">
+              <img src="assets/screenshots/step2-bank.png" alt="Step 2 of the lekana reconciliation flow on a deep-teal stepper band. The Upload Bank Data screen lists three uploaded bank files: ABSA Merchant Transactions CSV with 462 rows, Standard Bank Merchant Transactions with 19 rows, and FNB Merchant Transactions with 261 rows. Buttons offer to add another bank or continue to configure matching.">
+            </div>
+          </figure>
+          <div class="step-copy">
+            <div class="step-num" aria-hidden="true">02</div>
+            <h3>Upload your bank statements.</h3>
+            <p>Statements from FNB, ABSA, Standard Bank or Nedbank. Multiple banks in the same period are fine. Teal is step two.</p>
+          </div>
+        </li>
+
+        <li class="step-row">
+          <div class="step-copy">
+            <div class="step-num" aria-hidden="true">03</div>
+            <h3>Configure matching.</h3>
+            <p>Conservative, moderate or aggressive presets. Or use your saved station rules. Four matching passes run in order, each one tighter than the last. Burnt orange is step three.</p>
+          </div>
+          <figure>
+            <div class="shot">
+              <img src="assets/screenshots/step3-configure.png" alt="Step 3 of the lekana reconciliation flow on a burnt-orange stepper band. The Configure Matching screen shows three preset cards labelled Conservative, Moderate and Aggressive with progressively wider tolerances. Below, the four matching passes are listed: Strict Same-Day Exact, Operational Close Match, Boundary Transactions, and Settlement Fallback. Each pass shows its rule chips and a 60 percent minimum confidence threshold.">
+            </div>
+          </figure>
+        </li>
+
+        <li class="step-row flip">
+          <figure>
+            <div class="shot">
+              <img src="assets/screenshots/matching-complete.png" alt="Matching Complete confirmation screen. A 92 percent match rate is displayed: 112 of 122 card transactions matched, with 10 fuel-side and 10 bank-side items needing review. The Period Fuel Sales footer breaks down 280 total transactions into 122 card transactions worth R 133 011.50 and 158 cash transactions worth R 83 043.90. A View Results Dashboard button is shown.">
+            </div>
+          </figure>
+          <div class="step-copy">
+            <div class="step-num" aria-hidden="true">04</div>
+            <h3>Results.</h3>
+            <p>The match rate, the verified total, the items needing your attention. The payoff. Sunshine is step four. It is the only place yellow appears as a full canvas in the app.</p>
+          </div>
+        </li>
+
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="modules" aria-labelledby="modules-heading">
+    <div class="container">
+      <div class="section-head">
+        <span class="label">Built for verticals</span>
+        <h2 class="h1" id="modules-heading">One engine, three vocabularies.</h2>
+        <p>
+          The matching engine is the same. What changes is the domain knowledge. The way the data is named, the patterns the insights look for, the reports your accountant expects.
+        </p>
+      </div>
+
+      <div class="modules-list">
+        <article class="module">
+          <div>
+            <h3 class="module-name">lekana fuel</h3>
+            <p class="module-desc">Pump-level matching for service stations.</p>
+          </div>
+          <span class="module-status live">Available</span>
+        </article>
+        <article class="module">
+          <div>
+            <h3 class="module-name">lekana retail</h3>
+            <p class="module-desc">Cashier and till reconciliation for shops.</p>
+          </div>
+          <span class="module-status">Soon</span>
+        </article>
+        <article class="module">
+          <div>
+            <h3 class="module-name">lekana butchery</h3>
+            <p class="module-desc">Weight-based and scale-based POS reconciliation.</p>
+          </div>
+          <span class="module-status">Soon</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-tight" id="banks" aria-labelledby="banks-heading">
+    <div class="container-narrow">
+      <div class="section-head" style="margin-bottom: 32px;">
+        <span class="label">Bank coverage</span>
+        <h2 class="h2" id="banks-heading">Works with FNB, ABSA, Standard Bank and Nedbank.</h2>
+      </div>
+      <ul class="banks" aria-label="Supported South African banks">
+        <li class="bank-name">FNB</li>
+        <li class="bank-name">ABSA</li>
+        <li class="bank-name">Standard Bank</li>
+        <li class="bank-name">Nedbank</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="pricing" aria-labelledby="pricing-heading">
+    <div class="container-narrow">
+      <div class="section-head">
+        <span class="label">Pricing</span>
+        <h2 class="h1" id="pricing-heading">Two products. Plain numbers.</h2>
+        <p>
+          Reconciliation is the base. Insights is the add-on. Take one or both. No setup fee. Month to month.
+        </p>
+      </div>
+
+      <div class="pre-alpha-banner" role="note">
+        <span class="ba-tag">Pre-alpha</span>
+        <span class="ba-copy">All pricing is 50% off the standard rate while lekana is in pre-alpha.</span>
+      </div>
+
+      <div class="pricing-grid">
+        <article class="price-card" aria-labelledby="price-recon-heading">
+          <span class="price-flag">Pre-alpha 50% off</span>
+          <h3 class="price-name" id="price-recon-heading">Reconciliation</h3>
+          <p class="price-tagline">A day's work in five minutes.</p>
+          <p class="price-was">Standard <span style="text-decoration: line-through;">R 5 000</span> / month</p>
+          <p class="price-amount" aria-label="Two thousand five hundred rand per month">R 2 500</p>
+          <p class="price-amount-suffix">per month during pre-alpha. Excludes VAT.</p>
+          <hr class="price-divider" aria-hidden="true">
+          <ul class="price-features">
+            <li>Up to 3 service stations</li>
+            <li>Full reconciliation capability</li>
+            <li>Card, cash and debtor matching</li>
+            <li>Works with FNB, ABSA, Standard Bank, Nedbank</li>
+            <li>Complete audit trail</li>
+            <li>Per-station add-on above 3 sites</li>
+          </ul>
+          <p class="price-fineprint">Sites are approved individually during pre-alpha. We onboard one operator at a time so we can stay close to the work.</p>
+          <a href="#request" class="btn btn-primary">Request access</a>
+        </article>
+
+        <article class="price-card dark" aria-labelledby="price-recon-insights-heading">
+          <span class="price-flag">Pre-alpha 50% off</span>
+          <h3 class="price-name" id="price-recon-insights-heading">Reconciliation + Insights</h3>
+          <p class="price-tagline">Everything in the base, plus the reports.</p>
+          <p class="price-was">Standard <span style="text-decoration: line-through;">R 10 000</span> / month</p>
+          <p class="price-amount" aria-label="Five thousand rand per month">R 5 000</p>
+          <p class="price-amount-suffix">per month during pre-alpha. Excludes VAT.</p>
+          <hr class="price-divider" aria-hidden="true">
+          <ul class="price-features">
+            <li>Everything in Reconciliation</li>
+            <li>Reconciliation overview report</li>
+            <li>Attendants report</li>
+            <li>Declined card transactions report</li>
+            <li>Trends report (coming soon)</li>
+            <li>Pump performance report (coming soon)</li>
+          </ul>
+          <p class="price-fineprint">Sites are approved individually during pre-alpha. We onboard one operator at a time so we can stay close to the work.</p>
+          <a href="#request" class="btn btn-cream">Request access</a>
+        </article>
+      </div>
+
+      <p class="price-note">
+        All prices exclude VAT. Insights is a R 5 000 bundle on top of the base (R 2 500 during pre-alpha). Above 3 sites, a per-station add-on applies. Contact us for the rate.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" style="background: var(--lk-cream);" id="security" aria-labelledby="security-heading">
+    <div class="container">
+      <div class="section-head">
+        <span class="label">Security and data</span>
+        <h2 class="h1" id="security-heading">Your data stays yours.</h2>
+        <p>
+          Reconciliation deals with the most sensitive numbers in your business. The way we handle them is built to match.
+        </p>
+      </div>
+
+      <div class="security-grid">
+        <article class="sec-card">
+          <span class="label">Hosting</span>
+          <h3>South African operators, South African data.</h3>
+          <p>The application is hosted on infrastructure that keeps your data within the regions you would expect for POPIA-compliant work.</p>
+        </article>
+        <article class="sec-card">
+          <span class="label">Access</span>
+          <h3>Google sign-in. No passwords on our side.</h3>
+          <p>Authentication runs through Google OAuth. We never see or store your password. Access is per-user, never per-account.</p>
+        </article>
+        <article class="sec-card">
+          <span class="label">Audit</span>
+          <h3>Every match is traceable.</h3>
+          <p>Every decision the engine makes is logged. Every override you apply is logged. The audit trail is the record, not a feature.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section" id="request" aria-labelledby="request-heading">
+    <div class="container">
+      <div class="cta-card">
+        <h2 id="request-heading">Request access.</h2>
+        <p>
+          lekana is in pre-alpha. We are onboarding operators carefully, one site at a time, so we can stay close to the work. Fill this in and we will be in touch on WhatsApp.
+        </p>
+
+        <div class="approval-note">
+          <strong>Subject to site approval</strong>
+          During pre-alpha, we approve each site individually before access is granted. Once you submit this form we will be in touch to discuss your operation and confirm next steps.
+        </div>
+
+        <noscript>
+          <p style="background: var(--lk-cream); padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;">
+            JavaScript is disabled. Email <a href="mailto:garth@bethink.co.za">garth@bethink.co.za</a> directly with your name, business and WhatsApp number.
+          </p>
+        </noscript>
+
+        <form action="/api/request-access" method="POST" id="access-form">
+          <div class="form-field">
+            <label for="name">Your name</label>
+            <input type="text" id="name" name="name" required autocomplete="name">
+          </div>
+          <div class="form-field">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required autocomplete="email">
+          </div>
+          <div class="form-field">
+            <label for="cell">Cell (for WhatsApp)</label>
+            <input type="tel" id="cell" name="cell" required autocomplete="tel">
+          </div>
+          <div class="form-field">
+            <label for="business">Business and number of sites</label>
+            <input type="text" id="business" name="business" placeholder="e.g. Pomp Stasie, 2 sites" autocomplete="organization">
+          </div>
+          <button type="submit" class="btn btn-orange">Send request</button>
+          <p class="legal">
+            By sending this request, you accept that we will store these details to respond.
+            <br>No marketing emails. Ever.
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  </main>
+
+  <footer role="contentinfo">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="#top" aria-label="lekana home">
+            <svg class="brand-mark" viewBox="0 0 80 40" fill="none" aria-hidden="true" focusable="false">
+              <circle cx="10" cy="20" r="6" fill="#F5EDE6"/>
+              <rect x="38" y="6" width="4" height="28" rx="2" fill="#F5EDE6"/>
+              <circle cx="70" cy="20" r="6" fill="#F5EDE6"/>
+            </svg>
+            <span class="brand-word">lekana</span>
+          </a>
+          <p>Bank-to-POS reconciliation for South African operators. A day's work in five minutes.</p>
+        </div>
+
+        <nav class="footer-col" aria-label="Product">
+          <h4>Product</h4>
+          <a href="#reconciliation">Reconciliation</a>
+          <a href="#insights">Insights</a>
+          <a href="#how">How it works</a>
+          <a href="#pricing">Pricing</a>
+        </nav>
+
+        <nav class="footer-col" aria-label="Company">
+          <h4>Company</h4>
+          <a href="#request">Request access</a>
+          <a href="mailto:garth@bethink.co.za">Contact</a>
+          <a href="/terms.html">Terms of use</a>
+          <a href="/privacy.html">Privacy</a>
+        </nav>
+      </div>
+
+      <div class="footer-bottom">
+        <p class="credit">
+          a TimeWarp product by
+          <span class="bethink-mark">bethink<span class="b-dot" aria-hidden="true"></span></span>
+          (Pty) Ltd
+        </p>
+        <p class="credit">lekana.app &middot; &copy; 2026 Bethink (Pty) Ltd</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Top bar: yellow over hero, transition to page background on scroll
+    (function() {
+      const topbar = document.getElementById('topbar');
+      const hero = document.querySelector('.hero');
+      function onScroll() {
+        const heroBottom = hero.offsetTop + hero.offsetHeight - 80;
+        topbar.classList.toggle('scrolled', window.scrollY > heroBottom);
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+
+    // Form handler - posts to /api/request-access
+    (function() {
+      const form = document.getElementById('access-form');
+      if (!form) return;
+      const btn = form.querySelector('button[type=submit]');
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form));
+        const original = btn.textContent;
+        btn.textContent = 'Sending...';
+        btn.disabled = true;
+        try {
+          const res = await fetch('/api/request-access', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          const body = await res.json().catch(function() { return {}; });
+          if (!res.ok || !body.ok) {
+            throw new Error(body.error || 'Something went wrong. Please try again.');
+          }
+          btn.textContent = 'Request sent';
+          btn.style.background = '#166534';
+        } catch (err) {
+          btn.textContent = original;
+          btn.disabled = false;
+          let errEl = form.querySelector('.form-error');
+          if (!errEl) {
+            errEl = document.createElement('p');
+            errEl.className = 'legal form-error';
+            errEl.style.color = '#B45309';
+            form.appendChild(errEl);
+          }
+          errEl.textContent = err.message;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

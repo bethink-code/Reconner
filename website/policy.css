@@ -1,0 +1,163 @@
+:root {
+  --lk-dark: #1A1200;
+  --lk-cream: #F5EDE6;
+  --lk-page-bg: #F4F4F0;
+  --lk-white: #FFFFFF;
+  --lk-hair: #E5E3DC;
+  --lk-muted: #6B7280;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Figtree', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--lk-dark);
+  background: var(--lk-page-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--lk-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Header */
+.policy-header {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--lk-hair);
+}
+
+.policy-header-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.policy-header .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+
+.policy-header .brand-mark {
+  display: block;
+  height: 32px;
+  width: auto;
+}
+
+.policy-header .brand-word {
+  font-family: 'Nunito', system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--lk-dark);
+}
+
+/* Main */
+.policy-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 64px 24px 96px;
+}
+
+.policy-main h1 {
+  font-family: 'Nunito', system-ui, sans-serif;
+  font-weight: 300;
+  font-size: 42px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+}
+
+.policy-main .meta {
+  color: var(--lk-muted);
+  font-size: 14px;
+  margin: 0 0 48px;
+}
+
+.policy-main h2 {
+  font-family: 'Nunito', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  margin: 56px 0 16px;
+}
+
+.policy-main h3 {
+  font-family: 'Nunito', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 32px 0 12px;
+  color: var(--lk-dark);
+}
+
+.policy-main p {
+  margin: 0 0 16px;
+}
+
+.policy-main ul,
+.policy-main ol {
+  margin: 0 0 16px;
+  padding-left: 24px;
+}
+
+.policy-main li {
+  margin-bottom: 8px;
+}
+
+.policy-main strong {
+  font-weight: 500;
+}
+
+/* Footer */
+.policy-footer {
+  background: var(--lk-dark);
+  color: var(--lk-cream);
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.policy-footer-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.policy-footer p {
+  margin: 0 0 4px;
+}
+
+.policy-footer a {
+  color: var(--lk-cream);
+}
+
+@media (max-width: 540px) {
+  .policy-main h1 {
+    font-size: 32px;
+  }
+  .policy-main {
+    padding: 40px 20px 64px;
+  }
+}

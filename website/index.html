@@ -1940,6 +1940,9 @@
       const btn = form.querySelector('button[type=submit]');
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        // Clear any error from a previous attempt
+        const previousError = form.querySelector('.form-error');
+        if (previousError) previousError.remove();
         const data = Object.fromEntries(new FormData(form));
         const original = btn.textContent;
         btn.textContent = 'Sending...';

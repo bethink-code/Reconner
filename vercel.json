@@ -4,7 +4,7 @@
   "functions": {
     "api/index.mjs": {
       "maxDuration": 60,
-      "includeFiles": "api/pdf.worker.js"
+      "includeFiles": "api/{pdf.worker.js,email-templates/*.html}"
     }
   },
   "rewrites": [

@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { readFileSync, copyFileSync } from "fs";
+import { readFileSync, copyFileSync, mkdirSync, readdirSync } from "fs";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -43,3 +43,13 @@ copyFileSync(
   "node_modules/pdf.js-extract/lib/pdfjs/pdf.worker.js",
   "api/pdf.worker.js"
 );
+
+// Email templates are read with fs.readFileSync at module load, relative to
+// the bundle (__dirname). Copy them alongside api/index.mjs so the runtime
+// path resolves the same way it does in dev (server/email.ts → server/email-templates/).
+mkdirSync("api/email-templates", { recursive: true });
+for (const file of readdirSync("server/email-templates")) {
+  if (file.endsWith(".html")) {
+    copyFileSync(`server/email-templates/${file}`, `api/email-templates/${file}`);
+  }
+}

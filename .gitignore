@@ -6,3 +6,6 @@ vite.config.ts.*
 *.tar.gz
 .env
 uploads/
+
+# fonts cached by generate-og-image script
+scripts/.font-cache/

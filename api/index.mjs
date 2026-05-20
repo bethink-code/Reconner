@@ -36224,38 +36224,69 @@ var submissionSchema = z5.object({
   cell: z5.string().trim().min(1, "A cell number is required").max(40),
   business: z5.string().trim().max(200).optional().default("")
 });
-var RESEND_API_KEY = process.env.RESEND_API_KEY;
-var FROM = process.env.REQUEST_ACCESS_FROM || "lekana <noreply@lekana.app>";
+var GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
+var GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+var GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
+var FROM = process.env.REQUEST_ACCESS_FROM || "lekana <garth@bethink.co.za>";
 var TO = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page").split(",").map((address) => address.trim()).filter(Boolean);
-async function sendNotification(data) {
-  if (!RESEND_API_KEY) {
-    throw new Error("RESEND_API_KEY is not configured");
+async function getAccessToken() {
+  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
+    throw new Error("Gmail OAuth env vars are not configured");
   }
-  const text2 = [
-    "New lekana access request",
-    "",
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GMAIL_CLIENT_ID,
+      client_secret: GMAIL_CLIENT_SECRET,
+      refresh_token: GMAIL_REFRESH_TOKEN,
+      grant_type: "refresh_token"
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.access_token) {
+    throw new Error(`Token refresh failed (${response.status}): ${data.error || "no access_token"}`);
+  }
+  return data.access_token;
+}
+function buildRfc822(data) {
+  const subject = `lekana access request \u2014 ${data.name}`;
+  return [
+    `From: ${FROM}`,
+    `To: ${TO.join(", ")}`,
+    `Reply-To: ${data.email}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/plain; charset=UTF-8`,
+    ``,
+    `New lekana access request`,
+    ``,
     `Name:     ${data.name}`,
     `Email:    ${data.email}`,
     `Cell:     ${data.cell}`,
     `Business: ${data.business || "-"}`
-  ].join("\n");
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      from: FROM,
-      to: TO,
-      reply_to: data.email,
-      subject: `lekana access request \u2014 ${data.name}`,
-      text: text2
-    })
-  });
+  ].join("\r\n");
+}
+function base64UrlEncode(input) {
+  return Buffer.from(input, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function sendNotification(data) {
+  const accessToken = await getAccessToken();
+  const raw = base64UrlEncode(buildRfc822(data));
+  const response = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ raw })
+    }
+  );
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`Resend responded ${response.status}: ${body}`);
+    throw new Error(`Gmail send responded ${response.status}: ${body}`);
   }
 }
 function registerRequestAccessRoutes(app2) {

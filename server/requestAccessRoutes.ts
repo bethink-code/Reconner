@@ -102,10 +102,12 @@ async function sendNotification(data: Submission): Promise<void> {
 }
 
 export function registerRequestAccessRoutes(app: Express): void {
-  // Stricter than the global API limiter: 3 submissions per IP per hour.
+  // Stricter than the global API limiter: 10 submissions per IP per hour.
+  // Tight enough for abuse, loose enough that one mistype + retry doesn't
+  // burn the budget for an honest user.
   const limiter = rateLimit({
     windowMs: 60 * 60 * 1000,
-    max: 3,
+    max: 10,
     standardHeaders: true,
     legacyHeaders: false,
     message: { ok: false, error: "Too many requests. Please try again later." },

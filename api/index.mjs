@@ -36292,7 +36292,7 @@ async function sendNotification(data) {
 function registerRequestAccessRoutes(app2) {
   const limiter = rateLimit2({
     windowMs: 60 * 60 * 1e3,
-    max: 3,
+    max: 10,
     standardHeaders: true,
     legacyHeaders: false,
     message: { ok: false, error: "Too many requests. Please try again later." }

@@ -54,9 +54,9 @@ export default function Landing() {
       {/* Brand */}
       <div className="flex items-center gap-2.5 mb-2.5" style={{ animation: "pageFadeIn 0.5s ease-out" }}>
         <svg viewBox="0 0 80 40" width="44" height="22" fill="none" aria-hidden="true">
-          <circle cx="8" cy="20" r="7" fill="#1A1200" />
-          <rect x="34" y="2" width="4" height="36" rx="2" fill="#1A1200" />
-          <circle cx="64" cy="20" r="7" fill="#1A1200" />
+          <circle cx="26" cy="20" r="5" fill="#1A1200" />
+          <rect x="38" y="4" width="4" height="32" rx="2" fill="#1A1200" />
+          <circle cx="54" cy="20" r="5" fill="#1A1200" />
         </svg>
         <h1 className="font-heading text-4xl font-normal text-[#1A1200] tracking-tight">lekana</h1>
       </div>

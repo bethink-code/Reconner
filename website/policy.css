@@ -48,6 +48,31 @@ a:hover {
   max-width: 720px;
   margin: 0 auto;
   padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.policy-header .back-link {
+  font-family: 'Figtree', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--lk-dark);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.policy-header .back-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.policy-header .back-arrow {
+  font-size: 18px;
+  line-height: 1;
 }
 
 .policy-header .brand {

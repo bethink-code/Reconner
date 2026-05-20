@@ -2,25 +2,15 @@
   <!-- Sunshine canvas -->
   <rect width="1200" height="630" fill="#F5C400"/>
 
-  <!-- Mark, 2x scale of the canonical 80x40 mark, centered horizontally -->
-  <g transform="translate(520, 130)">
-    <circle cx="52" cy="40" r="10" fill="#1A1200"/>
-    <rect x="76" y="8" width="8" height="64" rx="4" fill="#1A1200"/>
-    <circle cx="108" cy="40" r="10" fill="#1A1200"/>
+  <!-- Mark, 4x scale of the canonical 80x40 mark, centered horizontally and vertically with the wordmark below -->
+  <g transform="translate(440, 160)">
+    <circle cx="104" cy="80" r="20" fill="#1A1200"/>
+    <rect x="152" y="16" width="16" height="128" rx="8" fill="#1A1200"/>
+    <circle cx="216" cy="80" r="20" fill="#1A1200"/>
   </g>
 
-  <!-- Wordmark below mark -->
-  <text x="600" y="290" text-anchor="middle"
+  <!-- Wordmark, centered below the mark -->
+  <text x="600" y="465" text-anchor="middle"
     font-family="Nunito"
-    font-weight="400" font-size="56" fill="#1A1200" letter-spacing="-1">lekana</text>
-
-  <!-- Strapline, the hero line -->
-  <text x="600" y="430" text-anchor="middle"
-    font-family="Nunito"
-    font-weight="300" font-size="68" fill="#1A1200" letter-spacing="-1">A day&#8217;s work in 5 minutes.</text>
-
-  <!-- Sub-brand at bottom -->
-  <text x="600" y="580" text-anchor="middle"
-    font-family="Figtree"
-    font-weight="400" font-size="22" fill="#1A1200" opacity="0.7">a TimeWarp product by Bethink (Pty) Ltd</text>
+    font-weight="400" font-size="112" fill="#1A1200" letter-spacing="-2">lekana</text>
 </svg>

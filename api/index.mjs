@@ -10735,7 +10735,7 @@ var require_pdf = __commonJS({
                   })()
                 }, {
                   key: "render",
-                  value: function render(_ref5) {
+                  value: function render2(_ref5) {
                     var _arguments$, _arguments$2, _this5 = this, _intentState;
                     var canvasContext = _ref5.canvasContext, viewport = _ref5.viewport, _ref5$intent = _ref5.intent, intent = _ref5$intent === void 0 ? "display" : _ref5$intent, _ref5$annotationMode = _ref5.annotationMode, annotationMode = _ref5$annotationMode === void 0 ? _util.AnnotationMode.ENABLE : _ref5$annotationMode, _ref5$transform = _ref5.transform, transform = _ref5$transform === void 0 ? null : _ref5$transform, _ref5$imageLayer = _ref5.imageLayer, imageLayer = _ref5$imageLayer === void 0 ? null : _ref5$imageLayer, _ref5$canvasFactory = _ref5.canvasFactory, canvasFactory = _ref5$canvasFactory === void 0 ? null : _ref5$canvasFactory, _ref5$background = _ref5.background, background = _ref5$background === void 0 ? null : _ref5$background, _ref5$optionalContent = _ref5.optionalContentConfigPromise, optionalContentConfigPromise = _ref5$optionalContent === void 0 ? null : _ref5$optionalContent, _ref5$annotationCanva = _ref5.annotationCanvasMap, annotationCanvasMap = _ref5$annotationCanva === void 0 ? null : _ref5$annotationCanva;
                     if (((_arguments$ = arguments[0]) === null || _arguments$ === void 0 ? void 0 : _arguments$.renderInteractiveForms) !== void 0) {
@@ -20113,7 +20113,7 @@ var require_pdf = __commonJS({
                   }
                 }, {
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     (0, _util2.unreachable)("Abstract method `AnnotationElement.render` called");
                   }
                 }, {
@@ -20205,7 +20205,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(LinkAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var data = this.data, linkService = this.linkService;
                     var link = document.createElement("a");
                     if (data.url) {
@@ -20438,7 +20438,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(TextAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = "textAnnotation";
                     var image = document.createElement("img");
                     image.style.height = this.container.style.height;
@@ -20467,7 +20467,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(WidgetAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     if (this.data.alternativeText) {
                       this.container.title = this.data.alternativeText;
                     }
@@ -20648,7 +20648,7 @@ var require_pdf = __commonJS({
                   }
                 }, {
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var _this7 = this;
                     var storage2 = this.annotationStorage;
                     var id = this.data.id;
@@ -20854,7 +20854,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(CheckboxWidgetAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var _this8 = this;
                     var storage2 = this.annotationStorage;
                     var data = this.data;
@@ -20941,7 +20941,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(RadioButtonWidgetAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var _this9 = this;
                     this.container.className = "buttonWidgetAnnotation radioButton";
                     var storage2 = this.annotationStorage;
@@ -21038,7 +21038,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(PushButtonWidgetAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var container = _get(_getPrototypeOf(PushButtonWidgetAnnotationElement2.prototype), "render", this).call(this);
                     container.className = "buttonWidgetAnnotation pushButton";
                     if (this.data.alternativeText) {
@@ -21060,7 +21060,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(ChoiceWidgetAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var _this10 = this;
                     this.container.className = "choiceWidgetAnnotation";
                     var storage2 = this.annotationStorage;
@@ -21304,7 +21304,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(PopupAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var IGNORE_TYPES = ["Line", "Square", "Circle", "PolyLine", "Polygon", "Ink"];
                     this.container.className = "popupAnnotation";
                     if (IGNORE_TYPES.includes(this.data.parentType)) {
@@ -21352,7 +21352,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(PopupElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var _this$richText, _this$contentsObj;
                     var BACKGROUND_ENLIGHT = 0.7;
                     var wrapper = document.createElement("div");
@@ -21482,7 +21482,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(FreeTextAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = "freeTextAnnotation";
                     if (!this.data.hasPopup) {
                       this._createPopup(null, this.data);
@@ -21506,7 +21506,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(LineAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = "lineAnnotation";
                     var data = this.data;
                     var _getRectDims2 = getRectDims(data.rect), width = _getRectDims2.width, height = _getRectDims2.height;
@@ -21541,7 +21541,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(SquareAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = "squareAnnotation";
                     var data = this.data;
                     var _getRectDims3 = getRectDims(data.rect), width = _getRectDims3.width, height = _getRectDims3.height;
@@ -21577,7 +21577,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(CircleAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = "circleAnnotation";
                     var data = this.data;
                     var _getRectDims4 = getRectDims(data.rect), width = _getRectDims4.width, height = _getRectDims4.height;
@@ -21617,7 +21617,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(PolylineAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = this.containerClassName;
                     var data = this.data;
                     var _getRectDims5 = getRectDims(data.rect), width = _getRectDims5.width, height = _getRectDims5.height;
@@ -21677,7 +21677,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(CaretAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = "caretAnnotation";
                     if (!this.data.hasPopup) {
                       this._createPopup(null, this.data);
@@ -21705,7 +21705,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(InkAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = this.containerClassName;
                     var data = this.data;
                     var _getRectDims6 = getRectDims(data.rect), width = _getRectDims6.width, height = _getRectDims6.height;
@@ -21763,7 +21763,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(HighlightAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     if (!this.data.hasPopup) {
                       this._createPopup(null, this.data);
                     }
@@ -21791,7 +21791,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(UnderlineAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     if (!this.data.hasPopup) {
                       this._createPopup(null, this.data);
                     }
@@ -21819,7 +21819,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(SquigglyAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     if (!this.data.hasPopup) {
                       this._createPopup(null, this.data);
                     }
@@ -21847,7 +21847,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(StrikeOutAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     if (!this.data.hasPopup) {
                       this._createPopup(null, this.data);
                     }
@@ -21874,7 +21874,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(StampAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     this.container.className = "stampAnnotation";
                     if (!this.data.hasPopup) {
                       this._createPopup(null, this.data);
@@ -21907,7 +21907,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(FileAttachmentAnnotationElement2, [{
                   key: "render",
-                  value: function render() {
+                  value: function render2() {
                     var _this$data$titleObj, _this$data$contentsOb;
                     this.container.className = "fileAttachmentAnnotation";
                     var trigger = document.createElement("div");
@@ -21935,7 +21935,7 @@ var require_pdf = __commonJS({
                 }
                 _createClass2(AnnotationLayer2, null, [{
                   key: "render",
-                  value: function render(parameters) {
+                  value: function render2(parameters) {
                     var sortedAnnotations = [], popupAnnotations = [];
                     var _iterator22 = _createForOfIteratorHelper2(parameters.annotations), _step22;
                     try {
@@ -22479,7 +22479,7 @@ var require_pdf = __commonJS({
                   }
                 }, {
                   key: "render",
-                  value: function render(parameters) {
+                  value: function render2(parameters) {
                     var storage2 = parameters.annotationStorage;
                     var linkService = parameters.linkService;
                     var root = parameters.xfaHtml;
@@ -22800,7 +22800,7 @@ var require_pdf = __commonJS({
                   });
                 }
               }
-              function render(task) {
+              function render2(task) {
                 if (task._canceled) {
                   return;
                 }
@@ -23220,10 +23220,10 @@ var require_pdf = __commonJS({
                     capability.promise.then(function() {
                       styleCache = null;
                       if (!timeout) {
-                        render(_this2);
+                        render2(_this2);
                       } else {
                         _this2._renderTimer = setTimeout(function() {
-                          render(_this2);
+                          render2(_this2);
                           _this2._renderTimer = null;
                         }, timeout);
                       }
@@ -36218,6 +36218,96 @@ function registerReconciliationWriteRoutes(app2) {
 // server/requestAccessRoutes.ts
 import rateLimit2 from "express-rate-limit";
 import { z as z5 } from "zod";
+
+// server/email.ts
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+var __dirname2 = dirname(fileURLToPath(import.meta.url));
+var TEMPLATE_DIR = join(__dirname2, "email-templates");
+var confirmationTemplate = readFileSync(
+  join(TEMPLATE_DIR, "access-request-confirmation.html"),
+  "utf8"
+);
+var notificationTemplate = readFileSync(
+  join(TEMPLATE_DIR, "access-request-notification.html"),
+  "utf8"
+);
+var HTML_ESCAPES = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+};
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
+}
+function render(template, vars) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => vars[key] ?? "");
+}
+function encodeHeaderWord(value) {
+  if (/^[\x20-\x7E]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
+}
+function buildAccessRequestConfirmation(request) {
+  return render(confirmationTemplate, {
+    CLIENT_NAME: escapeHtml(request.name)
+  });
+}
+function buildAccessRequestNotification(request) {
+  const received = (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    dateStyle: "long",
+    timeStyle: "short"
+  });
+  const answers = [
+    ["Name", request.name],
+    ["Email", request.email],
+    ["Cell (for WhatsApp)", request.cell],
+    ["Business and number of sites", request.business || "(not given)"]
+  ];
+  const response = answers.map(
+    ([question, answer]) => `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`
+  ).join("<br/><br/>");
+  return render(notificationTemplate, {
+    LEAD_DATE: escapeHtml(received),
+    RESPONSE: response
+  });
+}
+async function sendEmail(accessToken, message) {
+  const safe = (value) => value.replace(/[\r\n]/g, " ").trim();
+  const headers = [
+    `From: ${safe(message.from)}`,
+    `To: ${safe(message.to)}`
+  ];
+  if (message.replyTo) headers.push(`Reply-To: ${safe(message.replyTo)}`);
+  headers.push(
+    `Subject: ${encodeHeaderWord(safe(message.subject))}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=UTF-8",
+    ""
+  );
+  const raw = [...headers, message.html].join("\r\n");
+  const encoded = Buffer.from(raw, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const response = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ raw: encoded })
+    }
+  );
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Gmail send responded ${response.status}: ${body}`);
+  }
+}
+
+// server/requestAccessRoutes.ts
 var submissionSchema = z5.object({
   name: z5.string().trim().min(1, "Your name is required").max(120),
   email: z5.string().trim().email("A valid email is required").max(200),
@@ -36227,8 +36317,9 @@ var submissionSchema = z5.object({
 var GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 var GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 var GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
-var FROM = process.env.REQUEST_ACCESS_FROM || "lekana <garth@bethink.co.za>";
-var TO = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page").split(",").map((address) => address.trim()).filter(Boolean);
+var FROM_DISPLAY = "lekana";
+var FROM_ADDRESS = process.env.REQUEST_ACCESS_FROM_ADDRESS || "garth@bethink.co.za";
+var NOTIFICATION_RECIPIENTS = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page").split(",").map((address) => address.trim()).filter(Boolean);
 async function getAccessToken() {
   if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
     throw new Error("Gmail OAuth env vars are not configured");
@@ -36249,45 +36340,21 @@ async function getAccessToken() {
   }
   return data.access_token;
 }
-function buildRfc822(data) {
-  const subject = `lekana access request \u2014 ${data.name}`;
-  return [
-    `From: ${FROM}`,
-    `To: ${TO.join(", ")}`,
-    `Reply-To: ${data.email}`,
-    `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/plain; charset=UTF-8`,
-    ``,
-    `New lekana access request`,
-    ``,
-    `Name:     ${data.name}`,
-    `Email:    ${data.email}`,
-    `Cell:     ${data.cell}`,
-    `Business: ${data.business || "-"}`
-  ].join("\r\n");
-}
-function base64UrlEncode(input) {
-  return Buffer.from(input, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-async function sendNotification(data) {
-  const accessToken = await getAccessToken();
-  const raw = base64UrlEncode(buildRfc822(data));
-  const response = await fetch(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ raw })
-    }
-  );
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Gmail send responded ${response.status}: ${body}`);
-  }
+async function dispatchEmails(request) {
+  const token = await getAccessToken();
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: NOTIFICATION_RECIPIENTS.join(", "),
+    replyTo: `${encodeHeaderWord(request.name)} <${request.email}>`,
+    subject: `New lekana access request from ${request.name}`,
+    html: buildAccessRequestNotification(request)
+  });
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: request.email,
+    subject: "Thanks for your interest in lekana",
+    html: buildAccessRequestConfirmation(request)
+  });
 }
 function registerRequestAccessRoutes(app2) {
   const limiter = rateLimit2({
@@ -36308,7 +36375,7 @@ function registerRequestAccessRoutes(app2) {
       `[request-access] ${data.name} <${data.email}> cell=${data.cell} business=${data.business || "-"}`
     );
     try {
-      await sendNotification(data);
+      await dispatchEmails(data);
     } catch (err) {
       console.error("[request-access] email delivery failed:", err);
       return res.status(502).json({

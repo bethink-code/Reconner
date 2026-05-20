@@ -1,15 +1,23 @@
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import {
+  buildAccessRequestConfirmation,
+  buildAccessRequestNotification,
+  encodeHeaderWord,
+  sendEmail,
+  type AccessRequest,
+} from "./email";
 
 // Public "request access" form — served from the marketing site (lekana.app)
 // and the in-app login back-face. No authentication: this is how prospective
 // customers reach us before they have an account.
 //
-// Delivery uses the Gmail API: the server holds a long-lived refresh token
-// for a Google account (currently garth@bethink.co.za) and sends mail "as"
-// that user. See scripts/generate-gmail-refresh-token.ts to (re)generate
-// the refresh token if it's ever revoked.
+// On submit we send TWO emails via the Gmail API (as garth@bethink.co.za):
+//   1. Owner notification → garth@ + pieter@ (sent first so a lead is never
+//      lost if the auto-reply fails).
+//   2. Requester confirmation → the email they submitted.
+// See scripts/generate-gmail-refresh-token.ts to (re)mint the refresh token.
 
 const submissionSchema = z.object({
   name: z.string().trim().min(1, "Your name is required").max(120),
@@ -18,15 +26,15 @@ const submissionSchema = z.object({
   business: z.string().trim().max(200).optional().default(""),
 });
 
-type Submission = z.infer<typeof submissionSchema>;
-
 // Named GMAIL_* to avoid confusion with GOOGLE_CLIENT_ID/SECRET, which are
 // the user-login OAuth client used by server/auth.ts — a different client.
 const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
-const FROM = process.env.REQUEST_ACCESS_FROM || "lekana <garth@bethink.co.za>";
-const TO = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page")
+
+const FROM_DISPLAY = "lekana";
+const FROM_ADDRESS = process.env.REQUEST_ACCESS_FROM_ADDRESS || "garth@bethink.co.za";
+const NOTIFICATION_RECIPIENTS = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page")
   .split(",")
   .map((address) => address.trim())
   .filter(Boolean);
@@ -53,52 +61,25 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-function buildRfc822(data: Submission): string {
-  const subject = `lekana access request — ${data.name}`;
-  return [
-    `From: ${FROM}`,
-    `To: ${TO.join(", ")}`,
-    `Reply-To: ${data.email}`,
-    `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/plain; charset=UTF-8`,
-    ``,
-    `New lekana access request`,
-    ``,
-    `Name:     ${data.name}`,
-    `Email:    ${data.email}`,
-    `Cell:     ${data.cell}`,
-    `Business: ${data.business || "-"}`,
-  ].join("\r\n");
-}
+async function dispatchEmails(request: AccessRequest): Promise<void> {
+  const token = await getAccessToken();
 
-// Gmail API requires the raw RFC 822 message base64url-encoded.
-function base64UrlEncode(input: string): string {
-  return Buffer.from(input, "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
+  // 1. Owner notification first — never lose the lead if the auto-reply fails.
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: NOTIFICATION_RECIPIENTS.join(", "),
+    replyTo: `${encodeHeaderWord(request.name)} <${request.email}>`,
+    subject: `New lekana access request from ${request.name}`,
+    html: buildAccessRequestNotification(request),
+  });
 
-async function sendNotification(data: Submission): Promise<void> {
-  const accessToken = await getAccessToken();
-  const raw = base64UrlEncode(buildRfc822(data));
-  const response = await fetch(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ raw }),
-    },
-  );
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Gmail send responded ${response.status}: ${body}`);
-  }
+  // 2. Auto-reply confirmation to the requester.
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: request.email,
+    subject: "Thanks for your interest in lekana",
+    html: buildAccessRequestConfirmation(request),
+  });
 }
 
 export function registerRequestAccessRoutes(app: Express): void {
@@ -128,7 +109,7 @@ export function registerRequestAccessRoutes(app: Express): void {
     );
 
     try {
-      await sendNotification(data);
+      await dispatchEmails(data);
     } catch (err) {
       console.error("[request-access] email delivery failed:", err);
       return res.status(502).json({

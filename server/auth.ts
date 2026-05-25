@@ -17,7 +17,7 @@ import { eq } from "drizzle-orm";
 // only — never remove without confirming the user is actually leaving.
 const PLATFORM_OWNER_EMAILS = new Set<string>([
   "garth@bethink.co.za",
-  "pieter@molo.page",
+  "pieter@bethink.co.za",
 ]);
 
 interface SessionUser {

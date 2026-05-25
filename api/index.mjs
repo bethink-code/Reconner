@@ -29382,7 +29382,7 @@ var storage = new DatabaseStorage();
 import { eq as eq2 } from "drizzle-orm";
 var PLATFORM_OWNER_EMAILS = /* @__PURE__ */ new Set([
   "garth@bethink.co.za",
-  "pieter@molo.page"
+  "pieter@bethink.co.za"
 ]);
 var getOidcConfig = memoize(
   async () => {

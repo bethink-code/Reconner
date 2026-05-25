@@ -77,6 +77,29 @@
     letter-spacing: 0.02em;
   }
 
+  /* Active-preset badge — tells you at a glance whether you're on a named
+     preset, the baseline, or custom inputs. Named presets are visually strong. */
+  .preset-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--line-2);
+    color: var(--ink-3);
+    border: 1px solid var(--line);
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+  .preset-badge.is-preset {
+    background: var(--accent-soft);
+    color: var(--warning);
+    border-color: var(--accent);
+  }
+
   .scenario-controls {
     display: flex;
     align-items: center;
@@ -718,6 +741,7 @@
   <div class="brand">
     <span class="brand-name">lekana</span>
     <span class="brand-sub">viability model · internal</span>
+    <span class="preset-badge" id="preset-badge"></span>
   </div>
   <div class="scenario-controls">
     <select class="scenario-select" id="preset-select" title="Load a preset scenario">
@@ -736,7 +760,8 @@
 </div>
 
 <div class="tabs">
-  <button class="tab active" data-tab="steady">Steady state</button>
+  <button class="tab active" data-tab="summary">Summary</button>
+  <button class="tab" data-tab="steady">Steady state</button>
   <button class="tab" data-tab="projection">12-month projection</button>
   <button class="tab" data-tab="compare">Compare</button>
   <button class="tab" data-tab="sensitivity">Sensitivity</button>
@@ -745,8 +770,13 @@
 
 <div class="workspace">
 
+  <!-- ============ SUMMARY TAB ============ -->
+  <div id="tab-summary" class="tab-content">
+    <div id="summary-host"></div>
+  </div>
+
   <!-- ============ STEADY STATE TAB ============ -->
-  <div id="tab-steady" class="tab-content">
+  <div id="tab-steady" class="tab-content hidden">
 
     <div id="warnings-host"></div>
 
@@ -1235,7 +1265,7 @@ const FIELD_DEFS = {
 
 let inputs = loadInputs();
 let scenarios = [];            // loaded from the server (shared across platform owners)
-let currentTab = 'steady';
+let currentTab = 'summary';
 let openPanel = null;
 
 function loadInputs() {
@@ -1551,6 +1581,135 @@ function fmtPct(v, decimals = 1) {
 }
 
 // ==========================================================================
+// ACTIVE-PRESET DETECTION
+// Derive which preset (if any) the current inputs correspond to, rather than
+// tracking extra state — this stays correct across reloads and flips to
+// "Custom" the moment any single input diverges.
+// ==========================================================================
+
+function inputsMatch(a, b) {
+  return Object.keys(DEFAULT_INPUTS).every((k) => a[k] === b[k]);
+}
+
+function detectActivePreset(inp) {
+  if (inputsMatch(inp, DEFAULT_INPUTS)) return 'Calculator defaults';
+  for (const preset of Object.values(PRESETS)) {
+    if (inputsMatch(inp, { ...DEFAULT_INPUTS, ...preset.inputs })) return preset.name;
+  }
+  return null; // diverged from every preset — custom
+}
+
+function renderPresetBadge() {
+  const el = document.getElementById('preset-badge');
+  if (!el) return;
+  const name = detectActivePreset(inputs);
+  if (name === 'Calculator defaults') {
+    el.textContent = 'Baseline defaults';
+    el.classList.remove('is-preset');
+  } else if (name) {
+    el.textContent = '★ ' + name;
+    el.classList.add('is-preset');
+  } else {
+    el.textContent = 'Custom inputs';
+    el.classList.remove('is-preset');
+  }
+}
+
+// ==========================================================================
+// SUMMARY — the landing view. Bottom-line numbers + a blunt, plain-English
+// read on whether this makes money, what's working, and what's dragging.
+// Fully derived from the model (no LLM): the numbers and the words always agree.
+// ==========================================================================
+
+function renderSummary() {
+  const host = document.getElementById('summary-host');
+  if (!host) return;
+
+  const proj = compute12Month(inputs);
+  const m12 = proj.months[11];
+  const be = proj.breakEvenMonth;
+  const model = computeModel(inputs, m12.customers);
+
+  const netMargin = m12.revenue > 0 ? (m12.profit / m12.revenue) * 100 : 0;
+  const peopleShare = model.cost.total > 0 ? (model.cost.people / model.cost.total) * 100 : 0;
+  const insShare = model.revenue.net > 0 ? (model.revenue.insights / model.revenue.net) * 100 : 0;
+  const yearOneCash = m12.cumulative;
+  const ppc = model.unit.profitPerCustomer;
+
+  // Biggest lever: the variable whose ±30% swing moves month-12 profit most.
+  let lever = null, leverSwing = -1;
+  computeSensitivity(inputs).forEach(s => {
+    const sw = Math.abs(s.highProfit - s.lowProfit);
+    if (sw > leverSwing) { leverSwing = sw; lever = s; }
+  });
+
+  const viable = be !== null && m12.profit > 0;
+
+  const verdictText = viable
+    ? `Viable. Breaks even in month ${be}, then runs in the black.`
+    : (be === null
+        ? `Not viable as set — no break-even within 18 months.`
+        : `Marginal — breaks even month ${be}, but month 12 is only ${fmtZAR(m12.profit)}/mo.`);
+
+  const bottomLine = viable
+    ? `Bottom line: this makes money. By month 12 you're banking ${fmtZAR(m12.profit)}/mo on ${m12.paidCustomers} paying customers — a ${fmtPct(netMargin)} margin.`
+    : (m12.profit < 0
+        ? `Bottom line: you're bleeding ${fmtZAR(Math.abs(m12.profit))}/mo at month 12${be === null ? ' and never climb out inside 18 months' : ''}. As set, this loses money.`
+        : `Bottom line: roughly break-even at month 12 — not losing, not making. Not worth doing as set.`);
+
+  const working = [];
+  const dragging = [];
+  if (be !== null) working.push(`Breaks even month ${be} — ${m12.paidCustomers} paying customers by M12.`);
+  if (netMargin >= 25) working.push(`Fat margin: ${fmtPct(netMargin)} at month 12.`);
+  if (ppc > 0) working.push(`Each customer nets ~${fmtZAR(ppc)}/mo.`);
+  if (model.avgSitesPerCustomer >= 3) working.push(`Multi-site mix (${model.avgSitesPerCustomer.toFixed(1)} sites avg) lifts revenue per customer.`);
+  if (insShare >= 35) working.push(`Insights carries ${fmtPct(insShare)} of revenue.`);
+
+  if (be === null) dragging.push(`No break-even in 18 months — dead as set.`);
+  if (m12.profit < 0) dragging.push(`Losing ${fmtZAR(Math.abs(m12.profit))}/mo at month 12.`);
+  if (peopleShare >= 50) dragging.push(`People are ${fmtPct(peopleShare)} of spend (${fmtZAR(model.cost.people)}/mo) — the anchor.`);
+  if (ppc < 0) dragging.push(`Every customer you add loses ${fmtZAR(Math.abs(ppc))}/mo.`);
+  if (model.segMix[0] >= 0.4) dragging.push(`${fmtPct(model.segMix[0] * 100)} single-site — low value, high churn.`);
+  if (yearOneCash < 0) dragging.push(`Year-1 burn: ${fmtZAR(Math.abs(yearOneCash))} before you turn the corner.`);
+
+  if (working.length === 0) working.push('Nothing strong enough to brag about yet.');
+  if (dragging.length === 0) dragging.push('Nothing major dragging — tighten and scale.');
+
+  let leverLine = '';
+  if (lever) {
+    const pushUp = lever.highProfit > lever.lowProfit;
+    leverLine = `Biggest lever: <strong>${lever.label}</strong> — a &plusmn;30% move swings month-12 profit by ${fmtZAR(Math.abs(lever.highProfit - lever.lowProfit))}/mo. ${pushUp ? 'Push it up.' : 'Bring it down.'}`;
+  }
+
+  host.innerHTML = `
+    <div class="warning-banner ${viable ? 'positive' : ''}">
+      <span class="warning-icon">${viable ? '✓' : '!'}</span>
+      <span>${verdictText}</span>
+    </div>
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="serif" style="font-size:20px;line-height:1.45;">${bottomLine}</div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">Month-12 revenue</div><div class="metric-value mono">${fmtZAR(m12.revenue)}</div><div class="metric-sub">${m12.paidCustomers} paying customers</div></div>
+      <div class="metric"><div class="metric-label">Month-12 cost</div><div class="metric-value mono">${fmtZAR(m12.cost)}</div><div class="metric-sub">people ${fmtZAR(model.cost.people)}/mo</div></div>
+      <div class="metric"><div class="metric-label">Month-12 profit</div><div class="metric-value mono ${m12.profit >= 0 ? 'positive' : 'danger'}">${fmtZAR(m12.profit)}</div><div class="metric-sub">${fmtPct(netMargin)} margin</div></div>
+      <div class="metric"><div class="metric-label">Break even</div><div class="metric-value mono ${be !== null ? 'positive' : 'danger'}">${be !== null ? 'month ' + be : 'never'}</div><div class="metric-sub">year-1 cash ${fmtZAR(yearOneCash)}</div></div>
+    </div>
+    <div class="row-2" style="margin-top:8px;">
+      <div class="panel">
+        <div class="small-caps" style="margin-bottom:12px;">What's working</div>
+        <ul style="margin:0;padding-left:18px;line-height:1.8;">${working.map(w => `<li>${w}</li>`).join('')}</ul>
+      </div>
+      <div class="panel">
+        <div class="small-caps" style="margin-bottom:12px;">What's dragging</div>
+        <ul style="margin:0;padding-left:18px;line-height:1.8;">${dragging.map(d => `<li>${d}</li>`).join('')}</ul>
+      </div>
+    </div>
+    ${leverLine ? `<div class="panel"><div class="help-text" style="font-size:14px;">${leverLine}</div></div>` : ''}
+  `;
+}
+
+// ==========================================================================
 // RENDERING - HEADLINE METRICS
 // ==========================================================================
 
@@ -1558,6 +1717,8 @@ function render() {
   const m = computeModel(inputs);
   const proj = compute12Month(inputs);
 
+  renderPresetBadge();
+  renderSummary();
   renderMetrics(m, proj);
   renderWarnings(m, proj);
   renderRevenueTable(m);

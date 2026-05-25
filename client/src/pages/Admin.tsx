@@ -1387,9 +1387,15 @@ export default function Admin() {
           </div>
         )}
 
-        {/* Pricing tab — platform owner only */}
-        {activeTab === "pricing" && isPlatformOwner && <PricingTab />}
       </div>
+
+      {/* Pricing model — rendered full-width below the tab bar; it's a rich
+          tool that needs more room than the 4xl admin column. */}
+      {activeTab === "pricing" && isPlatformOwner && (
+        <div className="max-w-[1500px] mx-auto mt-4">
+          <PricingTab />
+        </div>
+      )}
 
       {/* Edit Property Dialog */}
       <Dialog open={!!editingProperty} onOpenChange={(open) => !open && setEditingProperty(null)}>

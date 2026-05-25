@@ -425,6 +425,44 @@
   }
   .close-x:hover { background: var(--line-2); color: var(--ink); }
 
+  /* ====== CONFIRM / ALERT MODAL (on-brand, replaces native dialogs) ====== */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 23, 26, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 60;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-md);
+    width: 100%;
+    max-width: 440px;
+    padding: 24px;
+    transform: translateY(8px) scale(0.98);
+    transition: transform 0.2s;
+  }
+  .modal-overlay.open .modal { transform: none; }
+  .modal-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    margin-bottom: 10px;
+  }
+  .modal-body { font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+  .modal-body .note { color: var(--ink-3); font-size: 13px; margin-top: 10px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+
   /* ====== FORM FIELDS ====== */
   .field {
     margin-bottom: 22px;
@@ -1032,6 +1070,18 @@
   <div class="slide-foot">
     <button class="btn" data-close>Cancel</button>
     <button class="btn primary" id="save-scenario-confirm">Save</button>
+  </div>
+</div>
+
+<!-- ON-BRAND CONFIRM / ALERT MODAL (replaces native confirm()/alert()) -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-title" id="modal-title"></div>
+    <div class="modal-body" id="modal-message"></div>
+    <div class="modal-foot">
+      <button class="btn" id="modal-cancel">Cancel</button>
+      <button class="btn primary" id="modal-confirm">Confirm</button>
+    </div>
   </div>
 </div>
 
@@ -2203,7 +2253,7 @@ async function removeScenario(id) {
     render();
   } catch (e) {
     console.error('Could not delete scenario:', e);
-    alert('Could not delete the scenario. Please try again.');
+    showAlert('Could not delete the scenario. Please try again.');
   }
 }
 window.removeScenario = removeScenario;
@@ -2420,6 +2470,44 @@ function closeAllPanels() {
 }
 
 // ==========================================================================
+// CONFIRM / ALERT MODAL — on-brand replacement for native confirm()/alert().
+// Promise-based so call sites read like the old synchronous flow with `await`.
+// ==========================================================================
+
+let _modalResolve = null;
+
+function showConfirm({ title = 'Confirm', message = '', confirmLabel = 'Confirm', showCancel = true } = {}) {
+  return new Promise((resolve) => {
+    _modalResolve = resolve;
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-message').innerHTML = message;
+    const confirmBtn = document.getElementById('modal-confirm');
+    confirmBtn.textContent = confirmLabel;
+    document.getElementById('modal-cancel').style.display = showCancel ? '' : 'none';
+    document.getElementById('modal-overlay').classList.add('open');
+    confirmBtn.focus();
+  });
+}
+
+function showAlert(message, title = 'Heads up') {
+  return showConfirm({ title, message, confirmLabel: 'OK', showCancel: false });
+}
+
+function closeModal(result) {
+  document.getElementById('modal-overlay').classList.remove('open');
+  if (_modalResolve) { const r = _modalResolve; _modalResolve = null; r(result); }
+}
+
+document.getElementById('modal-confirm').addEventListener('click', () => closeModal(true));
+document.getElementById('modal-cancel').addEventListener('click', () => closeModal(false));
+document.getElementById('modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-overlay') closeModal(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('modal-overlay').classList.contains('open')) closeModal(false);
+});
+
+// ==========================================================================
 // TAB SWITCHING
 // ==========================================================================
 
@@ -2463,7 +2551,7 @@ async function saveCurrentScenario(name) {
     render();
   } catch (e) {
     console.error('Could not save scenario:', e);
-    alert('Could not save the scenario. Please try again.');
+    showAlert('Could not save the scenario. Please try again.');
   }
 }
 
@@ -2539,7 +2627,7 @@ document.getElementById('save-scenario-2').addEventListener('click', () => openS
 document.getElementById('save-scenario-confirm').addEventListener('click', () => {
   const name = document.getElementById('scenario-name-input').value.trim();
   if (!name) {
-    alert('Please give the scenario a name');
+    showAlert('Please give the scenario a name.');
     return;
   }
   saveCurrentScenario(name);
@@ -2547,8 +2635,13 @@ document.getElementById('save-scenario-confirm').addEventListener('click', () =>
   closeAllPanels();
 });
 
-document.getElementById('reset-scenario').addEventListener('click', () => {
-  if (confirm('Reset all inputs to defaults? Saved scenarios will be kept.')) {
+document.getElementById('reset-scenario').addEventListener('click', async () => {
+  const ok = await showConfirm({
+    title: 'Reset inputs?',
+    message: 'Reset all inputs to defaults? Your saved scenarios are kept.',
+    confirmLabel: 'Reset',
+  });
+  if (ok) {
     inputs = { ...DEFAULT_INPUTS };
     saveInputs();
     render();
@@ -2558,7 +2651,7 @@ document.getElementById('reset-scenario').addEventListener('click', () => {
 document.getElementById('export-csv').addEventListener('click', exportCsv);
 
 // Preset dropdown — load preset configurations
-document.getElementById('preset-select').addEventListener('change', (e) => {
+document.getElementById('preset-select').addEventListener('change', async (e) => {
   const v = e.target.value;
   if (!v) return;
 
@@ -2575,7 +2668,12 @@ document.getElementById('preset-select').addEventListener('change', (e) => {
     return;
   }
 
-  if (confirm(`Load preset?\n\n${presetDescription}\n\nYour current working inputs will be replaced. (Use "Save as…" first if you want to keep them.)`)) {
+  const ok = await showConfirm({
+    title: 'Load preset?',
+    message: `${presetDescription}<div class="note">Your current working inputs will be replaced — use “Save as…” first if you want to keep them.</div>`,
+    confirmLabel: 'Load preset',
+  });
+  if (ok) {
     inputs = presetInputs;
     saveInputs();
     render();
@@ -2583,12 +2681,17 @@ document.getElementById('preset-select').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-document.getElementById('scenario-select').addEventListener('change', (e) => {
+document.getElementById('scenario-select').addEventListener('change', async (e) => {
   const v = e.target.value;
   if (v === 'default') return;
   const s = scenarios.find(x => x.id === v);
   if (s) {
-    if (confirm(`Load scenario "${s.name}"? Your current working inputs will be replaced (you can save them first via "Save as…" if needed).`)) {
+    const ok = await showConfirm({
+      title: 'Load scenario?',
+      message: `Load “${s.name}”?<div class="note">Your current working inputs will be replaced — use “Save as…” first if you want to keep them.</div>`,
+      confirmLabel: 'Load scenario',
+    });
+    if (ok) {
       inputs = { ...s.inputs };
       saveInputs();
       render();

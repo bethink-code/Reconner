@@ -275,11 +275,11 @@ var require_dommatrix = __commonJS({
           });
           var x = components[0];
           var y = components[1];
-          var z6 = components[2];
+          var z7 = components[2];
           var a = components[3];
-          var xyz = [x, y, z6];
-          var xyza = [x, y, z6, a];
-          if (prop === "perspective" && x && [y, z6].every(function(n) {
+          var xyz = [x, y, z7];
+          var xyza = [x, y, z7, a];
+          if (prop === "perspective" && x && [y, z7].every(function(n) {
             return n === void 0;
           })) {
             m.m34 = -1 / x;
@@ -293,14 +293,14 @@ var require_dommatrix = __commonJS({
           } else if (prop === "translate3d" && xyz.every(function(n) {
             return !Number.isNaN(+n);
           })) {
-            m = m.translate(x, y, z6);
-          } else if (prop === "translate" && x && z6 === void 0) {
+            m = m.translate(x, y, z7);
+          } else if (prop === "translate" && x && z7 === void 0) {
             m = m.translate(x, y || 0, 0);
           } else if (prop === "rotate3d" && xyza.every(function(n) {
             return !Number.isNaN(+n);
           }) && a) {
-            m = m.rotateAxisAngle(x, y, z6, a);
-          } else if (prop === "rotate" && x && [y, z6].every(function(n) {
+            m = m.rotateAxisAngle(x, y, z7, a);
+          } else if (prop === "rotate" && x && [y, z7].every(function(n) {
             return n === void 0;
           })) {
             m = m.rotate(0, 0, x);
@@ -309,15 +309,15 @@ var require_dommatrix = __commonJS({
           }) && xyz.some(function(n) {
             return n !== 1;
           })) {
-            m = m.scale(x, y, z6);
-          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z6 === void 0) {
+            m = m.scale(x, y, z7);
+          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z7 === void 0) {
             var nosy = Number.isNaN(+y);
             var sy = nosy ? x : y;
             m = m.scale(x, sy, 1);
-          } else if (prop === "skew" && x && z6 === void 0) {
+          } else if (prop === "skew" && x && z7 === void 0) {
             m = m.skewX(x);
             m = y ? m.skewY(y) : m;
-          } else if (/[XYZ]/.test(prop) && x && [y, z6].every(function(n) {
+          } else if (/[XYZ]/.test(prop) && x && [y, z7].every(function(n) {
             return n === void 0;
           }) && ["translate", "rotate", "scale", "skew"].some(function(p) {
             return prop.includes(p);
@@ -341,13 +341,13 @@ var require_dommatrix = __commonJS({
         });
         return m;
       }
-      function Translate(x, y, z6) {
+      function Translate(x, y, z7) {
         var m = new CSSMatrix();
         m.m41 = x;
         m.e = x;
         m.m42 = y;
         m.f = y;
-        m.m43 = z6;
+        m.m43 = z7;
         return m;
       }
       function Rotate(rx, ry, rz) {
@@ -381,16 +381,16 @@ var require_dommatrix = __commonJS({
         m.m33 = cosx * cosy;
         return m;
       }
-      function RotateAxisAngle(x, y, z6, alpha) {
+      function RotateAxisAngle(x, y, z7, alpha) {
         var m = new CSSMatrix();
         var angle = alpha * (Math.PI / 360);
         var sinA = Math.sin(angle);
         var cosA = Math.cos(angle);
         var sinA2 = sinA * sinA;
-        var length = Math.sqrt(x * x + y * y + z6 * z6);
+        var length = Math.sqrt(x * x + y * y + z7 * z7);
         var X = x;
         var Y = y;
-        var Z = z6;
+        var Z = z7;
         if (length === 0) {
           X = 0;
           Y = 0;
@@ -422,13 +422,13 @@ var require_dommatrix = __commonJS({
         m.m33 = 1 - 2 * (x2 + y2) * sinA2;
         return m;
       }
-      function Scale(x, y, z6) {
+      function Scale(x, y, z7) {
         var m = new CSSMatrix();
         m.m11 = x;
         m.a = x;
         m.m22 = y;
         m.d = y;
-        m.m33 = z6;
+        m.m33 = z7;
         return m;
       }
       function SkewX(angle) {
@@ -594,10 +594,10 @@ var require_dommatrix = __commonJS({
       CSSMatrix.prototype.multiply = function multiply(m2) {
         return Multiply(this, m2);
       };
-      CSSMatrix.prototype.translate = function translate(x, y, z6) {
+      CSSMatrix.prototype.translate = function translate(x, y, z7) {
         var X = x;
         var Y = y;
-        var Z = z6;
+        var Z = z7;
         if (Z === void 0) {
           Z = 0;
         }
@@ -606,10 +606,10 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Translate(X, Y, Z));
       };
-      CSSMatrix.prototype.scale = function scale(x, y, z6) {
+      CSSMatrix.prototype.scale = function scale(x, y, z7) {
         var X = x;
         var Y = y;
-        var Z = z6;
+        var Z = z7;
         if (Y === void 0) {
           Y = x;
         }
@@ -631,13 +631,13 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Rotate(RX, RY, RZ));
       };
-      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z6, angle) {
-        if ([x, y, z6, angle].some(function(n) {
+      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z7, angle) {
+        if ([x, y, z7, angle].some(function(n) {
           return Number.isNaN(n);
         })) {
           throw new TypeError("CSSMatrix: expecting 4 values");
         }
-        return Multiply(this, RotateAxisAngle(x, y, z6, angle));
+        return Multiply(this, RotateAxisAngle(x, y, z7, angle));
       };
       CSSMatrix.prototype.skewX = function skewX(angle) {
         return Multiply(this, SkewX(angle));
@@ -661,12 +661,12 @@ var require_dommatrix = __commonJS({
         var m = this;
         var x = m.m11 * t.x + m.m12 * t.y + m.m13 * t.z + m.m14 * t.w;
         var y = m.m21 * t.x + m.m22 * t.y + m.m23 * t.z + m.m24 * t.w;
-        var z6 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
+        var z7 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
         var w = m.m41 * t.x + m.m42 * t.y + m.m43 * t.z + m.m44 * t.w;
         return {
           x: x / w,
           y: y / w,
-          z: z6 / w,
+          z: z7 / w,
           w
         };
       };
@@ -27658,7 +27658,7 @@ import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-import rateLimit3 from "express-rate-limit";
+import rateLimit4 from "express-rate-limit";
 
 // server/routes.ts
 import { createServer } from "http";
@@ -36759,6 +36759,14 @@ var notificationTemplate = readFileSync2(
   join2(TEMPLATE_DIR, "access-request-notification.html"),
   "utf8"
 );
+var contactConfirmationTemplate = readFileSync2(
+  join2(TEMPLATE_DIR, "contact-confirmation.html"),
+  "utf8"
+);
+var contactNotificationTemplate = readFileSync2(
+  join2(TEMPLATE_DIR, "contact-notification.html"),
+  "utf8"
+);
 var HTML_ESCAPES = {
   "&": "&amp;",
   "<": "&lt;",
@@ -36801,6 +36809,56 @@ function buildAccessRequestNotification(request) {
     RESPONSE: response
   });
 }
+function buildContactConfirmation(contact) {
+  return render(contactConfirmationTemplate, {
+    CLIENT_NAME: escapeHtml(contact.name)
+  });
+}
+function buildContactNotification(contact) {
+  const received = (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    dateStyle: "long",
+    timeStyle: "short"
+  });
+  const answers = [
+    ["Name", contact.name],
+    ["Email", contact.email],
+    ["Message", contact.message]
+  ];
+  const response = answers.map(
+    ([question, answer]) => `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`
+  ).join("<br/><br/>");
+  return render(contactNotificationTemplate, {
+    LEAD_DATE: escapeHtml(received),
+    RESPONSE: response
+  });
+}
+var GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
+var GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+var GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
+var FROM_DISPLAY = "lekana";
+var FROM_ADDRESS = process.env.REQUEST_ACCESS_FROM_ADDRESS || "garth@bethink.co.za";
+var NOTIFICATION_RECIPIENTS = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@bethink.co.za").split(",").map((address) => address.trim()).filter(Boolean);
+async function getAccessToken() {
+  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
+    throw new Error("Gmail OAuth env vars are not configured");
+  }
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GMAIL_CLIENT_ID,
+      client_secret: GMAIL_CLIENT_SECRET,
+      refresh_token: GMAIL_REFRESH_TOKEN,
+      grant_type: "refresh_token"
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.access_token) {
+    throw new Error(`Token refresh failed (${response.status}): ${data.error || "no access_token"}`);
+  }
+  return data.access_token;
+}
 async function sendEmail(accessToken, message) {
   const safe = (value) => value.replace(/[\r\n]/g, " ").trim();
   const headers = [
@@ -36840,32 +36898,6 @@ var submissionSchema = z5.object({
   cell: z5.string().trim().min(1, "A cell number is required").max(40),
   business: z5.string().trim().max(200).optional().default("")
 });
-var GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-var GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
-var GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
-var FROM_DISPLAY = "lekana";
-var FROM_ADDRESS = process.env.REQUEST_ACCESS_FROM_ADDRESS || "garth@bethink.co.za";
-var NOTIFICATION_RECIPIENTS = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page").split(",").map((address) => address.trim()).filter(Boolean);
-async function getAccessToken() {
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
-    throw new Error("Gmail OAuth env vars are not configured");
-  }
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: GMAIL_CLIENT_ID,
-      client_secret: GMAIL_CLIENT_SECRET,
-      refresh_token: GMAIL_REFRESH_TOKEN,
-      grant_type: "refresh_token"
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.access_token) {
-    throw new Error(`Token refresh failed (${response.status}): ${data.error || "no access_token"}`);
-  }
-  return data.access_token;
-}
 async function dispatchEmails(request) {
   const token = await getAccessToken();
   await sendEmail(token, {
@@ -36913,6 +36945,59 @@ function registerRequestAccessRoutes(app2) {
   });
 }
 
+// server/contactRoutes.ts
+import rateLimit3 from "express-rate-limit";
+import { z as z6 } from "zod";
+var messageSchema = z6.object({
+  name: z6.string().trim().min(1, "Your name is required").max(120),
+  email: z6.string().trim().email("A valid email is required").max(200),
+  message: z6.string().trim().min(1, "A message is required").max(4e3)
+});
+async function dispatchEmails2(contact) {
+  const token = await getAccessToken();
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: NOTIFICATION_RECIPIENTS.join(", "),
+    replyTo: `${encodeHeaderWord(contact.name)} <${contact.email}>`,
+    subject: `New contact message from ${contact.name}`,
+    html: buildContactNotification(contact)
+  });
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: contact.email,
+    subject: "Thanks for getting in touch with lekana",
+    html: buildContactConfirmation(contact)
+  });
+}
+function registerContactRoutes(app2) {
+  const limiter = rateLimit3({
+    windowMs: 60 * 60 * 1e3,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, error: "Too many requests. Please try again later." }
+  });
+  app2.post("/api/contact", limiter, async (req, res) => {
+    const parsed = messageSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message || "Invalid submission";
+      return res.status(400).json({ ok: false, error: message });
+    }
+    const data = parsed.data;
+    console.log(`[contact] ${data.name} <${data.email}> message=${data.message.slice(0, 80)}`);
+    try {
+      await dispatchEmails2(data);
+    } catch (err) {
+      console.error("[contact] email delivery failed:", err);
+      return res.status(502).json({
+        ok: false,
+        error: "Could not send your message. Please email garth@bethink.co.za directly."
+      });
+    }
+    return res.json({ ok: true });
+  });
+}
+
 // server/routes.ts
 function computeContentHash(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -36937,6 +37022,7 @@ async function registerRoutes(app2) {
   registerReconciliationReadRoutes(app2);
   registerReconciliationWriteRoutes(app2);
   registerRequestAccessRoutes(app2);
+  registerContactRoutes(app2);
   const httpServer = createServer(app2);
   return httpServer;
 }
@@ -36948,7 +37034,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || "https://work.lekana.app",
   credentials: true
 }));
-var apiLimiter = rateLimit3({
+var apiLimiter = rateLimit4({
   windowMs: 15 * 60 * 1e3,
   // 15 minutes
   max: 200,

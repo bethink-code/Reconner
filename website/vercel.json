@@ -3,6 +3,10 @@
     {
       "source": "/api/request-access",
       "destination": "https://work.lekana.app/api/request-access"
+    },
+    {
+      "source": "/api/contact",
+      "destination": "https://work.lekana.app/api/contact"
     }
   ],
   "headers": [

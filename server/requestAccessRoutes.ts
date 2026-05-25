@@ -5,7 +5,11 @@ import {
   buildAccessRequestConfirmation,
   buildAccessRequestNotification,
   encodeHeaderWord,
+  getAccessToken,
   sendEmail,
+  FROM_ADDRESS,
+  FROM_DISPLAY,
+  NOTIFICATION_RECIPIENTS,
   type AccessRequest,
 } from "./email";
 
@@ -25,41 +29,6 @@ const submissionSchema = z.object({
   cell: z.string().trim().min(1, "A cell number is required").max(40),
   business: z.string().trim().max(200).optional().default(""),
 });
-
-// Named GMAIL_* to avoid confusion with GOOGLE_CLIENT_ID/SECRET, which are
-// the user-login OAuth client used by server/auth.ts — a different client.
-const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
-const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
-
-const FROM_DISPLAY = "lekana";
-const FROM_ADDRESS = process.env.REQUEST_ACCESS_FROM_ADDRESS || "garth@bethink.co.za";
-const NOTIFICATION_RECIPIENTS = (process.env.REQUEST_ACCESS_TO || "garth@bethink.co.za,pieter@molo.page")
-  .split(",")
-  .map((address) => address.trim())
-  .filter(Boolean);
-
-// Mint a short-lived Gmail access token from the long-lived refresh token.
-async function getAccessToken(): Promise<string> {
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
-    throw new Error("Gmail OAuth env vars are not configured");
-  }
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: GMAIL_CLIENT_ID,
-      client_secret: GMAIL_CLIENT_SECRET,
-      refresh_token: GMAIL_REFRESH_TOKEN,
-      grant_type: "refresh_token",
-    }),
-  });
-  const data = (await response.json().catch(() => ({}))) as { access_token?: string; error?: string };
-  if (!response.ok || !data.access_token) {
-    throw new Error(`Token refresh failed (${response.status}): ${data.error || "no access_token"}`);
-  }
-  return data.access_token;
-}
 
 async function dispatchEmails(request: AccessRequest): Promise<void> {
   const token = await getAccessToken();

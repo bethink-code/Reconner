@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact us | lekana</title>
+<meta name="description" content="Get in touch with the lekana team. Send us a question about POS-to-bank reconciliation and we'll reply as soon as we can.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://lekana.app/contact.html">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600&family=Figtree:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/policy.css">
+<style>
+  /* Contact form — local to this page; policy.css carries no form styles. */
+  .contact-intro {
+    margin: 0 0 40px;
+  }
+  .form-field {
+    margin-bottom: 20px;
+  }
+  .form-field label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .form-field input,
+  .form-field textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 16px;
+    color: var(--lk-dark);
+    background: var(--lk-white);
+    border: 1px solid var(--lk-hair);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .form-field textarea {
+    min-height: 160px;
+    resize: vertical;
+  }
+  .form-field input:focus,
+  .form-field textarea:focus {
+    outline: none;
+    border-color: #E8601C;
+    box-shadow: 0 0 0 3px rgba(232, 96, 28, 0.15);
+  }
+  .contact-form .btn-orange {
+    appearance: none;
+    border: none;
+    cursor: pointer;
+    background: #E8601C;
+    color: #FFFFFF;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 500;
+    border-radius: 10px;
+    padding: 13px 28px;
+  }
+  .contact-form .btn-orange:hover {
+    background: #D25315;
+  }
+  .contact-form .btn-orange:disabled {
+    opacity: 0.7;
+    cursor: default;
+  }
+  .contact-form .legal {
+    font-size: 13px;
+    color: var(--lk-muted);
+    margin: 16px 0 0;
+  }
+  .noscript-note {
+    background: var(--lk-cream);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+</style>
+</head>
+<body>
+
+<header class="policy-header">
+  <div class="policy-header-inner">
+    <a class="back-link" href="/">
+      <span class="back-arrow" aria-hidden="true">&larr;</span>
+      Back to lekana.app
+    </a>
+    <a class="brand" href="/" aria-label="lekana home">
+      <svg class="brand-mark" viewBox="0 0 80 40" fill="none" aria-hidden="true">
+        <circle cx="26" cy="20" r="5" fill="#1A1200"/>
+        <rect x="38" y="4" width="4" height="32" rx="2" fill="#1A1200"/>
+        <circle cx="54" cy="20" r="5" fill="#1A1200"/>
+      </svg>
+      <span class="brand-word">lekana</span>
+    </a>
+  </div>
+</header>
+
+<main class="policy-main">
+
+<h1>Contact us</h1>
+<p class="contact-intro">Have a question about lekana, or want to talk through your operation before requesting access? Send us a message and we&rsquo;ll reply as soon as we can. If you&rsquo;re ready to come on board, use <a href="/#request">request access</a> instead.</p>
+
+<noscript>
+  <p class="noscript-note">
+    JavaScript is disabled. Email <a href="mailto:garth@bethink.co.za">garth@bethink.co.za</a> directly with your message.
+  </p>
+</noscript>
+
+<form class="contact-form" id="contact-form">
+  <div class="form-field">
+    <label for="name">Your name</label>
+    <input type="text" id="name" name="name" required autocomplete="name">
+  </div>
+  <div class="form-field">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" required autocomplete="email">
+  </div>
+  <div class="form-field">
+    <label for="message">Message</label>
+    <textarea id="message" name="message" required></textarea>
+  </div>
+  <button type="submit" class="btn-orange">Send message</button>
+  <p class="legal">
+    By sending this message, you accept that we will store these details to respond.
+    <br>No marketing emails. Ever.
+  </p>
+</form>
+
+</main>
+
+<footer class="policy-footer">
+  <div class="policy-footer-inner">
+    <p>a TimeWarp product by Bethink (Pty) Ltd</p>
+    <p>lekana.app &middot; &copy; 2026 Bethink (Pty) Ltd. All rights reserved.</p>
+    <p><a href="/">Back to lekana.app</a> &middot; <a href="/terms.html">Terms</a> &middot; <a href="/privacy.html">Privacy</a></p>
+  </div>
+</footer>
+
+<script>
+  // Contact form handler — posts to /api/contact (proxied to work.lekana.app).
+  (function() {
+    const form = document.getElementById('contact-form');
+    if (!form) return;
+    const btn = form.querySelector('button[type=submit]');
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const previousError = form.querySelector('.form-error');
+      if (previousError) previousError.remove();
+      const data = Object.fromEntries(new FormData(form));
+      const original = btn.textContent;
+      btn.textContent = 'Sending...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const body = await res.json().catch(function() { return {}; });
+        if (!res.ok || !body.ok) {
+          throw new Error(body.error || 'Something went wrong. Please try again.');
+        }
+        btn.textContent = 'Message sent';
+        btn.style.background = '#166534';
+      } catch (err) {
+        btn.textContent = original;
+        btn.disabled = false;
+        let errEl = form.querySelector('.form-error');
+        if (!errEl) {
+          errEl = document.createElement('p');
+          errEl.className = 'legal form-error';
+          errEl.style.color = '#B45309';
+          form.appendChild(errEl);
+        }
+        errEl.textContent = err.message;
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

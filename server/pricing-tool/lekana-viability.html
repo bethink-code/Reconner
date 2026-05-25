@@ -779,20 +779,13 @@
   <div class="brand">
     <span class="brand-name">lekana</span>
     <span class="brand-sub">viability model · internal</span>
-    <span class="preset-badge" id="preset-badge"></span>
+    <span class="preset-badge" id="status-badge"></span>
   </div>
   <div class="scenario-controls">
-    <select class="scenario-select" id="preset-select" title="Load a preset scenario">
-      <option value="">Load preset…</option>
-      <option value="defaults">— Calculator defaults (honest baseline)</option>
-      <option value="recommended_premium">★ Premium niche (break-even M6)</option>
-      <option value="recommended_balanced">★ Balanced recommendation (break-even M8)</option>
-    </select>
-    <select class="scenario-select" id="scenario-select">
-      <option value="default">Working scenario</option>
-    </select>
-    <button class="btn" id="save-scenario">Save as…</button>
-    <button class="btn ghost" id="reset-scenario">Reset</button>
+    <select class="scenario-select" id="scenario-picker" title="Choose a scenario to view"></select>
+    <button class="btn primary" id="btn-edit">Edit</button>
+    <button class="btn primary hidden" id="btn-save">Save…</button>
+    <button class="btn ghost hidden" id="btn-discard">Discard</button>
     <button class="btn" id="export-csv">Export CSV</button>
   </div>
 </div>
@@ -807,6 +800,17 @@
 </div>
 
 <div class="workspace">
+
+  <!-- Editor row — only shown in edit mode, persistent across all tabs -->
+  <div class="adjust-row hidden" id="adjust-row">
+    <span class="adjust-label">Adjust</span>
+    <button class="adjust-btn" data-open="team">Team &amp; rates</button>
+    <button class="adjust-btn" data-open="platform">Platform</button>
+    <button class="adjust-btn" data-open="pricing">Pricing</button>
+    <button class="adjust-btn" data-open="segments">Segments</button>
+    <button class="adjust-btn" data-open="growth">Growth &amp; acquisition</button>
+    <button class="adjust-btn" data-open="pdf">PDF extraction</button>
+  </div>
 
   <!-- ============ SUMMARY TAB ============ -->
   <div id="tab-summary" class="tab-content">
@@ -839,16 +843,6 @@
         <div class="metric-value mono" id="m-breakeven">—</div>
         <div class="metric-sub" id="m-breakeven-sub">—</div>
       </div>
-    </div>
-
-    <div class="adjust-row">
-      <span class="adjust-label">Adjust</span>
-      <button class="adjust-btn" data-open="team">Team & rates</button>
-      <button class="adjust-btn" data-open="platform">Platform</button>
-      <button class="adjust-btn" data-open="pricing">Pricing</button>
-      <button class="adjust-btn" data-open="segments">Segments</button>
-      <button class="adjust-btn" data-open="growth">Growth & acquisition</button>
-      <button class="adjust-btn" data-open="pdf">PDF extraction</button>
     </div>
 
     <div class="row-2">
@@ -1314,9 +1308,11 @@ const FIELD_DEFS = {
 // ==========================================================================
 
 let inputs = loadInputs();
-let scenarios = [];            // loaded from the server (shared across platform owners)
+let scenarios = [];            // saved scenarios from the server (shared across platform owners)
 let currentTab = 'summary';
 let openPanel = null;
+let editMode = false;          // false = viewing a scenario (read-only); true = editing a draft
+let viewBase = null;           // { ref, name, inputs, builtin } — the scenario being viewed/edited
 
 function loadInputs() {
   try {
@@ -1328,6 +1324,19 @@ function loadInputs() {
 
 function saveInputs() {
   try { localStorage.setItem('lekana_inputs', JSON.stringify(inputs)); } catch (e) {}
+}
+
+// Session = which scenario is being viewed + whether we're mid-edit, so a reload
+// lands you back where you were (a draft survives, the original is never touched).
+function saveSession() {
+  try { localStorage.setItem('lekana_session', JSON.stringify({ editMode, viewBase })); } catch (e) {}
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem('lekana_session');
+    if (raw) { const s = JSON.parse(raw); editMode = !!s.editMode; viewBase = s.viewBase || null; }
+  } catch (e) {}
 }
 
 // Saved scenarios are shared between Garth and Pieter — they live in the
@@ -1346,7 +1355,7 @@ async function loadScenariosFromServer() {
     console.error('Could not load saved scenarios:', e);
     scenarios = [];
   }
-  refreshScenarioSelect();
+  buildPicker();
   if (currentTab === 'compare') renderCompare();
 }
 
@@ -1631,37 +1640,112 @@ function fmtPct(v, decimals = 1) {
 }
 
 // ==========================================================================
-// ACTIVE-PRESET DETECTION
-// Derive which preset (if any) the current inputs correspond to, rather than
-// tracking extra state — this stays correct across reloads and flips to
-// "Custom" the moment any single input diverges.
+// SCENARIOS — one unified model. Presets (built-in) and saved scenarios are the
+// same kind of thing. You VIEW a scenario read-only; to change values you EDIT
+// (a draft), and to keep changes you SAVE under a new name. The original is
+// never mutated.
 // ==========================================================================
 
-function inputsMatch(a, b) {
-  return Object.keys(DEFAULT_INPUTS).every((k) => a[k] === b[k]);
+// Built-in scenarios: the baseline + the named presets, shaped like saved ones.
+function builtInScenarios() {
+  return [
+    { ref: 'preset:baseline', name: 'Baseline defaults', inputs: { ...DEFAULT_INPUTS }, builtin: true },
+    ...Object.entries(PRESETS).map(([key, p]) => ({
+      ref: 'preset:' + key, name: p.name, inputs: { ...DEFAULT_INPUTS, ...p.inputs }, builtin: true,
+    })),
+  ];
 }
 
-function detectActivePreset(inp) {
-  if (inputsMatch(inp, DEFAULT_INPUTS)) return 'Calculator defaults';
-  for (const preset of Object.values(PRESETS)) {
-    if (inputsMatch(inp, { ...DEFAULT_INPUTS, ...preset.inputs })) return preset.name;
+function savedScenarioOptions() {
+  return scenarios.map(s => ({ ref: 'saved:' + s.id, name: s.name, inputs: s.inputs, builtin: false }));
+}
+
+function allScenarios() {
+  return [...builtInScenarios(), ...savedScenarioOptions()];
+}
+
+// Rebuild the picker options (presets + saved, grouped). Call when the saved
+// list changes or on init — not every render.
+function buildPicker() {
+  const sel = document.getElementById('scenario-picker');
+  if (!sel) return;
+  const saved = savedScenarioOptions();
+  let html = '<optgroup label="Presets">' +
+    builtInScenarios().map(s => `<option value="${s.ref}">${s.name}</option>`).join('') + '</optgroup>';
+  if (saved.length) {
+    html += '<optgroup label="Saved scenarios">' +
+      saved.map(s => `<option value="${s.ref}">${s.name}</option>`).join('') + '</optgroup>';
   }
-  return null; // diverged from every preset — custom
+  sel.innerHTML = html;
+  if (viewBase && viewBase.ref) sel.value = viewBase.ref;
 }
 
-function renderPresetBadge() {
-  const el = document.getElementById('preset-badge');
+function loadScenarioByRef(ref) {
+  const sc = allScenarios().find(s => s.ref === ref);
+  if (!sc) return;
+  closeAllPanels();
+  viewBase = { ref: sc.ref, name: sc.name, inputs: { ...sc.inputs }, builtin: sc.builtin };
+  inputs = { ...sc.inputs };
+  editMode = false;
+  saveInputs(); saveSession();
+  render();
+}
+
+function enterEditMode() {
+  editMode = true;
+  saveSession();
+  render();
+}
+
+function discardEdits() {
+  closeAllPanels();
+  if (viewBase) inputs = { ...viewBase.inputs };
+  editMode = false;
+  saveInputs(); saveSession();
+  render();
+}
+
+// Nudge name for "Save as…": bump a trailing "vN", else append " v2".
+function suggestName() {
+  const base = (viewBase && viewBase.name) || 'Scenario';
+  const m = base.match(/^(.*?)\s+v(\d+)$/i);
+  return m ? `${m[1].trim()} v${parseInt(m[2], 10) + 1}` : `${base} v2`;
+}
+
+function startSaveFlow() {
+  const input = document.getElementById('scenario-name-input');
+  input.value = suggestName();
+  openSlidePanel('save');
+  setTimeout(() => { input.focus(); input.select(); }, 60);
+}
+
+// Status badge: clear about mode. Strong while editing, muted while viewing.
+function renderStatusBadge() {
+  const el = document.getElementById('status-badge');
   if (!el) return;
-  const name = detectActivePreset(inputs);
-  if (name === 'Calculator defaults') {
-    el.textContent = 'Baseline defaults';
-    el.classList.remove('is-preset');
-  } else if (name) {
-    el.textContent = '★ ' + name;
+  if (editMode) {
+    el.textContent = '● Editing — unsaved draft';
     el.classList.add('is-preset');
   } else {
-    el.textContent = 'Custom inputs';
+    el.textContent = 'Viewing: ' + ((viewBase && viewBase.name) || 'Baseline defaults');
     el.classList.remove('is-preset');
+  }
+}
+
+// Toggle chrome between view and edit: editors + save/discard vs edit button.
+function renderChrome() {
+  const adjust = document.getElementById('adjust-row');
+  const btnEdit = document.getElementById('btn-edit');
+  const btnSave = document.getElementById('btn-save');
+  const btnDiscard = document.getElementById('btn-discard');
+  const picker = document.getElementById('scenario-picker');
+  if (adjust) adjust.classList.toggle('hidden', !editMode);
+  if (btnEdit) btnEdit.classList.toggle('hidden', editMode);
+  if (btnSave) btnSave.classList.toggle('hidden', !editMode);
+  if (btnDiscard) btnDiscard.classList.toggle('hidden', !editMode);
+  if (picker) {
+    picker.disabled = editMode;            // can't switch scenarios mid-edit
+    if (viewBase && viewBase.ref) picker.value = viewBase.ref;
   }
 }
 
@@ -1767,7 +1851,8 @@ function render() {
   const m = computeModel(inputs);
   const proj = compute12Month(inputs);
 
-  renderPresetBadge();
+  renderStatusBadge();
+  renderChrome();
   renderSummary();
   renderMetrics(m, proj);
   renderWarnings(m, proj);
@@ -2532,12 +2617,6 @@ function switchTab(tab) {
 // SCENARIO MGMT
 // ==========================================================================
 
-function refreshScenarioSelect() {
-  const sel = document.getElementById('scenario-select');
-  sel.innerHTML = '<option value="default">Working scenario</option>' +
-    scenarios.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-}
-
 async function saveCurrentScenario(name) {
   try {
     const res = await fetch(SCENARIOS_API, {
@@ -2547,7 +2626,13 @@ async function saveCurrentScenario(name) {
       body: JSON.stringify({ name, inputs }),
     });
     if (!res.ok) throw new Error('save failed');
+    const saved = await res.json();
     await loadScenariosFromServer();
+    // Land on the freshly-saved scenario, in view mode.
+    viewBase = { ref: 'saved:' + saved.id, name: saved.name, inputs: { ...inputs }, builtin: false };
+    editMode = false;
+    saveInputs(); saveSession();
+    buildPicker();
     render();
   } catch (e) {
     console.error('Could not save scenario:', e);
@@ -2621,8 +2706,27 @@ document.querySelectorAll('[data-close]').forEach(b => {
 
 document.getElementById('overlay').addEventListener('click', closeAllPanels);
 
-document.getElementById('save-scenario').addEventListener('click', () => openSlidePanel('save'));
-document.getElementById('save-scenario-2').addEventListener('click', () => openSlidePanel('save'));
+// ----- Scenario chrome: view / edit / save-as-new -----
+document.getElementById('scenario-picker').addEventListener('change', (e) => {
+  loadScenarioByRef(e.target.value);
+});
+
+document.getElementById('btn-edit').addEventListener('click', enterEditMode);
+document.getElementById('btn-save').addEventListener('click', startSaveFlow);
+document.getElementById('save-scenario-2').addEventListener('click', startSaveFlow);
+
+document.getElementById('btn-discard').addEventListener('click', async () => {
+  const changed = viewBase && Object.keys(DEFAULT_INPUTS).some(k => inputs[k] !== viewBase.inputs[k]);
+  if (changed) {
+    const ok = await showConfirm({
+      title: 'Discard changes?',
+      message: `Discard your edits and return to “${(viewBase && viewBase.name) || 'the saved scenario'}”?`,
+      confirmLabel: 'Discard',
+    });
+    if (!ok) return;
+  }
+  discardEdits();
+});
 
 document.getElementById('save-scenario-confirm').addEventListener('click', () => {
   const name = document.getElementById('scenario-name-input').value.trim();
@@ -2635,78 +2739,19 @@ document.getElementById('save-scenario-confirm').addEventListener('click', () =>
   closeAllPanels();
 });
 
-document.getElementById('reset-scenario').addEventListener('click', async () => {
-  const ok = await showConfirm({
-    title: 'Reset inputs?',
-    message: 'Reset all inputs to defaults? Your saved scenarios are kept.',
-    confirmLabel: 'Reset',
-  });
-  if (ok) {
-    inputs = { ...DEFAULT_INPUTS };
-    saveInputs();
-    render();
-  }
-});
-
 document.getElementById('export-csv').addEventListener('click', exportCsv);
-
-// Preset dropdown — load preset configurations
-document.getElementById('preset-select').addEventListener('change', async (e) => {
-  const v = e.target.value;
-  if (!v) return;
-
-  let presetInputs, presetDescription;
-  if (v === 'defaults') {
-    presetInputs = { ...DEFAULT_INPUTS };
-    presetDescription = 'Reset all inputs to calculator defaults (R 850 base, 30% Insights uptake, 50% single-site mix). The honest baseline — does not break even within 18 months.';
-  } else if (PRESETS[v]) {
-    const preset = PRESETS[v];
-    presetInputs = { ...DEFAULT_INPUTS, ...preset.inputs };
-    presetDescription = preset.description;
-  } else {
-    e.target.value = '';
-    return;
-  }
-
-  const ok = await showConfirm({
-    title: 'Load preset?',
-    message: `${presetDescription}<div class="note">Your current working inputs will be replaced — use “Save as…” first if you want to keep them.</div>`,
-    confirmLabel: 'Load preset',
-  });
-  if (ok) {
-    inputs = presetInputs;
-    saveInputs();
-    render();
-  }
-  e.target.value = '';
-});
-
-document.getElementById('scenario-select').addEventListener('change', async (e) => {
-  const v = e.target.value;
-  if (v === 'default') return;
-  const s = scenarios.find(x => x.id === v);
-  if (s) {
-    const ok = await showConfirm({
-      title: 'Load scenario?',
-      message: `Load “${s.name}”?<div class="note">Your current working inputs will be replaced — use “Save as…” first if you want to keep them.</div>`,
-      confirmLabel: 'Load scenario',
-    });
-    if (ok) {
-      inputs = { ...s.inputs };
-      saveInputs();
-      render();
-    }
-    e.target.value = 'default';
-  }
-});
 
 // Resize handler for canvas
 window.addEventListener('resize', () => {
   if (currentTab === 'projection') render();
 });
 
-// Initial render
-refreshScenarioSelect();
+// Initial render — restore session; default to viewing the Baseline.
+loadSession();
+if (!viewBase) {
+  viewBase = { ref: 'preset:baseline', name: 'Baseline defaults', inputs: { ...DEFAULT_INPUTS }, builtin: true };
+}
+buildPicker();
 render();
 loadScenariosFromServer();
 </script>

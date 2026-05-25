@@ -53,3 +53,13 @@ for (const file of readdirSync("server/email-templates")) {
     copyFileSync(`server/email-templates/${file}`, `api/email-templates/${file}`);
   }
 }
+
+// The pricing/viability tool HTML is read with fs.readFileSync at module load
+// (server/pricingRoutes.ts → server/pricing-tool/). Copy it next to the bundle
+// so the runtime path (api/pricing-tool/) resolves the same way.
+mkdirSync("api/pricing-tool", { recursive: true });
+for (const file of readdirSync("server/pricing-tool")) {
+  if (file.endsWith(".html")) {
+    copyFileSync(`server/pricing-tool/${file}`, `api/pricing-tool/${file}`);
+  }
+}

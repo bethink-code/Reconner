@@ -24,6 +24,27 @@ export async function isAdmin(req: any, res: any, next: any) {
   }
 }
 
+// Stricter than isAdmin: only platform owners (Bethink staff) may pass. Used for
+// internal-only tooling such as the pricing/viability model, whose data must
+// never reach a customer org admin.
+export async function isPlatformOwner(req: any, res: any, next: any) {
+  try {
+    if (!req.user?.claims?.sub) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const user = await storage.getUser(req.user.claims.sub);
+    if (!user?.isPlatformOwner) {
+      return res.status(403).json({ message: "Platform owner access required" });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Platform owner check error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 export async function resolveOrgContext(
   req: any,
   res: any,

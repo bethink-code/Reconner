@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore, Calculator } from "lucide-react";
+import PricingTab from "@/components/admin/PricingTab";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -58,7 +59,7 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user: currentUser, isPlatformOwner, currentOrgId, canWrite } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security" | "ai-usage" | "organizations" | "properties">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security" | "ai-usage" | "organizations" | "properties" | "pricing">("users");
   const [auditPage, setAuditPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
@@ -437,6 +438,17 @@ export default function Admin() {
             <Sparkles className="h-4 w-4 mr-2" />
             AI Costs
           </Button>
+          {isPlatformOwner && (
+            <Button
+              variant={activeTab === "pricing" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("pricing")}
+              data-testid="tab-pricing"
+            >
+              <Calculator className="h-4 w-4 mr-2" />
+              Pricing
+            </Button>
+          )}
         </div>
 
         {/* Organizations tab — platform owner only */}
@@ -1374,6 +1386,9 @@ export default function Admin() {
             ) : null}
           </div>
         )}
+
+        {/* Pricing tab — platform owner only */}
+        {activeTab === "pricing" && isPlatformOwner && <PricingTab />}
       </div>
 
       {/* Edit Property Dialog */}

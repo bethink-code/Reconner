@@ -27693,6 +27693,7 @@ __export(schema_exports, {
   matchingRulesConfigSchema: () => matchingRulesConfigSchema,
   organizationMembers: () => organizationMembers,
   organizations: () => organizations,
+  pricingScenarios: () => pricingScenarios,
   properties: () => properties,
   reconciliationPeriods: () => reconciliationPeriods,
   sessions: () => sessions,
@@ -27990,6 +27991,17 @@ var aiUsage = pgTable("ai_usage", {
   index("IDX_ai_usage_created_at").on(table.createdAt),
   index("IDX_ai_usage_org_id").on(table.organizationId)
 ]);
+var pricingScenarios = pgTable("pricing_scenarios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  inputs: jsonb("inputs").notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdByEmail: text("created_by_email"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  index("IDX_pricing_scenarios_created_at").on(table.createdAt)
+]);
 var RESOLUTION_REASONS = [
   { value: "attendant_overfill", label: "Attendant error / overfill" },
   { value: "possible_tip", label: "Possible attendant tip" },
@@ -28049,8 +28061,8 @@ var DatabaseStorage = class {
   async getAllUsers() {
     return await db.select().from(users).orderBy(desc(users.createdAt));
   }
-  async setUserAdmin(id, isAdmin) {
-    const [updated] = await db.update(users).set({ isAdmin, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, id)).returning();
+  async setUserAdmin(id, isAdmin2) {
+    const [updated] = await db.update(users).set({ isAdmin: isAdmin2, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, id)).returning();
     return updated || void 0;
   }
   async acceptTerms(userId) {
@@ -28113,6 +28125,17 @@ var DatabaseStorage = class {
   }
   async deleteOrganization(id) {
     await db.delete(organizations).where(eq(organizations.id, id));
+  }
+  // Pricing / viability scenarios — shared across platform owners, newest first.
+  async getPricingScenarios() {
+    return await db.select().from(pricingScenarios).orderBy(desc(pricingScenarios.createdAt));
+  }
+  async createPricingScenario(data) {
+    const [scenario] = await db.insert(pricingScenarios).values(data).returning();
+    return scenario;
+  }
+  async deletePricingScenario(id) {
+    await db.delete(pricingScenarios).where(eq(pricingScenarios.id, id));
   }
   // Organization members. Filters out archived orgs by default — users should never
   // see (or be able to switch to) an archived org.
@@ -29358,7 +29381,8 @@ var storage = new DatabaseStorage();
 // server/auth.ts
 import { eq as eq2 } from "drizzle-orm";
 var PLATFORM_OWNER_EMAILS = /* @__PURE__ */ new Set([
-  "garth@bethink.co.za"
+  "garth@bethink.co.za",
+  "pieter@molo.page"
 ]);
 var getOidcConfig = memoize(
   async () => {
@@ -29619,8 +29643,60 @@ async function audit(req, entry) {
     console.error("[AUDIT] Failed to write audit log:", err);
   }
 }
+async function queryAuditLogs(filters) {
+  const conditions = [];
+  if (filters.userId) conditions.push(eq3(auditLogs.userId, filters.userId));
+  if (filters.action) conditions.push(eq3(auditLogs.action, filters.action));
+  if (filters.resourceType) conditions.push(eq3(auditLogs.resourceType, filters.resourceType));
+  if (filters.outcome) conditions.push(eq3(auditLogs.outcome, filters.outcome));
+  if (filters.from) conditions.push(gte(auditLogs.createdAt, new Date(filters.from)));
+  if (filters.to) conditions.push(lte(auditLogs.createdAt, new Date(filters.to)));
+  const limit = Math.min(filters.limit || 100, 500);
+  const offset = filters.offset || 0;
+  const where = conditions.length > 0 ? and2(...conditions) : void 0;
+  const [logs, countResult] = await Promise.all([
+    db.select().from(auditLogs).where(where).orderBy(desc2(auditLogs.createdAt)).limit(limit).offset(offset),
+    db.select({ count: sql3`count(*)` }).from(auditLogs).where(where)
+  ]);
+  return {
+    logs,
+    total: Number(countResult[0]?.count || 0),
+    limit,
+    offset
+  };
+}
 
 // server/routeAccess.ts
+async function isAdmin(req, res, next) {
+  try {
+    if (!req.user?.claims?.sub) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const user = await storage.getUser(req.user.claims.sub);
+    if (!user?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  } catch (error) {
+    console.error("Admin check error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+async function isPlatformOwner(req, res, next) {
+  try {
+    if (!req.user?.claims?.sub) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const user = await storage.getUser(req.user.claims.sub);
+    if (!user?.isPlatformOwner) {
+      return res.status(403).json({ message: "Platform owner access required" });
+    }
+    next();
+  } catch (error) {
+    console.error("Platform owner check error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
 async function resolveOrgContext(req, res) {
   const userId = req.user?.claims?.sub;
   if (!userId) {
@@ -29951,6 +30027,456 @@ function registerAccountRoutes(app2) {
     } catch (error) {
       console.error("Error accepting terms:", error);
       res.status(500).json({ error: "Failed to accept terms" });
+    }
+  });
+}
+
+// server/adminRoutes.ts
+function registerAdminRoutes(app2) {
+  app2.get("/api/admin/users", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const users2 = await storage.getAllUsers();
+      res.json(users2);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+  app2.patch("/api/admin/users/:id/admin", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { isAdmin: makeAdmin } = req.body;
+      if (typeof makeAdmin !== "boolean") {
+        return res.status(400).json({ message: "isAdmin must be a boolean" });
+      }
+      if (req.params.id === req.user.claims.sub && !makeAdmin) {
+        return res.status(400).json({ message: "Cannot remove your own admin status" });
+      }
+      const updated = await storage.setUserAdmin(req.params.id, makeAdmin);
+      if (!updated) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      audit(req, { action: makeAdmin ? "admin.grant" : "admin.revoke", resourceType: "user", resourceId: req.params.id, detail: updated.email || void 0 });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating user admin status:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+  app2.get("/api/admin/invites", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const orgIdFilter = req.query.organizationId;
+      if (me?.isPlatformOwner) {
+        const invites2 = await storage.getInvitedUsers(orgIdFilter);
+        return res.json(invites2);
+      }
+      const ctx = await resolveOrgContext(req, res);
+      if (!ctx) return;
+      if (ctx.role === "viewer") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const invites = await storage.getInvitedUsers(ctx.orgId);
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      res.status(500).json({ error: "Failed to fetch invites" });
+    }
+  });
+  app2.post("/api/admin/invites", isAuthenticated, async (req, res) => {
+    try {
+      const { email, organizationId, role } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ error: "Email is required" });
+      }
+      if (!organizationId) {
+        return res.status(400).json({ error: "organizationId is required" });
+      }
+      const inviteRole = role && ORG_ROLES.includes(role) ? role : "viewer";
+      const trimmed = email.trim().toLowerCase();
+      if (!trimmed.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const myRole = await storage.getUserRoleInOrg(userId, organizationId);
+        allowed = myRole === "owner" || myRole === "admin";
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Not allowed to invite to this organization" });
+      }
+      const isAlready = await storage.isEmailInvited(trimmed);
+      if (isAlready) {
+        return res.status(409).json({ error: "This email is already invited" });
+      }
+      const invited = await storage.inviteUser(trimmed, organizationId, inviteRole, userId);
+      audit(req, { action: "invite.create", resourceType: "invite", resourceId: invited.id, detail: `${trimmed} \u2192 ${organizationId} (${inviteRole})` });
+      res.json(invited);
+    } catch (error) {
+      console.error("Error creating invite:", error);
+      res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+  app2.delete("/api/admin/invites/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      await storage.removeInvite(req.params.id);
+      audit(req, { action: "invite.revoke", resourceType: "invite", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing invite:", error);
+      res.status(500).json({ error: "Failed to remove invite" });
+    }
+  });
+  app2.get("/api/admin/access-requests", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const requests = await storage.getAccessRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching access requests:", error);
+      res.status(500).json({ error: "Failed to fetch access requests" });
+    }
+  });
+  app2.patch("/api/admin/access-requests/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { status, organizationId, role } = req.body;
+      if (!status || !["approved", "declined"].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'approved' or 'declined'" });
+      }
+      if (status === "approved" && !organizationId) {
+        return res.status(400).json({ error: "organizationId required when approving" });
+      }
+      const updated = await storage.updateAccessRequestStatus(req.params.id, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+      if (status === "approved") {
+        const isAlready = await storage.isEmailInvited(updated.email);
+        if (!isAlready) {
+          const userId = req.user?.claims?.sub;
+          const inviteRole = role && ORG_ROLES.includes(role) ? role : "viewer";
+          await storage.inviteUser(updated.email, organizationId, inviteRole, userId);
+        }
+      }
+      audit(req, { action: `access_request.${status}`, resourceType: "access_request", resourceId: req.params.id, detail: updated.email });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating access request:", error);
+      res.status(500).json({ error: "Failed to update access request" });
+    }
+  });
+  app2.get("/api/admin/security-overview", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const sessionsResult = await pool.query(`SELECT COUNT(*) as count FROM sessions WHERE expire > NOW()`);
+      const activeSessions = parseInt(sessionsResult.rows[0]?.count || "0");
+      const usersResult = await pool.query(`SELECT COUNT(*) as count FROM users`);
+      const totalUsers = parseInt(usersResult.rows[0]?.count || "0");
+      const termsResult = await pool.query(`SELECT COUNT(*) as count FROM users WHERE terms_accepted_at IS NOT NULL`);
+      const termsAccepted = parseInt(termsResult.rows[0]?.count || "0");
+      const pendingInvitesResult = await pool.query(
+        `SELECT COUNT(*) as count FROM invited_users iu WHERE NOT EXISTS (SELECT 1 FROM users u WHERE LOWER(u.email) = LOWER(iu.email))`
+      );
+      const pendingInvites = parseInt(pendingInvitesResult.rows[0]?.count || "0");
+      const last24h = await pool.query(
+        `SELECT action, outcome, COUNT(*) as count FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY action, outcome ORDER BY count DESC`
+      );
+      const denials7d = await pool.query(
+        `SELECT user_email, ip_address, detail, created_at FROM audit_logs WHERE outcome = 'denied' AND created_at > NOW() - INTERVAL '7 days' ORDER BY created_at DESC LIMIT 20`
+      );
+      const auditTotalResult = await pool.query(`SELECT COUNT(*) as count FROM audit_logs`);
+      const totalAuditEvents = parseInt(auditTotalResult.rows[0]?.count || "0");
+      res.json({
+        activeSessions,
+        totalUsers,
+        termsAccepted,
+        pendingInvites,
+        totalAuditEvents,
+        last24h: last24h.rows,
+        recentDenials: denials7d.rows
+      });
+    } catch (error) {
+      console.error("Error fetching security overview:", error);
+      res.status(500).json({ error: "Failed to fetch security overview" });
+    }
+  });
+  app2.get("/api/admin/audit-logs", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const result = await queryAuditLogs({
+        userId: req.query.userId,
+        action: req.query.action,
+        resourceType: req.query.resourceType,
+        outcome: req.query.outcome,
+        from: req.query.from,
+        to: req.query.to,
+        limit: req.query.limit ? parseInt(req.query.limit) : 100,
+        offset: req.query.offset ? parseInt(req.query.offset) : 0
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching audit logs:", error);
+      res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+  app2.get("/api/admin/ai-usage", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const summary = await pool.query(`
+        SELECT
+          COUNT(*) as total_calls,
+          COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+          COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+          COALESCE(SUM(estimated_cost_usd::numeric), 0) as total_cost_usd
+        FROM ai_usage
+      `);
+      const byUser = await pool.query(`
+        SELECT user_email, COUNT(*) as calls, COALESCE(SUM(estimated_cost_usd::numeric), 0) as cost_usd
+        FROM ai_usage
+        GROUP BY user_email
+        ORDER BY cost_usd DESC
+      `);
+      const recent = await pool.query(`
+        SELECT user_email, action, model, input_tokens, output_tokens, estimated_cost_usd, created_at
+        FROM ai_usage
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+      res.json({
+        summary: summary.rows[0],
+        byUser: byUser.rows,
+        recent: recent.rows
+      });
+    } catch (error) {
+      console.error("Error fetching AI usage:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage" });
+    }
+  });
+}
+
+// server/organizationRoutes.ts
+function registerOrganizationRoutes(app2) {
+  app2.get("/api/organizations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const includeArchived = req.query.includeArchived === "true";
+      if (me?.isPlatformOwner) {
+        const orgs = await storage.getOrganizations(includeArchived);
+        return res.json(orgs);
+      }
+      const memberships = await storage.getUserOrganizations(userId);
+      res.json(memberships.map((m) => ({ ...m.organization, role: m.role })));
+    } catch (error) {
+      console.error("Error fetching organizations:", error);
+      res.status(500).json({ error: "Failed to fetch organizations" });
+    }
+  });
+  app2.post("/api/organizations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can create organizations" });
+      }
+      const { name, slug, billingEmail, billingAddress, vatNumber } = req.body;
+      if (!name || !slug) return res.status(400).json({ error: "name and slug required" });
+      if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "slug must be lowercase alphanumeric with hyphens" });
+      const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber });
+      await storage.addOrganizationMember(org.id, userId, "admin");
+      await storage.createProperty({ organizationId: org.id, name: "Main", code: null, address: null });
+      audit(req, { action: "org.create", resourceType: "organization", resourceId: org.id, detail: name });
+      res.json(org);
+    } catch (error) {
+      if (error?.code === "23505") return res.status(409).json({ error: "An organization with that slug already exists" });
+      console.error("Error creating organization:", error);
+      res.status(500).json({ error: "Failed to create organization" });
+    }
+  });
+  app2.get("/api/organizations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ error: "Not found" });
+      if (!me?.isPlatformOwner) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        if (!role) return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(org);
+    } catch (error) {
+      console.error("Error fetching organization:", error);
+      res.status(500).json({ error: "Failed to fetch organization" });
+    }
+  });
+  app2.patch("/api/organizations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can update" });
+      const { name, billingEmail, billingAddress, vatNumber, status } = req.body;
+      const updated = await storage.updateOrganization(req.params.id, { name, billingEmail, billingAddress, vatNumber, status });
+      audit(req, { action: "org.update", resourceType: "organization", resourceId: req.params.id });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating organization:", error);
+      res.status(500).json({ error: "Failed to update organization" });
+    }
+  });
+  app2.delete("/api/organizations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can archive organizations" });
+      }
+      await storage.updateOrganization(req.params.id, { status: "archived" });
+      audit(req, { action: "org.archive", resourceType: "organization", resourceId: req.params.id });
+      res.json({ success: true, archived: true });
+    } catch (error) {
+      console.error("Error archiving organization:", error);
+      res.status(500).json({ error: "Failed to archive organization" });
+    }
+  });
+  app2.post("/api/organizations/:id/restore", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      if (!me?.isPlatformOwner) {
+        return res.status(403).json({ error: "Only the platform owner can restore organizations" });
+      }
+      await storage.updateOrganization(req.params.id, { status: "active" });
+      audit(req, { action: "org.restore", resourceType: "organization", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error restoring organization:", error);
+      res.status(500).json({ error: "Failed to restore organization" });
+    }
+  });
+  app2.get("/api/organizations/:id/members", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = !!role;
+      }
+      if (!allowed) return res.status(403).json({ error: "Access denied" });
+      const members = await storage.getOrganizationMembers(req.params.id);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching members:", error);
+      res.status(500).json({ error: "Failed to fetch members" });
+    }
+  });
+  app2.patch("/api/organizations/:id/members/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role2 = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role2 === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can change roles" });
+      const { role } = req.body;
+      if (!ORG_ROLES.includes(role)) return res.status(400).json({ error: "Invalid role" });
+      const updated = await storage.updateOrganizationMemberRole(req.params.id, req.params.userId, role);
+      audit(req, { action: "org.member.role_changed", resourceType: "organization", resourceId: req.params.id, detail: `${req.params.userId} \u2192 ${role}` });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating member role:", error);
+      res.status(500).json({ error: "Failed to update member role" });
+    }
+  });
+  app2.delete("/api/organizations/:id/members/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can remove members" });
+      await storage.removeOrganizationMember(req.params.id, req.params.userId);
+      audit(req, { action: "org.member.removed", resourceType: "organization", resourceId: req.params.id, detail: req.params.userId });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing member:", error);
+      res.status(500).json({ error: "Failed to remove member" });
+    }
+  });
+}
+
+// server/pricingRoutes.ts
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+var __dirname2 = dirname(fileURLToPath(import.meta.url));
+var toolHtml = readFileSync(
+  join(__dirname2, "pricing-tool", "lekana-viability.html"),
+  "utf8"
+);
+function registerPricingRoutes(app2) {
+  app2.get("/api/admin/pricing-tool", isAuthenticated, isPlatformOwner, (_req, res) => {
+    res.setHeader(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        "script-src 'unsafe-inline' 'self'",
+        "style-src 'unsafe-inline' 'self' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com data:",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        "frame-ancestors 'self'"
+      ].join("; ")
+    );
+    res.type("html").send(toolHtml);
+  });
+  app2.get("/api/admin/pricing-scenarios", isAuthenticated, isPlatformOwner, async (_req, res) => {
+    try {
+      const scenarios = await storage.getPricingScenarios();
+      res.json(scenarios);
+    } catch (error) {
+      console.error("Error fetching pricing scenarios:", error);
+      res.status(500).json({ error: "Failed to fetch scenarios" });
+    }
+  });
+  app2.post("/api/admin/pricing-scenarios", isAuthenticated, isPlatformOwner, async (req, res) => {
+    try {
+      const { name, inputs } = req.body;
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ error: "name is required" });
+      }
+      if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) {
+        return res.status(400).json({ error: "inputs object is required" });
+      }
+      const scenario = await storage.createPricingScenario({
+        name: name.trim(),
+        inputs,
+        createdBy: req.user?.claims?.sub ?? null,
+        createdByEmail: req.user?.claims?.email ?? null
+      });
+      audit(req, { action: "pricing.scenario_saved", resourceType: "pricing_scenario", resourceId: scenario.id, detail: name.trim() });
+      res.json(scenario);
+    } catch (error) {
+      console.error("Error saving pricing scenario:", error);
+      res.status(500).json({ error: "Failed to save scenario" });
+    }
+  });
+  app2.delete("/api/admin/pricing-scenarios/:id", isAuthenticated, isPlatformOwner, async (req, res) => {
+    try {
+      await storage.deletePricingScenario(req.params.id);
+      audit(req, { action: "pricing.scenario_deleted", resourceType: "pricing_scenario", resourceId: req.params.id });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting pricing scenario:", error);
+      res.status(500).json({ error: "Failed to delete scenario" });
     }
   });
 }
@@ -36220,17 +36746,17 @@ import rateLimit2 from "express-rate-limit";
 import { z as z5 } from "zod";
 
 // server/email.ts
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-var __dirname2 = dirname(fileURLToPath(import.meta.url));
-var TEMPLATE_DIR = join(__dirname2, "email-templates");
-var confirmationTemplate = readFileSync(
-  join(TEMPLATE_DIR, "access-request-confirmation.html"),
+import { readFileSync as readFileSync2 } from "node:fs";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { dirname as dirname2, join as join2 } from "node:path";
+var __dirname3 = dirname2(fileURLToPath2(import.meta.url));
+var TEMPLATE_DIR = join2(__dirname3, "email-templates");
+var confirmationTemplate = readFileSync2(
+  join2(TEMPLATE_DIR, "access-request-confirmation.html"),
   "utf8"
 );
-var notificationTemplate = readFileSync(
-  join(TEMPLATE_DIR, "access-request-notification.html"),
+var notificationTemplate = readFileSync2(
+  join2(TEMPLATE_DIR, "access-request-notification.html"),
   "utf8"
 );
 var HTML_ESCAPES = {
@@ -36400,6 +36926,9 @@ var upload = multer({
 async function registerRoutes(app2) {
   await setupAuth(app2);
   registerAccountRoutes(app2);
+  registerAdminRoutes(app2);
+  registerOrganizationRoutes(app2);
+  registerPricingRoutes(app2);
   registerExportRoutes(app2);
   registerFilePreparationRoutes(app2);
   registerFileWorkflowRoutes(app2, upload, computeContentHash);

@@ -1,0 +1,2451 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lekana · viability model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500&family=Inter+Tight:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #14171A;
+    --ink-2: #3A4047;
+    --ink-3: #6B7280;
+    --ink-4: #9AA1AB;
+    --line: #E4E2DC;
+    --line-2: #EDEBE5;
+    --paper: #FAF8F3;
+    --card: #FFFFFF;
+    --accent: #B8843B;       /* warm bronze - calm, not flashy */
+    --accent-soft: #F5EAD4;
+    --positive: #2D6A4F;
+    --positive-soft: #DCEBE2;
+    --warning: #8B5A1A;
+    --warning-soft: #F5E4C8;
+    --danger: #8B2F2F;
+    --danger-soft: #F1DCDC;
+    --shadow-sm: 0 1px 0 rgba(20, 23, 26, 0.04);
+    --shadow-md: 0 4px 20px -8px rgba(20, 23, 26, 0.08);
+    --shadow-panel: -20px 0 60px -20px rgba(20, 23, 26, 0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    font-family: 'Inter Tight', sans-serif;
+    font-feature-settings: 'ss01', 'cv11';
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'tnum'; }
+  .serif { font-family: 'Fraunces', serif; font-feature-settings: 'tnum'; }
+
+  /* ====== TOP BAR ====== */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .brand-name {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .brand-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+    letter-spacing: 0.02em;
+  }
+
+  .scenario-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .scenario-select {
+    font-family: inherit;
+    font-size: 13px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 28px 6px 12px;
+    color: var(--ink);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .btn {
+    font-family: inherit;
+    font-size: 13px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 14px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: var(--line-2); border-color: var(--ink-4); }
+  .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .btn.primary:hover { background: var(--ink-2); }
+  .btn.ghost { background: transparent; border-color: transparent; }
+  .btn.ghost:hover { background: var(--line-2); }
+  .btn.danger { color: var(--danger); }
+
+  /* ====== TABS ====== */
+  .tabs {
+    display: flex;
+    padding: 0 32px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+  }
+  .tab {
+    font-family: inherit;
+    font-size: 13px;
+    background: none;
+    border: none;
+    padding: 14px 0;
+    margin-right: 28px;
+    color: var(--ink-3);
+    cursor: pointer;
+    position: relative;
+    letter-spacing: -0.005em;
+    transition: color 0.15s;
+  }
+  .tab:hover { color: var(--ink-2); }
+  .tab.active {
+    color: var(--ink);
+  }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--ink);
+  }
+
+  /* ====== LAYOUT ====== */
+  .workspace {
+    padding: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* ====== HEADLINE METRICS ====== */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .metric {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric-label {
+    font-size: 11px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  .metric-value {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 36px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    font-feature-settings: 'tnum';
+  }
+  .metric-value.positive { color: var(--positive); }
+  .metric-value.danger { color: var(--danger); }
+  .metric-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 8px;
+  }
+  .metric-spark {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 40%;
+    height: 36px;
+    opacity: 0.35;
+  }
+
+  /* ====== ADJUST SECTION ====== */
+  .adjust-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .adjust-label {
+    font-size: 12px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-right: 8px;
+  }
+  .adjust-btn {
+    font-family: inherit;
+    font-size: 13px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 14px;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .adjust-btn:hover {
+    background: var(--line-2);
+    color: var(--ink);
+    border-color: var(--ink-4);
+  }
+  .adjust-btn .badge {
+    font-size: 10px;
+    background: var(--accent-soft);
+    color: var(--warning);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  /* ====== CHART CARD ====== */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .panel-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+  }
+  .panel-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+
+  .chart-container {
+    position: relative;
+    height: 320px;
+  }
+  .chart-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* ====== BREAKDOWN TABLE ====== */
+  table.breakdown {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  table.breakdown th,
+  table.breakdown td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-2);
+  }
+  table.breakdown th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    font-weight: 500;
+  }
+  table.breakdown td.num {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-feature-settings: 'tnum';
+  }
+  table.breakdown tr.total td {
+    border-top: 1px solid var(--ink-3);
+    border-bottom: none;
+    padding-top: 14px;
+    font-weight: 500;
+  }
+  table.breakdown tr.subhead td {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    padding-top: 18px;
+    padding-bottom: 6px;
+    border-bottom: none;
+    font-weight: 500;
+  }
+  table.breakdown tr.indent td:first-child {
+    padding-left: 24px;
+    color: var(--ink-2);
+  }
+
+  /* ====== SLIDE PANEL ====== */
+  .panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 23, 26, 0.25);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+    z-index: 50;
+  }
+  .panel-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+  .slide-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: 480px;
+    max-width: 90vw;
+    background: var(--paper);
+    border-left: 1px solid var(--line);
+    box-shadow: var(--shadow-panel);
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0.36, 1);
+    z-index: 51;
+    display: flex;
+    flex-direction: column;
+  }
+  .slide-panel.open { transform: translateX(0); }
+
+  .slide-head {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .slide-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+  }
+  .slide-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+  .slide-foot {
+    padding: 16px 24px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .close-x {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-3);
+  }
+  .close-x:hover { background: var(--line-2); color: var(--ink); }
+
+  /* ====== FORM FIELDS ====== */
+  .field {
+    margin-bottom: 22px;
+  }
+  .field-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .field-label {
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .field-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--ink);
+    font-feature-settings: 'tnum';
+  }
+  .field-hint {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    outline: none;
+    margin: 6px 0;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--ink);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--ink);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+
+  input[type="number"], input[type="text"], select {
+    font-family: inherit;
+    font-size: 13px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--ink);
+    width: 100%;
+  }
+  input[type="number"]:focus, input[type="text"]:focus, select:focus {
+    outline: none;
+    border-color: var(--ink);
+  }
+
+  .input-prefix {
+    position: relative;
+  }
+  .input-prefix span {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-3);
+    font-size: 13px;
+    pointer-events: none;
+  }
+  .input-prefix input { padding-left: 28px; }
+
+  .section-head {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    margin: 0 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line-2);
+    font-weight: 500;
+  }
+  .section-head:not(:first-of-type) { margin-top: 32px; }
+
+  .segment-block {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .segment-name {
+    font-weight: 500;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+
+  .field-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* ====== STACK SELECTOR ====== */
+  .stack-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .stack-option {
+    padding: 12px 10px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .stack-option:hover { border-color: var(--ink-4); }
+  .stack-option.selected {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .stack-option-name {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .stack-option-price {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    opacity: 0.7;
+  }
+
+  /* ====== SENSITIVITY ====== */
+  .sensitivity-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .sensitivity-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .sens-label {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+  .sens-bar-container {
+    height: 28px;
+    background: var(--line-2);
+    border-radius: 4px;
+    position: relative;
+    margin-bottom: 6px;
+    overflow: hidden;
+  }
+  .sens-bar-low {
+    position: absolute;
+    height: 100%;
+    background: var(--danger-soft);
+    border-right: 2px solid var(--danger);
+  }
+  .sens-bar-high {
+    position: absolute;
+    height: 100%;
+    background: var(--positive-soft);
+    border-left: 2px solid var(--positive);
+  }
+  .sens-bar-center {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--ink);
+  }
+  .sens-values {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+
+  /* ====== COMPARE ====== */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .compare-col {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .compare-col.delta {
+    background: var(--paper);
+    border: 1px dashed var(--line);
+  }
+  .compare-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line-2);
+    font-size: 13px;
+  }
+  .compare-row:last-child { border: none; }
+  .compare-key { color: var(--ink-3); }
+  .compare-val { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'tnum'; }
+  .compare-val.up { color: var(--positive); }
+  .compare-val.down { color: var(--danger); }
+  .compare-head {
+    font-family: 'Fraunces', serif;
+    font-size: 16px;
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* ====== WARNING BANNER ====== */
+  .warning-banner {
+    background: var(--warning-soft);
+    border: 1px solid var(--warning);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--warning);
+    margin-bottom: 16px;
+    display: flex;
+    gap: 10px;
+  }
+  .warning-banner.positive {
+    background: var(--positive-soft);
+    border-color: var(--positive);
+    color: var(--positive);
+  }
+  .warning-icon { flex-shrink: 0; }
+
+  /* ====== UTILITY ====== */
+  .hidden { display: none !important; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .small-caps { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 500; }
+  .help-text { font-size: 12px; color: var(--ink-3); line-height: 1.5; }
+  .swap-link { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; font-family: inherit; padding: 0; }
+  .swap-link:hover { color: var(--ink); }
+
+  /* ====== PROJECTION TABLE ====== */
+  .projection-wrap { overflow-x: auto; }
+  table.projection {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-feature-settings: 'tnum';
+  }
+  table.projection th, table.projection td {
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--line-2);
+  }
+  table.projection th:first-child, table.projection td:first-child {
+    text-align: left;
+  }
+  table.projection th {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    font-weight: 500;
+    background: var(--line-2);
+    position: sticky;
+    top: 0;
+  }
+  table.projection tr.profit-pos td { color: var(--positive); }
+  table.projection tr.profit-neg td { color: var(--ink-2); }
+  table.projection tr.breakeven { background: var(--accent-soft); }
+  table.projection tr.breakeven td { color: var(--ink); font-weight: 500; }
+
+  @media (max-width: 900px) {
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    .row-2 { grid-template-columns: 1fr; }
+    .sensitivity-grid { grid-template-columns: 1fr; }
+    .compare-grid { grid-template-columns: 1fr; }
+    .workspace { padding: 20px; }
+    .topbar { padding: 14px 20px; }
+    .tabs { padding: 0 20px; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-name">lekana</span>
+    <span class="brand-sub">viability model · internal</span>
+  </div>
+  <div class="scenario-controls">
+    <select class="scenario-select" id="preset-select" title="Load a preset scenario">
+      <option value="">Load preset…</option>
+      <option value="defaults">— Calculator defaults (honest baseline)</option>
+      <option value="recommended_premium">★ Premium niche (break-even M6)</option>
+      <option value="recommended_balanced">★ Balanced recommendation (break-even M8)</option>
+    </select>
+    <select class="scenario-select" id="scenario-select">
+      <option value="default">Working scenario</option>
+    </select>
+    <button class="btn" id="save-scenario">Save as…</button>
+    <button class="btn ghost" id="reset-scenario">Reset</button>
+    <button class="btn" id="export-csv">Export CSV</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="steady">Steady state</button>
+  <button class="tab" data-tab="projection">12-month projection</button>
+  <button class="tab" data-tab="compare">Compare</button>
+  <button class="tab" data-tab="sensitivity">Sensitivity</button>
+  <button class="tab" data-tab="assumptions">Assumptions</button>
+</div>
+
+<div class="workspace">
+
+  <!-- ============ STEADY STATE TAB ============ -->
+  <div id="tab-steady" class="tab-content">
+
+    <div id="warnings-host"></div>
+
+    <div class="metric-grid">
+      <div class="metric">
+        <div class="metric-label">Monthly revenue</div>
+        <div class="metric-value mono" id="m-mrr">—</div>
+        <div class="metric-sub" id="m-mrr-sub">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Monthly cost</div>
+        <div class="metric-value mono" id="m-cost">—</div>
+        <div class="metric-sub" id="m-cost-sub">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Monthly profit</div>
+        <div class="metric-value mono" id="m-profit">—</div>
+        <div class="metric-sub" id="m-profit-sub">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Break even</div>
+        <div class="metric-value mono" id="m-breakeven">—</div>
+        <div class="metric-sub" id="m-breakeven-sub">—</div>
+      </div>
+    </div>
+
+    <div class="adjust-row">
+      <span class="adjust-label">Adjust</span>
+      <button class="adjust-btn" data-open="team">Team & rates</button>
+      <button class="adjust-btn" data-open="platform">Platform</button>
+      <button class="adjust-btn" data-open="pricing">Pricing</button>
+      <button class="adjust-btn" data-open="segments">Segments</button>
+      <button class="adjust-btn" data-open="growth">Growth & acquisition</button>
+      <button class="adjust-btn" data-open="pdf">PDF extraction</button>
+    </div>
+
+    <div class="row-2">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Revenue breakdown</div>
+            <div class="panel-sub">at current customer mix</div>
+          </div>
+        </div>
+        <table class="breakdown" id="revenue-table"><tbody></tbody></table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Cost breakdown</div>
+            <div class="panel-sub">all-in, including founder time at full rate</div>
+          </div>
+        </div>
+        <table class="breakdown" id="cost-table"><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Unit economics</div>
+          <div class="panel-sub">per customer, blended across segments</div>
+        </div>
+      </div>
+      <table class="breakdown" id="unit-table"><tbody></tbody></table>
+    </div>
+
+  </div>
+
+  <!-- ============ PROJECTION TAB ============ -->
+  <div id="tab-projection" class="tab-content hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">12-month projection</div>
+          <div class="panel-sub" id="projection-sub">starting from current customer count, applying monthly growth</div>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="projection-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Month-by-month</div>
+          <div class="panel-sub">break-even month highlighted</div>
+        </div>
+      </div>
+      <div class="projection-wrap">
+        <table class="projection" id="projection-table"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ COMPARE TAB ============ -->
+  <div id="tab-compare" class="tab-content hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Compare scenarios</div>
+          <div class="panel-sub">save your current settings as a scenario, change inputs, save again, compare side by side</div>
+        </div>
+        <div>
+          <button class="btn primary" id="save-scenario-2">Save current as scenario</button>
+        </div>
+      </div>
+      <div id="compare-host">
+        <p class="help-text">Save at least two scenarios to compare. Use the “Save as…” button at the top, or change inputs and save again here.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SENSITIVITY TAB ============ -->
+  <div id="tab-sensitivity" class="tab-content hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">What moves the needle</div>
+          <div class="panel-sub">each variable shifted ±30% — bars show the resulting change in monthly profit</div>
+        </div>
+      </div>
+      <div class="sensitivity-grid" id="sensitivity-host"></div>
+    </div>
+  </div>
+
+  <!-- ============ ASSUMPTIONS TAB ============ -->
+  <div id="tab-assumptions" class="tab-content hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">All assumptions, all in one place</div>
+          <div class="panel-sub">the full input set — useful when you want to see everything at once or share with Pieter</div>
+        </div>
+      </div>
+      <div id="assumptions-host"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ SLIDE PANELS ============ -->
+<div class="panel-overlay" id="overlay"></div>
+
+<!-- TEAM PANEL -->
+<div class="slide-panel" id="panel-team">
+  <div class="slide-head">
+    <div>
+      <div class="slide-title">Team & rates</div>
+      <div class="help-text">All time-costs in the model use these rates. Founder hours are split by the work being done.</div>
+    </div>
+    <button class="close-x" data-close>✕</button>
+  </div>
+  <div class="slide-body" id="panel-body-team"></div>
+  <div class="slide-foot">
+    <button class="btn" data-close>Done</button>
+  </div>
+</div>
+
+<!-- PLATFORM PANEL -->
+<div class="slide-panel" id="panel-platform">
+  <div class="slide-head">
+    <div>
+      <div class="slide-title">Platform & infrastructure</div>
+      <div class="help-text">Hosting, database, monitoring, domains. Pilot tier handles up to ~20 sites; commercial tier needs the architecture rebuild.</div>
+    </div>
+    <button class="close-x" data-close>✕</button>
+  </div>
+  <div class="slide-body" id="panel-body-platform"></div>
+  <div class="slide-foot">
+    <button class="btn" data-close>Done</button>
+  </div>
+</div>
+
+<!-- PRICING PANEL -->
+<div class="slide-panel" id="panel-pricing">
+  <div class="slide-head">
+    <div>
+      <div class="slide-title">Pricing</div>
+      <div class="help-text">The levers. Recon is the base, Insights is the add-on, PDF extraction has its own model.</div>
+    </div>
+    <button class="close-x" data-close>✕</button>
+  </div>
+  <div class="slide-body" id="panel-body-pricing"></div>
+  <div class="slide-foot">
+    <button class="btn" data-close>Done</button>
+  </div>
+</div>
+
+<!-- SEGMENTS PANEL -->
+<div class="slide-panel" id="panel-segments">
+  <div class="slide-head">
+    <div>
+      <div class="slide-title">Customer segments</div>
+      <div class="help-text">The three segments behave differently — site count, willingness to pay, churn. Mix percentages must sum to 100%.</div>
+    </div>
+    <button class="close-x" data-close>✕</button>
+  </div>
+  <div class="slide-body" id="panel-body-segments"></div>
+  <div class="slide-foot">
+    <button class="btn" data-close>Done</button>
+  </div>
+</div>
+
+<!-- GROWTH PANEL -->
+<div class="slide-panel" id="panel-growth">
+  <div class="slide-head">
+    <div>
+      <div class="slide-title">Growth & acquisition</div>
+      <div class="help-text">How customers are acquired and at what cost. Reseller margin only applies to the reseller-acquired portion.</div>
+    </div>
+    <button class="close-x" data-close>✕</button>
+  </div>
+  <div class="slide-body" id="panel-body-growth"></div>
+  <div class="slide-foot">
+    <button class="btn" data-close>Done</button>
+  </div>
+</div>
+
+<!-- PDF PANEL -->
+<div class="slide-panel" id="panel-pdf">
+  <div class="slide-head">
+    <div>
+      <div class="slide-title">PDF extraction</div>
+      <div class="help-text">Claude Sonnet 4 PDF-to-JSON. Costs tracked in ai_usage table. Default model: bundled with Insights.</div>
+    </div>
+    <button class="close-x" data-close>✕</button>
+  </div>
+  <div class="slide-body" id="panel-body-pdf"></div>
+  <div class="slide-foot">
+    <button class="btn" data-close>Done</button>
+  </div>
+</div>
+
+<!-- SAVE SCENARIO MODAL -->
+<div class="slide-panel" id="panel-save">
+  <div class="slide-head">
+    <div>
+      <div class="slide-title">Save scenario</div>
+      <div class="help-text">Give this set of assumptions a name. Saved scenarios appear in the dropdown and on the Compare tab.</div>
+    </div>
+    <button class="close-x" data-close>✕</button>
+  </div>
+  <div class="slide-body">
+    <div class="field">
+      <div class="field-row"><span class="field-label">Scenario name</span></div>
+      <input type="text" id="scenario-name-input" placeholder="e.g. Low base price, high Insights uptake">
+    </div>
+    <div id="saved-scenarios-list"></div>
+  </div>
+  <div class="slide-foot">
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn primary" id="save-scenario-confirm">Save</button>
+  </div>
+</div>
+
+<script>
+// ==========================================================================
+// MODEL DEFAULTS
+// ==========================================================================
+
+const DEFAULT_INPUTS = {
+  // Team & rates (ZAR per hour)
+  rate_founder: 1200,
+  rate_engineering: 800,
+  rate_customer_success: 500,
+  rate_bookkeeping: 750,
+
+  // Hours per month — founder + ops capacity
+  // Modelled as: hours that scale per customer, plus baseline overhead
+  hours_founder_baseline: 20,        // per month, regardless of customers (strategy, partnerships, etc.)
+  hours_engineering_baseline: 40,    // per month, maintenance, bug fixes
+  hours_cs_per_customer_active: 4,   // per active customer per month
+  hours_cs_per_onboarding: 6,        // per onboarding event
+  hours_bookkeeping_baseline: 8,     // per month
+  hours_bookkeeping_per_customer: 0.3, // grows with customer count
+
+  // Acquisition
+  hours_per_customer_close: 8,       // sales hours to close one customer (founder time)
+  conversion_rate_pct: 35,           // % of pitched operators that convert
+  reseller_mix_pct: 0,               // % of customers via resellers
+  reseller_margin_pct: 25,           // wholesale discount to reseller
+  marketing_press_monthly: 0,
+
+  // Platform
+  platform_tier: 'pilot',            // pilot | commercial | scale
+  platform_pilot_cost: 1000,
+  platform_commercial_cost: 3500,
+  platform_scale_cost: 8000,
+  architecture_rebuild_cost: 100000,
+  architecture_amortise_months: 24,
+
+  // PDF AI extraction (Claude Sonnet 4)
+  pdf_input_rate_usd_per_1m: 3,
+  pdf_output_rate_usd_per_1m: 15,
+  pdf_zar_usd: 18.5,
+  pdf_avg_input_tokens_per_doc: 40000,
+  pdf_avg_output_tokens_per_doc: 8000,
+  pdf_docs_per_active_customer: 4,    // per month
+  pdf_active_customer_pct: 30,        // % of customers using PDF feature
+  pdf_pricing_model: 'bundled',       // bundled | per_doc | tier
+  pdf_per_doc_price: 25,              // if per_doc
+  pdf_tier_price: 250,                // if tier
+  pdf_tier_docs_included: 20,         // if tier
+
+  // Pricing
+  recon_base_price: 850,              // ZAR / month per customer
+  recon_sites_included: 1,
+  recon_per_site_addon: 600,          // per additional site / month
+  insights_price: 2500,               // ZAR / month per customer
+  insights_uptake_pct: 30,            // % of recon customers also taking insights
+
+  // Segments (3 buckets, mix sums to 100%)
+  seg1_name: 'Single-site independent',
+  seg1_mix_pct: 50,
+  seg1_avg_sites: 1,
+  seg1_monthly_churn_pct: 4,
+
+  seg2_name: 'Small multi-site (2-5)',
+  seg2_mix_pct: 35,
+  seg2_avg_sites: 3,
+  seg2_monthly_churn_pct: 2,
+
+  seg3_name: 'Larger multi-site (6+)',
+  seg3_mix_pct: 15,
+  seg3_avg_sites: 10,
+  seg3_monthly_churn_pct: 1,
+
+  // Growth
+  starting_customers: 1,
+  new_customers_per_month: 2,
+  pilot_period_months: 3,
+  pilot_to_paid_conversion_pct: 60,
+};
+
+// ==========================================================================
+// PRESETS — recommended scenarios discovered through scenario sweep
+// Each preset is a delta on top of DEFAULT_INPUTS
+// ==========================================================================
+
+const PRESETS = {
+  // ★ Premium niche — break-even month 6, ~31 customers by M12
+  // Position: lekana for operators who can afford R 6 500-8 500/month
+  // Single-site operators politely deprioritised. Sales is slow but high-quality.
+  recommended_premium: {
+    name: 'Premium niche',
+    description: 'High-price, multi-site bias. Break-even month 6, ~31 paying customers by month 12. Year-1 burn ~R 230k.',
+    inputs: {
+      recon_base_price: 3500,
+      recon_per_site_addon: 1000,
+      insights_price: 5000,
+      insights_uptake_pct: 70,
+      seg1_mix_pct: 10,
+      seg2_mix_pct: 50,
+      seg3_mix_pct: 40,
+      new_customers_per_month: 3,
+      starting_customers: 5,
+      pilot_period_months: 3,
+      pilot_to_paid_conversion_pct: 60,
+      reseller_mix_pct: 0,
+    },
+  },
+
+  // ★ Balanced recommendation — break-even month 8, ~43 customers by M12
+  // Position: mid-price with multi-site lean, reseller channel as accelerator
+  // The "two products plus reseller" model — defensible commercial pricing
+  recommended_balanced: {
+    name: 'Balanced recommendation',
+    description: 'Mid-price with multi-site lean and 25% reseller mix. Break-even month 8, ~43 paying customers by month 12. Year-1 burn ~R 800k.',
+    inputs: {
+      recon_base_price: 2500,
+      recon_per_site_addon: 1000,
+      insights_price: 4500,
+      insights_uptake_pct: 60,
+      seg1_mix_pct: 15,
+      seg2_mix_pct: 50,
+      seg3_mix_pct: 35,
+      reseller_mix_pct: 25,
+      reseller_margin_pct: 25,
+      new_customers_per_month: 4,
+      starting_customers: 5,
+      pilot_period_months: 3,
+      pilot_to_paid_conversion_pct: 60,
+    },
+  },
+};
+
+// ==========================================================================
+// FIELD DEFINITIONS - drive the slide panel forms
+// ==========================================================================
+
+const FIELD_DEFS = {
+  team: [
+    { section: 'Hourly rates' },
+    { key: 'rate_founder', label: 'Founder rate', prefix: 'R', min: 500, max: 2500, step: 50, hint: 'You and Pieter when doing founder work — strategy, partnerships, big-customer conversations.' },
+    { key: 'rate_engineering', label: 'Engineering rate', prefix: 'R', min: 300, max: 1500, step: 50, hint: 'Your time when doing engineering work, or a future engineering hire.' },
+    { key: 'rate_customer_success', label: 'Customer success rate', prefix: 'R', min: 200, max: 1000, step: 50, hint: 'Day-to-day pilot ops, onboarding, support. Lower-skilled role.' },
+    { key: 'rate_bookkeeping', label: 'Bookkeeping rate', prefix: 'R', min: 300, max: 1200, step: 50, hint: 'In-house, Xero-supported.' },
+    { section: 'Hours per month' },
+    { key: 'hours_founder_baseline', label: 'Founder hours (baseline)', suffix: 'hrs', min: 0, max: 80, step: 4, hint: 'Strategy, partnerships, planning. Independent of customer count.' },
+    { key: 'hours_engineering_baseline', label: 'Engineering hours (baseline)', suffix: 'hrs', min: 0, max: 160, step: 8, hint: 'Maintenance, bug fixes, small features. Independent of customer count.' },
+    { key: 'hours_cs_per_customer_active', label: 'CS hours per active customer / month', suffix: 'hrs', min: 0, max: 12, step: 0.5, hint: 'Steady-state support load per existing customer.' },
+    { key: 'hours_cs_per_onboarding', label: 'CS hours per new onboarding', suffix: 'hrs', min: 0, max: 24, step: 1, hint: 'One-time onboarding effort per new customer (first month only).' },
+    { key: 'hours_bookkeeping_baseline', label: 'Bookkeeping hours / month', suffix: 'hrs', min: 0, max: 40, step: 1 },
+    { key: 'hours_bookkeeping_per_customer', label: 'Bookkeeping hours per customer / month', suffix: 'hrs', min: 0, max: 2, step: 0.1, hint: 'Grows with customer count — invoicing, debtor management.' },
+  ],
+  platform: [
+    { section: 'Stack tier' },
+    { key: 'platform_tier', label: 'Current tier', type: 'stack_select' },
+    { section: 'Tier costs (ZAR / month)' },
+    { key: 'platform_pilot_cost', label: 'Pilot tier cost', prefix: 'R', min: 0, max: 5000, step: 100, hint: 'Vercel Pro, Neon Launch, Workspace seats, basic monitoring.' },
+    { key: 'platform_commercial_cost', label: 'Commercial tier cost', prefix: 'R', min: 0, max: 15000, step: 250, hint: 'Adds proper job queue, better Neon tier, error tracking, log management.' },
+    { key: 'platform_scale_cost', label: 'Scale tier cost', prefix: 'R', min: 0, max: 30000, step: 500, hint: 'Full observability, dedicated workers, better SLAs.' },
+    { section: 'Architecture rebuild' },
+    { key: 'architecture_rebuild_cost', label: 'One-time rebuild cost', prefix: 'R', min: 0, max: 500000, step: 10000, hint: 'Job queue + worker rebuild to handle commercial scale. Engineering time at current rate.' },
+    { key: 'architecture_amortise_months', label: 'Amortise over (months)', suffix: 'mo', min: 1, max: 60, step: 1, hint: 'Spreads the rebuild cost across this many months in the cost model.' },
+  ],
+  pricing: [
+    { section: 'Reconciliation (base)' },
+    { key: 'recon_base_price', label: 'Recon base price / month', prefix: 'R', min: 0, max: 5000, step: 50, hint: 'Per customer per month. Includes the sites count below.' },
+    { key: 'recon_sites_included', label: 'Sites included in base', suffix: 'sites', min: 1, max: 10, step: 1 },
+    { key: 'recon_per_site_addon', label: 'Per-site add-on (above included)', prefix: 'R', min: 0, max: 2000, step: 50, hint: 'Charged per additional site above the included count.' },
+    { section: 'Insights (add-on)' },
+    { key: 'insights_price', label: 'Insights price / month', prefix: 'R', min: 0, max: 10000, step: 100, hint: 'Add-on per customer per month. Includes all live + future reports.' },
+    { key: 'insights_uptake_pct', label: 'Insights uptake', suffix: '%', min: 0, max: 100, step: 5, hint: '% of recon customers that also take Insights.' },
+  ],
+  segments: [
+    { section: 'Segment 1' },
+    { key: 'seg1_name', label: 'Name', type: 'text' },
+    { key: 'seg1_mix_pct', label: 'Share of customer mix', suffix: '%', min: 0, max: 100, step: 5 },
+    { key: 'seg1_avg_sites', label: 'Average sites', suffix: 'sites', min: 1, max: 50, step: 1 },
+    { key: 'seg1_monthly_churn_pct', label: 'Monthly churn', suffix: '%', min: 0, max: 20, step: 0.5 },
+    { section: 'Segment 2' },
+    { key: 'seg2_name', label: 'Name', type: 'text' },
+    { key: 'seg2_mix_pct', label: 'Share of customer mix', suffix: '%', min: 0, max: 100, step: 5 },
+    { key: 'seg2_avg_sites', label: 'Average sites', suffix: 'sites', min: 1, max: 50, step: 1 },
+    { key: 'seg2_monthly_churn_pct', label: 'Monthly churn', suffix: '%', min: 0, max: 20, step: 0.5 },
+    { section: 'Segment 3' },
+    { key: 'seg3_name', label: 'Name', type: 'text' },
+    { key: 'seg3_mix_pct', label: 'Share of customer mix', suffix: '%', min: 0, max: 100, step: 5 },
+    { key: 'seg3_avg_sites', label: 'Average sites', suffix: 'sites', min: 1, max: 50, step: 1 },
+    { key: 'seg3_monthly_churn_pct', label: 'Monthly churn', suffix: '%', min: 0, max: 20, step: 0.5 },
+  ],
+  growth: [
+    { section: 'Sales effort' },
+    { key: 'hours_per_customer_close', label: 'Hours to close per customer', suffix: 'hrs', min: 0, max: 40, step: 1, hint: 'Total founder time per closed customer — discovery, demo, follow-up.' },
+    { key: 'conversion_rate_pct', label: 'Conversion rate', suffix: '%', min: 1, max: 100, step: 5, hint: '% of pitched operators that become customers.' },
+    { section: 'Reseller channel' },
+    { key: 'reseller_mix_pct', label: 'Reseller mix', suffix: '%', min: 0, max: 100, step: 5, hint: '% of new customers acquired through resellers vs direct.' },
+    { key: 'reseller_margin_pct', label: 'Reseller margin', suffix: '%', min: 0, max: 60, step: 5, hint: 'Wholesale discount to the reseller (off retail price).' },
+    { section: 'Other acquisition' },
+    { key: 'marketing_press_monthly', label: 'Marketing / press / month', prefix: 'R', min: 0, max: 50000, step: 500 },
+    { section: 'Growth assumptions' },
+    { key: 'starting_customers', label: 'Starting customer count', suffix: '', min: 0, max: 100, step: 1, hint: 'Customers at month 0 of the projection.' },
+    { key: 'new_customers_per_month', label: 'New customers / month', suffix: '', min: 0, max: 20, step: 1, hint: 'Constant ramp — net new customers added monthly.' },
+    { key: 'pilot_period_months', label: 'Pilot period', suffix: 'mo', min: 0, max: 24, step: 1, hint: 'Months during which new customers pay nothing.' },
+    { key: 'pilot_to_paid_conversion_pct', label: 'Pilot → paid conversion', suffix: '%', min: 0, max: 100, step: 5, hint: '% of pilot customers that convert to paying customers at end of pilot.' },
+  ],
+  pdf: [
+    { section: 'Cost (Claude Sonnet 4)' },
+    { key: 'pdf_input_rate_usd_per_1m', label: 'Input rate (USD / 1M tokens)', prefix: '$', min: 0, max: 50, step: 0.5 },
+    { key: 'pdf_output_rate_usd_per_1m', label: 'Output rate (USD / 1M tokens)', prefix: '$', min: 0, max: 100, step: 0.5 },
+    { key: 'pdf_zar_usd', label: 'ZAR / USD exchange rate', prefix: 'R', min: 10, max: 30, step: 0.1 },
+    { section: 'Usage assumptions' },
+    { key: 'pdf_avg_input_tokens_per_doc', label: 'Avg input tokens per document', suffix: 'tok', min: 1000, max: 200000, step: 1000 },
+    { key: 'pdf_avg_output_tokens_per_doc', label: 'Avg output tokens per document', suffix: 'tok', min: 500, max: 50000, step: 500 },
+    { key: 'pdf_docs_per_active_customer', label: 'Docs / active customer / month', suffix: 'docs', min: 0, max: 50, step: 1 },
+    { key: 'pdf_active_customer_pct', label: '% of customers using PDF', suffix: '%', min: 0, max: 100, step: 5 },
+    { section: 'Pricing model' },
+    { key: 'pdf_pricing_model', label: 'How is PDF priced?', type: 'select', options: [
+      { value: 'bundled', label: 'Bundled with Insights' },
+      { value: 'per_doc', label: 'Per document' },
+      { value: 'tier', label: 'Monthly tier (with included docs)' },
+    ]},
+    { key: 'pdf_per_doc_price', label: 'Per-document price', prefix: 'R', min: 0, max: 200, step: 5 },
+    { key: 'pdf_tier_price', label: 'Tier price / month', prefix: 'R', min: 0, max: 1000, step: 50 },
+    { key: 'pdf_tier_docs_included', label: 'Docs included in tier', suffix: 'docs', min: 0, max: 200, step: 5 },
+  ],
+};
+
+// ==========================================================================
+// STATE
+// ==========================================================================
+
+let inputs = loadInputs();
+let scenarios = [];            // loaded from the server (shared across platform owners)
+let currentTab = 'steady';
+let openPanel = null;
+
+function loadInputs() {
+  try {
+    const raw = localStorage.getItem('lekana_inputs');
+    if (raw) return { ...DEFAULT_INPUTS, ...JSON.parse(raw) };
+  } catch (e) {}
+  return { ...DEFAULT_INPUTS };
+}
+
+function saveInputs() {
+  try { localStorage.setItem('lekana_inputs', JSON.stringify(inputs)); } catch (e) {}
+}
+
+// Saved scenarios are shared between Garth and Pieter — they live in the
+// database (served behind the platform-owner gate), not localStorage. The live
+// working draft above stays per-browser; named scenarios are the shared unit.
+const SCENARIOS_API = '/api/admin/pricing-scenarios';
+
+async function loadScenariosFromServer() {
+  try {
+    const res = await fetch(SCENARIOS_API, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('load failed');
+    const rows = await res.json();
+    // Map DB rows to the shape the tool expects (savedAt ← createdAt).
+    scenarios = rows.map(r => ({ id: r.id, name: r.name, inputs: r.inputs, savedAt: r.createdAt }));
+  } catch (e) {
+    console.error('Could not load saved scenarios:', e);
+    scenarios = [];
+  }
+  refreshScenarioSelect();
+  if (currentTab === 'compare') renderCompare();
+}
+
+// ==========================================================================
+// MODEL: takes inputs, returns derived state
+// ==========================================================================
+
+function computeModel(inp, customerCount) {
+  // Compute current customer count if not specified
+  if (customerCount === undefined) customerCount = inp.starting_customers;
+
+  // ----- Segment mix normalisation -----
+  const segMixRaw = [inp.seg1_mix_pct, inp.seg2_mix_pct, inp.seg3_mix_pct];
+  const segMixTotal = segMixRaw.reduce((a, b) => a + b, 0) || 1;
+  const segMix = segMixRaw.map(p => p / segMixTotal);
+  const segAvgSites = [inp.seg1_avg_sites, inp.seg2_avg_sites, inp.seg3_avg_sites];
+  const segNames = [inp.seg1_name, inp.seg2_name, inp.seg3_name];
+
+  // Blended average sites per customer
+  const avgSitesPerCustomer = segMix.reduce((s, mix, i) => s + mix * segAvgSites[i], 0);
+
+  // ----- Revenue -----
+  // Per-customer recon revenue (factoring in sites)
+  // For each segment: base + per-site addon * (sites - included)
+  let reconRevenuePerSegment = [0, 0, 0];
+  for (let i = 0; i < 3; i++) {
+    const extraSites = Math.max(0, segAvgSites[i] - inp.recon_sites_included);
+    reconRevenuePerSegment[i] = inp.recon_base_price + extraSites * inp.recon_per_site_addon;
+  }
+  const reconRevenuePerCustomer = segMix.reduce((s, mix, i) => s + mix * reconRevenuePerSegment[i], 0);
+  const totalReconRevenue = reconRevenuePerCustomer * customerCount;
+
+  // Insights revenue (uptake % of customers take it)
+  const insightsCustomers = customerCount * (inp.insights_uptake_pct / 100);
+  const totalInsightsRevenue = insightsCustomers * inp.insights_price;
+
+  // PDF revenue
+  let totalPdfRevenue = 0;
+  const pdfActiveCustomers = customerCount * (inp.pdf_active_customer_pct / 100);
+  if (inp.pdf_pricing_model === 'per_doc') {
+    totalPdfRevenue = pdfActiveCustomers * inp.pdf_docs_per_active_customer * inp.pdf_per_doc_price;
+  } else if (inp.pdf_pricing_model === 'tier') {
+    totalPdfRevenue = pdfActiveCustomers * inp.pdf_tier_price;
+    // Add overage (docs above tier_docs_included @ per_doc_price)
+    const overagePerCustomer = Math.max(0, inp.pdf_docs_per_active_customer - inp.pdf_tier_docs_included);
+    totalPdfRevenue += pdfActiveCustomers * overagePerCustomer * inp.pdf_per_doc_price;
+  }
+  // 'bundled' means PDF revenue is R 0 (cost absorbed into Insights)
+
+  const grossRevenue = totalReconRevenue + totalInsightsRevenue + totalPdfRevenue;
+
+  // Reseller discount (only on reseller-acquired portion)
+  const resellerShare = inp.reseller_mix_pct / 100;
+  const resellerDiscount = grossRevenue * resellerShare * (inp.reseller_margin_pct / 100);
+  const netRevenue = grossRevenue - resellerDiscount;
+
+  // ----- Costs -----
+  // Time costs
+  const founderBaseHours = inp.hours_founder_baseline;
+  const founderSalesHours = (customerCount > 0)
+    ? (customerCount * inp.hours_per_customer_close * (inp.conversion_rate_pct > 0 ? 100 / inp.conversion_rate_pct : 0) / 12)
+    : 0;
+  // Sales hours are amortised — total hours to bring in this many customers spread over the year
+  // Simpler: assume sales hours per month = new_customers_per_month * hours_per_close / (conversion_rate%)
+  const monthlySalesHours = inp.new_customers_per_month * inp.hours_per_customer_close / Math.max(inp.conversion_rate_pct, 1) * 100;
+  const engineeringHours = inp.hours_engineering_baseline;
+  const csHours = customerCount * inp.hours_cs_per_customer_active + inp.new_customers_per_month * inp.hours_cs_per_onboarding;
+  const bookkeepingHours = inp.hours_bookkeeping_baseline + customerCount * inp.hours_bookkeeping_per_customer;
+
+  const founderCost = (founderBaseHours + monthlySalesHours) * inp.rate_founder;
+  const engineeringCost = engineeringHours * inp.rate_engineering;
+  const csCost = csHours * inp.rate_customer_success;
+  const bookkeepingCost = bookkeepingHours * inp.rate_bookkeeping;
+  const totalPeopleCost = founderCost + engineeringCost + csCost + bookkeepingCost;
+
+  // Platform cost
+  let platformBase;
+  if (inp.platform_tier === 'pilot') platformBase = inp.platform_pilot_cost;
+  else if (inp.platform_tier === 'commercial') platformBase = inp.platform_commercial_cost;
+  else platformBase = inp.platform_scale_cost;
+  const architectureAmortised = inp.architecture_rebuild_cost / Math.max(inp.architecture_amortise_months, 1);
+  const totalPlatformCost = platformBase + architectureAmortised;
+
+  // PDF AI extraction cost
+  const totalPdfDocs = pdfActiveCustomers * inp.pdf_docs_per_active_customer;
+  const inputTokens = totalPdfDocs * inp.pdf_avg_input_tokens_per_doc;
+  const outputTokens = totalPdfDocs * inp.pdf_avg_output_tokens_per_doc;
+  const pdfCostUsd = (inputTokens * inp.pdf_input_rate_usd_per_1m + outputTokens * inp.pdf_output_rate_usd_per_1m) / 1000000;
+  const pdfCostZar = pdfCostUsd * inp.pdf_zar_usd;
+
+  // Marketing
+  const marketingCost = inp.marketing_press_monthly;
+
+  const totalCost = totalPeopleCost + totalPlatformCost + pdfCostZar + marketingCost;
+
+  const profit = netRevenue - totalCost;
+  const grossMargin = netRevenue > 0 ? ((netRevenue - totalPlatformCost - pdfCostZar) / netRevenue) * 100 : 0;
+
+  // Unit economics
+  const revenuePerCustomer = customerCount > 0 ? netRevenue / customerCount : 0;
+  const costPerCustomer = customerCount > 0 ? totalCost / customerCount : 0;
+  const cacPerCustomer = inp.conversion_rate_pct > 0
+    ? (inp.hours_per_customer_close / (inp.conversion_rate_pct / 100)) * inp.rate_founder
+    : 0;
+  const onboardingCostPerCustomer = inp.hours_cs_per_onboarding * inp.rate_customer_success;
+
+  return {
+    customerCount,
+    avgSitesPerCustomer,
+    insightsCustomers,
+    pdfActiveCustomers,
+    segMix,
+    segNames,
+    segAvgSites,
+    reconRevenuePerSegment,
+    revenue: {
+      recon: totalReconRevenue,
+      insights: totalInsightsRevenue,
+      pdf: totalPdfRevenue,
+      gross: grossRevenue,
+      resellerDiscount,
+      net: netRevenue,
+    },
+    cost: {
+      founder: founderCost,
+      engineering: engineeringCost,
+      cs: csCost,
+      bookkeeping: bookkeepingCost,
+      people: totalPeopleCost,
+      platformBase,
+      architectureAmortised,
+      platform: totalPlatformCost,
+      pdf: pdfCostZar,
+      marketing: marketingCost,
+      total: totalCost,
+    },
+    hours: {
+      founder: founderBaseHours + monthlySalesHours,
+      sales: monthlySalesHours,
+      engineering: engineeringHours,
+      cs: csHours,
+      bookkeeping: bookkeepingHours,
+    },
+    profit,
+    grossMargin,
+    unit: {
+      revenuePerCustomer,
+      costPerCustomer,
+      cac: cacPerCustomer,
+      onboardingCost: onboardingCostPerCustomer,
+      profitPerCustomer: revenuePerCustomer - costPerCustomer,
+    },
+  };
+}
+
+// ==========================================================================
+// 12-MONTH PROJECTION
+// ==========================================================================
+
+function compute12Month(inp) {
+  const months = [];
+  let customerCount = inp.starting_customers;
+  let pilotCustomers = inp.starting_customers;  // Assume all starting are in pilot
+  let paidCustomers = 0;
+  let breakEvenMonth = null;
+  let cumulative = 0;
+
+  for (let m = 0; m < 18; m++) {
+    // At pilot_period_months, convert pilot to paid
+    if (m === inp.pilot_period_months) {
+      paidCustomers = Math.round(pilotCustomers * (inp.pilot_to_paid_conversion_pct / 100));
+      pilotCustomers = 0;
+    }
+
+    // Add new customers
+    if (m > 0) {
+      const newCust = inp.new_customers_per_month;
+      if (m < inp.pilot_period_months) {
+        pilotCustomers += newCust;
+      } else {
+        // After pilot, new customers are paid immediately (assumption)
+        paidCustomers += newCust;
+      }
+    }
+    customerCount = pilotCustomers + paidCustomers;
+
+    // Apply churn (only to paid customers — pilots churn separately)
+    if (paidCustomers > 0) {
+      const seg1Churn = paidCustomers * (inp.seg1_mix_pct / 100) * (inp.seg1_monthly_churn_pct / 100);
+      const seg2Churn = paidCustomers * (inp.seg2_mix_pct / 100) * (inp.seg2_monthly_churn_pct / 100);
+      const seg3Churn = paidCustomers * (inp.seg3_mix_pct / 100) * (inp.seg3_monthly_churn_pct / 100);
+      paidCustomers = Math.max(0, paidCustomers - seg1Churn - seg2Churn - seg3Churn);
+      customerCount = pilotCustomers + paidCustomers;
+    }
+
+    // Revenue & cost using *paid* customers for revenue, *total* for cost
+    const m_paid = computeModel(inp, paidCustomers);
+    const m_all = computeModel(inp, customerCount);
+
+    const monthlyRev = m_paid.revenue.net;
+    const monthlyCost = m_all.cost.total;
+    const monthlyProfit = monthlyRev - monthlyCost;
+    cumulative += monthlyProfit;
+
+    if (breakEvenMonth === null && monthlyProfit >= 0 && m >= inp.pilot_period_months) {
+      breakEvenMonth = m;
+    }
+
+    months.push({
+      monthIndex: m,
+      customers: Math.round(customerCount),
+      pilotCustomers: Math.round(pilotCustomers),
+      paidCustomers: Math.round(paidCustomers),
+      revenue: monthlyRev,
+      cost: monthlyCost,
+      profit: monthlyProfit,
+      cumulative,
+    });
+  }
+  return { months, breakEvenMonth };
+}
+
+// ==========================================================================
+// SENSITIVITY ANALYSIS
+// ==========================================================================
+
+function computeSensitivity(inp) {
+  const sensVars = [
+    { key: 'recon_base_price', label: 'Recon base price' },
+    { key: 'insights_price', label: 'Insights price' },
+    { key: 'insights_uptake_pct', label: 'Insights uptake' },
+    { key: 'recon_per_site_addon', label: 'Per-site add-on' },
+    { key: 'reseller_mix_pct', label: 'Reseller mix' },
+    { key: 'reseller_margin_pct', label: 'Reseller margin' },
+    { key: 'hours_cs_per_customer_active', label: 'CS hours per customer' },
+    { key: 'hours_per_customer_close', label: 'Sales hours per close' },
+    { key: 'conversion_rate_pct', label: 'Conversion rate' },
+    { key: 'new_customers_per_month', label: 'New customers / month' },
+  ];
+
+  // Use month-12 paid customer count as the "steady" reference
+  const proj = compute12Month(inp);
+  const month12 = proj.months[11];
+  const refProfit = month12.profit;
+
+  return sensVars.map(v => {
+    const lowInp = { ...inp, [v.key]: inp[v.key] * 0.7 };
+    const highInp = { ...inp, [v.key]: inp[v.key] * 1.3 };
+    const lowProj = compute12Month(lowInp);
+    const highProj = compute12Month(highInp);
+    return {
+      label: v.label,
+      key: v.key,
+      baseValue: inp[v.key],
+      lowProfit: lowProj.months[11].profit,
+      highProfit: highProj.months[11].profit,
+      refProfit,
+    };
+  });
+}
+
+// ==========================================================================
+// FORMATTING
+// ==========================================================================
+
+function fmtZAR(v, opts = {}) {
+  const { showZero = true, decimals = 0 } = opts;
+  if (!showZero && Math.abs(v) < 1) return '—';
+  const rounded = decimals > 0 ? v.toFixed(decimals) : Math.round(v).toString();
+  const sign = v < 0 ? '-' : '';
+  const abs = Math.abs(parseFloat(rounded));
+  const parts = abs.toLocaleString('en-ZA', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).replace(/,/g, ' ');
+  return `${sign}R ${parts}`;
+}
+
+function fmtNum(v, decimals = 0) {
+  return v.toLocaleString('en-ZA', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).replace(/,/g, ' ');
+}
+
+function fmtPct(v, decimals = 1) {
+  return `${v.toFixed(decimals)}%`;
+}
+
+// ==========================================================================
+// RENDERING - HEADLINE METRICS
+// ==========================================================================
+
+function render() {
+  const m = computeModel(inputs);
+  const proj = compute12Month(inputs);
+
+  renderMetrics(m, proj);
+  renderWarnings(m, proj);
+  renderRevenueTable(m);
+  renderCostTable(m);
+  renderUnitTable(m);
+  renderProjection(proj);
+  renderSensitivity();
+  renderCompare();
+  renderAssumptions();
+  saveInputs();
+}
+
+function renderMetrics(m, proj) {
+  const projM12 = proj.months[11];
+
+  document.getElementById('m-mrr').textContent = fmtZAR(projM12.revenue);
+  document.getElementById('m-mrr-sub').textContent = `month 12, ${Math.round(projM12.paidCustomers)} paying customers`;
+
+  document.getElementById('m-cost').textContent = fmtZAR(projM12.cost);
+  document.getElementById('m-cost-sub').textContent = `all-in, including ${fmtZAR(m.cost.people)} people`;
+
+  const profitEl = document.getElementById('m-profit');
+  profitEl.textContent = fmtZAR(projM12.profit);
+  profitEl.classList.remove('positive', 'danger');
+  if (projM12.profit > 0) profitEl.classList.add('positive');
+  else if (projM12.profit < 0) profitEl.classList.add('danger');
+  document.getElementById('m-profit-sub').textContent = projM12.profit > 0
+    ? `at month 12 — ${fmtPct(m.grossMargin)} gross margin`
+    : `still ${fmtZAR(-projM12.profit)} underwater at month 12`;
+
+  const beEl = document.getElementById('m-breakeven');
+  if (proj.breakEvenMonth !== null) {
+    beEl.textContent = `month ${proj.breakEvenMonth}`;
+    beEl.classList.add('positive');
+    beEl.classList.remove('danger');
+    document.getElementById('m-breakeven-sub').textContent = `at ${proj.months[proj.breakEvenMonth].paidCustomers} paying customers`;
+  } else {
+    beEl.textContent = 'not in 18 months';
+    beEl.classList.add('danger');
+    beEl.classList.remove('positive');
+    document.getElementById('m-breakeven-sub').textContent = `worst-case shortfall: ${fmtZAR(Math.min(...proj.months.map(x => x.profit)))}/mo`;
+  }
+}
+
+function renderWarnings(m, proj) {
+  const host = document.getElementById('warnings-host');
+  host.innerHTML = '';
+  const warnings = [];
+
+  // Segment mix sanity
+  const segTotal = inputs.seg1_mix_pct + inputs.seg2_mix_pct + inputs.seg3_mix_pct;
+  if (Math.abs(segTotal - 100) > 0.1) {
+    warnings.push({ tone: 'warning', msg: `Segment mix sums to ${segTotal.toFixed(0)}%, not 100%. Model normalises automatically but the inputs need attention.` });
+  }
+
+  // Capacity check — if monthly sales hours exceed Pieter's reasonable capacity
+  if (m.hours.founder > 160) {
+    warnings.push({ tone: 'warning', msg: `Founder time at this scale is ${Math.round(m.hours.founder)} hours/month — exceeds Pieter's plausible Lekana capacity. Reseller channel or sales hire needed.` });
+  }
+
+  // Break-even
+  if (proj.breakEvenMonth === null) {
+    warnings.push({ tone: 'warning', msg: `At current settings, the business doesn't reach break-even within 18 months. Try raising prices, lowering costs, or increasing customer count.` });
+  } else if (proj.breakEvenMonth <= 12) {
+    warnings.push({ tone: 'positive', msg: `Break-even within 12 months at ${proj.months[proj.breakEvenMonth].paidCustomers} paying customers — viable scenario.` });
+  }
+
+  // PDF cost sanity
+  if (m.cost.pdf > 5000 && inputs.pdf_pricing_model === 'bundled') {
+    warnings.push({ tone: 'warning', msg: `Bundled PDF cost is ${fmtZAR(m.cost.pdf)}/mo at this customer count — consider switching to per-document or tier pricing.` });
+  }
+
+  warnings.forEach(w => {
+    const div = document.createElement('div');
+    div.className = `warning-banner${w.tone === 'positive' ? ' positive' : ''}`;
+    div.innerHTML = `<span class="warning-icon">${w.tone === 'positive' ? '✓' : '!'}</span><span>${w.msg}</span>`;
+    host.appendChild(div);
+  });
+}
+
+function renderRevenueTable(m) {
+  const proj = compute12Month(inputs);
+  const month12 = proj.months[11];
+  const m12 = computeModel(inputs, month12.paidCustomers);
+
+  const rows = [
+    { key: 'Reconciliation', value: m12.revenue.recon, indent: false },
+    { key: `↳ at ${month12.paidCustomers} customers × avg ${fmtZAR(m12.revenue.recon / Math.max(month12.paidCustomers, 1))}/mo`, value: null, indent: true, sub: true },
+    { key: 'Insights', value: m12.revenue.insights, indent: false },
+    { key: `↳ ${Math.round(m12.insightsCustomers)} customers × ${fmtZAR(inputs.insights_price)}`, value: null, indent: true, sub: true },
+    { key: 'PDF extraction', value: m12.revenue.pdf, indent: false },
+    { key: `↳ model: ${inputs.pdf_pricing_model}`, value: null, indent: true, sub: true },
+    { key: 'Gross revenue', value: m12.revenue.gross, indent: false, bold: true },
+    { key: `Reseller discount (${inputs.reseller_mix_pct}% mix × ${inputs.reseller_margin_pct}%)`, value: -m12.revenue.resellerDiscount, indent: false },
+    { key: 'Net revenue', value: m12.revenue.net, indent: false, total: true },
+  ];
+
+  const tbody = document.querySelector('#revenue-table tbody');
+  tbody.innerHTML = rows.map(r => {
+    const cls = [];
+    if (r.total) cls.push('total');
+    if (r.indent) cls.push('indent');
+    return `<tr class="${cls.join(' ')}">
+      <td style="${r.sub ? 'color: var(--ink-3); font-size: 12px;' : ''} ${r.bold ? 'font-weight: 500;' : ''}">${r.key}</td>
+      <td class="num">${r.value !== null ? fmtZAR(r.value) : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCostTable(m) {
+  const proj = compute12Month(inputs);
+  const month12 = proj.months[11];
+  const m12 = computeModel(inputs, month12.customers);
+
+  const rows = [
+    { subhead: true, key: 'People' },
+    { key: 'Founder time', value: m12.cost.founder, indent: true, hint: `${Math.round(m12.hours.founder)} hrs/mo @ R ${inputs.rate_founder}` },
+    { key: 'Engineering', value: m12.cost.engineering, indent: true, hint: `${m12.hours.engineering} hrs/mo @ R ${inputs.rate_engineering}` },
+    { key: 'Customer success', value: m12.cost.cs, indent: true, hint: `${Math.round(m12.hours.cs)} hrs/mo @ R ${inputs.rate_customer_success}` },
+    { key: 'Bookkeeping', value: m12.cost.bookkeeping, indent: true, hint: `${m12.hours.bookkeeping.toFixed(1)} hrs/mo @ R ${inputs.rate_bookkeeping}` },
+    { subhead: true, key: 'Platform' },
+    { key: `${inputs.platform_tier} tier`, value: m12.cost.platformBase, indent: true },
+    { key: 'Architecture rebuild (amortised)', value: m12.cost.architectureAmortised, indent: true, hint: `${fmtZAR(inputs.architecture_rebuild_cost)} ÷ ${inputs.architecture_amortise_months} mo` },
+    { subhead: true, key: 'Other' },
+    { key: 'PDF AI cost', value: m12.cost.pdf, indent: true },
+    { key: 'Marketing / press', value: m12.cost.marketing, indent: true },
+    { key: 'Total monthly cost', value: m12.cost.total, total: true },
+  ];
+
+  const tbody = document.querySelector('#cost-table tbody');
+  tbody.innerHTML = rows.map(r => {
+    if (r.subhead) {
+      return `<tr class="subhead"><td colspan="2">${r.key}</td></tr>`;
+    }
+    const cls = [];
+    if (r.total) cls.push('total');
+    if (r.indent) cls.push('indent');
+    return `<tr class="${cls.join(' ')}">
+      <td>${r.key}${r.hint ? `<span style="color: var(--ink-3); font-size: 11px; margin-left: 8px;">${r.hint}</span>` : ''}</td>
+      <td class="num">${fmtZAR(r.value)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderUnitTable(m) {
+  const proj = compute12Month(inputs);
+  const month12 = proj.months[11];
+  const m12 = computeModel(inputs, month12.paidCustomers);
+
+  const rows = [
+    { key: 'Revenue per paying customer / month', value: fmtZAR(m12.unit.revenuePerCustomer) },
+    { key: 'Cost per customer / month (allocated)', value: fmtZAR(m12.unit.costPerCustomer) },
+    { key: 'Profit per customer / month', value: fmtZAR(m12.unit.profitPerCustomer), total: true },
+    { key: 'CAC (effective)', value: fmtZAR(m12.unit.cac), hint: `${inputs.hours_per_customer_close} hrs ÷ ${inputs.conversion_rate_pct}% conversion @ founder rate` },
+    { key: 'Onboarding cost per customer (one-off)', value: fmtZAR(m12.unit.onboardingCost), hint: `${inputs.hours_cs_per_onboarding} hrs @ CS rate` },
+    { key: 'Payback period', value: m12.unit.profitPerCustomer > 0 ? `${(m12.unit.cac / m12.unit.profitPerCustomer).toFixed(1)} months` : '∞ (no contribution margin)' },
+    { key: 'Gross margin', value: fmtPct(m12.grossMargin) },
+  ];
+
+  const tbody = document.querySelector('#unit-table tbody');
+  tbody.innerHTML = rows.map(r => {
+    const cls = r.total ? 'total' : '';
+    return `<tr class="${cls}">
+      <td>${r.key}${r.hint ? `<span style="color: var(--ink-3); font-size: 11px; margin-left: 8px;">${r.hint}</span>` : ''}</td>
+      <td class="num">${r.value}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ==========================================================================
+// PROJECTION RENDER
+// ==========================================================================
+
+function renderProjection(proj) {
+  // Chart
+  const canvas = document.getElementById('projection-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  // Force layout to get correct dimensions
+  // If canvas isn't visible (display:none parent), clientWidth will be 0 — bail out
+  const parent = canvas.parentElement;
+  const w = canvas.clientWidth || (parent && parent.clientWidth ? parent.clientWidth - 48 : 0);
+  const h = canvas.clientHeight || 320;
+
+  // Only render the chart if dimensions are real
+  if (w < 100) {
+    // Defer until visible
+    return;
+  }
+
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);  // reset any prior scale
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const months = proj.months;
+  const padding = { l: 70, r: 30, t: 20, b: 40 };
+  const chartW = w - padding.l - padding.r;
+  const chartH = h - padding.t - padding.b;
+
+  const allValues = months.flatMap(m => [m.revenue, m.cost, m.profit]);
+  const maxV = Math.max(...allValues, 0);
+  const minV = Math.min(...allValues, 0);
+  const range = maxV - minV || 1;
+
+  const x = (i) => padding.l + (i / (months.length - 1)) * chartW;
+  const y = (v) => padding.t + chartH - ((v - minV) / range) * chartH;
+
+  // Y axis grid
+  ctx.strokeStyle = '#EDEBE5';
+  ctx.fillStyle = '#9AA1AB';
+  ctx.font = '11px "JetBrains Mono", monospace';
+  ctx.textAlign = 'right';
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const yVal = minV + (range * i / yTicks);
+    const yPx = y(yVal);
+    ctx.beginPath();
+    ctx.moveTo(padding.l, yPx);
+    ctx.lineTo(w - padding.r, yPx);
+    ctx.stroke();
+    ctx.fillText(`R ${(yVal / 1000).toFixed(0)}k`, padding.l - 8, yPx + 3);
+  }
+
+  // Zero line (heavier)
+  if (minV < 0 && maxV > 0) {
+    ctx.strokeStyle = '#9AA1AB';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.l, y(0));
+    ctx.lineTo(w - padding.r, y(0));
+    ctx.stroke();
+  }
+
+  // X axis labels
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#9AA1AB';
+  for (let i = 0; i < months.length; i++) {
+    if (i % 3 === 0 || i === months.length - 1) {
+      ctx.fillText(`M${i}`, x(i), h - padding.b + 18);
+    }
+  }
+
+  // Break-even marker
+  if (proj.breakEvenMonth !== null) {
+    const bx = x(proj.breakEvenMonth);
+    ctx.strokeStyle = '#B8843B';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(bx, padding.t);
+    ctx.lineTo(bx, h - padding.b);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#B8843B';
+    ctx.font = '500 11px "Inter Tight", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`break-even`, bx + 6, padding.t + 14);
+  }
+
+  // Revenue line
+  ctx.strokeStyle = '#2D6A4F';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  months.forEach((m, i) => {
+    if (i === 0) ctx.moveTo(x(i), y(m.revenue));
+    else ctx.lineTo(x(i), y(m.revenue));
+  });
+  ctx.stroke();
+
+  // Cost line
+  ctx.strokeStyle = '#8B2F2F';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  months.forEach((m, i) => {
+    if (i === 0) ctx.moveTo(x(i), y(m.cost));
+    else ctx.lineTo(x(i), y(m.cost));
+  });
+  ctx.stroke();
+
+  // Profit line (dashed)
+  ctx.strokeStyle = '#14171A';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  months.forEach((m, i) => {
+    if (i === 0) ctx.moveTo(x(i), y(m.profit));
+    else ctx.lineTo(x(i), y(m.profit));
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Legend
+  ctx.font = '11px "Inter Tight", sans-serif';
+  ctx.textAlign = 'left';
+  const legendX = padding.l + 8;
+  let legendY = padding.t + 14;
+  const legend = [
+    { color: '#2D6A4F', label: 'Revenue' },
+    { color: '#8B2F2F', label: 'Cost' },
+    { color: '#14171A', label: 'Profit', dashed: true },
+  ];
+  legend.forEach((l, i) => {
+    const ly = legendY + i * 16;
+    ctx.strokeStyle = l.color;
+    ctx.lineWidth = 2;
+    if (l.dashed) ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(legendX, ly);
+    ctx.lineTo(legendX + 18, ly);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#3A4047';
+    ctx.fillText(l.label, legendX + 24, ly + 3);
+  });
+
+  // Table
+  const thead = document.querySelector('#projection-table thead');
+  const tbody = document.querySelector('#projection-table tbody');
+  thead.innerHTML = `<tr>
+    <th>Month</th>
+    <th>Pilot</th>
+    <th>Paid</th>
+    <th>Revenue</th>
+    <th>Cost</th>
+    <th>Profit</th>
+    <th>Cumulative</th>
+  </tr>`;
+  tbody.innerHTML = months.map(m => {
+    const cls = [];
+    if (m.profit > 0) cls.push('profit-pos');
+    else cls.push('profit-neg');
+    if (m === months[proj.breakEvenMonth]) cls.push('breakeven');
+    return `<tr class="${cls.join(' ')}">
+      <td>Month ${m.monthIndex}</td>
+      <td>${m.pilotCustomers}</td>
+      <td>${m.paidCustomers}</td>
+      <td>${fmtZAR(m.revenue)}</td>
+      <td>${fmtZAR(m.cost)}</td>
+      <td>${fmtZAR(m.profit)}</td>
+      <td>${fmtZAR(m.cumulative)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ==========================================================================
+// SENSITIVITY RENDER
+// ==========================================================================
+
+function renderSensitivity() {
+  const sens = computeSensitivity(inputs);
+  const host = document.getElementById('sensitivity-host');
+
+  const maxAbs = Math.max(...sens.flatMap(s => [Math.abs(s.lowProfit - s.refProfit), Math.abs(s.highProfit - s.refProfit)]));
+
+  // Sort by impact
+  sens.sort((a, b) => {
+    const ai = Math.max(Math.abs(a.lowProfit - a.refProfit), Math.abs(a.highProfit - a.refProfit));
+    const bi = Math.max(Math.abs(b.lowProfit - b.refProfit), Math.abs(b.highProfit - b.refProfit));
+    return bi - ai;
+  });
+
+  host.innerHTML = sens.map(s => {
+    const lowDelta = s.lowProfit - s.refProfit;
+    const highDelta = s.highProfit - s.refProfit;
+    const lowPct = maxAbs > 0 ? (Math.abs(lowDelta) / maxAbs) * 50 : 0;
+    const highPct = maxAbs > 0 ? (Math.abs(highDelta) / maxAbs) * 50 : 0;
+
+    return `<div class="sensitivity-card">
+      <div class="sens-label">${s.label}</div>
+      <div class="sens-bar-container">
+        <div class="sens-bar-low" style="right: 50%; width: ${lowPct}%;"></div>
+        <div class="sens-bar-high" style="left: 50%; width: ${highPct}%;"></div>
+        <div class="sens-bar-center"></div>
+      </div>
+      <div class="sens-values">
+        <span>−30%: ${fmtZAR(lowDelta)}</span>
+        <span>base ${typeof s.baseValue === 'number' ? s.baseValue.toFixed(s.baseValue % 1 === 0 ? 0 : 1) : s.baseValue}</span>
+        <span>+30%: ${fmtZAR(highDelta)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ==========================================================================
+// COMPARE RENDER
+// ==========================================================================
+
+function renderCompare() {
+  const host = document.getElementById('compare-host');
+  if (scenarios.length < 1) {
+    host.innerHTML = '<p class="help-text">Save at least one scenario to begin comparing. Use the “Save current as scenario” button above, or “Save as…” in the top bar.</p>';
+    return;
+  }
+
+  // Compute current
+  const currentProj = compute12Month(inputs);
+  const currentM12 = currentProj.months[11];
+  const currentModel = computeModel(inputs, currentM12.paidCustomers);
+
+  // Build columns: current + last 2 saved scenarios
+  const cols = [];
+  cols.push({
+    name: 'Current (live)',
+    isCurrent: true,
+    m12: currentM12,
+    model: currentModel,
+    proj: currentProj,
+    inp: inputs,
+  });
+
+  scenarios.slice(-2).reverse().forEach(s => {
+    const p = compute12Month(s.inputs);
+    const mm = p.months[11];
+    cols.push({
+      name: s.name,
+      m12: mm,
+      model: computeModel(s.inputs, mm.paidCustomers),
+      proj: p,
+      inp: s.inputs,
+      id: s.id,
+    });
+  });
+
+  // Build comparison rows
+  const rowDefs = [
+    { label: 'Month-12 paying customers', get: c => c.m12.paidCustomers, fmt: v => v },
+    { label: 'Monthly revenue (m12)', get: c => c.m12.revenue, fmt: fmtZAR },
+    { label: 'Monthly cost (m12)', get: c => c.m12.cost, fmt: fmtZAR },
+    { label: 'Monthly profit (m12)', get: c => c.m12.profit, fmt: fmtZAR },
+    { label: 'Break-even month', get: c => c.proj.breakEvenMonth !== null ? `M${c.proj.breakEvenMonth}` : '>18mo', fmt: v => v },
+    { label: 'Gross margin', get: c => c.model.grossMargin, fmt: v => fmtPct(v) },
+    { label: 'Recon base price', get: c => c.inp.recon_base_price, fmt: fmtZAR },
+    { label: 'Insights price', get: c => c.inp.insights_price, fmt: fmtZAR },
+    { label: 'Insights uptake', get: c => c.inp.insights_uptake_pct, fmt: v => fmtPct(v, 0) },
+    { label: 'Reseller mix', get: c => c.inp.reseller_mix_pct, fmt: v => fmtPct(v, 0) },
+    { label: 'Reseller margin', get: c => c.inp.reseller_margin_pct, fmt: v => fmtPct(v, 0) },
+    { label: 'New customers/mo', get: c => c.inp.new_customers_per_month, fmt: v => v },
+  ];
+
+  const colsHtml = cols.map((c, i) => {
+    const rows = rowDefs.map(r => {
+      const val = r.get(c);
+      const baseVal = r.get(cols[0]);
+      let cls = '';
+      if (i > 0 && typeof val === 'number' && typeof baseVal === 'number' && val !== baseVal) {
+        // Direction depends on whether higher is better
+        const positiveDirection = ['Monthly revenue (m12)', 'Monthly profit (m12)', 'Month-12 paying customers', 'Gross margin'].includes(r.label);
+        if (val > baseVal) cls = positiveDirection ? 'up' : 'down';
+        else cls = positiveDirection ? 'down' : 'up';
+      }
+      return `<div class="compare-row">
+        <span class="compare-key">${r.label}</span>
+        <span class="compare-val ${cls}">${r.fmt(val)}</span>
+      </div>`;
+    }).join('');
+
+    const removeBtn = c.id ? `<button class="btn ghost danger" onclick="removeScenario('${c.id}')">Remove</button>` : '';
+
+    return `<div class="compare-col ${c.isCurrent ? 'current' : ''}">
+      <div class="compare-head">
+        <span>${c.name}</span>
+        ${removeBtn}
+      </div>
+      ${rows}
+    </div>`;
+  }).join('');
+
+  host.innerHTML = `<div class="compare-grid" style="grid-template-columns: repeat(${cols.length}, 1fr);">${colsHtml}</div>
+    <p class="help-text" style="margin-top: 16px;">The current live scenario sits in the left column. Up to two saved scenarios show alongside. Green/red marks improvements vs current for revenue/profit, deteriorations for costs.</p>`;
+}
+
+async function removeScenario(id) {
+  try {
+    const res = await fetch(`${SCENARIOS_API}/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+    if (!res.ok) throw new Error('delete failed');
+    await loadScenariosFromServer();
+    render();
+  } catch (e) {
+    console.error('Could not delete scenario:', e);
+    alert('Could not delete the scenario. Please try again.');
+  }
+}
+window.removeScenario = removeScenario;
+
+// ==========================================================================
+// ASSUMPTIONS RENDER (read-only summary of all inputs)
+// ==========================================================================
+
+function renderAssumptions() {
+  const host = document.getElementById('assumptions-host');
+  const sections = {
+    'Team & rates': [
+      ['Founder rate', fmtZAR(inputs.rate_founder) + '/hr'],
+      ['Engineering rate', fmtZAR(inputs.rate_engineering) + '/hr'],
+      ['Customer success rate', fmtZAR(inputs.rate_customer_success) + '/hr'],
+      ['Bookkeeping rate', fmtZAR(inputs.rate_bookkeeping) + '/hr'],
+      ['Founder baseline hrs/mo', inputs.hours_founder_baseline],
+      ['Engineering baseline hrs/mo', inputs.hours_engineering_baseline],
+      ['CS hrs / active customer / mo', inputs.hours_cs_per_customer_active],
+      ['CS hrs / onboarding', inputs.hours_cs_per_onboarding],
+      ['Bookkeeping baseline hrs/mo', inputs.hours_bookkeeping_baseline],
+      ['Bookkeeping hrs / customer / mo', inputs.hours_bookkeeping_per_customer],
+    ],
+    'Platform': [
+      ['Current tier', inputs.platform_tier],
+      ['Pilot tier cost', fmtZAR(inputs.platform_pilot_cost) + '/mo'],
+      ['Commercial tier cost', fmtZAR(inputs.platform_commercial_cost) + '/mo'],
+      ['Scale tier cost', fmtZAR(inputs.platform_scale_cost) + '/mo'],
+      ['Architecture rebuild', fmtZAR(inputs.architecture_rebuild_cost)],
+      ['Amortise over', inputs.architecture_amortise_months + ' months'],
+    ],
+    'Pricing': [
+      ['Recon base price', fmtZAR(inputs.recon_base_price) + '/mo'],
+      ['Sites included in base', inputs.recon_sites_included],
+      ['Per-site add-on', fmtZAR(inputs.recon_per_site_addon) + '/mo'],
+      ['Insights price', fmtZAR(inputs.insights_price) + '/mo'],
+      ['Insights uptake', inputs.insights_uptake_pct + '%'],
+    ],
+    'Segments': [
+      [inputs.seg1_name, `${inputs.seg1_mix_pct}% · ${inputs.seg1_avg_sites} sites · ${inputs.seg1_monthly_churn_pct}% churn`],
+      [inputs.seg2_name, `${inputs.seg2_mix_pct}% · ${inputs.seg2_avg_sites} sites · ${inputs.seg2_monthly_churn_pct}% churn`],
+      [inputs.seg3_name, `${inputs.seg3_mix_pct}% · ${inputs.seg3_avg_sites} sites · ${inputs.seg3_monthly_churn_pct}% churn`],
+    ],
+    'Acquisition & growth': [
+      ['Hours to close / customer', inputs.hours_per_customer_close],
+      ['Conversion rate', inputs.conversion_rate_pct + '%'],
+      ['Reseller mix', inputs.reseller_mix_pct + '%'],
+      ['Reseller margin', inputs.reseller_margin_pct + '%'],
+      ['Marketing / press / mo', fmtZAR(inputs.marketing_press_monthly)],
+      ['Starting customers', inputs.starting_customers],
+      ['New customers / mo', inputs.new_customers_per_month],
+      ['Pilot period', inputs.pilot_period_months + ' months'],
+      ['Pilot → paid conversion', inputs.pilot_to_paid_conversion_pct + '%'],
+    ],
+    'PDF extraction': [
+      ['Pricing model', inputs.pdf_pricing_model],
+      ['Per-doc price', fmtZAR(inputs.pdf_per_doc_price)],
+      ['Tier price', fmtZAR(inputs.pdf_tier_price) + '/mo'],
+      ['Tier docs included', inputs.pdf_tier_docs_included],
+      ['Docs / active customer / mo', inputs.pdf_docs_per_active_customer],
+      ['% of customers using PDF', inputs.pdf_active_customer_pct + '%'],
+      ['Input tokens / doc', inputs.pdf_avg_input_tokens_per_doc.toLocaleString()],
+      ['Output tokens / doc', inputs.pdf_avg_output_tokens_per_doc.toLocaleString()],
+      ['ZAR / USD', inputs.pdf_zar_usd],
+    ],
+  };
+
+  host.innerHTML = Object.entries(sections).map(([sec, rows]) => {
+    return `<div style="margin-bottom: 32px;">
+      <div class="section-head">${sec}</div>
+      ${rows.map(([k, v]) => `<div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line-2); font-size: 13px;">
+        <span style="color: var(--ink-3);">${k}</span>
+        <span class="mono">${v}</span>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ==========================================================================
+// PANEL RENDERING
+// ==========================================================================
+
+function renderPanelBody(panelKey) {
+  const fields = FIELD_DEFS[panelKey];
+  const host = document.getElementById(`panel-body-${panelKey}`);
+  if (!host || !fields) return;
+
+  host.innerHTML = fields.map(f => {
+    if (f.section) {
+      return `<div class="section-head">${f.section}</div>`;
+    }
+    return renderField(f);
+  }).join('');
+
+  // Bind events
+  fields.forEach(f => {
+    if (f.section) return;
+    if (f.type === 'stack_select') {
+      ['pilot', 'commercial', 'scale'].forEach(tier => {
+        const el = host.querySelector(`[data-tier="${tier}"]`);
+        if (el) el.addEventListener('click', () => {
+          inputs.platform_tier = tier;
+          renderPanelBody(panelKey);
+          render();
+        });
+      });
+    } else if (f.type === 'select' || f.type === 'text') {
+      const el = host.querySelector(`[data-key="${f.key}"]`);
+      if (el) el.addEventListener('change', () => {
+        inputs[f.key] = el.value;
+        if (f.type === 'select') {
+          // Re-render panel for conditional fields
+          renderPanelBody(panelKey);
+        }
+        render();
+      });
+    } else {
+      // Range slider
+      const range = host.querySelector(`[data-key="${f.key}"][type="range"]`);
+      const display = host.querySelector(`[data-key-display="${f.key}"]`);
+      if (range) {
+        range.addEventListener('input', () => {
+          const v = parseFloat(range.value);
+          inputs[f.key] = v;
+          display.textContent = formatFieldValue(f, v);
+          render();
+        });
+      }
+    }
+  });
+}
+
+function renderField(f) {
+  if (f.type === 'stack_select') {
+    return `<div class="stack-selector">
+      <div class="stack-option ${inputs.platform_tier === 'pilot' ? 'selected' : ''}" data-tier="pilot">
+        <div class="stack-option-name">Pilot</div>
+        <div class="stack-option-price">${fmtZAR(inputs.platform_pilot_cost)}/mo</div>
+      </div>
+      <div class="stack-option ${inputs.platform_tier === 'commercial' ? 'selected' : ''}" data-tier="commercial">
+        <div class="stack-option-name">Commercial</div>
+        <div class="stack-option-price">${fmtZAR(inputs.platform_commercial_cost)}/mo</div>
+      </div>
+      <div class="stack-option ${inputs.platform_tier === 'scale' ? 'selected' : ''}" data-tier="scale">
+        <div class="stack-option-name">Scale</div>
+        <div class="stack-option-price">${fmtZAR(inputs.platform_scale_cost)}/mo</div>
+      </div>
+    </div>
+    ${f.hint ? `<div class="field-hint" style="margin-top: 8px;">${f.hint}</div>` : ''}`;
+  }
+
+  if (f.type === 'select') {
+    return `<div class="field">
+      <div class="field-row"><span class="field-label">${f.label}</span></div>
+      <select data-key="${f.key}">
+        ${f.options.map(o => `<option value="${o.value}" ${inputs[f.key] === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+      </select>
+      ${f.hint ? `<div class="field-hint">${f.hint}</div>` : ''}
+    </div>`;
+  }
+
+  if (f.type === 'text') {
+    return `<div class="field">
+      <div class="field-row"><span class="field-label">${f.label}</span></div>
+      <input type="text" data-key="${f.key}" value="${inputs[f.key]}">
+    </div>`;
+  }
+
+  // Range slider
+  const v = inputs[f.key];
+  return `<div class="field">
+    <div class="field-row">
+      <span class="field-label">${f.label}</span>
+      <span class="field-value" data-key-display="${f.key}">${formatFieldValue(f, v)}</span>
+    </div>
+    <input type="range" data-key="${f.key}" min="${f.min}" max="${f.max}" step="${f.step}" value="${v}">
+    ${f.hint ? `<div class="field-hint">${f.hint}</div>` : ''}
+  </div>`;
+}
+
+function formatFieldValue(f, v) {
+  if (f.prefix === 'R') return fmtZAR(v);
+  if (f.prefix === '$') return `$${v.toFixed(v < 1 ? 2 : 1)}`;
+  if (f.suffix === '%') return `${v}%`;
+  if (f.suffix === 'hrs') return `${v} hrs`;
+  if (f.suffix === 'sites') return `${v} site${v !== 1 ? 's' : ''}`;
+  if (f.suffix === 'mo') return `${v} mo`;
+  if (f.suffix === 'docs') return `${v} docs`;
+  if (f.suffix === 'tok') return v.toLocaleString();
+  if (f.suffix) return `${v} ${f.suffix}`;
+  return v;
+}
+
+// ==========================================================================
+// PANEL OPEN/CLOSE
+// ==========================================================================
+
+function openSlidePanel(key) {
+  closeAllPanels();
+  const panel = document.getElementById(`panel-${key}`);
+  const overlay = document.getElementById('overlay');
+  if (panel) {
+    if (key !== 'save') renderPanelBody(key);
+    panel.classList.add('open');
+    overlay.classList.add('open');
+    openPanel = key;
+  }
+}
+
+function closeAllPanels() {
+  document.querySelectorAll('.slide-panel').forEach(p => p.classList.remove('open'));
+  document.getElementById('overlay').classList.remove('open');
+  openPanel = null;
+}
+
+// ==========================================================================
+// TAB SWITCHING
+// ==========================================================================
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+  document.getElementById(`tab-${tab}`).classList.remove('hidden');
+  currentTab = tab;
+  // Re-render to make sure canvas dimensions are correct now that the tab is visible
+  if (tab === 'projection') {
+    // Use requestAnimationFrame to ensure layout completes before measuring
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const proj = compute12Month(inputs);
+        renderProjection(proj);
+      });
+    });
+  }
+}
+
+// ==========================================================================
+// SCENARIO MGMT
+// ==========================================================================
+
+function refreshScenarioSelect() {
+  const sel = document.getElementById('scenario-select');
+  sel.innerHTML = '<option value="default">Working scenario</option>' +
+    scenarios.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+async function saveCurrentScenario(name) {
+  try {
+    const res = await fetch(SCENARIOS_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ name, inputs }),
+    });
+    if (!res.ok) throw new Error('save failed');
+    await loadScenariosFromServer();
+    render();
+  } catch (e) {
+    console.error('Could not save scenario:', e);
+    alert('Could not save the scenario. Please try again.');
+  }
+}
+
+// ==========================================================================
+// EXPORT CSV
+// ==========================================================================
+
+function exportCsv() {
+  const proj = compute12Month(inputs);
+  const lines = [];
+
+  lines.push('# Lekana viability model — export');
+  lines.push('# Generated: ' + new Date().toISOString());
+  lines.push('');
+
+  // Inputs section
+  lines.push('## Inputs');
+  lines.push('Key,Value');
+  Object.entries(inputs).forEach(([k, v]) => lines.push(`${k},"${v}"`));
+  lines.push('');
+
+  // 12-month projection
+  lines.push('## 12-month projection');
+  lines.push('Month,Pilot customers,Paid customers,Revenue (ZAR),Cost (ZAR),Profit (ZAR),Cumulative (ZAR)');
+  proj.months.forEach(m => {
+    lines.push(`${m.monthIndex},${m.pilotCustomers},${m.paidCustomers},${Math.round(m.revenue)},${Math.round(m.cost)},${Math.round(m.profit)},${Math.round(m.cumulative)}`);
+  });
+  lines.push('');
+
+  // Scenarios
+  if (scenarios.length > 0) {
+    lines.push('## Saved scenarios');
+    lines.push('Name,Saved at,Month-12 revenue,Month-12 cost,Month-12 profit,Break-even month');
+    scenarios.forEach(s => {
+      const p = compute12Month(s.inputs);
+      const m12 = p.months[11];
+      lines.push(`"${s.name}","${s.savedAt}",${Math.round(m12.revenue)},${Math.round(m12.cost)},${Math.round(m12.profit)},${p.breakEvenMonth !== null ? p.breakEvenMonth : '>18'}`);
+    });
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lekana-viability-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ==========================================================================
+// EVENT WIRING
+// ==========================================================================
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => switchTab(t.dataset.tab));
+});
+
+document.querySelectorAll('[data-open]').forEach(b => {
+  b.addEventListener('click', () => openSlidePanel(b.dataset.open));
+});
+
+document.querySelectorAll('[data-close]').forEach(b => {
+  b.addEventListener('click', closeAllPanels);
+});
+
+document.getElementById('overlay').addEventListener('click', closeAllPanels);
+
+document.getElementById('save-scenario').addEventListener('click', () => openSlidePanel('save'));
+document.getElementById('save-scenario-2').addEventListener('click', () => openSlidePanel('save'));
+
+document.getElementById('save-scenario-confirm').addEventListener('click', () => {
+  const name = document.getElementById('scenario-name-input').value.trim();
+  if (!name) {
+    alert('Please give the scenario a name');
+    return;
+  }
+  saveCurrentScenario(name);
+  document.getElementById('scenario-name-input').value = '';
+  closeAllPanels();
+});
+
+document.getElementById('reset-scenario').addEventListener('click', () => {
+  if (confirm('Reset all inputs to defaults? Saved scenarios will be kept.')) {
+    inputs = { ...DEFAULT_INPUTS };
+    saveInputs();
+    render();
+  }
+});
+
+document.getElementById('export-csv').addEventListener('click', exportCsv);
+
+// Preset dropdown — load preset configurations
+document.getElementById('preset-select').addEventListener('change', (e) => {
+  const v = e.target.value;
+  if (!v) return;
+
+  let presetInputs, presetDescription;
+  if (v === 'defaults') {
+    presetInputs = { ...DEFAULT_INPUTS };
+    presetDescription = 'Reset all inputs to calculator defaults (R 850 base, 30% Insights uptake, 50% single-site mix). The honest baseline — does not break even within 18 months.';
+  } else if (PRESETS[v]) {
+    const preset = PRESETS[v];
+    presetInputs = { ...DEFAULT_INPUTS, ...preset.inputs };
+    presetDescription = preset.description;
+  } else {
+    e.target.value = '';
+    return;
+  }
+
+  if (confirm(`Load preset?\n\n${presetDescription}\n\nYour current working inputs will be replaced. (Use "Save as…" first if you want to keep them.)`)) {
+    inputs = presetInputs;
+    saveInputs();
+    render();
+  }
+  e.target.value = '';
+});
+
+document.getElementById('scenario-select').addEventListener('change', (e) => {
+  const v = e.target.value;
+  if (v === 'default') return;
+  const s = scenarios.find(x => x.id === v);
+  if (s) {
+    if (confirm(`Load scenario "${s.name}"? Your current working inputs will be replaced (you can save them first via "Save as…" if needed).`)) {
+      inputs = { ...s.inputs };
+      saveInputs();
+      render();
+    }
+    e.target.value = 'default';
+  }
+});
+
+// Resize handler for canvas
+window.addEventListener('resize', () => {
+  if (currentTab === 'projection') render();
+});
+
+// Initial render
+refreshScenarioSelect();
+render();
+loadScenariosFromServer();
+</script>
+
+</body>
+</html>

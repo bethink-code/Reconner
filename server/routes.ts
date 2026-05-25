@@ -4,6 +4,9 @@ import { createHash } from "crypto";
 import multer from "multer";
 import { setupAuth } from "./auth";
 import { registerAccountRoutes } from "./accountRoutes";
+import { registerAdminRoutes } from "./adminRoutes";
+import { registerOrganizationRoutes } from "./organizationRoutes";
+import { registerPricingRoutes } from "./pricingRoutes";
 import { registerExportRoutes } from "./exportRoutes";
 import { registerFilePreparationRoutes } from "./filePreparationRoutes";
 import { registerFileWorkflowRoutes } from "./fileWorkflowRoutes";
@@ -28,6 +31,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
 
   registerAccountRoutes(app);
+  registerAdminRoutes(app);
+  registerOrganizationRoutes(app);
+  registerPricingRoutes(app);
   registerExportRoutes(app);
   registerFilePreparationRoutes(app);
   registerFileWorkflowRoutes(app, upload, computeContentHash);

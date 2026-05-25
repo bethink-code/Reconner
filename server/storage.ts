@@ -22,6 +22,8 @@ import {
   type OrgRole,
   type Property,
   type InsertProperty,
+  type PricingScenario,
+  type InsertPricingScenario,
   users,
   reconciliationPeriods,
   uploadedFiles,
@@ -33,7 +35,8 @@ import {
   accessRequests,
   organizations,
   organizationMembers,
-  properties
+  properties,
+  pricingScenarios
 } from "../shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -242,6 +245,11 @@ export interface IStorage {
   updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property | undefined>;
   deleteProperty(id: string): Promise<void>;
 
+  // Pricing / viability scenarios (internal, platform-owner only, shared)
+  getPricingScenarios(): Promise<PricingScenario[]>;
+  createPricingScenario(data: InsertPricingScenario): Promise<PricingScenario>;
+  deletePricingScenario(id: string): Promise<void>;
+
   getPeriods(orgId: string, propertyId?: string): Promise<ReconciliationPeriod[]>;
   getPeriod(id: string): Promise<ReconciliationPeriod | undefined>;
   createPeriod(period: InsertReconciliationPeriod): Promise<ReconciliationPeriod>;
@@ -439,6 +447,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOrganization(id: string): Promise<void> {
     await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  // Pricing / viability scenarios — shared across platform owners, newest first.
+  async getPricingScenarios(): Promise<PricingScenario[]> {
+    return await db.select().from(pricingScenarios).orderBy(desc(pricingScenarios.createdAt));
+  }
+
+  async createPricingScenario(data: InsertPricingScenario): Promise<PricingScenario> {
+    const [scenario] = await db.insert(pricingScenarios).values(data).returning();
+    return scenario;
+  }
+
+  async deletePricingScenario(id: string): Promise<void> {
+    await db.delete(pricingScenarios).where(eq(pricingScenarios.id, id));
   }
 
   // Organization members. Filters out archived orgs by default — users should never

@@ -365,6 +365,25 @@ export const aiUsage = pgTable("ai_usage", {
 
 export type AiUsageRecord = typeof aiUsage.$inferSelect;
 
+// Pricing / viability scenarios — internal Bethink tooling, shared across the
+// platform owners (Garth + Pieter). Deliberately NOT tenant-scoped: this is
+// company strategy data, gated behind isPlatformOwner and never exposed to a
+// customer org. `inputs` holds the full model input set (DEFAULT_INPUTS shape).
+export const pricingScenarios = pgTable("pricing_scenarios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  inputs: jsonb("inputs").notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdByEmail: text("created_by_email"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_pricing_scenarios_created_at").on(table.createdAt),
+]);
+
+export type PricingScenario = typeof pricingScenarios.$inferSelect;
+export type InsertPricingScenario = typeof pricingScenarios.$inferInsert;
+
 // Resolution reason options
 export const RESOLUTION_REASONS = [
   { value: "attendant_overfill", label: "Attendant error / overfill" },

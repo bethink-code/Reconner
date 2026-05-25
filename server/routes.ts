@@ -16,6 +16,7 @@ import { registerReconciliationReadRoutes } from "./reconciliationReadRoutes";
 import { registerReconciliationWriteRoutes } from "./reconciliationWriteRoutes";
 import { registerRequestAccessRoutes } from "./requestAccessRoutes";
 import { registerContactRoutes } from "./contactRoutes";
+import { registerPilotApplicationRoutes } from "./pilotApplicationRoutes";
 
 function computeContentHash(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -44,6 +45,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerReconciliationWriteRoutes(app);
   registerRequestAccessRoutes(app);
   registerContactRoutes(app);
+  registerPilotApplicationRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

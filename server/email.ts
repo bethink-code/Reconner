@@ -28,6 +28,14 @@ const contactNotificationTemplate = readFileSync(
   join(TEMPLATE_DIR, "contact-notification.html"),
   "utf8",
 );
+const pilotConfirmationTemplate = readFileSync(
+  join(TEMPLATE_DIR, "pilot-application-confirmation.html"),
+  "utf8",
+);
+const pilotNotificationTemplate = readFileSync(
+  join(TEMPLATE_DIR, "pilot-application-notification.html"),
+  "utf8",
+);
 
 const HTML_ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -51,6 +59,22 @@ export function encodeHeaderWord(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
 }
 
+/** Submission timestamp in the business's timezone, for owner notifications. */
+function johannesburgTimestamp(): string {
+  return new Date().toLocaleString("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+}
+
+/** Render submitted [question, answer] pairs into the notification {{RESPONSE}} block. */
+function renderAnswers(answers: ReadonlyArray<readonly [string, string]>): string {
+  return answers
+    .map(([question, answer]) => `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`)
+    .join("<br/><br/>");
+}
+
 export interface AccessRequest {
   name: string;
   email: string;
@@ -67,29 +91,14 @@ export function buildAccessRequestConfirmation(request: AccessRequest): string {
 
 /** Owner-facing notification carrying the submitted request. */
 export function buildAccessRequestNotification(request: AccessRequest): string {
-  const received = new Date().toLocaleString("en-ZA", {
-    timeZone: "Africa/Johannesburg",
-    dateStyle: "long",
-    timeStyle: "short",
-  });
-
-  const answers: ReadonlyArray<readonly [string, string]> = [
-    ["Name", request.name],
-    ["Email", request.email],
-    ["Cell (for WhatsApp)", request.cell],
-    ["Business and number of sites", request.business || "(not given)"],
-  ];
-
-  const response = answers
-    .map(
-      ([question, answer]) =>
-        `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`,
-    )
-    .join("<br/><br/>");
-
   return render(notificationTemplate, {
-    LEAD_DATE: escapeHtml(received),
-    RESPONSE: response,
+    LEAD_DATE: escapeHtml(johannesburgTimestamp()),
+    RESPONSE: renderAnswers([
+      ["Name", request.name],
+      ["Email", request.email],
+      ["Cell (for WhatsApp)", request.cell],
+      ["Business and number of sites", request.business || "(not given)"],
+    ]),
   });
 }
 
@@ -110,28 +119,50 @@ export function buildContactConfirmation(contact: ContactMessage): string {
 
 /** Owner-facing notification carrying the submitted contact message. */
 export function buildContactNotification(contact: ContactMessage): string {
-  const received = new Date().toLocaleString("en-ZA", {
-    timeZone: "Africa/Johannesburg",
-    dateStyle: "long",
-    timeStyle: "short",
-  });
-
-  const answers: ReadonlyArray<readonly [string, string]> = [
-    ["Name", contact.name],
-    ["Email", contact.email],
-    ["Message", contact.message],
-  ];
-
-  const response = answers
-    .map(
-      ([question, answer]) =>
-        `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`,
-    )
-    .join("<br/><br/>");
-
   return render(contactNotificationTemplate, {
-    LEAD_DATE: escapeHtml(received),
-    RESPONSE: response,
+    LEAD_DATE: escapeHtml(johannesburgTimestamp()),
+    RESPONSE: renderAnswers([
+      ["Name", contact.name],
+      ["Email", contact.email],
+      ["Message", contact.message],
+    ]),
+  });
+}
+
+// --- Pilot applications ------------------------------------------------------
+
+export interface PilotApplication {
+  name: string;
+  business: string;
+  email: string;
+  cell: string;
+  sites: number;
+  posSystem: string;
+  banks: string[];
+  successDefinition: string;
+}
+
+/** Applicant-facing auto-reply confirming the pilot application was received. */
+export function buildPilotApplicationConfirmation(application: PilotApplication): string {
+  return render(pilotConfirmationTemplate, {
+    CLIENT_NAME: escapeHtml(application.name),
+  });
+}
+
+/** Owner-facing notification carrying the submitted pilot application. */
+export function buildPilotApplicationNotification(application: PilotApplication): string {
+  return render(pilotNotificationTemplate, {
+    LEAD_DATE: escapeHtml(johannesburgTimestamp()),
+    RESPONSE: renderAnswers([
+      ["Name", application.name],
+      ["Business", application.business],
+      ["Email", application.email],
+      ["Cell (for WhatsApp)", application.cell],
+      ["Number of sites", String(application.sites)],
+      ["POS / fuel management system", application.posSystem],
+      ["Banks", application.banks.join(", ")],
+      ["What success looks like", application.successDefinition],
+    ]),
   });
 }
 

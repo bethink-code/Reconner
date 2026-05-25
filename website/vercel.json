@@ -1,4 +1,16 @@
 {
+  "buildCommand": "node build.mjs",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.lekana.app" }],
+      "destination": "https://lekana.app/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/request-access",
@@ -7,6 +19,10 @@
     {
       "source": "/api/contact",
       "destination": "https://work.lekana.app/api/contact"
+    },
+    {
+      "source": "/api/pilot-application",
+      "destination": "https://work.lekana.app/api/pilot-application"
     }
   ],
   "headers": [
@@ -14,12 +30,6 @@
       "source": "/assets/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
-      "source": "/(index.html)?",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache" }
       ]
     },
     {

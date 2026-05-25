@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TITLE}}</title>
+<meta name="description" content="{{DESCRIPTION}}">
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+<link rel="canonical" href="{{CANONICAL}}">
+<meta name="theme-color" content="#F5C400">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{TITLE}}">
+<meta property="og:description" content="{{DESCRIPTION}}">
+<meta property="og:url" content="{{CANONICAL}}">
+<meta property="og:image" content="{{OG_IMAGE}}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{TITLE}}">
+<meta name="twitter:description" content="{{DESCRIPTION}}">
+<meta name="twitter:image" content="{{OG_IMAGE}}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600&family=Figtree:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+{{HEAD_EXTRA}}
+</head>
+<body>
+<a class="visually-hidden" href="#main">Skip to content</a>
+{{NAV}}
+<main id="main">
+{{BODY}}
+</main>
+{{FOOTER}}
+<script>
+  // Mobile nav overlay toggle
+  (function () {
+    var overlay = document.querySelector('[data-nav-overlay]');
+    if (!overlay) return;
+    function open() { overlay.classList.add('open'); document.body.style.overflow = 'hidden'; }
+    function close() { overlay.classList.remove('open'); document.body.style.overflow = ''; }
+    document.querySelectorAll('[data-nav-open]').forEach(function (b) { b.addEventListener('click', open); });
+    document.querySelectorAll('[data-nav-close]').forEach(function (b) { b.addEventListener('click', close); });
+  })();
+</script>
+</body>
+</html>

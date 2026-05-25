@@ -41,14 +41,27 @@ export default function Landing() {
         throw new Error();
       }
     } catch {
-      alert("Something went wrong — please try again or email garth@bethink.co.za directly.");
+      alert("Something went wrong — please try again or email pieter@bethink.co.za directly.");
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Field styling shared across the request inputs (cream fill, 12px radius, dark focus).
+  const inputClass = (hasError: boolean) =>
+    `bg-[#F5EDE6] border ${hasError ? "border-red-500" : "border-transparent"} rounded-xl px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/30 outline-none focus:border-[#1A1200] transition-colors w-full`;
+  const labelClass = "font-heading font-semibold text-[13px] text-[#1A1200]";
+
   return (
-    <div className="min-h-screen bg-[#F5C400] flex flex-col items-center justify-center px-4 py-10">
+    <div className="relative min-h-screen bg-[#F5C400] flex flex-col items-center justify-center px-4 py-10">
+      {/* Back to the marketing site */}
+      <a
+        href="https://lekana.app"
+        className="absolute top-6 left-6 inline-flex items-center gap-1.5 text-[14px] text-[#1A1200]/70 hover:text-[#1A1200] transition-colors no-underline"
+      >
+        <span aria-hidden="true">&larr;</span> Back to lekana.app
+      </a>
+
       {/* Centered content group */}
       <div className="flex flex-col items-center">
       {/* Brand */}
@@ -79,7 +92,7 @@ export default function Landing() {
               Welcome!
             </p>
             <p className="text-[13px] text-[#1A1200] text-center mb-6 leading-relaxed">
-              Sign in if you have access, or send us a request and we'll get you set up.
+              Sign in if you have access, or apply for the pilot and we'll get you set up.
             </p>
 
             {notInvited && (
@@ -88,14 +101,14 @@ export default function Landing() {
                   Your account hasn't been invited yet.
                 </p>
                 <p className="text-xs text-red-600 mt-0.5">
-                  Request an invite below, or contact your administrator.
+                  Apply for the pilot below, or contact your administrator.
                 </p>
               </div>
             )}
 
             <a
               href="/api/login"
-              className="w-full flex items-center justify-center gap-2.5 bg-background text-[#1A1200] border border-[#E5E3DC] rounded-lg px-4 py-3 font-medium text-sm hover:bg-[#ECEAE6] transition-colors"
+              className="w-full flex items-center justify-center gap-2.5 bg-[#1A1200] text-[#F5EDE6] rounded-xl px-4 py-3 font-medium text-sm hover:bg-black transition-colors"
               data-testid="button-login"
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -109,67 +122,61 @@ export default function Landing() {
 
             <button
               onClick={flip}
-              className="block w-full mt-5 text-[13px] text-[#1A1200]/40 text-center hover:text-[#1A1200]/70 transition-colors bg-transparent border-none cursor-pointer"
+              className="block w-full mt-5 text-[13px] text-[#1A1200]/55 text-center hover:text-[#1A1200] transition-colors bg-transparent border-none cursor-pointer"
             >
-              Need access? <span className="underline underline-offset-2">Request an invite</span>
+              Want access? <span className="underline underline-offset-2">Apply for the pilot</span>
             </button>
           </div>
         ) : !submitted ? (
           <div key="request" className="w-full bg-white rounded-xl px-8 py-8" style={{ animation: "fadeSlideIn 0.2s ease-out" }}>
             <p className="font-heading font-semibold text-lg text-[#1A1200] mb-1.5">
-              Request an invite
+              Apply for the pilot
             </p>
             <p className="text-[13px] text-[#1A1200] mb-6 leading-relaxed">
-              Tell us where we can get hold of you and we'll be in touch.
+              Tell us where to reach you and Pieter will be in touch on WhatsApp.
             </p>
 
             <div className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1.5">
-                <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
-                  Full name
-                </label>
+                <label className={labelClass}>Your name</label>
                 <input
                   type="text"
                   placeholder="Your name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className={`bg-background border ${errors.name ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                  className={inputClass(!!errors.name)}
                 />
-                {errors.name && <span className="text-[11px] text-red-600">Please enter your name</span>}
+                {errors.name && <span className="text-[12px] text-red-600">Please enter your name</span>}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
-                  Email address
-                </label>
+                <label className={labelClass}>Email address</label>
                 <input
                   type="email"
                   placeholder="you@yourcompany.co.za"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={`bg-background border ${errors.email ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                  className={inputClass(!!errors.email)}
                 />
-                {errors.email && <span className="text-[11px] text-red-600">Please enter a valid email address</span>}
+                {errors.email && <span className="text-[12px] text-red-600">Please enter a valid email address</span>}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="font-heading font-semibold text-[10px] uppercase tracking-wider text-[#1A1200]">
-                  Cell number
-                </label>
+                <label className={labelClass}>Cell number</label>
                 <input
                   type="tel"
                   placeholder="+27 82 000 0000"
                   value={formData.cell}
                   onChange={(e) => setFormData({ ...formData, cell: e.target.value })}
-                  className={`bg-background border ${errors.cell ? "border-red-500" : "border-[#1A1200]/12"} rounded-lg px-3.5 py-2.5 text-sm text-[#1A1200] placeholder:text-[#1A1200]/25 outline-none focus:border-[#1A1200]/40 transition-colors w-full`}
+                  className={inputClass(!!errors.cell)}
                 />
-                {errors.cell && <span className="text-[11px] text-red-600">Please enter your cell number</span>}
+                {errors.cell && <span className="text-[12px] text-red-600">Please enter your cell number</span>}
               </div>
 
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="w-full mt-2 flex items-center justify-center gap-2.5 bg-[#FC6722] text-white rounded-lg px-4 py-3 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full mt-2 flex items-center justify-center gap-2.5 bg-[#FC6722] text-white rounded-xl px-4 py-3 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>
@@ -177,14 +184,14 @@ export default function Landing() {
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   </>
                 ) : (
-                  "Send request"
+                  "Send application"
                 )}
               </button>
             </div>
 
             <button
               onClick={flip}
-              className="block w-full mt-5 text-[13px] text-[#1A1200]/40 text-center hover:text-[#1A1200]/70 transition-colors bg-transparent border-none cursor-pointer"
+              className="block w-full mt-5 text-[13px] text-[#1A1200]/55 text-center hover:text-[#1A1200] transition-colors bg-transparent border-none cursor-pointer"
             >
               Already have access? <span className="underline underline-offset-2">Sign in</span>
             </button>
@@ -192,14 +199,14 @@ export default function Landing() {
         ) : (
           <div key="success" className="w-full bg-white rounded-xl px-8 py-8" style={{ animation: "fadeSlideIn 0.2s ease-out" }}>
             <div className="flex flex-col items-center text-center gap-3 py-3">
-              <div className="w-11 h-11 rounded-full bg-background flex items-center justify-center">
+              <div className="w-11 h-11 rounded-full bg-[#F5EDE6] flex items-center justify-center">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M3 10.5L8 15.5L17 5.5" stroke="#1A1200" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              <p className="font-heading font-semibold text-[17px] text-[#1A1200]">Request sent</p>
-              <p className="text-[13px] font-light text-[#1A1200]/50 leading-relaxed">
-                Thanks! We'll be in touch on WhatsApp shortly.
+              <p className="font-heading font-semibold text-[17px] text-[#1A1200]">Application received</p>
+              <p className="text-[13px] font-light text-[#1A1200]/55 leading-relaxed">
+                Thanks! Pieter will be in touch on WhatsApp shortly.
               </p>
             </div>
           </div>

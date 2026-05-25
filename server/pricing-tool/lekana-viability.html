@@ -724,6 +724,7 @@
   /* ====== UTILITY ====== */
   .hidden { display: none !important; }
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .assumptions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
   .small-caps { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 500; }
   .help-text { font-size: 12px; color: var(--ink-3); line-height: 1.5; }
   .swap-link { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; font-family: inherit; padding: 0; }
@@ -765,6 +766,7 @@
   @media (max-width: 900px) {
     .metric-grid { grid-template-columns: repeat(2, 1fr); }
     .row-2 { grid-template-columns: 1fr; }
+    .assumptions-grid { grid-template-columns: 1fr; }
     .sensitivity-grid { grid-template-columns: 1fr; }
     .compare-grid { grid-template-columns: 1fr; }
     .workspace { padding: 20px; }
@@ -1815,6 +1817,32 @@ function renderSummary() {
     leverLine = `Biggest lever: <strong>${lever.label}</strong> — a &plusmn;30% move swings month-12 profit by ${fmtZAR(Math.abs(lever.highProfit - lever.lowProfit))}/mo. ${pushUp ? 'Push it up.' : 'Bring it down.'}`;
   }
 
+  // Assumptions behind the numbers — who we sell to, what we charge, what it costs.
+  const churns = [inputs.seg1_monthly_churn_pct, inputs.seg2_monthly_churn_pct, inputs.seg3_monthly_churn_pct];
+  const segLines = model.segNames.map((nm, i) => {
+    const mix = Math.round(model.segMix[i] * 100);
+    const sites = model.segAvgSites[i];
+    return `<li><strong>${mix}%</strong> ${nm} — ${sites} site${sites > 1 ? 's' : ''} avg, ${churns[i]}% churn</li>`;
+  }).join('');
+
+  const pdfModel = inputs.pdf_pricing_model === 'per_doc'
+    ? `${fmtZAR(inputs.pdf_per_doc_price)}/doc`
+    : inputs.pdf_pricing_model === 'tier'
+      ? `${fmtZAR(inputs.pdf_tier_price)}/mo (${inputs.pdf_tier_docs_included} docs incl.)`
+      : 'bundled with Insights';
+
+  const pricingLines = `
+    <li>Recon: <strong>${fmtZAR(inputs.recon_base_price)}</strong>/mo (incl. ${inputs.recon_sites_included} site${inputs.recon_sites_included > 1 ? 's' : ''}), +${fmtZAR(inputs.recon_per_site_addon)}/extra site</li>
+    <li>Insights: <strong>${fmtZAR(inputs.insights_price)}</strong>/mo — ${inputs.insights_uptake_pct}% take it</li>
+    <li>PDF extraction: ${pdfModel}</li>`;
+
+  const costLines = `
+    <li>People: <strong>${fmtZAR(model.cost.people)}</strong>/mo</li>
+    <li>Platform: ${fmtZAR(model.cost.platform)}/mo (${inputs.platform_tier} tier)</li>
+    <li>AI / PDF: ${fmtZAR(model.cost.pdf)}/mo</li>
+    <li>Marketing: ${fmtZAR(model.cost.marketing)}/mo</li>
+    <li>Cost per customer: <strong>${fmtZAR(model.unit.costPerCustomer)}</strong>/mo</li>`;
+
   host.innerHTML = `
     <div class="warning-banner ${viable ? 'positive' : ''}">
       <span class="warning-icon">${viable ? '✓' : '!'}</span>
@@ -1828,6 +1856,23 @@ function renderSummary() {
       <div class="metric"><div class="metric-label">Month-12 cost</div><div class="metric-value mono">${fmtZAR(m12.cost)}</div><div class="metric-sub">people ${fmtZAR(model.cost.people)}/mo</div></div>
       <div class="metric"><div class="metric-label">Month-12 profit</div><div class="metric-value mono ${m12.profit >= 0 ? 'positive' : 'danger'}">${fmtZAR(m12.profit)}</div><div class="metric-sub">${fmtPct(netMargin)} margin</div></div>
       <div class="metric"><div class="metric-label">Break even</div><div class="metric-value mono ${be !== null ? 'positive' : 'danger'}">${be !== null ? 'month ' + be : 'never'}</div><div class="metric-sub">year-1 cash ${fmtZAR(yearOneCash)}</div></div>
+    </div>
+    <div class="panel">
+      <div class="small-caps" style="margin-bottom:14px;">What this scenario assumes</div>
+      <div class="assumptions-grid">
+        <div>
+          <div class="serif" style="font-size:15px;margin-bottom:8px;">Business mix</div>
+          <ul style="margin:0;padding-left:16px;line-height:1.7;font-size:13px;">${segLines}</ul>
+        </div>
+        <div>
+          <div class="serif" style="font-size:15px;margin-bottom:8px;">Pricing</div>
+          <ul style="margin:0;padding-left:16px;line-height:1.7;font-size:13px;">${pricingLines}</ul>
+        </div>
+        <div>
+          <div class="serif" style="font-size:15px;margin-bottom:8px;">Cost model</div>
+          <ul style="margin:0;padding-left:16px;line-height:1.7;font-size:13px;">${costLines}</ul>
+        </div>
+      </div>
     </div>
     <div class="row-2" style="margin-top:8px;">
       <div class="panel">

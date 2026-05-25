@@ -213,7 +213,7 @@ p { margin: 0 0 16px; }
   color: var(--lk-cream);
 }
 .band-dark h2, .band-dark h3 { color: var(--lk-cream); }
-.band-dark a { color: var(--lk-cream); }
+.band-dark a:not(.btn) { color: var(--lk-cream); }
 
 /* Sunshine hero canvas - home page only */
 .band-sunshine { background: var(--lk-sunshine); color: var(--lk-dark); }

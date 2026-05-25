@@ -275,11 +275,11 @@ var require_dommatrix = __commonJS({
           });
           var x = components[0];
           var y = components[1];
-          var z7 = components[2];
+          var z8 = components[2];
           var a = components[3];
-          var xyz = [x, y, z7];
-          var xyza = [x, y, z7, a];
-          if (prop === "perspective" && x && [y, z7].every(function(n) {
+          var xyz = [x, y, z8];
+          var xyza = [x, y, z8, a];
+          if (prop === "perspective" && x && [y, z8].every(function(n) {
             return n === void 0;
           })) {
             m.m34 = -1 / x;
@@ -293,14 +293,14 @@ var require_dommatrix = __commonJS({
           } else if (prop === "translate3d" && xyz.every(function(n) {
             return !Number.isNaN(+n);
           })) {
-            m = m.translate(x, y, z7);
-          } else if (prop === "translate" && x && z7 === void 0) {
+            m = m.translate(x, y, z8);
+          } else if (prop === "translate" && x && z8 === void 0) {
             m = m.translate(x, y || 0, 0);
           } else if (prop === "rotate3d" && xyza.every(function(n) {
             return !Number.isNaN(+n);
           }) && a) {
-            m = m.rotateAxisAngle(x, y, z7, a);
-          } else if (prop === "rotate" && x && [y, z7].every(function(n) {
+            m = m.rotateAxisAngle(x, y, z8, a);
+          } else if (prop === "rotate" && x && [y, z8].every(function(n) {
             return n === void 0;
           })) {
             m = m.rotate(0, 0, x);
@@ -309,15 +309,15 @@ var require_dommatrix = __commonJS({
           }) && xyz.some(function(n) {
             return n !== 1;
           })) {
-            m = m.scale(x, y, z7);
-          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z7 === void 0) {
+            m = m.scale(x, y, z8);
+          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z8 === void 0) {
             var nosy = Number.isNaN(+y);
             var sy = nosy ? x : y;
             m = m.scale(x, sy, 1);
-          } else if (prop === "skew" && x && z7 === void 0) {
+          } else if (prop === "skew" && x && z8 === void 0) {
             m = m.skewX(x);
             m = y ? m.skewY(y) : m;
-          } else if (/[XYZ]/.test(prop) && x && [y, z7].every(function(n) {
+          } else if (/[XYZ]/.test(prop) && x && [y, z8].every(function(n) {
             return n === void 0;
           }) && ["translate", "rotate", "scale", "skew"].some(function(p) {
             return prop.includes(p);
@@ -341,13 +341,13 @@ var require_dommatrix = __commonJS({
         });
         return m;
       }
-      function Translate(x, y, z7) {
+      function Translate(x, y, z8) {
         var m = new CSSMatrix();
         m.m41 = x;
         m.e = x;
         m.m42 = y;
         m.f = y;
-        m.m43 = z7;
+        m.m43 = z8;
         return m;
       }
       function Rotate(rx, ry, rz) {
@@ -381,16 +381,16 @@ var require_dommatrix = __commonJS({
         m.m33 = cosx * cosy;
         return m;
       }
-      function RotateAxisAngle(x, y, z7, alpha) {
+      function RotateAxisAngle(x, y, z8, alpha) {
         var m = new CSSMatrix();
         var angle = alpha * (Math.PI / 360);
         var sinA = Math.sin(angle);
         var cosA = Math.cos(angle);
         var sinA2 = sinA * sinA;
-        var length = Math.sqrt(x * x + y * y + z7 * z7);
+        var length = Math.sqrt(x * x + y * y + z8 * z8);
         var X = x;
         var Y = y;
-        var Z = z7;
+        var Z = z8;
         if (length === 0) {
           X = 0;
           Y = 0;
@@ -422,13 +422,13 @@ var require_dommatrix = __commonJS({
         m.m33 = 1 - 2 * (x2 + y2) * sinA2;
         return m;
       }
-      function Scale(x, y, z7) {
+      function Scale(x, y, z8) {
         var m = new CSSMatrix();
         m.m11 = x;
         m.a = x;
         m.m22 = y;
         m.d = y;
-        m.m33 = z7;
+        m.m33 = z8;
         return m;
       }
       function SkewX(angle) {
@@ -594,10 +594,10 @@ var require_dommatrix = __commonJS({
       CSSMatrix.prototype.multiply = function multiply(m2) {
         return Multiply(this, m2);
       };
-      CSSMatrix.prototype.translate = function translate(x, y, z7) {
+      CSSMatrix.prototype.translate = function translate(x, y, z8) {
         var X = x;
         var Y = y;
-        var Z = z7;
+        var Z = z8;
         if (Z === void 0) {
           Z = 0;
         }
@@ -606,10 +606,10 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Translate(X, Y, Z));
       };
-      CSSMatrix.prototype.scale = function scale(x, y, z7) {
+      CSSMatrix.prototype.scale = function scale(x, y, z8) {
         var X = x;
         var Y = y;
-        var Z = z7;
+        var Z = z8;
         if (Y === void 0) {
           Y = x;
         }
@@ -631,13 +631,13 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Rotate(RX, RY, RZ));
       };
-      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z7, angle) {
-        if ([x, y, z7, angle].some(function(n) {
+      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z8, angle) {
+        if ([x, y, z8, angle].some(function(n) {
           return Number.isNaN(n);
         })) {
           throw new TypeError("CSSMatrix: expecting 4 values");
         }
-        return Multiply(this, RotateAxisAngle(x, y, z7, angle));
+        return Multiply(this, RotateAxisAngle(x, y, z8, angle));
       };
       CSSMatrix.prototype.skewX = function skewX(angle) {
         return Multiply(this, SkewX(angle));
@@ -661,12 +661,12 @@ var require_dommatrix = __commonJS({
         var m = this;
         var x = m.m11 * t.x + m.m12 * t.y + m.m13 * t.z + m.m14 * t.w;
         var y = m.m21 * t.x + m.m22 * t.y + m.m23 * t.z + m.m24 * t.w;
-        var z7 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
+        var z8 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
         var w = m.m41 * t.x + m.m42 * t.y + m.m43 * t.z + m.m44 * t.w;
         return {
           x: x / w,
           y: y / w,
-          z: z7 / w,
+          z: z8 / w,
           w
         };
       };
@@ -27658,7 +27658,7 @@ import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-import rateLimit4 from "express-rate-limit";
+import rateLimit5 from "express-rate-limit";
 
 // server/routes.ts
 import { createServer } from "http";
@@ -36767,6 +36767,14 @@ var contactNotificationTemplate = readFileSync2(
   join2(TEMPLATE_DIR, "contact-notification.html"),
   "utf8"
 );
+var pilotConfirmationTemplate = readFileSync2(
+  join2(TEMPLATE_DIR, "pilot-application-confirmation.html"),
+  "utf8"
+);
+var pilotNotificationTemplate = readFileSync2(
+  join2(TEMPLATE_DIR, "pilot-application-notification.html"),
+  "utf8"
+);
 var HTML_ESCAPES = {
   "&": "&amp;",
   "<": "&lt;",
@@ -36784,29 +36792,30 @@ function encodeHeaderWord(value) {
   if (/^[\x20-\x7E]*$/.test(value)) return value;
   return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
 }
+function johannesburgTimestamp() {
+  return (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    dateStyle: "long",
+    timeStyle: "short"
+  });
+}
+function renderAnswers(answers) {
+  return answers.map(([question, answer]) => `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`).join("<br/><br/>");
+}
 function buildAccessRequestConfirmation(request) {
   return render(confirmationTemplate, {
     CLIENT_NAME: escapeHtml(request.name)
   });
 }
 function buildAccessRequestNotification(request) {
-  const received = (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", {
-    timeZone: "Africa/Johannesburg",
-    dateStyle: "long",
-    timeStyle: "short"
-  });
-  const answers = [
-    ["Name", request.name],
-    ["Email", request.email],
-    ["Cell (for WhatsApp)", request.cell],
-    ["Business and number of sites", request.business || "(not given)"]
-  ];
-  const response = answers.map(
-    ([question, answer]) => `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`
-  ).join("<br/><br/>");
   return render(notificationTemplate, {
-    LEAD_DATE: escapeHtml(received),
-    RESPONSE: response
+    LEAD_DATE: escapeHtml(johannesburgTimestamp()),
+    RESPONSE: renderAnswers([
+      ["Name", request.name],
+      ["Email", request.email],
+      ["Cell (for WhatsApp)", request.cell],
+      ["Business and number of sites", request.business || "(not given)"]
+    ])
   });
 }
 function buildContactConfirmation(contact) {
@@ -36815,22 +36824,33 @@ function buildContactConfirmation(contact) {
   });
 }
 function buildContactNotification(contact) {
-  const received = (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", {
-    timeZone: "Africa/Johannesburg",
-    dateStyle: "long",
-    timeStyle: "short"
-  });
-  const answers = [
-    ["Name", contact.name],
-    ["Email", contact.email],
-    ["Message", contact.message]
-  ];
-  const response = answers.map(
-    ([question, answer]) => `<strong>${escapeHtml(question)}</strong><br/>${escapeHtml(answer)}`
-  ).join("<br/><br/>");
   return render(contactNotificationTemplate, {
-    LEAD_DATE: escapeHtml(received),
-    RESPONSE: response
+    LEAD_DATE: escapeHtml(johannesburgTimestamp()),
+    RESPONSE: renderAnswers([
+      ["Name", contact.name],
+      ["Email", contact.email],
+      ["Message", contact.message]
+    ])
+  });
+}
+function buildPilotApplicationConfirmation(application) {
+  return render(pilotConfirmationTemplate, {
+    CLIENT_NAME: escapeHtml(application.name)
+  });
+}
+function buildPilotApplicationNotification(application) {
+  return render(pilotNotificationTemplate, {
+    LEAD_DATE: escapeHtml(johannesburgTimestamp()),
+    RESPONSE: renderAnswers([
+      ["Name", application.name],
+      ["Business", application.business],
+      ["Email", application.email],
+      ["Cell (for WhatsApp)", application.cell],
+      ["Number of sites", String(application.sites)],
+      ["POS / fuel management system", application.posSystem],
+      ["Banks", application.banks.join(", ")],
+      ["What success looks like", application.successDefinition]
+    ])
   });
 }
 var GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
@@ -36998,6 +37018,89 @@ function registerContactRoutes(app2) {
   });
 }
 
+// server/pilotApplicationRoutes.ts
+import rateLimit4 from "express-rate-limit";
+import { z as z7 } from "zod";
+var BANKS = ["FNB", "ABSA", "Standard Bank", "Nedbank", "Other"];
+var applicationSchema = z7.object({
+  name: z7.string().trim().min(1, "Your name is required").max(120),
+  business: z7.string().trim().min(1, "A business name is required").max(200),
+  email: z7.string().trim().email("A valid email is required").max(200),
+  cell: z7.string().trim().min(1, "A cell number is required").max(40),
+  sites: z7.coerce.number().int("Number of sites must be a whole number").min(1, "At least one site is required"),
+  pos_system: z7.string().trim().min(1, "Tell us which POS or fuel system you use").max(200),
+  banks: z7.array(z7.enum(BANKS)).min(1, "Choose at least one bank"),
+  success_definition: z7.string().trim().min(1, "Tell us what success looks like").max(500),
+  terms_accepted: z7.literal(true, {
+    errorMap: () => ({ message: "Please confirm you have read the pilot terms" })
+  })
+});
+async function dispatchEmails3(application) {
+  const token = await getAccessToken();
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: NOTIFICATION_RECIPIENTS.join(", "),
+    replyTo: `${encodeHeaderWord(application.name)} <${application.email}>`,
+    subject: `New lekana pilot application from ${application.business}`,
+    html: buildPilotApplicationNotification(application)
+  });
+  await sendEmail(token, {
+    from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+    to: application.email,
+    subject: "Thanks for applying to the lekana pilot",
+    html: buildPilotApplicationConfirmation(application)
+  });
+}
+function toApplication(input) {
+  return {
+    name: input.name,
+    business: input.business,
+    email: input.email,
+    cell: input.cell,
+    sites: input.sites,
+    posSystem: input.pos_system,
+    banks: input.banks,
+    successDefinition: input.success_definition
+  };
+}
+function registerPilotApplicationRoutes(app2) {
+  const limiter = rateLimit4({
+    windowMs: 60 * 60 * 1e3,
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, errors: { form: "Too many requests. Please try again later." } }
+  });
+  app2.post("/api/pilot-application", limiter, async (req, res) => {
+    const parsed = applicationSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      const errors = {};
+      for (const issue of parsed.error.issues) {
+        const key = String(issue.path[0] ?? "form");
+        if (!errors[key]) errors[key] = issue.message;
+      }
+      return res.status(400).json({ ok: false, errors });
+    }
+    const application = toApplication(parsed.data);
+    console.log(
+      `[pilot-application] ${application.name} <${application.email}> business=${application.business} sites=${application.sites} banks=${application.banks.join("/")}`
+    );
+    try {
+      await dispatchEmails3(application);
+    } catch (err) {
+      console.error("[pilot-application] email delivery failed:", err);
+      return res.status(502).json({
+        ok: false,
+        errors: { form: "Could not send your application. Please email pieter@bethink.co.za directly." }
+      });
+    }
+    return res.json({
+      ok: true,
+      message: "Application received. Pieter will be in touch on WhatsApp within 24 hours."
+    });
+  });
+}
+
 // server/routes.ts
 function computeContentHash(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -37023,6 +37126,7 @@ async function registerRoutes(app2) {
   registerReconciliationWriteRoutes(app2);
   registerRequestAccessRoutes(app2);
   registerContactRoutes(app2);
+  registerPilotApplicationRoutes(app2);
   const httpServer = createServer(app2);
   return httpServer;
 }
@@ -37034,7 +37138,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || "https://work.lekana.app",
   credentials: true
 }));
-var apiLimiter = rateLimit4({
+var apiLimiter = rateLimit5({
   windowMs: 15 * 60 * 1e3,
   // 15 minutes
   max: 200,

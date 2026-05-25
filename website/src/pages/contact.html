@@ -1,0 +1,126 @@
+<!--meta
+{
+  "title": "Contact - get in touch with lekana.",
+  "description": "Email Pieter or Garth at Bethink (Pty) Ltd, or send us a message. We come back to every enquiry. To join the pilot, use the application form.",
+  "route": "/contact",
+  "ogImage": "/og-image.png"
+}
+-->
+<section class="hero">
+  <div class="container container--narrow">
+    <h1>Get in touch.</h1>
+    <p class="lead">For general questions, partnership conversations, press, or anything that is not the pilot, send us a message or email us directly. We come back to every enquiry.</p>
+    <p class="footnote">If you want to join the pilot, the application form is on the <a href="/pilot" style="text-decoration:underline;text-underline-offset:3px;">pilot page</a>.</p>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow">
+    <div class="card">
+      <h2 style="font-size:24px;">Send a message</h2>
+      <p style="margin-top:8px;">Tell us what you need and we will get back to you by email.</p>
+
+      <noscript>
+        <p class="callout" style="margin-top:16px;">JavaScript is disabled. Email <a href="mailto:garth@bethink.co.za">garth@bethink.co.za</a> directly with your message.</p>
+      </noscript>
+
+      <form id="contact-form" novalidate style="margin-top:16px;">
+        <div class="form-field">
+          <label for="cf-name">Your name <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="cf-name" name="name" required autocomplete="name">
+        </div>
+        <div class="form-field">
+          <label for="cf-email">Email <span class="req" aria-hidden="true">*</span></label>
+          <input type="email" id="cf-email" name="email" required autocomplete="email">
+        </div>
+        <div class="form-field">
+          <label for="cf-message">Message <span class="req" aria-hidden="true">*</span></label>
+          <textarea id="cf-message" name="message" maxlength="4000" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Send message</button>
+        <p class="form-legal">By sending this message, you accept that we will store these details to respond. No marketing emails. Ever.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow">
+    <h2>Or email us directly.</h2>
+    <div class="grid grid-2" style="margin-top:24px;">
+      <div class="card contact-card">
+        <h3>Pieter</h3>
+        <p class="role">Pilot lead and fuel station business owner</p>
+        <div class="row"><span class="k">Email</span> <a href="mailto:pieter@bethink.co.za">pieter@bethink.co.za</a></div>
+        <div class="row"><span class="k">WhatsApp</span> <a href="https://wa.me/27832252986">+27 83 225 2986</a></div>
+        <p class="best">Best for: pilot questions, fuel operations, onboarding.</p>
+      </div>
+      <div class="card contact-card">
+        <h3>Garth</h3>
+        <p class="role">Product</p>
+        <div class="row"><span class="k">Email</span> <a href="mailto:garth@bethink.co.za">garth@bethink.co.za</a></div>
+        <div class="row"><span class="k">WhatsApp</span> <a href="https://wa.me/27834966860">+27 83 496 6860</a></div>
+        <p class="best">Best for: product, partnerships, press, anything technical.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow prose">
+    <h2>Bethink (Pty) Ltd.</h2>
+    <p>lekana is a TimeWarp product built by Bethink (Pty) Ltd in South Africa. Registered address available on request.</p>
+  </div>
+</section>
+
+<script>
+  // Contact message -> POST /api/contact (proxied to work.lekana.app)
+  (function () {
+    var form = document.getElementById('contact-form');
+    if (!form) return;
+    var btn = form.querySelector('button[type=submit]');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var prev = form.querySelector('.field-error');
+      if (prev) prev.remove();
+      var payload = {
+        name: form.name.value.trim(),
+        email: form.email.value.trim(),
+        message: form.message.value.trim()
+      };
+      var original = btn.textContent;
+      btn.textContent = 'Sending...';
+      btn.disabled = true;
+      fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: res.ok, body: body };
+        });
+      }).then(function (result) {
+        if (result.ok && result.body.ok) {
+          var card = form.closest('.card');
+          card.innerHTML = '<h2 style="font-size:24px;margin:0 0 8px;">Message sent.</h2>'
+            + '<p style="margin:0;">Thanks for getting in touch. We will reply by email as soon as we can.</p>';
+          return;
+        }
+        btn.textContent = original;
+        btn.disabled = false;
+        var p = document.createElement('p');
+        p.className = 'field-error';
+        p.textContent = (result.body && result.body.error)
+          || 'Something went wrong. Please try again or email garth@bethink.co.za directly.';
+        form.appendChild(p);
+      }).catch(function () {
+        btn.textContent = original;
+        btn.disabled = false;
+        var p = document.createElement('p');
+        p.className = 'field-error';
+        p.textContent = 'Could not send. Please email garth@bethink.co.za directly.';
+        form.appendChild(p);
+      });
+    });
+  })();
+</script>

@@ -1097,10 +1097,15 @@ const DEFAULT_INPUTS = {
   // Modelled as: hours that scale per customer, plus baseline overhead
   hours_founder_baseline: 20,        // per month, regardless of customers (strategy, partnerships, etc.)
   hours_engineering_baseline: 40,    // per month, maintenance, bug fixes
-  hours_cs_per_customer_active: 4,   // per active customer per month
-  hours_cs_per_onboarding: 6,        // per onboarding event
+  hours_cs_per_onboarding: 6,        // per onboarding event (kept for unit metric)
   hours_bookkeeping_baseline: 8,     // per month
   hours_bookkeeping_per_customer: 0.3, // grows with customer count
+
+  // Support capacity — economies of scale. Ops/CS cost is headcount-driven, not
+  // a flat per-customer charge: one ops person covers this many STATIONS. Raise
+  // it to model tooling/efficiency gains as you scale.
+  stations_per_ops_person: 60,
+  ops_hours_per_month: 160,          // full-time hours per ops person per month
 
   // Acquisition
   hours_per_customer_close: 8,       // sales hours to close one customer (founder time)
@@ -1155,9 +1160,15 @@ const DEFAULT_INPUTS = {
 
   // Growth
   starting_customers: 1,
-  new_customers_per_month: 2,
+  new_customers_per_month: 2,        // organic customers added in month 1 (then accelerates)
+  acquisition_growth_pct: 20,        // month-over-month growth in the organic add rate (0 = flat)
   pilot_period_months: 3,
   pilot_to_paid_conversion_pct: 60,
+
+  // Big-partner / reseller deal — a lump of stations brought on at once.
+  partner_stations: 0,               // stations a channel partner brings (0 = none)
+  partner_month: 6,                  // month the partner deal lands
+  partner_discount_pct: 20,          // reseller discount on partner-brought stations
 };
 
 // ==========================================================================
@@ -1226,10 +1237,12 @@ const FIELD_DEFS = {
     { section: 'Hours per month' },
     { key: 'hours_founder_baseline', label: 'Founder hours (baseline)', suffix: 'hrs', min: 0, max: 80, step: 4, hint: 'Strategy, partnerships, planning. Independent of customer count.' },
     { key: 'hours_engineering_baseline', label: 'Engineering hours (baseline)', suffix: 'hrs', min: 0, max: 160, step: 8, hint: 'Maintenance, bug fixes, small features. Independent of customer count.' },
-    { key: 'hours_cs_per_customer_active', label: 'CS hours per active customer / month', suffix: 'hrs', min: 0, max: 12, step: 0.5, hint: 'Steady-state support load per existing customer.' },
-    { key: 'hours_cs_per_onboarding', label: 'CS hours per new onboarding', suffix: 'hrs', min: 0, max: 24, step: 1, hint: 'One-time onboarding effort per new customer (first month only).' },
+    { key: 'hours_cs_per_onboarding', label: 'CS hours per new onboarding', suffix: 'hrs', min: 0, max: 24, step: 1, hint: 'One-time onboarding effort per new customer.' },
     { key: 'hours_bookkeeping_baseline', label: 'Bookkeeping hours / month', suffix: 'hrs', min: 0, max: 40, step: 1 },
     { key: 'hours_bookkeeping_per_customer', label: 'Bookkeeping hours per customer / month', suffix: 'hrs', min: 0, max: 2, step: 0.1, hint: 'Grows with customer count — invoicing, debtor management.' },
+    { section: 'Support capacity (economies of scale)' },
+    { key: 'stations_per_ops_person', label: 'Stations per ops person', suffix: 'sites', min: 5, max: 300, step: 5, hint: 'How many stations one ops/CS person can support. Raise it to model tooling/efficiency gains as you scale — this is what stops support cost rising linearly.' },
+    { key: 'ops_hours_per_month', label: 'Ops hours / month (full-time)', suffix: 'hrs', min: 80, max: 200, step: 10, hint: 'Support hours per ops person per month, costed at the customer-success rate.' },
   ],
   platform: [
     { section: 'Stack tier' },
@@ -1279,9 +1292,14 @@ const FIELD_DEFS = {
     { key: 'marketing_press_monthly', label: 'Marketing / press / month', prefix: 'R', min: 0, max: 50000, step: 500 },
     { section: 'Growth assumptions' },
     { key: 'starting_customers', label: 'Starting customer count', suffix: '', min: 0, max: 100, step: 1, hint: 'Customers at month 0 of the projection.' },
-    { key: 'new_customers_per_month', label: 'New customers / month', suffix: '', min: 0, max: 20, step: 1, hint: 'Constant ramp — net new customers added monthly.' },
+    { key: 'new_customers_per_month', label: 'Organic new customers — month 1', suffix: '', min: 0, max: 100, step: 1, hint: 'Customers acquired organically in month 1. This rate then accelerates monthly (below).' },
+    { key: 'acquisition_growth_pct', label: 'Acquisition growth / month', suffix: '%', min: 0, max: 100, step: 5, hint: 'How much the monthly acquisition rate compounds as you build steam. 0% = flat ramp; 20% ≈ doubles every ~4 months.' },
     { key: 'pilot_period_months', label: 'Pilot period', suffix: 'mo', min: 0, max: 24, step: 1, hint: 'Months during which new customers pay nothing.' },
     { key: 'pilot_to_paid_conversion_pct', label: 'Pilot → paid conversion', suffix: '%', min: 0, max: 100, step: 5, hint: '% of pilot customers that convert to paying customers at end of pilot.' },
+    { section: 'Big-partner / reseller deal' },
+    { key: 'partner_stations', label: 'Partner stations (one-off)', type: 'number', min: 0, step: 10, hint: 'Stations a channel partner brings on in a single deal — type the number. 0 = no partner.' },
+    { key: 'partner_month', label: 'Month the deal lands', suffix: 'mo', min: 0, max: 18, step: 1, hint: 'Which projection month the partner stations come on.' },
+    { key: 'partner_discount_pct', label: 'Partner discount', suffix: '%', min: 0, max: 60, step: 5, hint: 'Reseller discount on partner-brought stations (they resell, so wholesale pricing).' },
   ],
   pdf: [
     { section: 'Cost (Claude Sonnet 4)' },
@@ -1424,7 +1442,12 @@ function computeModel(inp, customerCount) {
   // Simpler: assume sales hours per month = new_customers_per_month * hours_per_close / (conversion_rate%)
   const monthlySalesHours = inp.new_customers_per_month * inp.hours_per_customer_close / Math.max(inp.conversion_rate_pct, 1) * 100;
   const engineeringHours = inp.hours_engineering_baseline;
-  const csHours = customerCount * inp.hours_cs_per_customer_active + inp.new_customers_per_month * inp.hours_cs_per_onboarding;
+  // Support is headcount-driven (economies of scale), not a flat per-customer
+  // charge: ops people scale with total STATIONS and step up at capacity, so
+  // cost-per-station falls as you grow.
+  const stationsServed = customerCount * avgSitesPerCustomer;
+  const opsHeadcount = stationsServed > 0 ? Math.ceil(stationsServed / Math.max(inp.stations_per_ops_person, 1)) : 0;
+  const csHours = opsHeadcount * inp.ops_hours_per_month;
   const bookkeepingHours = inp.hours_bookkeeping_baseline + customerCount * inp.hours_bookkeeping_per_customer;
 
   const founderCost = (founderBaseHours + monthlySalesHours) * inp.rate_founder;
@@ -1467,6 +1490,7 @@ function computeModel(inp, customerCount) {
   return {
     customerCount,
     avgSitesPerCustomer,
+    stations: stationsServed,
     insightsCustomers,
     pdfActiveCustomers,
     segMix,
@@ -1485,6 +1509,7 @@ function computeModel(inp, customerCount) {
       founder: founderCost,
       engineering: engineeringCost,
       cs: csCost,
+      opsHeadcount,
       bookkeeping: bookkeepingCost,
       people: totalPeopleCost,
       platformBase,
@@ -1519,45 +1544,56 @@ function computeModel(inp, customerCount) {
 
 function compute12Month(inp) {
   const months = [];
-  let customerCount = inp.starting_customers;
-  let pilotCustomers = inp.starting_customers;  // Assume all starting are in pilot
-  let paidCustomers = 0;
+  const avgSites = Math.max(computeModel(inp, 1).avgSitesPerCustomer, 0.0001);
+
+  // Blended monthly churn on paid customers (mix-weighted across segments).
+  const segTotal = (inp.seg1_mix_pct + inp.seg2_mix_pct + inp.seg3_mix_pct) || 1;
+  const blendedChurn = (
+    inp.seg1_mix_pct * inp.seg1_monthly_churn_pct +
+    inp.seg2_mix_pct * inp.seg2_monthly_churn_pct +
+    inp.seg3_mix_pct * inp.seg3_monthly_churn_pct
+  ) / segTotal / 100;
+
+  let pilotCustomers = inp.starting_customers;   // all starting customers are in pilot
+  let paidOrganic = 0;
+  let paidPartner = 0;                            // partner-channel cohort (discounted)
+  let organicAdd = inp.new_customers_per_month;   // month-1 organic add; accelerates monthly
   let breakEvenMonth = null;
   let cumulative = 0;
 
   for (let m = 0; m < 18; m++) {
-    // At pilot_period_months, convert pilot to paid
+    // Convert pilots to paid at the end of the pilot period
     if (m === inp.pilot_period_months) {
-      paidCustomers = Math.round(pilotCustomers * (inp.pilot_to_paid_conversion_pct / 100));
+      paidOrganic += Math.round(pilotCustomers * (inp.pilot_to_paid_conversion_pct / 100));
       pilotCustomers = 0;
     }
 
-    // Add new customers
+    // Organic acquisition — accelerates month over month ("steam")
     if (m > 0) {
-      const newCust = inp.new_customers_per_month;
-      if (m < inp.pilot_period_months) {
-        pilotCustomers += newCust;
-      } else {
-        // After pilot, new customers are paid immediately (assumption)
-        paidCustomers += newCust;
-      }
-    }
-    customerCount = pilotCustomers + paidCustomers;
-
-    // Apply churn (only to paid customers — pilots churn separately)
-    if (paidCustomers > 0) {
-      const seg1Churn = paidCustomers * (inp.seg1_mix_pct / 100) * (inp.seg1_monthly_churn_pct / 100);
-      const seg2Churn = paidCustomers * (inp.seg2_mix_pct / 100) * (inp.seg2_monthly_churn_pct / 100);
-      const seg3Churn = paidCustomers * (inp.seg3_mix_pct / 100) * (inp.seg3_monthly_churn_pct / 100);
-      paidCustomers = Math.max(0, paidCustomers - seg1Churn - seg2Churn - seg3Churn);
-      customerCount = pilotCustomers + paidCustomers;
+      if (m < inp.pilot_period_months) pilotCustomers += organicAdd;
+      else paidOrganic += organicAdd;
+      organicAdd *= (1 + inp.acquisition_growth_pct / 100);
     }
 
-    // Revenue & cost using *paid* customers for revenue, *total* for cost
+    // Big-partner lump — lands once, paid immediately (committed channel deal)
+    if (m === inp.partner_month && inp.partner_stations > 0) {
+      paidPartner += inp.partner_stations / avgSites;
+    }
+
+    // Churn on paid cohorts (pilots churn separately / ignored here)
+    paidOrganic = Math.max(0, paidOrganic * (1 - blendedChurn));
+    paidPartner = Math.max(0, paidPartner * (1 - blendedChurn));
+
+    const paidCustomers = paidOrganic + paidPartner;
+    const customerCount = pilotCustomers + paidCustomers;
+
+    // Revenue on paid, cost on all. Partner cohort takes its reseller discount.
     const m_paid = computeModel(inp, paidCustomers);
     const m_all = computeModel(inp, customerCount);
+    const partnerGross = paidPartner > 0 ? computeModel(inp, paidPartner).revenue.gross : 0;
+    const partnerDiscount = partnerGross * (inp.partner_discount_pct / 100);
 
-    const monthlyRev = m_paid.revenue.net;
+    const monthlyRev = m_paid.revenue.net - partnerDiscount;
     const monthlyCost = m_all.cost.total;
     const monthlyProfit = monthlyRev - monthlyCost;
     cumulative += monthlyProfit;
@@ -1571,6 +1607,8 @@ function compute12Month(inp) {
       customers: Math.round(customerCount),
       pilotCustomers: Math.round(pilotCustomers),
       paidCustomers: Math.round(paidCustomers),
+      stations: Math.round(customerCount * avgSites),
+      opsHeadcount: m_all.cost.opsHeadcount,
       revenue: monthlyRev,
       cost: monthlyCost,
       profit: monthlyProfit,
@@ -1590,12 +1628,12 @@ function computeSensitivity(inp) {
     { key: 'insights_price', label: 'Insights price' },
     { key: 'insights_uptake_pct', label: 'Insights uptake' },
     { key: 'recon_per_site_addon', label: 'Per-site add-on' },
-    { key: 'reseller_mix_pct', label: 'Reseller mix' },
-    { key: 'reseller_margin_pct', label: 'Reseller margin' },
-    { key: 'hours_cs_per_customer_active', label: 'CS hours per customer' },
-    { key: 'hours_per_customer_close', label: 'Sales hours per close' },
+    { key: 'stations_per_ops_person', label: 'Stations per ops person' },
+    { key: 'new_customers_per_month', label: 'Organic adds / month' },
+    { key: 'acquisition_growth_pct', label: 'Acquisition growth' },
+    { key: 'partner_stations', label: 'Partner stations' },
     { key: 'conversion_rate_pct', label: 'Conversion rate' },
-    { key: 'new_customers_per_month', label: 'New customers / month' },
+    { key: 'hours_per_customer_close', label: 'Sales hours per close' },
   ];
 
   // Use month-12 paid customer count as the "steady" reference
@@ -1659,7 +1697,9 @@ function builtInScenarios() {
 }
 
 function savedScenarioOptions() {
-  return scenarios.map(s => ({ ref: 'saved:' + s.id, name: s.name, inputs: s.inputs, builtin: false }));
+  // Merge over DEFAULT_INPUTS so scenarios saved before newer inputs existed
+  // still get sane defaults (e.g. ops-capacity keys) instead of undefined.
+  return scenarios.map(s => ({ ref: 'saved:' + s.id, name: s.name, inputs: { ...DEFAULT_INPUTS, ...s.inputs }, builtin: false }));
 }
 
 function allScenarios() {
@@ -1686,8 +1726,9 @@ function loadScenarioByRef(ref) {
   const sc = allScenarios().find(s => s.ref === ref);
   if (!sc) return;
   closeAllPanels();
-  viewBase = { ref: sc.ref, name: sc.name, inputs: { ...sc.inputs }, builtin: sc.builtin };
-  inputs = { ...sc.inputs };
+  const merged = { ...DEFAULT_INPUTS, ...sc.inputs };
+  viewBase = { ref: sc.ref, name: sc.name, inputs: merged, builtin: sc.builtin };
+  inputs = { ...merged };
   editMode = false;
   saveInputs(); saveSession();
   render();
@@ -1837,7 +1878,8 @@ function renderSummary() {
     <li>PDF extraction: ${pdfModel}</li>`;
 
   const costLines = `
-    <li>People: <strong>${fmtZAR(model.cost.people)}</strong>/mo</li>
+    <li>Ops team: <strong>${model.cost.opsHeadcount}</strong> ${model.cost.opsHeadcount === 1 ? 'person' : 'people'} (1 per ${inputs.stations_per_ops_person} stations)</li>
+    <li>People (all-in): <strong>${fmtZAR(model.cost.people)}</strong>/mo</li>
     <li>Platform: ${fmtZAR(model.cost.platform)}/mo (${inputs.platform_tier} tier)</li>
     <li>AI / PDF: ${fmtZAR(model.cost.pdf)}/mo</li>
     <li>Marketing: ${fmtZAR(model.cost.marketing)}/mo</li>
@@ -1852,8 +1894,8 @@ function renderSummary() {
       <div class="serif" style="font-size:20px;line-height:1.45;">${bottomLine}</div>
     </div>
     <div class="metric-grid">
-      <div class="metric"><div class="metric-label">Month-12 revenue</div><div class="metric-value mono">${fmtZAR(m12.revenue)}</div><div class="metric-sub">${m12.paidCustomers} paying customers</div></div>
-      <div class="metric"><div class="metric-label">Month-12 cost</div><div class="metric-value mono">${fmtZAR(m12.cost)}</div><div class="metric-sub">people ${fmtZAR(model.cost.people)}/mo</div></div>
+      <div class="metric"><div class="metric-label">Month-12 revenue</div><div class="metric-value mono">${fmtZAR(m12.revenue)}</div><div class="metric-sub">${m12.paidCustomers} paying · ${m12.stations.toLocaleString()} stations</div></div>
+      <div class="metric"><div class="metric-label">Month-12 cost</div><div class="metric-value mono">${fmtZAR(m12.cost)}</div><div class="metric-sub">${model.cost.opsHeadcount} ops · people ${fmtZAR(model.cost.people)}</div></div>
       <div class="metric"><div class="metric-label">Month-12 profit</div><div class="metric-value mono ${m12.profit >= 0 ? 'positive' : 'danger'}">${fmtZAR(m12.profit)}</div><div class="metric-sub">${fmtPct(netMargin)} margin</div></div>
       <div class="metric"><div class="metric-label">Break even</div><div class="metric-value mono ${be !== null ? 'positive' : 'danger'}">${be !== null ? 'month ' + be : 'never'}</div><div class="metric-sub">year-1 cash ${fmtZAR(yearOneCash)}</div></div>
     </div>
@@ -2402,10 +2444,11 @@ function renderAssumptions() {
       ['Bookkeeping rate', fmtZAR(inputs.rate_bookkeeping) + '/hr'],
       ['Founder baseline hrs/mo', inputs.hours_founder_baseline],
       ['Engineering baseline hrs/mo', inputs.hours_engineering_baseline],
-      ['CS hrs / active customer / mo', inputs.hours_cs_per_customer_active],
       ['CS hrs / onboarding', inputs.hours_cs_per_onboarding],
       ['Bookkeeping baseline hrs/mo', inputs.hours_bookkeeping_baseline],
       ['Bookkeeping hrs / customer / mo', inputs.hours_bookkeeping_per_customer],
+      ['Stations per ops person', inputs.stations_per_ops_person],
+      ['Ops hours / mo (full-time)', inputs.ops_hours_per_month],
     ],
     'Platform': [
       ['Current tier', inputs.platform_tier],
@@ -2434,9 +2477,13 @@ function renderAssumptions() {
       ['Reseller margin', inputs.reseller_margin_pct + '%'],
       ['Marketing / press / mo', fmtZAR(inputs.marketing_press_monthly)],
       ['Starting customers', inputs.starting_customers],
-      ['New customers / mo', inputs.new_customers_per_month],
+      ['Organic new customers (month 1)', inputs.new_customers_per_month],
+      ['Acquisition growth / mo', inputs.acquisition_growth_pct + '%'],
       ['Pilot period', inputs.pilot_period_months + ' months'],
       ['Pilot → paid conversion', inputs.pilot_to_paid_conversion_pct + '%'],
+      ['Partner stations (one-off)', inputs.partner_stations],
+      ['Partner deal month', inputs.partner_month],
+      ['Partner discount', inputs.partner_discount_pct + '%'],
     ],
     'PDF extraction': [
       ['Pricing model', inputs.pdf_pricing_model],
@@ -2500,6 +2547,12 @@ function renderPanelBody(panelKey) {
         }
         render();
       });
+    } else if (f.type === 'number') {
+      const el = host.querySelector(`[data-key="${f.key}"]`);
+      if (el) el.addEventListener('input', () => {
+        inputs[f.key] = parseFloat(el.value) || 0;
+        render();
+      });
     } else {
       // Range slider
       const range = host.querySelector(`[data-key="${f.key}"][type="range"]`);
@@ -2549,6 +2602,17 @@ function renderField(f) {
     return `<div class="field">
       <div class="field-row"><span class="field-label">${f.label}</span></div>
       <input type="text" data-key="${f.key}" value="${inputs[f.key]}">
+    </div>`;
+  }
+
+  if (f.type === 'number') {
+    return `<div class="field">
+      <div class="field-row"><span class="field-label">${f.label}</span></div>
+      <div class="input-prefix">
+        ${f.prefix ? `<span>${f.prefix}</span>` : ''}
+        <input type="number" data-key="${f.key}" min="${f.min ?? 0}" step="${f.step ?? 1}" value="${inputs[f.key]}">
+      </div>
+      ${f.hint ? `<div class="field-hint">${f.hint}</div>` : ''}
     </div>`;
   }
 

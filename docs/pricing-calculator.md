@@ -86,6 +86,30 @@ Built-in scenarios = the **Baseline** (`DEFAULT_INPUTS`) + the named **presets**
 three). The live working draft persists per-browser (`lekana_inputs`); the
 view/edit state in `lekana_session`; saved scenarios in the DB.
 
+### The cost + growth engine (economies of scale)
+
+The model is **station-aware**, since the business steers by service stations:
+
+- **Cost — economies of scale.** Support is *not* a flat per-customer charge. Ops
+  headcount = `total stations ÷ stations_per_ops_person`, costed at the
+  customer-success rate × `ops_hours_per_month`. So support cost steps up at
+  capacity boundaries instead of rising linearly — per-station cost falls as you
+  grow (verified: ~R13k/station at 15 stations → ~R1.7k at 610). Raise
+  `stations_per_ops_person` to model tooling/efficiency gains.
+- **Acquisition — accelerating.** Organic adds start at `new_customers_per_month`
+  (month 1) and compound by `acquisition_growth_pct` each month ("steam"); 0% =
+  flat. The old hard 20/month cap is gone.
+- **Big-partner / reseller deal.** `partner_stations` (a typed value) lands in
+  `partner_month` as a one-off lump, revenue discounted by `partner_discount_pct`
+  (20% baseline — they resell). Tracked as a separate cohort so only their
+  revenue is discounted.
+
+These live in `computeModel` (cost) and `compute12Month` (growth) in the tool
+HTML. There's a quick way to sanity-check changes without a browser: slice the
+constants…`computeSensitivity` out of the `<script>` and run them in Node (that's
+how the engine above was verified — economies of scale, the partner lump, and the
+accelerating ramp).
+
 ### The Summary tab (no LLM)
 
 The landing **Summary** is generated **deterministically in the browser** from the

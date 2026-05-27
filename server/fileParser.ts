@@ -18,7 +18,7 @@ export interface ColumnMapping {
 export interface SourcePreset {
   name: string;
   description: string;
-  category: 'bank' | 'fuel'; // Source category for validation
+  category: 'bank' | 'fuel' | 'retail'; // Source category for validation
   detectPattern: (headers: string[]) => boolean;
   mappings: Record<string, 'date' | 'amount' | 'reference' | 'description' | 'time' | 'paymentType' | 'cardNumber' | 'attendant' | 'cashier' | 'pump' | 'ignore'>;
   columnLabels: Record<string, string>; // Human-readable labels for cryptic column names
@@ -270,6 +270,132 @@ export const SOURCE_PRESETS: SourcePreset[] = [
       'Description': 'Product Description (fuel type)',
       'PayType': 'Payment Type (Card/Cash)',
       'accnum': 'Account/Card Number',
+    },
+  },
+  {
+    name: 'Nedbank Merchant',
+    description: 'Nedbank merchant card-settlement batch report',
+    category: 'bank',
+    detectPattern: (headers) => {
+      const normalized = headers.map(h => h.toLowerCase().trim());
+      return normalized.includes('settle amount') &&
+             normalized.includes('retrieval reference') &&
+             normalized.some(h => h.includes('merchant number'));
+    },
+    mappings: {
+      'Transaction Date': 'date', // combined "2026-04-22 09:47:14"
+      'Settle Amount': 'amount', // what actually hit the account (not Request Amount)
+      'Retrieval Reference': 'reference', // RRN
+      'Card Number': 'cardNumber',
+      'Transaction Type': 'description',
+      // Ignore the rest
+      'Merchant Number - Business Name': 'ignore',
+      'Terminal ID': 'ignore',
+      'System Batch Number': 'ignore',
+      'Device Batch Number': 'ignore',
+      'Request Amount': 'ignore',
+      'Card Product': 'ignore',
+      'Ext Card Type': 'ignore',
+      'Auth Code': 'ignore',
+      'System Trace Audit Number': 'ignore',
+      'Message Type': 'ignore',
+      'Extended Transaction Type': 'ignore',
+      'Transaction Paid': 'ignore',
+      'Pos Entry Mode': 'ignore',
+      'Device Serial': 'ignore',
+      'Batch Screening Status': 'ignore',
+    },
+    columnLabels: {
+      'Transaction Date': 'Date & Time of transaction',
+      'Settle Amount': 'Settled Amount (R)',
+      'Retrieval Reference': 'Retrieval Reference (RRN)',
+      'Card Number': 'Card Number (masked)',
+      'Transaction Type': 'Transaction Type',
+      'Request Amount': 'Requested Amount (pre-settlement)',
+    },
+  },
+  {
+    name: 'Loyverse Receipts',
+    description: 'Loyverse POS receipts export (one row per receipt, with payment type)',
+    category: 'retail',
+    detectPattern: (headers) => {
+      const n = headers.map(h => h.toLowerCase().trim());
+      return n.includes('receipt number') &&
+             n.includes('payment type') &&
+             n.includes('total collected');
+    },
+    mappings: {
+      'Date': 'date', // combined "25/04/2026 16:56"
+      'Receipt number': 'reference',
+      'Total collected': 'amount', // what the customer paid (incl. tips) = the bank settlement target
+      'Payment type': 'paymentType', // Card / Cash → drives isCardTransaction (card pre-filter)
+      'Description': 'description',
+      'Cashier name': 'cashier',
+      // Ignore the rest
+      'Receipt type': 'ignore',
+      'Gross sales': 'ignore',
+      'Discounts': 'ignore',
+      'Net sales': 'ignore',
+      'Taxes': 'ignore',
+      'Tips': 'ignore',
+      'Cost of goods': 'ignore',
+      'Gross profit': 'ignore',
+      'POS': 'ignore',
+      'Store': 'ignore',
+      'Customer name': 'ignore',
+      'Customer contacts': 'ignore',
+      'Status': 'ignore',
+    },
+    columnLabels: {
+      'Date': 'Date & Time of sale',
+      'Receipt number': 'Receipt Number',
+      'Total collected': 'Total Collected (R, incl. tips)',
+      'Payment type': 'Payment Type (Card / Cash)',
+      'Description': 'Items',
+      'Cashier name': 'Cashier',
+    },
+  },
+  {
+    name: 'Loyverse Receipts (by item)',
+    description: 'Loyverse POS receipts-by-item export (line items grouped by receipt; no payment type)',
+    category: 'retail',
+    detectPattern: (headers) => {
+      const normalized = headers.map(h => h.toLowerCase().trim());
+      return normalized.includes('receipt number') &&
+             normalized.includes('net sales') &&
+             normalized.includes('sku');
+    },
+    mappings: {
+      'Date': 'date', // combined "25/04/2026 16:56"
+      'Receipt number': 'reference', // group line items into one receipt total
+      'Net sales': 'amount', // tax-inclusive line amount; summed per receipt = card amount
+      'Item': 'description',
+      'Cashier name': 'cashier',
+      // Ignore the rest
+      'Receipt type': 'ignore',
+      'Category': 'ignore',
+      'SKU': 'ignore',
+      'Variant': 'ignore',
+      'Modifiers applied': 'ignore',
+      'Quantity': 'ignore',
+      'Gross sales': 'ignore',
+      'Discounts': 'ignore',
+      'Cost of goods': 'ignore',
+      'Gross profit': 'ignore',
+      'Taxes': 'ignore',
+      'POS': 'ignore',
+      'Store': 'ignore',
+      'Customer name': 'ignore',
+      'Customer contacts': 'ignore',
+      'Comment': 'ignore',
+      'Status': 'ignore',
+    },
+    columnLabels: {
+      'Date': 'Date & Time of sale',
+      'Receipt number': 'Receipt Number (groups line items)',
+      'Net sales': 'Net Sales (R, tax-inclusive)',
+      'Item': 'Item Name',
+      'Cashier name': 'Cashier',
     },
   },
 ];
@@ -1575,6 +1701,20 @@ export class FileParser {
             } else {
               transactionDate = rawDate;
               processedFields.add('date');
+            }
+          } else if (preset?.name?.startsWith('Loyverse')) {
+            // "25/04/2026 16:56" (DD/MM/YYYY, optional time) → YYYY-MM-DD + time
+            const [datePart, ...timeParts] = rawDate.split(' ');
+            const parts = datePart.split('/');
+            if (parts.length === 3) {
+              transactionDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+              processedFields.add('date');
+            } else {
+              transactionDate = rawDate;
+              processedFields.add('date');
+            }
+            if (!transactionTime && timeParts.length > 0) {
+              transactionTime = timeParts.join(' ').trim();
             }
           } else if (preset?.name === 'Sale Master') {
             // "2026-02-01 00:03" → extract date and time

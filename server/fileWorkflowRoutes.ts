@@ -211,7 +211,7 @@ export function registerFileWorkflowRoutes(
 
         const rawQualityReport = dataQualityValidator.validate(
           parsed,
-          sourceType as "fuel" | "bank",
+          sourceType as "fuel" | "bank" | "retail",
           sourceName,
         );
 

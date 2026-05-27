@@ -15,7 +15,7 @@ test("deriveAutoMatchProgressMetrics uses invoice wording when invoice grouping 
   assert.deepEqual(metrics, {
     bank: 187,
     fuel: 186,
-    fuelLabel: "Fuel card invoices",
+    fuelLabel: "Card sales",
   });
 });
 
@@ -31,6 +31,6 @@ test("deriveAutoMatchProgressMetrics uses transaction wording when invoice group
   assert.deepEqual(metrics, {
     bank: 187,
     fuel: 193,
-    fuelLabel: "Fuel card transactions",
+    fuelLabel: "Card sales",
   });
 });

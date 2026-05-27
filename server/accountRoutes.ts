@@ -3,6 +3,7 @@ import { isAuthenticated } from "./auth";
 import { audit } from "./auditLog";
 import { resolveOrgContext } from "./routeAccess";
 import { storage } from "./storage";
+import { getVertical } from "../shared/verticals/index.ts";
 
 export function registerAccountRoutes(app: Express) {
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
@@ -150,7 +151,7 @@ export function registerAccountRoutes(app: Express) {
         return res.status(403).json({ error: "read_only" });
       }
 
-      const { name, code, address } = req.body || {};
+      const { name, code, address, verticalId } = req.body || {};
       if (!name) {
         return res.status(400).json({ error: "name required" });
       }
@@ -160,6 +161,7 @@ export function registerAccountRoutes(app: Express) {
         name,
         code,
         address,
+        verticalId: getVertical(verticalId).id, // validated; unknown/missing → "fuel"
       });
       audit(req, {
         action: "property.create",
@@ -190,12 +192,13 @@ export function registerAccountRoutes(app: Express) {
         return res.status(403).json({ error: "Access denied" });
       }
 
-      const { name, code, address, status } = req.body || {};
+      const { name, code, address, status, verticalId } = req.body || {};
       const updated = await storage.updateProperty(req.params.id, {
         name,
         code,
         address,
         status,
+        ...(verticalId !== undefined ? { verticalId: getVertical(verticalId).id } : {}),
       });
       audit(req, {
         action: "property.update",

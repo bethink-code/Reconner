@@ -41,11 +41,13 @@ interface FuelUploadStepProps {
   existingFile?: UploadedFile;
   onComplete: () => void;
   stepColor?: string;
+  /** The sales-side sourceType for this property's vertical (fuel: "fuel", retail: "retail"). */
+  salesSideSourceType?: string;
 }
 
 type SubStep = "upload" | "quality" | "mapping" | "complete";
 
-export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploadStepProps) {
+export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSourceType = "fuel" }: FuelUploadStepProps) {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -64,8 +66,8 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
     mutationFn: async (file: File): Promise<UploadResponse> => {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("sourceType", "fuel");
-      formData.append("sourceName", "Fuel Management System");
+      formData.append("sourceType", salesSideSourceType);
+      formData.append("sourceName", "Point of Sale");
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -276,8 +278,8 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
           <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <Check className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Fuel Data Ready</h2>
-          <p className="text-sm text-muted-foreground mt-1">Your fuel transactions have been imported successfully.</p>
+          <h2 className="text-2xl font-semibold tracking-tight">Sales Data Ready</h2>
+          <p className="text-sm text-muted-foreground mt-1">Your sales transactions have been imported successfully.</p>
         </div>
         <div className="space-y-4">
           {currentFile && (
@@ -465,7 +467,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete }: FuelUploa
         <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
           <Fuel className="h-6 w-6 text-primary" />
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">Upload Fuel Data</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Upload Sales Data</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Upload your fuel transactions first — this is your source of truth.
           We'll match your bank transactions against these records.

@@ -95,7 +95,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   }
 
   const sideCards: { key: ReviewSide; label: string }[] = [
-    { key: "fuel", label: "Fuel card sales transactions" },
+    { key: "fuel", label: "Sales transactions" },
     { key: "bank", label: "Bank transactions" },
   ];
 
@@ -149,7 +149,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                 <div className="mb-4 flex items-baseline justify-between">
                   <p className="text-xs text-muted-foreground">To review</p>
                   <p className="text-[10px] text-muted-foreground">
-                    across {summary.originalCount} {card.key === "bank" ? "bank" : "fuel card sales"} transactions
+                    across {summary.originalCount} {card.key === "bank" ? "bank" : "sales"} transactions
                   </p>
                 </div>
 
@@ -202,7 +202,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
               <div>
                 <h3 className="text-lg font-semibold text-[#1A1200]">Review Complete</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  All {side === "fuel" ? "fuel" : "bank"} transactions have been reviewed.
+                  All {side === "fuel" ? "sales" : "bank"} transactions have been reviewed.
                 </p>
               </div>
             </div>

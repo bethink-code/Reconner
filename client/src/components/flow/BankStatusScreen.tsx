@@ -174,7 +174,7 @@ export function BankStatusScreen({
         data-testid="button-back-fuel"
       >
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Fuel Data
+        Back to Sales Data
       </Button>
       
       {hasUploads ? (
@@ -197,7 +197,7 @@ export function BankStatusScreen({
     <WizardStepLayout
       icon={Building2}
       title="Bank Statements"
-      description="Upload bank statements to verify your fuel transactions."
+      description="Upload bank statements to verify your sales."
       statusSection={statusSection}
       actionsSection={actionsSection}
       navigationSection={navigationSection}

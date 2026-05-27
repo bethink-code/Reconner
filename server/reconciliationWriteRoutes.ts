@@ -5,6 +5,7 @@ import { audit } from "./auditLog";
 import { storage } from "./storage";
 import { assertPeriodWrite } from "./routeAccess";
 import { planAutoMatch } from "./reconciliation/autoMatchPlanner.ts";
+import { resolveVertical, salesSideConfig } from "./verticals.ts";
 import {
   ReconciliationCommandError,
   ReconciliationCommandService,
@@ -78,12 +79,13 @@ export function registerReconciliationWriteRoutes(app: Express) {
 
       const rules = await storage.getMatchingRules(req.params.periodId);
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      const vertical = await resolveVertical(period.propertyId);
       const plan = planAutoMatch({
         id: req.params.periodId,
         name: period.name,
         startDate: period.startDate,
         endDate: period.endDate,
-      }, rules, transactions);
+      }, rules, transactions, salesSideConfig(vertical));
 
       console.log(`[MATCH] Applying ${plan.pendingMatches.length} matches with transactional state updates...`);
       await reconciliationCommandService.clearPeriodResolutions(req.params.periodId);

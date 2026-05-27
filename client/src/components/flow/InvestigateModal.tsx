@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import { cn } from "@/lib/utils";
 import { formatRand, formatDate } from "@/lib/format";
-import { RESOLUTION_REASONS } from "@shared/schema";
+import { getVertical } from "@shared/verticals";
 import type { Transaction, MatchingRulesConfig } from "@shared/schema";
 import { CATEGORY_LABELS } from "@/lib/reconciliation-types";
 import type { CategorizedTransaction } from "@/lib/reconciliation-types";
@@ -51,6 +51,11 @@ export function InvestigateModal({
 }: InvestigateModalProps) {
   const { toast } = useToast();
   const invalidateAll = useInvalidateReconciliation(periodId);
+  const { data: period } = useQuery<{ verticalId?: string }>({
+    queryKey: ["/api/periods", periodId],
+    enabled: !!periodId,
+  });
+  const resolutionReasons = getVertical(period?.verticalId).resolutionReasons;
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [selectedReason, setSelectedReason] = useState("");
   const [resolutionNotes, setResolutionNotes] = useState("");
@@ -249,7 +254,7 @@ export function InvestigateModal({
             {matchingRules && (
               <div className="px-5 py-3 border-t border-[#E5E3DC]/40 bg-section">
                 <p className="text-xs text-muted-foreground">
-                  Current matching settings: {matchingRules.dateWindowDays} day date window, R{Number(matchingRules.amountTolerance).toFixed(0)} amount tolerance, {matchingRules.timeWindowMinutes} min close-match window, {matchingRules.attendantSubmissionDelayMinutes} min attendant submission delay, and {matchingRules.minimumConfidence}% minimum confidence. Lekana works through ordered passes rather than one blended rule.
+                  Current matching settings: {matchingRules.dateWindowDays} day date window, R{Number(matchingRules.amountTolerance).toFixed(0)} amount tolerance, {matchingRules.timeWindowMinutes} min close-match window, {matchingRules.attendantSubmissionDelayMinutes} min submission delay, and {matchingRules.minimumConfidence}% minimum confidence. Lekana works through ordered passes rather than one blended rule.
                 </p>
               </div>
             )}
@@ -377,7 +382,7 @@ export function InvestigateModal({
                 <SelectValue placeholder="Select reason" />
               </SelectTrigger>
               <SelectContent>
-                {RESOLUTION_REASONS.map((reason) => (
+                {resolutionReasons.map((reason) => (
                   <SelectItem key={reason.value} value={reason.value}>
                     {reason.label}
                   </SelectItem>

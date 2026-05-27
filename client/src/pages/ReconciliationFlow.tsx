@@ -16,6 +16,7 @@ import { deriveCompletionMetrics } from "@shared/reconciliationCompletion";
 import { deriveAutoMatchProgressMetrics } from "@shared/reconciliationProgress";
 import type { ResultsDashboardReadModel } from "@shared/reconciliationDashboard";
 import type { MatchingRulesConfig, ReconciliationPeriod, UploadedFile } from "@shared/schema";
+import { getVertical } from "@shared/verticals";
 import { Eye } from "lucide-react";
 
 import { FuelUploadStep } from "@/components/flow/FuelUploadStep";
@@ -56,10 +57,11 @@ export default function ReconciliationFlow() {
   const periodId = params?.periodId || "";
   const invalidateAll = useInvalidateReconciliation(periodId);
 
-  const { data: period, isLoading: periodLoading } = useQuery<ReconciliationPeriod>({
+  const { data: period, isLoading: periodLoading } = useQuery<ReconciliationPeriod & { verticalId?: string }>({
     queryKey: ["/api/periods", periodId],
     enabled: !!periodId,
   });
+  const vertical = getVertical(period?.verticalId);
 
   const { data: files = [], isLoading: filesLoading } = useQuery<UploadedFile[]>({
     queryKey: ["/api/periods", periodId, "files"],
@@ -401,7 +403,7 @@ export default function ReconciliationFlow() {
             <CardHeader className="text-center">
               <CardTitle>Matching Transactions</CardTitle>
               <CardDescription>
-                Comparing your bank transactions against fuel records...
+                Comparing your bank transactions against your sales...
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -409,15 +411,17 @@ export default function ReconciliationFlow() {
                 <div className="h-full w-1/3 rounded-full bg-[#F5C400] animate-indeterminate" />
               </div>
               {txCounts && (
-                <div className="grid grid-cols-2 gap-4 text-center">
+                <div className={cn("grid gap-4 text-center", txCounts.fuel > 0 ? "grid-cols-2" : "grid-cols-1")}>
                   <div className="rounded-lg bg-muted/50 p-3">
                     <p className="text-2xl font-semibold">{txCounts.bank}</p>
                     <p className="text-xs text-muted-foreground">Bank transactions</p>
                   </div>
-                  <div className="rounded-lg bg-muted/50 p-3">
-                    <p className="text-2xl font-semibold">{txCounts.fuel}</p>
-                    <p className="text-xs text-muted-foreground">{txCounts.fuelLabel}</p>
-                  </div>
+                  {txCounts.fuel > 0 && (
+                    <div className="rounded-lg bg-muted/50 p-3">
+                      <p className="text-2xl font-semibold">{txCounts.fuel}</p>
+                      <p className="text-xs text-muted-foreground">{txCounts.fuelLabel}</p>
+                    </div>
+                  )}
                 </div>
               )}
               <p className="text-sm text-muted-foreground text-center">
@@ -439,10 +443,10 @@ export default function ReconciliationFlow() {
                   {/* Hero: the answer to "how well did my period match?" */}
                   <div className="text-center space-y-1">
                     <p className="text-5xl font-heading font-bold text-[#1A1200] dark:text-[#F0EAE0]">{completionMetrics.headlineRate}%</p>
-                    <p className="text-lg font-medium">of your fuel card sales matched</p>
+                    <p className="text-lg font-medium">of your card sales matched</p>
                     {completionMetrics.unmatchedFuelTransactions > 0 || completionMetrics.unmatchedBankTransactions > 0 ? (
                       <p className="text-base font-medium text-[#B45309]">
-                        {completionMetrics.matchedCardTransactions} of {completionMetrics.totalCardTransactions} card transactions matched - {completionMetrics.unmatchedFuelTransactions} fuel and {completionMetrics.unmatchedBankTransactions} bank items need review
+                        {completionMetrics.matchedCardTransactions} of {completionMetrics.totalCardTransactions} card transactions matched - {completionMetrics.unmatchedFuelTransactions} sales and {completionMetrics.unmatchedBankTransactions} bank items need review
                       </p>
                     ) : (
                       <p className="text-sm text-muted-foreground">
@@ -466,7 +470,7 @@ export default function ReconciliationFlow() {
               {/* Fuel sales breakdown */}
               {verSummary && (
                 <div className="rounded-xl bg-section p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">Period Fuel Sales</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">Period Sales</p>
                   <div className="flex divide-x divide-border/50">
                     {[
                       { label: "All", count: verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions, amount: verSummary.overview.fuelSystem.totalSales },
@@ -503,7 +507,7 @@ export default function ReconciliationFlow() {
                   </div>
                   <div className="rounded-lg bg-[#FEF9C3] dark:bg-amber-950/30 p-3">
                     <p className="text-2xl font-semibold text-[#B45309] dark:text-amber-400">{completionMetrics.unmatchedFuelTransactions}</p>
-                    <p className="text-xs text-muted-foreground">Review Fuel</p>
+                    <p className="text-xs text-muted-foreground">Review Sales</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 p-3">
                     <p className="text-2xl font-semibold">{completionMetrics.unmatchedBankTransactions}</p>
@@ -545,9 +549,10 @@ export default function ReconciliationFlow() {
             {currentStep === "fuel" && (
               <FuelUploadStep
                 periodId={periodId}
-                existingFile={files.find((f) => f.sourceType === "fuel")}
+                existingFile={files.find((f) => f.sourceType === vertical.salesSideSourceType)}
                 onComplete={handleFuelComplete}
                 stepColor={STEP_CANVAS_COLORS[currentStep]}
+                salesSideSourceType={vertical.salesSideSourceType}
               />
             )}
 

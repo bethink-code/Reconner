@@ -281,7 +281,7 @@ export function ConfigureMatchingStep({
               )}
               {selectedPreset === "moderate" && (
                 <>
-                  <span className="font-medium">Moderate</span> is recommended for most fuel stations.
+                  <span className="font-medium">Moderate</span> is recommended for most businesses.
                   Uses a 60 minute operational-close window and a 120 minute attendant exact-delay window.
                 </>
               )}
@@ -388,7 +388,7 @@ export function ConfigureMatchingStep({
             };
 
             const statusLabel = (status: string) => {
-              if (status === 'match') return 'Covers fuel period';
+              if (status === 'match') return 'Covers the period';
               if (status === 'overlap') return 'Partial overlap';
               if (status === 'miss') return 'No overlap';
               return '';
@@ -407,7 +407,7 @@ export function ConfigureMatchingStep({
                   const fuelStatus = getCoverageStatus(fuelRange.earliest, fuelRange.latest);
                   return (
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Fuel data</span>
+                      <span className="text-muted-foreground">Sales data</span>
                       <span className="flex items-center gap-1.5 font-medium">
                         {fuelRange.earliest} to {fuelRange.latest}
                         <span className="text-muted-foreground">({verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions} txns)</span>
@@ -451,7 +451,7 @@ export function ConfigureMatchingStep({
                       return (
                         <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 mt-2">
                           <p className="text-xs font-medium text-[#B45309]">
-                            Bank data only partially covers the fuel period — some transactions may not find matches.
+                            Bank data only partially covers the period — some transactions may not find matches.
                           </p>
                         </div>
                       );
@@ -515,13 +515,13 @@ export function ConfigureMatchingStep({
                     data-testid="slider-date-window"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How far before or after the fuel sale a bank transaction can still be considered for matching. This does not change the reconciliation period itself.
+                    How far before or after the sale a bank transaction can still be considered for matching. This does not change the reconciliation period itself.
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Attendant Submission Delay</Label>
+                    <Label>Submission Delay</Label>
                     <span className="text-sm font-mono">
                       {customRules.attendantSubmissionDelayMinutes} min
                     </span>
@@ -535,7 +535,7 @@ export function ConfigureMatchingStep({
                     data-testid="slider-attendant-delay"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How long after the fuel sale an attendant may still submit the slip to the cashier for an exact same-day match.
+                    How long after the sale the payment may still post for an exact same-day match.
                   </p>
                 </div>
 
@@ -555,7 +555,7 @@ export function ConfigureMatchingStep({
                     data-testid="slider-operational-close-window"
                   />
                   <p className="text-xs text-muted-foreground">
-                    For close same-day matches that are not exact in amount, how far apart the fuel and bank times may still be.
+                    For close same-day matches that are not exact in amount, how far apart the sale and bank times may still be.
                   </p>
                 </div>
 
@@ -573,7 +573,7 @@ export function ConfigureMatchingStep({
                     data-testid="slider-min-confidence"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How sure should we be before pairing a fuel sale with a bank transaction? Lower = more matches but less accurate. Higher = fewer but more reliable.
+                    How sure should we be before pairing a sale with a bank transaction? Lower = more matches but less accurate. Higher = fewer but more reliable.
                   </p>
                 </div>
 
@@ -581,7 +581,7 @@ export function ConfigureMatchingStep({
                   <div className="space-y-1">
                     <Label>Invoice Grouping</Label>
                     <p className="text-xs text-muted-foreground">
-                      Group fuel transactions by invoice before matching
+                      Group sale lines by receipt before matching
                     </p>
                   </div>
                   <Switch

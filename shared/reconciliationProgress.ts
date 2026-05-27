@@ -29,13 +29,13 @@ export function deriveAutoMatchProgressMetrics(
     return {
       bank,
       fuel: matchableInvoices || cardTransactions,
-      fuelLabel: "Fuel card invoices",
+      fuelLabel: "Card sales",
     };
   }
 
   return {
     bank,
     fuel: cardTransactions,
-    fuelLabel: "Fuel card transactions",
+    fuelLabel: "Card sales",
   };
 }

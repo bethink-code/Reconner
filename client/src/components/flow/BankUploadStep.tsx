@@ -420,7 +420,7 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
             <Building2 className="h-6 w-6 text-primary" />
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Upload {bankName} Statement</h2>
-          <p className="text-sm text-muted-foreground mt-1">Upload your {bankName} bank statement to verify against your fuel records.</p>
+          <p className="text-sm text-muted-foreground mt-1">Upload your {bankName} bank statement to verify against your sales.</p>
         </div>
         <div className="space-y-4">
           {uploadMutation.isPending ? (

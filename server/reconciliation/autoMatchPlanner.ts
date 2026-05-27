@@ -1,4 +1,5 @@
 import { buildMatchingStages, type MatchingStage } from "../../shared/matchingStages.ts";
+import { isSalesSideTransaction, type SalesSideConfig } from "../../shared/verticals/types.ts";
 import {
   groupFuelByInvoice,
   parseDateToDays,
@@ -94,15 +95,19 @@ export function planAutoMatch(
   period: AutoMatchPeriodLike,
   rules: AutoMatchRulesLike,
   transactions: AutoMatchTransactionLike[],
+  salesSide: SalesSideConfig,
 ): AutoMatchPlan {
+  const isSalesSide = (transaction: AutoMatchTransactionLike) =>
+    isSalesSideTransaction(transaction, salesSide);
+  const groupByInvoice = rules.groupByInvoice || salesSide.forceInvoiceGrouping;
+
   const periodStartDay = new Date(`${period.startDate}T00:00:00`).getTime();
   const periodEndDay = new Date(`${period.endDate}T00:00:00`).getTime();
   const dateBufferMs = rules.dateWindowDays * 86400000;
 
   const fuelTransactions = transactions.filter((transaction) => {
     if (
-      transaction.sourceType !== "fuel" ||
-      transaction.isCardTransaction !== "yes" ||
+      !isSalesSide(transaction) ||
       isDebtorTransaction(transaction) ||
       transaction.matchStatus === "excluded" ||
       !transaction.transactionDate
@@ -131,7 +136,7 @@ export function planAutoMatch(
     (transaction) => !unmatchableBankTransactions.includes(transaction),
   );
 
-  const fuelInvoices = groupFuelByInvoice(fuelTransactions, rules.groupByInvoice);
+  const fuelInvoices = groupFuelByInvoice(fuelTransactions, groupByInvoice);
   const stages = buildMatchingStages(rules);
   const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
   const stageMatches = runSequentialMatchingStages(
@@ -230,8 +235,7 @@ export function planAutoMatch(
 
   const outOfPeriodCardFuel = transactions.filter((transaction) => {
     if (
-      transaction.sourceType !== "fuel" ||
-      transaction.isCardTransaction !== "yes" ||
+      !isSalesSide(transaction) ||
       isDebtorTransaction(transaction) ||
       transaction.matchStatus === "excluded" ||
       !transaction.transactionDate
@@ -244,7 +248,7 @@ export function planAutoMatch(
     return day < periodStartDay || day > periodEndDay;
   });
 
-  const outOfPeriodInvoices = groupFuelByInvoice(outOfPeriodCardFuel, rules.groupByInvoice);
+  const outOfPeriodInvoices = groupFuelByInvoice(outOfPeriodCardFuel, groupByInvoice);
   const outOfPeriodByDate = new Map<number, FuelInvoice<AutoMatchTransactionLike>[]>();
 
   for (const invoice of outOfPeriodInvoices) {
@@ -285,8 +289,8 @@ export function planAutoMatch(
     ? ((matchCount / matchableCount) * 100).toFixed(1)
     : "0";
 
-  const skippedNonCardCount = transactions.filter((transaction) => {
-    if (transaction.sourceType !== "fuel" || transaction.isCardTransaction === "yes" || !transaction.transactionDate) {
+  const skippedNonCardCount = !salesSide.requireCardFlag ? 0 : transactions.filter((transaction) => {
+    if (transaction.sourceType !== salesSide.sourceType || transaction.isCardTransaction === "yes" || !transaction.transactionDate) {
       return false;
     }
 

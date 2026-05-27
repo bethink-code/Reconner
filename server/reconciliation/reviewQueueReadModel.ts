@@ -3,6 +3,7 @@ import type {
   Transaction,
   TransactionResolution,
 } from "../../shared/schema";
+import { isSalesSideTransaction, type SalesSideConfig } from "../../shared/verticals/types.ts";
 import type {
   CategorizedTransaction,
   InvestigateQueueItem,
@@ -74,15 +75,15 @@ function isBankTransaction(transaction: Transaction) {
   return !!transaction.sourceType?.startsWith("bank");
 }
 
-function isFuelCardTransaction(transaction: Transaction) {
-  return transaction.sourceType === "fuel" && transaction.isCardTransaction === "yes";
+function isFuelCardTransaction(transaction: Transaction, salesSide: SalesSideConfig) {
+  return isSalesSideTransaction(transaction, salesSide);
 }
 
-function buildFuelBoundaryPositions(transactions: Transaction[]) {
+function buildFuelBoundaryPositions(transactions: Transaction[], salesSide: SalesSideConfig) {
   const grouped = new Map<string, Transaction[]>();
 
   for (const transaction of transactions) {
-    if (!isFuelCardTransaction(transaction)) continue;
+    if (!isFuelCardTransaction(transaction, salesSide)) continue;
     const key = transaction.transactionDate;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)?.push(transaction);
@@ -439,6 +440,7 @@ export function buildReviewQueueReadModel(
   transactions: Transaction[],
   resolutions: TransactionResolution[],
   matchingRules: MatchingRulesConfig,
+  salesSide: SalesSideConfig,
 ): ReviewQueueReadModel {
   const latestResolutionByTransactionId = buildLatestResolutionMap(resolutions);
   const latestResolutions = [...latestResolutionByTransactionId.values()];
@@ -446,7 +448,7 @@ export function buildReviewQueueReadModel(
     (transaction) => isBankTransaction(transaction) && isInPeriod(transaction, period),
   );
   const inPeriodFuelTransactions = transactions.filter(
-    (transaction) => isFuelCardTransaction(transaction) && isInPeriod(transaction, period),
+    (transaction) => isFuelCardTransaction(transaction, salesSide) && isInPeriod(transaction, period),
   );
   const unmatchedBankTransactions = inPeriodBankTransactions.filter((transaction) => transaction.matchStatus === "unmatched");
   const unmatchedFuelTransactions = inPeriodFuelTransactions.filter((transaction) => transaction.matchStatus === "unmatched");
@@ -462,7 +464,7 @@ export function buildReviewQueueReadModel(
       .map((resolution) => resolution.transactionId),
   );
   const perSideCounts = buildPerSideCounts(inPeriodBankTransactions, inPeriodFuelTransactions, latestResolutions);
-  const fuelBoundaryPositions = buildFuelBoundaryPositions(inPeriodFuelTransactions);
+  const fuelBoundaryPositions = buildFuelBoundaryPositions(inPeriodFuelTransactions, salesSide);
   const reviewFuelTransactions = unmatchedFuelTransactions.filter(
     (transaction) => !resolvedIds.has(transaction.id) && !flaggedTransactionIds.has(transaction.id),
   );

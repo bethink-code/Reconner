@@ -15,6 +15,7 @@ import { buildResultsDashboardReadModel } from "./reconciliation/dashboardReadMo
 import { buildReviewQueueReadModel } from "./reconciliation/reviewQueueReadModel.ts";
 import { assertPeriodOwner } from "./routeAccess";
 import { storage } from "./storage";
+import { resolveVertical, salesSideConfig } from "./verticals.ts";
 
 function matchTypeLabel(matchType: string) {
   if (matchType === "auto_exact" || matchType === "auto_exact_review") {
@@ -106,12 +107,14 @@ export function registerExportRoutes(app: Express) {
         (transaction) => transaction.matchStatus === "unmatchable",
       );
 
+      const vertical = await resolveVertical(period.propertyId);
       const dashboardModel = buildResultsDashboardReadModel(periodSummary, resolutions);
       const reviewModel = buildReviewQueueReadModel(
         period,
         allTransactions,
         resolutions,
         matchingRulesData,
+        salesSideConfig(vertical),
       );
       const declineResult = computeDeclineAnalysisFromInsights(
         allBankTransactions,

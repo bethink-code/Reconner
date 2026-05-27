@@ -75,6 +75,7 @@ export const properties = pgTable("properties", {
   name: text("name").notNull(),
   code: varchar("code"), // Optional short code, e.g. "DT-01"
   address: text("address"),
+  verticalId: text("vertical_id").notNull().default("fuel"), // business type: 'fuel' | 'retail' — drives vocabulary, insights, sales-side sourceType
   status: text("status").notNull().default("active"), // 'active' | 'archived'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -384,21 +385,4 @@ export const pricingScenarios = pgTable("pricing_scenarios", {
 export type PricingScenario = typeof pricingScenarios.$inferSelect;
 export type InsertPricingScenario = typeof pricingScenarios.$inferInsert;
 
-// Resolution reason options
-export const RESOLUTION_REASONS = [
-  { value: "attendant_overfill", label: "Attendant error / overfill" },
-  { value: "possible_tip", label: "Possible attendant tip" },
-  { value: "duplicate_charge", label: "Duplicate bank charge" },
-  { value: "no_fuel_record", label: "No matching fuel record" },
-  { value: "timing_difference", label: "Timing difference (posted next day)" },
-  { value: "cash_as_card", label: "Cash recorded as card (or vice versa)" },
-  { value: "test_transaction", label: "Test/pre-auth transaction" },
-  { value: "different_merchant", label: "Different merchant account" },
-  { value: "refund_reversal", label: "Refund/reversal" },
-  { value: "bank_fee", label: "Bank fee/charge" },
-  { value: "not_yet_settled", label: "Not yet settled at bank" },
-  { value: "grouped_invoice", label: "Part of grouped invoice" },
-  { value: "declined_at_bank", label: "Declined at bank" },
-  { value: "wrong_payment_type", label: "Wrong payment type recorded" },
-  { value: "other", label: "Other" },
-] as const;
+// Resolution reasons are now vertical-specific — see shared/verticals (resolutionReasons).

@@ -85,7 +85,7 @@ function getMatchLabel(matchType: string, userName: string, description?: string
   }
   if (matchType === "cash") return "Cash";
   if (matchType === "debtor") return "Debtor";
-  if (matchType === "unmatched_card") return "Unmatched fuel card sales";
+  if (matchType === "unmatched_card") return "Unmatched card sales";
   if (matchType === "unmatched_bank") return "Unmatched bank";
   if (matchType === "linked") return `${userName} (With reason)`;
   return `${userName} (Confirmed)`;
@@ -376,7 +376,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
             },
             {
               key: "card",
-              label: "Unmatched fuel card sales",
+              label: "Unmatched card sales",
               count: counts.unmatchedCard,
               isLink: true,
               onClickSub: () => onJumpToReview?.('fuel'),

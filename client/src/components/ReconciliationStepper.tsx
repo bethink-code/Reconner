@@ -13,8 +13,8 @@ interface StepConfig {
 const STEPS: StepConfig[] = [
   {
     id: "fuel",
-    label: "Upload Fuel Data",
-    shortLabel: "Fuel",
+    label: "Upload Sales Data",
+    shortLabel: "Sales",
     description: "Your source of truth",
   },
   {

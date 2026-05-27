@@ -104,7 +104,7 @@ export class DataQualityValidator {
    */
   validate(
     parsedData: ParsedFileData,
-    sourceType: 'fuel' | 'bank',
+    sourceType: 'fuel' | 'bank' | 'retail',
     sourceName?: string
   ): DataQualityReport {
     const issues: DataQualityIssue[] = [];
@@ -444,7 +444,7 @@ export class DataQualityValidator {
   private detectMissingRequiredData(
     parsedData: ParsedFileData,
     columnAnalysis: ColumnAnalysis[],
-    sourceType: 'fuel' | 'bank',
+    sourceType: 'fuel' | 'bank' | 'retail',
     detectedPreset?: { name: string; category: string; mappings: Record<string, string> } | null
   ): { issues: DataQualityIssue[] } {
     const issues: DataQualityIssue[] = [];

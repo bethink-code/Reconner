@@ -7,6 +7,7 @@ import {
   resolveOrgContext,
 } from "./routeAccess";
 import { storage } from "./storage";
+import { resolveVertical } from "./verticals.ts";
 import { insertReconciliationPeriodSchema } from "../shared/schema";
 
 export function registerPeriodRoutes(app: Express) {
@@ -32,7 +33,8 @@ export function registerPeriodRoutes(app: Express) {
     try {
       const period = await assertPeriodOwner(req.params.id, req, res);
       if (!period) return;
-      res.json(period);
+      const vertical = await resolveVertical(period.propertyId);
+      res.json({ ...period, verticalId: vertical.id });
     } catch (error) {
       console.error("Error fetching period:", error);
       res.status(500).json({ error: "Failed to fetch period" });

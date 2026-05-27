@@ -10,6 +10,8 @@ import {
   assertPeriodWrite,
 } from "./routeAccess";
 import { storage } from "./storage";
+import { resolveVertical, salesSideConfig } from "./verticals.ts";
+import { buildRetailSummary } from "../shared/retailSummary.ts";
 import { matchingRulesConfigSchema } from "../shared/schema";
 
 export function registerReconciliationReadRoutes(app: Express) {
@@ -110,6 +112,7 @@ export function registerReconciliationReadRoutes(app: Express) {
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getResolutionsByPeriod(req.params.periodId),
       ]);
+      const vertical = await resolveVertical(period.propertyId);
       const txMap = new Map(transactions.map((tx) => [tx.id, tx]));
       const fuelItemsByMatchId = new Map<string, typeof transactions>();
       const linkedResolutionTransactionIds = new Set(
@@ -137,7 +140,7 @@ export function registerReconciliationReadRoutes(app: Express) {
 
       const isCanonicalFuel = (transaction: (typeof transactions)[number] | null | undefined) =>
         !!transaction &&
-        transaction.sourceType === "fuel" &&
+        transaction.sourceType === vertical.salesSideSourceType &&
         isInPeriod(transaction);
 
       const parseTimeToMinutes = (timeStr: string | null | undefined): number | null => {
@@ -201,7 +204,7 @@ export function registerReconciliationReadRoutes(app: Express) {
       };
 
       for (const transaction of transactions) {
-        if (transaction.sourceType === "fuel" && transaction.matchId) {
+        if (transaction.sourceType === vertical.salesSideSourceType && transaction.matchId) {
           if (!fuelItemsByMatchId.has(transaction.matchId)) {
             fuelItemsByMatchId.set(transaction.matchId, []);
           }
@@ -240,7 +243,7 @@ export function registerReconciliationReadRoutes(app: Express) {
           paymentType.includes("account") ||
           paymentType.includes("fleet");
 
-        if (transaction.sourceType === "fuel" && transaction.matchStatus !== "matched") {
+        if (transaction.sourceType === vertical.salesSideSourceType && transaction.matchStatus !== "matched") {
           if (!isCanonicalFuel(transaction)) return [];
           if (isDebtor) {
             return [{
@@ -388,7 +391,8 @@ export function registerReconciliationReadRoutes(app: Express) {
       if (!period) return;
 
       const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
-      const fuelTxns = transactions.filter((tx) => tx.sourceType === "fuel");
+      const vertical = await resolveVertical(period.propertyId);
+      const fuelTxns = transactions.filter((tx) => tx.sourceType === vertical.salesSideSourceType);
       const bankTxns = transactions.filter(
         (tx) => tx.sourceType && tx.sourceType.startsWith("bank"),
       );
@@ -411,8 +415,9 @@ export function registerReconciliationReadRoutes(app: Express) {
         storage.getAttendantSummary(req.params.periodId),
         storage.getTransactionsByPeriod(req.params.periodId),
       ]);
+      const vertical = await resolveVertical(period.propertyId);
 
-      const fuelTransactions = transactions.filter((tx) => tx.sourceType === "fuel");
+      const fuelTransactions = transactions.filter((tx) => tx.sourceType === vertical.salesSideSourceType);
       const bankTransactions = transactions.filter(
         (tx) => tx.sourceType && tx.sourceType.startsWith("bank"),
       );
@@ -435,11 +440,30 @@ export function registerReconciliationReadRoutes(app: Express) {
         storage.getResolutionsByPeriod(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
       ]);
+      const vertical = await resolveVertical(period.propertyId);
 
-      res.json(buildReviewQueueReadModel(period, transactions, resolutions, matchingRules));
+      res.json(buildReviewQueueReadModel(period, transactions, resolutions, matchingRules, salesSideConfig(vertical)));
     } catch (error) {
       console.error("Error fetching review read model:", error);
       res.status(500).json({ error: "Failed to fetch review data" });
+    }
+  });
+
+  app.get("/api/periods/:periodId/retail-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const vertical = await resolveVertical(period.propertyId);
+      const transactions = await storage.getTransactionsByPeriod(req.params.periodId);
+      res.json(
+        buildRetailSummary(transactions, vertical.salesSideSourceType, {
+          startDate: period.startDate,
+          endDate: period.endDate,
+        }),
+      );
+    } catch (error) {
+      console.error("Error building retail summary:", error);
+      res.status(500).json({ error: "Failed to build retail summary" });
     }
   });
 

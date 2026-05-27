@@ -121,6 +121,7 @@ export function registerExportRoutes(app: Express) {
         periodSummary,
         attendantSummary,
         declineResult,
+        allFuelTransactions,
       );
 
       const XLSX = await import("xlsx");

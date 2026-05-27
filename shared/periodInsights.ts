@@ -1,3 +1,5 @@
+import type { ReprintScamReadModel } from "./reprintScam.ts";
+
 export interface InsightsBankBreakdown {
   bankName: string;
   approvedCount: number;
@@ -174,4 +176,5 @@ export interface PeriodInsightsReadModel {
   detail: InsightsDetailReadModel;
   attendants: InsightsAttendantsReadModel;
   declines: InsightsDeclinesReadModel;
+  reprints: ReprintScamReadModel;
 }

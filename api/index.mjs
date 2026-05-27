@@ -31482,8 +31482,38 @@ function buildReconciliationOverviewReport(summary) {
   };
 }
 
+// shared/reprintScam.ts
+var DEFAULT_REPRINT_SCAM_RULES = {
+  roundDenomination: 10,
+  roundCentsTolerance: 0.05,
+  minClusterSize: 3,
+  minCardTailReuse: 2,
+  minRepeatSameAmount: 2
+};
+
+// server/insights/reprintScamReport.ts
+function extractReprintCandidates(fuelTransactions) {
+  return fuelTransactions.filter((tx) => tx.sourceType === "fuel" && tx.isCardTransaction === "yes").map((tx) => ({
+    id: tx.id,
+    date: tx.transactionDate || "",
+    time: tx.transactionTime,
+    amount: parseFloat(tx.amount),
+    attendant: tx.attendant,
+    cashier: tx.cashier,
+    pump: tx.pump,
+    cardTail: tx.cardNumber,
+    matched: tx.matchStatus === "matched"
+  }));
+}
+function buildReprintScamReadModel(fuelTransactions) {
+  return {
+    candidates: extractReprintCandidates(fuelTransactions),
+    defaultRules: DEFAULT_REPRINT_SCAM_RULES
+  };
+}
+
 // server/insights/insightsReadModel.ts
-function buildInsightsReadModel(summary, attendantSummary, declineResult) {
+function buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions) {
   return {
     detail: buildReconciliationOverviewReport(summary),
     attendants: buildAttendantsReport({
@@ -31492,7 +31522,8 @@ function buildInsightsReadModel(summary, attendantSummary, declineResult) {
       unmatchedBankCount: summary.unmatchedBankTransactions,
       unmatchedBankAmount: summary.unmatchedBankAmount
     }),
-    declines: buildDeclinedTransactionsReport(declineResult)
+    declines: buildDeclinedTransactionsReport(declineResult),
+    reprints: buildReprintScamReadModel(fuelTransactions)
   };
 }
 
@@ -32367,7 +32398,8 @@ function registerExportRoutes(app2) {
       const insightsModel = buildInsightsReadModel(
         periodSummary,
         attendantSummary,
-        declineResult
+        declineResult,
+        allFuelTransactions
       );
       const XLSX2 = await import("xlsx");
       const wb = XLSX2.utils.book_new();
@@ -36224,7 +36256,7 @@ function registerReconciliationReadRoutes(app2) {
         (tx) => tx.sourceType && tx.sourceType.startsWith("bank")
       );
       const declineResult = computeDeclineAnalysis(bankTransactions, fuelTransactions);
-      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult));
+      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions));
     } catch (error) {
       console.error("Error fetching insights read model:", error);
       res.status(500).json({ error: "Failed to fetch insights data" });

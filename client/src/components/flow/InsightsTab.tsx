@@ -14,22 +14,24 @@ import {
   MinusCircle,
   TrendingUp,
   BarChart3,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRand } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { getBankColor } from "@/lib/bankColors";
 import { AttendantReport } from "./AttendantReport";
+import { ReprintScamReport } from "./ReprintScamReport";
+
+type InsightsView = "landing" | "detail" | "attendants" | "declined" | "reprints";
 
 interface InsightsTabProps {
   periodId: string;
-  initialView?: "landing" | "detail" | "attendants" | "declined";
+  initialView?: InsightsView;
 }
 
 export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
-  const [view, setView] = useState<"landing" | "detail" | "attendants" | "declined">(
-    initialView || "landing",
-  );
+  const [view, setView] = useState<InsightsView>(initialView || "landing");
 
   const { data: insights, isLoading } = useQuery<PeriodInsightsReadModel>({
     queryKey: ["/api/periods", periodId, "insights"],
@@ -103,6 +105,12 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
             title="Declined card transactions"
             description="Transactions declined at point of sale. Patterns by card type, pump, time of day."
             onClick={() => setView("declined")}
+          />
+          <LandingCard
+            icon={<ShieldAlert className="h-5 w-5 text-muted-foreground" />}
+            title="Reprint-scam check"
+            description="Round-amount card sales clustered by day, and reused card numbers — the phantom-slip signal."
+            onClick={() => setView("reprints")}
           />
         </div>
 
@@ -696,6 +704,18 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
             </div>
           </>
         )}
+      </div>
+    );
+  }
+
+  if (view === "reprints") {
+    return (
+      <div className="mx-auto space-y-4">
+        {backHeader(
+          "Reprint-scam check",
+          "Round-amount card sales clustered by day, and reused card numbers — the phantom-slip signal.",
+        )}
+        <ReprintScamReport data={insights.reprints} />
       </div>
     );
   }

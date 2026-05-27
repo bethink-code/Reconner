@@ -178,7 +178,7 @@ test("buildInsightsReadModel keeps report logic separate and returns report-owne
         attendant: "Alice",
       },
     ],
-  });
+  }, []);
 
   assert.equal(model.detail.matching.cardMatchPct, 87);
   assert.equal(model.detail.reconciliation.bankApprovedAmount, 69800);
@@ -226,6 +226,7 @@ test("buildInsightsReadModel returns no-attendant state when uploads have no att
       transactions: [],
       suspicious: [],
     },
+    [],
   );
 
   assert.equal(model.attendants.state, "no_attendant_data");

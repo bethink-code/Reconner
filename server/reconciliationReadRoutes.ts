@@ -418,7 +418,7 @@ export function registerReconciliationReadRoutes(app: Express) {
       );
       const declineResult = computeDeclineAnalysis(bankTransactions, fuelTransactions);
 
-      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult));
+      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions));
     } catch (error) {
       console.error("Error fetching insights read model:", error);
       res.status(500).json({ error: "Failed to fetch insights data" });

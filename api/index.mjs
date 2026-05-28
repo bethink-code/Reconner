@@ -28085,6 +28085,13 @@ var DatabaseStorage = class {
     const [updated] = await db.update(properties).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq(properties.id, id)).returning();
     return updated || void 0;
   }
+  async setPropertiesVerticalForOrg(orgId, verticalId) {
+    const updated = await db.update(properties).set({ verticalId, updatedAt: /* @__PURE__ */ new Date() }).where(and(
+      eq(properties.organizationId, orgId),
+      eq(properties.status, "active")
+    )).returning({ id: properties.id });
+    return updated.length;
+  }
   async deleteProperty(id) {
     await db.delete(properties).where(eq(properties.id, id));
   }
@@ -30407,9 +30414,19 @@ function registerOrganizationRoutes(app2) {
         allowed = role === "owner";
       }
       if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can update" });
-      const { name, billingEmail, billingAddress, vatNumber, status } = req.body;
+      const { name, billingEmail, billingAddress, vatNumber, status, verticalId } = req.body;
       const updated = await storage.updateOrganization(req.params.id, { name, billingEmail, billingAddress, vatNumber, status });
       audit(req, { action: "org.update", resourceType: "organization", resourceId: req.params.id });
+      if (verticalId !== void 0) {
+        const resolved = getVertical(verticalId).id;
+        const count = await storage.setPropertiesVerticalForOrg(req.params.id, resolved);
+        audit(req, {
+          action: "org.set_vertical",
+          resourceType: "organization",
+          resourceId: req.params.id,
+          detail: `${resolved} (${count} ${count === 1 ? "property" : "properties"})`
+        });
+      }
       res.json(updated);
     } catch (error) {
       console.error("Error updating organization:", error);

@@ -243,6 +243,7 @@ export interface IStorage {
   getProperty(id: string): Promise<Property | undefined>;
   createProperty(data: InsertProperty): Promise<Property>;
   updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property | undefined>;
+  setPropertiesVerticalForOrg(orgId: string, verticalId: string): Promise<number>;
   deleteProperty(id: string): Promise<void>;
 
   // Pricing / viability scenarios (internal, platform-owner only, shared)
@@ -411,6 +412,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(properties.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  async setPropertiesVerticalForOrg(orgId: string, verticalId: string): Promise<number> {
+    const updated = await db.update(properties)
+      .set({ verticalId, updatedAt: new Date() })
+      .where(and(
+        eq(properties.organizationId, orgId),
+        eq(properties.status, "active"),
+      ))
+      .returning({ id: properties.id });
+    return updated.length;
   }
 
   async deleteProperty(id: string): Promise<void> {

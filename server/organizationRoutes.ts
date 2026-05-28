@@ -89,9 +89,22 @@ export function registerOrganizationRoutes(app: Express): void {
         allowed = role === "owner";
       }
       if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can update" });
-      const { name, billingEmail, billingAddress, vatNumber, status } = req.body;
+      const { name, billingEmail, billingAddress, vatNumber, status, verticalId } = req.body;
       const updated = await storage.updateOrganization(req.params.id, { name, billingEmail, billingAddress, vatNumber, status });
       audit(req, { action: "org.update", resourceType: "organization", resourceId: req.params.id });
+      // Optional cascade: bulk-flip the business type of every active property in this org.
+      // The "vertical lives on properties" model means this is how an org-level vertical change
+      // actually happens — there is no org-side vertical column. Validates via getVertical (unknown → fuel).
+      if (verticalId !== undefined) {
+        const resolved = getVertical(verticalId).id;
+        const count = await storage.setPropertiesVerticalForOrg(req.params.id, resolved);
+        audit(req, {
+          action: "org.set_vertical",
+          resourceType: "organization",
+          resourceId: req.params.id,
+          detail: `${resolved} (${count} ${count === 1 ? "property" : "properties"})`,
+        });
+      }
       res.json(updated);
     } catch (error) {
       console.error("Error updating organization:", error);

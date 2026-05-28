@@ -73,6 +73,8 @@ export default function Admin() {
   const [inviteOrgId, setInviteOrgId] = useState<string>("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("viewer");
   const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "", verticalId: DEFAULT_VERTICAL_ID });
+  const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+  const [editOrgForm, setEditOrgForm] = useState({ name: "", billingEmail: "", billingAddress: "", vatNumber: "", verticalId: "" });
   const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
@@ -123,6 +125,20 @@ export default function Admin() {
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message || "Failed to create organization", variant: "destructive" });
+    },
+  });
+
+  const updateOrgMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { name?: string; billingEmail?: string; billingAddress?: string; vatNumber?: string; verticalId?: string } }) =>
+      apiRequest("PATCH", `/api/organizations/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      setEditingOrg(null);
+      toast({ title: "Organization updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to update organization", variant: "destructive" });
     },
   });
 
@@ -537,20 +553,41 @@ export default function Admin() {
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm(`Archive ${org.name}? All data is preserved and the org can be restored later.`)) {
-                            archiveOrgMutation.mutate(org.id);
-                          }
-                        }}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="Archive (data preserved)"
-                        data-testid={`button-archive-org-${org.slug}`}
-                      >
-                        <Archive className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingOrg(org);
+                            setEditOrgForm({
+                              name: org.name,
+                              billingEmail: org.billingEmail || "",
+                              billingAddress: org.billingAddress || "",
+                              vatNumber: org.vatNumber || "",
+                              verticalId: "",
+                            });
+                          }}
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Edit"
+                          data-testid={`button-edit-org-${org.slug}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm(`Archive ${org.name}? All data is preserved and the org can be restored later.`)) {
+                              archiveOrgMutation.mutate(org.id);
+                            }
+                          }}
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Archive (data preserved)"
+                          data-testid={`button-archive-org-${org.slug}`}
+                        >
+                          <Archive className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1519,6 +1556,98 @@ export default function Admin() {
               </Button>
               <Button type="submit" disabled={updatePropertyMutation.isPending || !editPropertyForm.name}>
                 {updatePropertyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Organization Dialog */}
+      <Dialog open={!!editingOrg} onOpenChange={(open) => !open && setEditingOrg(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogDescription>Update org name, billing details, or change the business type of all its properties.</DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!editingOrg || !editOrgForm.name) return;
+              updateOrgMutation.mutate({
+                id: editingOrg.id,
+                data: {
+                  name: editOrgForm.name,
+                  billingEmail: editOrgForm.billingEmail || undefined,
+                  billingAddress: editOrgForm.billingAddress || undefined,
+                  vatNumber: editOrgForm.vatNumber || undefined,
+                  ...(editOrgForm.verticalId ? { verticalId: editOrgForm.verticalId } : {}),
+                },
+              });
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="edit-org-name">Name *</Label>
+              <Input
+                id="edit-org-name"
+                value={editOrgForm.name}
+                onChange={(e) => setEditOrgForm({ ...editOrgForm, name: e.target.value })}
+                required
+                data-testid="input-edit-org-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-org-billing-email">Billing email</Label>
+              <Input
+                id="edit-org-billing-email"
+                type="email"
+                value={editOrgForm.billingEmail}
+                onChange={(e) => setEditOrgForm({ ...editOrgForm, billingEmail: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-org-billing-address">Billing address</Label>
+              <Input
+                id="edit-org-billing-address"
+                value={editOrgForm.billingAddress}
+                onChange={(e) => setEditOrgForm({ ...editOrgForm, billingAddress: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-org-vat">VAT number</Label>
+              <Input
+                id="edit-org-vat"
+                value={editOrgForm.vatNumber}
+                onChange={(e) => setEditOrgForm({ ...editOrgForm, vatNumber: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <Label htmlFor="edit-org-vertical">Change business type for all properties</Label>
+              <Select
+                value={editOrgForm.verticalId}
+                onValueChange={(value) => setEditOrgForm({ ...editOrgForm, verticalId: value })}
+              >
+                <SelectTrigger id="edit-org-vertical" data-testid="select-edit-org-vertical">
+                  <SelectValue placeholder="Leave unchanged" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VERTICAL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Picking a business type will flip every active property in this org. Leave unset to keep current values.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingOrg(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateOrgMutation.isPending || !editOrgForm.name}>
+                {updateOrgMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
               </Button>
             </DialogFooter>
           </form>

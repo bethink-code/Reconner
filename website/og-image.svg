@@ -1,16 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
-  <!-- Sunshine canvas -->
+  <!-- Sunshine canvas - matches the lekana product brand -->
   <rect width="1200" height="630" fill="#F5C400"/>
 
-  <!-- Mark, 4x scale of the canonical 80x40 mark, centered horizontally and vertically with the wordmark below -->
-  <g transform="translate(440, 160)">
-    <circle cx="104" cy="80" r="20" fill="#1A1200"/>
-    <rect x="152" y="16" width="16" height="128" rx="8" fill="#1A1200"/>
-    <circle cx="216" cy="80" r="20" fill="#1A1200"/>
+  <!-- MIDDLE: lekana mark + wordmark, filling the central 600x630 square.
+       When WhatsApp / iMessage crop to the centre square (~x=285..915), the
+       viewer sees this block. The side strips give the landscape preview
+       breathing space without competing with the logo. -->
+
+  <!-- Mark - 5x scale of the canonical 80x40 mark, centered horizontally -->
+  <g transform="translate(470, 130)">
+    <circle cx="130" cy="100" r="25" fill="#1A1200"/>
+    <rect x="190" y="20" width="20" height="160" rx="10" fill="#1A1200"/>
+    <circle cx="270" cy="100" r="25" fill="#1A1200"/>
   </g>
 
   <!-- Wordmark, centered below the mark -->
-  <text x="600" y="465" text-anchor="middle"
-    font-family="Nunito"
-    font-weight="400" font-size="112" fill="#1A1200" letter-spacing="-2">lekana</text>
+  <text x="600" y="490" text-anchor="middle"
+    font-family="Nunito" font-weight="400" font-size="140" fill="#1A1200" letter-spacing="-2">lekana</text>
 </svg>

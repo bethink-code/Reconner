@@ -33,6 +33,12 @@
       ]
     },
     {
+      "source": "/(.*).vcf",
+      "headers": [
+        { "key": "Content-Type", "value": "text/vcard; charset=utf-8" }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },

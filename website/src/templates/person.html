@@ -1,0 +1,77 @@
+<section class="hero">
+  <div class="container container--narrow">
+    {{PHOTO_BLOCK}}
+    <p class="tag">{{TITLE}}</p>
+    <h1>{{FULL_NAME}}.</h1>
+    <p class="lead">{{ROLE}}</p>
+    <p>{{INTRO}}</p>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow">
+    <div class="card person-card">
+      <div class="person-card-grid">
+        <div class="person-card-actions">
+          <h2>My card.</h2>
+          <p>Save to your contacts, or share the link.</p>
+          <div class="btn-row">
+            <a class="btn btn-primary" href="/{{SLUG}}.vcf" download>Save to contacts</a>
+            <button class="btn btn-cream" type="button" data-share-btn data-share-url="https://lekana.app/{{SLUG}}" data-share-title="{{FULL_NAME}} - {{TITLE}}">Share this page</button>
+          </div>
+          <ul class="person-rows">
+            <li><span class="k">Email</span> <a href="mailto:{{EMAIL}}">{{EMAIL}}</a></li>
+            <li><span class="k">WhatsApp</span> <a href="{{WHATSAPP}}">{{PHONE_DISPLAY}}</a></li>
+            {{LINKEDIN_ROW}}
+          </ul>
+        </div>
+        <div class="person-card-qr" aria-hidden="false">
+          <div class="person-qr">{{QR_SVG}}</div>
+          <p class="person-qr-caption">Scan to open this page on a phone.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow">
+    <p class="tag">Best for</p>
+    <p class="lead" style="margin-top:4px;">{{BEST_FOR}}</p>
+  </div>
+</section>
+
+<script>
+  // Native share sheet (Web Share API) on phones; clipboard copy on desktop.
+  (function () {
+    var btn = document.querySelector('[data-share-btn]');
+    if (!btn) return;
+    var url = btn.getAttribute('data-share-url');
+    var title = btn.getAttribute('data-share-title');
+    btn.addEventListener('click', function () {
+      if (navigator.share) {
+        navigator.share({ title: title, url: url }).catch(function () {});
+        return;
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(function () {
+          var orig = btn.textContent;
+          btn.textContent = 'Link copied';
+          setTimeout(function () { btn.textContent = orig; }, 1800);
+        });
+      }
+    });
+  })();
+</script>
+
+<section class="section">
+  <div class="container container--narrow">
+    <p class="tag">About lekana</p>
+    <h2>A day's work in five minutes.</h2>
+    <p class="lead" style="margin-top:12px;">lekana matches your bank transactions to your point-of-sale. Across every bank. What used to take a day takes under five minutes.</p>
+    <div class="btn-row" style="margin-top:20px;">
+      <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
+      <a class="btn btn-ghost" href="/reconciliation">See how it works</a>
+    </div>
+  </div>
+</section>

@@ -3,6 +3,7 @@ import { isAuthenticated } from "./auth";
 import { storage } from "./storage";
 import { audit } from "./auditLog";
 import { ORG_ROLES } from "../shared/schema";
+import { getVertical } from "../shared/verticals/index.ts";
 
 // Organization management: list, create, get, update, archive/restore, members.
 // Platform owners can manage any org; org owners manage their own. Authorisation
@@ -35,14 +36,21 @@ export function registerOrganizationRoutes(app: Express): void {
       if (!me?.isPlatformOwner) {
         return res.status(403).json({ error: "Only the platform owner can create organizations" });
       }
-      const { name, slug, billingEmail, billingAddress, vatNumber } = req.body;
+      const { name, slug, billingEmail, billingAddress, vatNumber, verticalId } = req.body;
       if (!name || !slug) return res.status(400).json({ error: "name and slug required" });
       if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "slug must be lowercase alphanumeric with hyphens" });
       const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber });
       // Auto-add the platform owner as admin so they can manage it
       await storage.addOrganizationMember(org.id, userId, "admin");
-      // Auto-create a default "Main" property so the org has somewhere to put periods immediately
-      await storage.createProperty({ organizationId: org.id, name: "Main", code: null, address: null });
+      // Auto-create a default "Main" property so the org has somewhere to put periods immediately.
+      // Seed it with the org's chosen business type so the admin doesn't have to flip it after.
+      await storage.createProperty({
+        organizationId: org.id,
+        name: "Main",
+        code: null,
+        address: null,
+        verticalId: getVertical(verticalId).id,
+      });
       audit(req, { action: "org.create", resourceType: "organization", resourceId: org.id, detail: name });
       res.json(org);
     } catch (error: any) {

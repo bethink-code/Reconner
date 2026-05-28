@@ -72,7 +72,7 @@ export default function Admin() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteOrgId, setInviteOrgId] = useState<string>("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("viewer");
-  const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "" });
+  const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "", verticalId: DEFAULT_VERTICAL_ID });
   const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
@@ -113,12 +113,12 @@ export default function Admin() {
   });
 
   const createOrgMutation = useMutation({
-    mutationFn: async (payload: { name: string; slug: string; billingEmail?: string }) => {
+    mutationFn: async (payload: { name: string; slug: string; billingEmail?: string; verticalId?: string }) => {
       return await apiRequest("POST", "/api/organizations", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
-      setNewOrgForm({ name: "", slug: "", billingEmail: "" });
+      setNewOrgForm({ name: "", slug: "", billingEmail: "", verticalId: DEFAULT_VERTICAL_ID });
       toast({ title: "Organization created" });
     },
     onError: (error: Error) => {
@@ -498,6 +498,21 @@ export default function Admin() {
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, billingEmail: e.target.value })}
                     className="md:w-[220px]"
                   />
+                  <Select
+                    value={newOrgForm.verticalId}
+                    onValueChange={(value) => setNewOrgForm({ ...newOrgForm, verticalId: value })}
+                  >
+                    <SelectTrigger className="md:w-[160px]" data-testid="select-new-org-vertical">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VERTICAL_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button type="submit" disabled={createOrgMutation.isPending || !newOrgForm.name || !newOrgForm.slug}>
                     {createOrgMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
                   </Button>

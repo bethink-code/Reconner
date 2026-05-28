@@ -30361,12 +30361,18 @@ function registerOrganizationRoutes(app2) {
       if (!me?.isPlatformOwner) {
         return res.status(403).json({ error: "Only the platform owner can create organizations" });
       }
-      const { name, slug, billingEmail, billingAddress, vatNumber } = req.body;
+      const { name, slug, billingEmail, billingAddress, vatNumber, verticalId } = req.body;
       if (!name || !slug) return res.status(400).json({ error: "name and slug required" });
       if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "slug must be lowercase alphanumeric with hyphens" });
       const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber });
       await storage.addOrganizationMember(org.id, userId, "admin");
-      await storage.createProperty({ organizationId: org.id, name: "Main", code: null, address: null });
+      await storage.createProperty({
+        organizationId: org.id,
+        name: "Main",
+        code: null,
+        address: null,
+        verticalId: getVertical(verticalId).id
+      });
       audit(req, { action: "org.create", resourceType: "organization", resourceId: org.id, detail: name });
       res.json(org);
     } catch (error) {

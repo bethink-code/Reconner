@@ -14,8 +14,14 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { User, AuditLog, InvitedUser, AccessRequest, Organization, OrgRole, Property } from "@shared/schema";
+import { VERTICALS, DEFAULT_VERTICAL_ID } from "@shared/verticals";
 import { useAuth } from "@/hooks/useAuth";
 import { Building2, MapPin } from "lucide-react";
+
+const VERTICAL_OPTIONS = Object.values(VERTICALS).map((v) => ({
+  value: v.id,
+  label: v.vocabulary.businessType,
+}));
 
 const ACTION_LABELS: Record<string, string> = {
   "access.denied": "Access Denied",
@@ -67,9 +73,9 @@ export default function Admin() {
   const [inviteOrgId, setInviteOrgId] = useState<string>("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("viewer");
   const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "" });
-  const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "" });
+  const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
-  const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "" });
+  const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
   const AUDIT_LIMIT = 50;
 
   // Organizations — for invite picker and Organizations tab
@@ -152,13 +158,13 @@ export default function Admin() {
   const archivedProperties = allProperties.filter(p => p.status === "archived");
 
   const createPropertyMutation = useMutation({
-    mutationFn: async (payload: { name: string; code?: string; address?: string }) => {
+    mutationFn: async (payload: { name: string; code?: string; address?: string; verticalId?: string }) => {
       return await apiRequest("POST", "/api/properties", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setNewPropertyForm({ name: "", code: "", address: "" });
+      setNewPropertyForm({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
       toast({ title: "Property created" });
     },
     onError: (error: Error) => {
@@ -191,7 +197,7 @@ export default function Admin() {
   });
 
   const updatePropertyMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { name: string; code?: string; address?: string } }) =>
+    mutationFn: async ({ id, data }: { id: string; data: { name: string; code?: string; address?: string; verticalId?: string } }) =>
       apiRequest("PATCH", `/api/properties/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
@@ -593,6 +599,7 @@ export default function Admin() {
                         name: newPropertyForm.name,
                         code: newPropertyForm.code || undefined,
                         address: newPropertyForm.address || undefined,
+                        verticalId: newPropertyForm.verticalId,
                       });
                     }
                   }}
@@ -619,6 +626,21 @@ export default function Admin() {
                       onChange={(e) => setNewPropertyForm({ ...newPropertyForm, address: e.target.value })}
                       className="md:w-[260px]"
                     />
+                    <Select
+                      value={newPropertyForm.verticalId}
+                      onValueChange={(value) => setNewPropertyForm({ ...newPropertyForm, verticalId: value })}
+                    >
+                      <SelectTrigger className="md:w-[160px]" data-testid="select-new-property-vertical">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VERTICAL_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button type="submit" disabled={createPropertyMutation.isPending || !newPropertyForm.name}>
                       {createPropertyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
                     </Button>
@@ -637,9 +659,12 @@ export default function Admin() {
                       <div className="flex items-center gap-3">
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <p className="text-sm font-medium">
+                          <p className="text-sm font-medium flex items-center gap-2">
                             {p.name}
-                            {p.code && <span className="text-xs text-muted-foreground ml-2">({p.code})</span>}
+                            {p.code && <span className="text-xs text-muted-foreground">({p.code})</span>}
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {VERTICALS[p.verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? p.verticalId}
+                            </Badge>
                           </p>
                           {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
                         </div>
@@ -651,7 +676,12 @@ export default function Admin() {
                             size="sm"
                             onClick={() => {
                               setEditingProperty(p);
-                              setEditPropertyForm({ name: p.name, code: p.code || "", address: p.address || "" });
+                              setEditPropertyForm({
+                                name: p.name,
+                                code: p.code || "",
+                                address: p.address || "",
+                                verticalId: p.verticalId || DEFAULT_VERTICAL_ID,
+                              });
                             }}
                             className="text-muted-foreground hover:text-foreground"
                             data-testid={`button-edit-property-${p.id}`}
@@ -695,9 +725,12 @@ export default function Admin() {
                       <div className="flex items-center gap-3">
                         <Archive className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <p className="text-sm font-medium">
+                          <p className="text-sm font-medium flex items-center gap-2">
                             {p.name}
-                            {p.code && <span className="text-xs text-muted-foreground ml-2">({p.code})</span>}
+                            {p.code && <span className="text-xs text-muted-foreground">({p.code})</span>}
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {VERTICALS[p.verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? p.verticalId}
+                            </Badge>
                           </p>
                           {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
                         </div>
@@ -1414,6 +1447,7 @@ export default function Admin() {
                   name: editPropertyForm.name,
                   code: editPropertyForm.code || undefined,
                   address: editPropertyForm.address || undefined,
+                  verticalId: editPropertyForm.verticalId,
                 },
               });
             }}
@@ -1445,6 +1479,24 @@ export default function Admin() {
                 value={editPropertyForm.address}
                 onChange={(e) => setEditPropertyForm({ ...editPropertyForm, address: e.target.value })}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-property-vertical">Business type</Label>
+              <Select
+                value={editPropertyForm.verticalId}
+                onValueChange={(value) => setEditPropertyForm({ ...editPropertyForm, verticalId: value })}
+              >
+                <SelectTrigger id="edit-property-vertical" data-testid="select-edit-property-vertical">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VERTICAL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingProperty(null)}>

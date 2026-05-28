@@ -155,6 +155,34 @@ export function registerOrganizationRoutes(app: Express): void {
     }
   });
 
+  // Add an existing user to an org with a given role. Used by Admin → Users → Manage access.
+  // Invites are still the path for not-yet-signed-up emails; this is for users who already exist.
+  app.post("/api/organizations/:id/members", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can add members" });
+      const { userId: targetUserId, role } = req.body;
+      if (!targetUserId) return res.status(400).json({ error: "userId required" });
+      if (!ORG_ROLES.includes(role)) return res.status(400).json({ error: "Invalid role" });
+      const targetUser = await storage.getUser(targetUserId);
+      if (!targetUser) return res.status(404).json({ error: "User not found" });
+      const existing = await storage.getUserRoleInOrg(targetUserId, req.params.id);
+      if (existing) return res.status(409).json({ error: "User is already a member of this organization" });
+      const member = await storage.addOrganizationMember(req.params.id, targetUserId, role);
+      audit(req, { action: "org.member.added", resourceType: "organization", resourceId: req.params.id, detail: `${targetUser.email} as ${role}` });
+      res.json(member);
+    } catch (error) {
+      console.error("Error adding member:", error);
+      res.status(500).json({ error: "Failed to add member" });
+    }
+  });
+
   // List members of an org
   app.get("/api/organizations/:id/members", isAuthenticated, async (req: any, res) => {
     try {

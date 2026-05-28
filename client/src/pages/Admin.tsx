@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore, Calculator } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore, Calculator, UserCog } from "lucide-react";
 import PricingTab from "@/components/admin/PricingTab";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -75,6 +75,9 @@ export default function Admin() {
   const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "", verticalId: DEFAULT_VERTICAL_ID });
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [editOrgForm, setEditOrgForm] = useState({ name: "", billingEmail: "", billingAddress: "", vatNumber: "", verticalId: DEFAULT_VERTICAL_ID });
+  const [manageAccessUser, setManageAccessUser] = useState<User | null>(null);
+  const [addMembershipOrgId, setAddMembershipOrgId] = useState<string>("");
+  const [addMembershipRole, setAddMembershipRole] = useState<OrgRole>("viewer");
   const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", organizationId: "" });
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "" });
@@ -368,6 +371,55 @@ export default function Admin() {
       });
     },
   });
+
+  // Manage access: a user's org memberships. Fetched on demand when the dialog opens.
+  const accessUserId = manageAccessUser?.id ?? null;
+  const { data: userMemberships = [], isLoading: membershipsLoading } = useQuery<{ organization: Organization; role: OrgRole }[]>({
+    queryKey: [`/api/admin/users/${accessUserId}/memberships`],
+    enabled: !!accessUserId,
+    retry: false,
+  });
+  const invalidateMemberships = () => {
+    if (accessUserId) queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${accessUserId}/memberships`] });
+    queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+  };
+  const addMembershipMutation = useMutation({
+    mutationFn: async ({ orgId, userId, role }: { orgId: string; userId: string; role: OrgRole }) =>
+      apiRequest("POST", `/api/organizations/${orgId}/members`, { userId, role }),
+    onSuccess: () => {
+      invalidateMemberships();
+      setAddMembershipOrgId("");
+      setAddMembershipRole("viewer");
+      toast({ title: "Access granted" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to add access", variant: "destructive" });
+    },
+  });
+  const changeMembershipRoleMutation = useMutation({
+    mutationFn: async ({ orgId, userId, role }: { orgId: string; userId: string; role: OrgRole }) =>
+      apiRequest("PATCH", `/api/organizations/${orgId}/members/${userId}`, { role }),
+    onSuccess: () => {
+      invalidateMemberships();
+      toast({ title: "Role updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to update role", variant: "destructive" });
+    },
+  });
+  const removeMembershipMutation = useMutation({
+    mutationFn: async ({ orgId, userId }: { orgId: string; userId: string }) =>
+      apiRequest("DELETE", `/api/organizations/${orgId}/members/${userId}`),
+    onSuccess: () => {
+      invalidateMemberships();
+      toast({ title: "Access removed" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to remove access", variant: "destructive" });
+    },
+  });
+  // Orgs the user is NOT yet a member of — used to populate the "add to org" picker
+  const availableOrgsToAdd = organizations.filter(o => !userMemberships.some(m => m.organization.id === o.id));
 
   const getInitials = (user: User) => {
     const first = user.firstName?.[0] || "";
@@ -923,7 +975,20 @@ export default function Admin() {
                           </p>
                         </div>
                       </div>
-                      <div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setManageAccessUser(user);
+                            setAddMembershipOrgId("");
+                            setAddMembershipRole("viewer");
+                          }}
+                          data-testid={`button-manage-access-${user.id}`}
+                        >
+                          <UserCog className="h-4 w-4 mr-2" />
+                          Manage access
+                        </Button>
                         {user.id === currentUser?.id ? (
                           <Button variant="ghost" size="sm" disabled>
                             <Shield className="h-4 w-4 mr-2" />
@@ -1708,6 +1773,116 @@ export default function Admin() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Access Dialog — list user's org memberships, add/remove/change role */}
+      <Dialog open={!!manageAccessUser} onOpenChange={(open) => !open && setManageAccessUser(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage access</DialogTitle>
+            <DialogDescription>
+              {manageAccessUser ? `${getDisplayName(manageAccessUser)} · ${manageAccessUser.email}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Current access</Label>
+              {membershipsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : userMemberships.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">No organizations yet — add one below.</p>
+              ) : (
+                <div className="space-y-2">
+                  {userMemberships.map(({ organization, role }) => (
+                    <div key={organization.id} className="flex items-center justify-between gap-2 p-3 rounded-lg border bg-card" data-testid={`membership-row-${organization.slug}`}>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium truncate">{organization.name}</span>
+                      </div>
+                      <Select
+                        value={role}
+                        onValueChange={(newRole) => {
+                          if (newRole !== role && manageAccessUser) {
+                            changeMembershipRoleMutation.mutate({ orgId: organization.id, userId: manageAccessUser.id, role: newRole as OrgRole });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-[120px]" data-testid={`select-role-${organization.slug}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="owner">Owner</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="viewer">Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (manageAccessUser && confirm(`Remove ${getDisplayName(manageAccessUser)} from ${organization.name}?`)) {
+                            removeMembershipMutation.mutate({ orgId: organization.id, userId: manageAccessUser.id });
+                          }
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                        data-testid={`button-remove-membership-${organization.slug}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 pt-3 border-t">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Add to organization</Label>
+              {availableOrgsToAdd.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">Already a member of every organization.</p>
+              ) : (
+                <div className="flex gap-2">
+                  <Select value={addMembershipOrgId} onValueChange={setAddMembershipOrgId}>
+                    <SelectTrigger className="flex-1" data-testid="select-add-membership-org">
+                      <SelectValue placeholder="Pick an organization" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableOrgsToAdd.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={addMembershipRole} onValueChange={(v) => setAddMembershipRole(v as OrgRole)}>
+                    <SelectTrigger className="w-[120px]" data-testid="select-add-membership-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (manageAccessUser && addMembershipOrgId) {
+                        addMembershipMutation.mutate({ orgId: addMembershipOrgId, userId: manageAccessUser.id, role: addMembershipRole });
+                      }
+                    }}
+                    disabled={!addMembershipOrgId || addMembershipMutation.isPending}
+                    data-testid="button-add-membership"
+                  >
+                    {addMembershipMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageAccessUser(null)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

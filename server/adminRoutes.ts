@@ -43,6 +43,18 @@ export function registerAdminRoutes(app: Express): void {
     }
   });
 
+  // List a user's org memberships (admin-console "Manage access" dialog).
+  // Platform admin only — viewing another user's access is a platform-level concern.
+  app.get("/api/admin/users/:id/memberships", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const memberships = await storage.getUserOrganizations(req.params.id);
+      res.json(memberships);
+    } catch (error) {
+      console.error("Error fetching user memberships:", error);
+      res.status(500).json({ message: "Failed to fetch memberships" });
+    }
+  });
+
   // ----- INVITES -----
   // Scoped per org. Platform owner can pass any orgId; org admin/owner only
   // sees and invites into their current org.

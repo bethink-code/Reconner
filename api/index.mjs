@@ -30191,6 +30191,15 @@ function registerAdminRoutes(app2) {
       res.status(500).json({ message: "Failed to update user" });
     }
   });
+  app2.get("/api/admin/users/:id/memberships", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const memberships = await storage.getUserOrganizations(req.params.id);
+      res.json(memberships);
+    } catch (error) {
+      console.error("Error fetching user memberships:", error);
+      res.status(500).json({ message: "Failed to fetch memberships" });
+    }
+  });
   app2.get("/api/admin/invites", isAuthenticated, async (req, res) => {
     try {
       const userId = req.user?.claims?.sub;
@@ -30507,6 +30516,31 @@ function registerOrganizationRoutes(app2) {
     } catch (error) {
       console.error("Error restoring organization:", error);
       res.status(500).json({ error: "Failed to restore organization" });
+    }
+  });
+  app2.post("/api/organizations/:id/members", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const me = await storage.getUser(userId);
+      let allowed = !!me?.isPlatformOwner;
+      if (!allowed) {
+        const role2 = await storage.getUserRoleInOrg(userId, req.params.id);
+        allowed = role2 === "owner";
+      }
+      if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can add members" });
+      const { userId: targetUserId, role } = req.body;
+      if (!targetUserId) return res.status(400).json({ error: "userId required" });
+      if (!ORG_ROLES.includes(role)) return res.status(400).json({ error: "Invalid role" });
+      const targetUser = await storage.getUser(targetUserId);
+      if (!targetUser) return res.status(404).json({ error: "User not found" });
+      const existing = await storage.getUserRoleInOrg(targetUserId, req.params.id);
+      if (existing) return res.status(409).json({ error: "User is already a member of this organization" });
+      const member = await storage.addOrganizationMember(req.params.id, targetUserId, role);
+      audit(req, { action: "org.member.added", resourceType: "organization", resourceId: req.params.id, detail: `${targetUser.email} as ${role}` });
+      res.json(member);
+    } catch (error) {
+      console.error("Error adding member:", error);
+      res.status(500).json({ error: "Failed to add member" });
     }
   });
   app2.get("/api/organizations/:id/members", isAuthenticated, async (req, res) => {

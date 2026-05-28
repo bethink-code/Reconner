@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,7 +75,7 @@ export default function Admin() {
   const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "", verticalId: DEFAULT_VERTICAL_ID });
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [editOrgForm, setEditOrgForm] = useState({ name: "", billingEmail: "", billingAddress: "", vatNumber: "", verticalId: "" });
-  const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
+  const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID, organizationId: "" });
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
   const AUDIT_LIMIT = 50;
@@ -133,7 +133,7 @@ export default function Admin() {
       apiRequest("PATCH", `/api/organizations/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/properties") });
       setEditingOrg(null);
       toast({ title: "Organization updated" });
     },
@@ -164,23 +164,68 @@ export default function Admin() {
     },
   });
 
-  // Properties for the current org — Admin view shows BOTH active and archived
+  // Properties — platform owners see every org's properties; everyone else stays scoped to their current org
+  const propertiesQueryKey = isPlatformOwner
+    ? ["/api/properties?includeArchived=true&all=true"]
+    : ["/api/properties?includeArchived=true"];
   const { data: allProperties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties?includeArchived=true"],
+    queryKey: propertiesQueryKey,
     enabled: !!currentOrgId,
     retry: false,
   });
   const properties = allProperties.filter(p => p.status === "active");
   const archivedProperties = allProperties.filter(p => p.status === "archived");
+  const invalidateProperties = () => {
+    queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/properties") });
+  };
+
+  // Group properties by org for the Admin Properties tab. Each org section shows its name plus
+  // a derived "primary vertical" badge (most common verticalId among its active properties).
+  const propertyGroups = useMemo(() => {
+    const byOrg = new Map<string, { active: Property[]; archived: Property[] }>();
+    for (const p of allProperties) {
+      const bucket = byOrg.get(p.organizationId) ?? { active: [], archived: [] };
+      (p.status === "active" ? bucket.active : bucket.archived).push(p);
+      byOrg.set(p.organizationId, bucket);
+    }
+    return organizations.map(org => {
+      const bucket = byOrg.get(org.id) ?? { active: [], archived: [] };
+      const verticalCounts = new Map<string, number>();
+      for (const p of bucket.active) {
+        const v = p.verticalId || DEFAULT_VERTICAL_ID;
+        verticalCounts.set(v, (verticalCounts.get(v) ?? 0) + 1);
+      }
+      let primaryVertical = DEFAULT_VERTICAL_ID;
+      let bestCount = 0;
+      let mixed = false;
+      for (const [v, c] of verticalCounts) {
+        if (c > bestCount) { primaryVertical = v; bestCount = c; mixed = false; }
+        else if (c === bestCount && v !== primaryVertical) { mixed = true; }
+      }
+      return { org, active: bucket.active, archived: bucket.archived, primaryVertical, mixed };
+    });
+  }, [allProperties, organizations]);
+
+  const orgsWithArchived = propertyGroups.filter(g => g.archived.length > 0);
+
+  // Seed the create-property form's org once we know the user's current/first org. Without this,
+  // the org Select renders with no value and the user has to pick before they can type the name.
+  useEffect(() => {
+    if (newPropertyForm.organizationId) return;
+    const seed = currentOrgId ?? organizations[0]?.id ?? "";
+    if (seed) {
+      setNewPropertyForm(prev => ({ ...prev, organizationId: seed }));
+    }
+  }, [currentOrgId, organizations, newPropertyForm.organizationId]);
 
   const createPropertyMutation = useMutation({
-    mutationFn: async (payload: { name: string; code?: string; address?: string; verticalId?: string }) => {
+    mutationFn: async (payload: { name: string; code?: string; address?: string; verticalId?: string; organizationId?: string }) => {
       return await apiRequest("POST", "/api/properties", payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      invalidateProperties();
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setNewPropertyForm({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
+      setNewPropertyForm({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID, organizationId: currentOrgId ?? "" });
       toast({ title: "Property created" });
     },
     onError: (error: Error) => {
@@ -191,7 +236,7 @@ export default function Admin() {
   const archivePropertyMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/properties/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      invalidateProperties();
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({ title: "Property archived", description: "All periods and data are preserved. Restore from the Archived section." });
     },
@@ -203,7 +248,7 @@ export default function Admin() {
   const restorePropertyMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("POST", `/api/properties/${id}/restore`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      invalidateProperties();
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({ title: "Property restored" });
     },
@@ -216,7 +261,7 @@ export default function Admin() {
     mutationFn: async ({ id, data }: { id: string; data: { name: string; code?: string; address?: string; verticalId?: string } }) =>
       apiRequest("PATCH", `/api/properties/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties?includeArchived=true"] });
+      invalidateProperties();
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       setEditingProperty(null);
       toast({ title: "Property updated" });
@@ -646,12 +691,13 @@ export default function Admin() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (newPropertyForm.name) {
+                    if (newPropertyForm.name && newPropertyForm.organizationId) {
                       createPropertyMutation.mutate({
                         name: newPropertyForm.name,
                         code: newPropertyForm.code || undefined,
                         address: newPropertyForm.address || undefined,
                         verticalId: newPropertyForm.verticalId,
+                        organizationId: newPropertyForm.organizationId,
                       });
                     }
                   }}
@@ -660,6 +706,30 @@ export default function Admin() {
                 >
                   <p className="text-sm font-medium">Add a property</p>
                   <div className="flex flex-col md:flex-row gap-2">
+                    <Select
+                      value={newPropertyForm.organizationId}
+                      onValueChange={(value) => {
+                        // When the org changes, pre-fill the business type from that org's primary vertical
+                        // so the dropdown matches what the org typically is.
+                        const group = propertyGroups.find(g => g.org.id === value);
+                        setNewPropertyForm({
+                          ...newPropertyForm,
+                          organizationId: value,
+                          verticalId: group?.primaryVertical ?? newPropertyForm.verticalId,
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="md:w-[200px]" data-testid="select-new-property-org">
+                        <SelectValue placeholder="Organization" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizations.map((org) => (
+                          <SelectItem key={org.id} value={org.id}>
+                            {org.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Input
                       placeholder="Site name (e.g. Engen Mossel Bay)"
                       value={newPropertyForm.name}
@@ -667,22 +737,22 @@ export default function Admin() {
                       className="flex-1"
                     />
                     <Input
-                      placeholder="Code (optional, e.g. DT-01)"
+                      placeholder="Code (optional)"
                       value={newPropertyForm.code}
                       onChange={(e) => setNewPropertyForm({ ...newPropertyForm, code: e.target.value })}
-                      className="md:w-[180px]"
+                      className="md:w-[140px]"
                     />
                     <Input
                       placeholder="Address (optional)"
                       value={newPropertyForm.address}
                       onChange={(e) => setNewPropertyForm({ ...newPropertyForm, address: e.target.value })}
-                      className="md:w-[260px]"
+                      className="md:w-[200px]"
                     />
                     <Select
                       value={newPropertyForm.verticalId}
                       onValueChange={(value) => setNewPropertyForm({ ...newPropertyForm, verticalId: value })}
                     >
-                      <SelectTrigger className="md:w-[160px]" data-testid="select-new-property-vertical">
+                      <SelectTrigger className="md:w-[140px]" data-testid="select-new-property-vertical">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -693,7 +763,7 @@ export default function Admin() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button type="submit" disabled={createPropertyMutation.isPending || !newPropertyForm.name}>
+                    <Button type="submit" disabled={createPropertyMutation.isPending || !newPropertyForm.name || !newPropertyForm.organizationId}>
                       {createPropertyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
                     </Button>
                   </div>
@@ -701,60 +771,80 @@ export default function Admin() {
               )}
 
               {properties.length > 0 ? (
-                <div className="space-y-2">
-                  {properties.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                      data-testid={`row-property-${p.id}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium flex items-center gap-2">
-                            {p.name}
-                            {p.code && <span className="text-xs text-muted-foreground">({p.code})</span>}
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {VERTICALS[p.verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? p.verticalId}
-                            </Badge>
-                          </p>
-                          {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
-                        </div>
+                <div className="space-y-6">
+                  {propertyGroups.map(({ org, active, primaryVertical, mixed }) => (
+                    <div key={org.id} className="space-y-2" data-testid={`group-org-${org.slug}`}>
+                      <div className="flex items-center gap-2 px-1">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-semibold">{org.name}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {mixed
+                            ? "Mixed"
+                            : VERTICALS[primaryVertical]?.vocabulary.businessType ?? primaryVertical}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground ml-1">
+                          {active.length} {active.length === 1 ? "property" : "properties"}
+                        </span>
                       </div>
-                      {canWrite && (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingProperty(p);
-                              setEditPropertyForm({
-                                name: p.name,
-                                code: p.code || "",
-                                address: p.address || "",
-                                verticalId: p.verticalId || DEFAULT_VERTICAL_ID,
-                              });
-                            }}
-                            className="text-muted-foreground hover:text-foreground"
-                            data-testid={`button-edit-property-${p.id}`}
+                      {active.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground italic">No active properties</div>
+                      ) : (
+                        active.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between p-3 rounded-lg border bg-card ml-6"
+                            data-testid={`row-property-${p.id}`}
                           >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              if (confirm(`Archive ${p.name}? Periods and data are kept and can be restored later.`)) {
-                                archivePropertyMutation.mutate(p.id);
-                              }
-                            }}
-                            className="text-muted-foreground hover:text-foreground"
-                            title="Archive (data preserved)"
-                            data-testid={`button-archive-property-${p.id}`}
-                          >
-                            <Archive className="h-4 w-4" />
-                          </Button>
-                        </div>
+                            <div className="flex items-center gap-3">
+                              <MapPin className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <p className="text-sm font-medium flex items-center gap-2">
+                                  {p.name}
+                                  {p.code && <span className="text-xs text-muted-foreground">({p.code})</span>}
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    {VERTICALS[p.verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? p.verticalId}
+                                  </Badge>
+                                </p>
+                                {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
+                              </div>
+                            </div>
+                            {canWrite && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingProperty(p);
+                                    setEditPropertyForm({
+                                      name: p.name,
+                                      code: p.code || "",
+                                      address: p.address || "",
+                                      verticalId: p.verticalId || DEFAULT_VERTICAL_ID,
+                                    });
+                                  }}
+                                  className="text-muted-foreground hover:text-foreground"
+                                  data-testid={`button-edit-property-${p.id}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm(`Archive ${p.name}? Periods and data are kept and can be restored later.`)) {
+                                      archivePropertyMutation.mutate(p.id);
+                                    }
+                                  }}
+                                  className="text-muted-foreground hover:text-foreground"
+                                  title="Archive (data preserved)"
+                                  data-testid={`button-archive-property-${p.id}`}
+                                >
+                                  <Archive className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ))
                       )}
                     </div>
                   ))}
@@ -765,41 +855,49 @@ export default function Admin() {
                 </div>
               )}
 
-              {archivedProperties.length > 0 && (
-                <div className="space-y-2 pt-4 border-t">
+              {orgsWithArchived.length > 0 && (
+                <div className="space-y-4 pt-4 border-t">
                   <p className="text-sm font-medium text-muted-foreground">Archived</p>
-                  {archivedProperties.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-dashed bg-card opacity-60"
-                      data-testid={`row-archived-property-${p.id}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Archive className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium flex items-center gap-2">
-                            {p.name}
-                            {p.code && <span className="text-xs text-muted-foreground">({p.code})</span>}
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {VERTICALS[p.verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? p.verticalId}
-                            </Badge>
-                          </p>
-                          {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
-                        </div>
+                  {orgsWithArchived.map(({ org, archived }) => (
+                    <div key={`archived-${org.id}`} className="space-y-2">
+                      <div className="flex items-center gap-2 px-1">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-semibold text-muted-foreground">{org.name}</span>
                       </div>
-                      {canWrite && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => restorePropertyMutation.mutate(p.id)}
-                          disabled={restorePropertyMutation.isPending}
-                          className="text-muted-foreground hover:text-foreground"
-                          data-testid={`button-restore-property-${p.id}`}
+                      {archived.map((p) => (
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-dashed bg-card opacity-60 ml-6"
+                          data-testid={`row-archived-property-${p.id}`}
                         >
-                          <ArchiveRestore className="h-4 w-4 mr-1" />
-                          Restore
-                        </Button>
-                      )}
+                          <div className="flex items-center gap-3">
+                            <Archive className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm font-medium flex items-center gap-2">
+                                {p.name}
+                                {p.code && <span className="text-xs text-muted-foreground">({p.code})</span>}
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  {VERTICALS[p.verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? p.verticalId}
+                                </Badge>
+                              </p>
+                              {p.address && <p className="text-xs text-muted-foreground">{p.address}</p>}
+                            </div>
+                          </div>
+                          {canWrite && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => restorePropertyMutation.mutate(p.id)}
+                              disabled={restorePropertyMutation.isPending}
+                              className="text-muted-foreground hover:text-foreground"
+                              data-testid={`button-restore-property-${p.id}`}
+                            >
+                              <ArchiveRestore className="h-4 w-4 mr-1" />
+                              Restore
+                            </Button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

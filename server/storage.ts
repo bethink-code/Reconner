@@ -240,6 +240,7 @@ export interface IStorage {
 
   // Properties
   getPropertiesByOrg(orgId: string, includeArchived?: boolean): Promise<Property[]>;
+  getAllProperties(includeArchived?: boolean): Promise<Property[]>;
   getProperty(id: string): Promise<Property | undefined>;
   createProperty(data: InsertProperty): Promise<Property>;
   updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property | undefined>;
@@ -393,6 +394,15 @@ export class DatabaseStorage implements IStorage {
         eq(properties.organizationId, orgId),
         eq(properties.status, "active"),
       ))
+      .orderBy(properties.name);
+  }
+
+  async getAllProperties(includeArchived: boolean = false): Promise<Property[]> {
+    if (includeArchived) {
+      return await db.select().from(properties).orderBy(properties.name);
+    }
+    return await db.select().from(properties)
+      .where(eq(properties.status, "active"))
       .orderBy(properties.name);
   }
 

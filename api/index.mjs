@@ -28073,6 +28073,12 @@ var DatabaseStorage = class {
       eq(properties.status, "active")
     )).orderBy(properties.name);
   }
+  async getAllProperties(includeArchived = false) {
+    if (includeArchived) {
+      return await db.select().from(properties).orderBy(properties.name);
+    }
+    return await db.select().from(properties).where(eq(properties.status, "active")).orderBy(properties.name);
+  }
   async getProperty(id) {
     const [row] = await db.select().from(properties).where(eq(properties.id, id));
     return row || void 0;
@@ -29973,9 +29979,17 @@ function registerAccountRoutes(app2) {
   });
   app2.get("/api/properties", isAuthenticated, async (req, res) => {
     try {
+      const includeArchived = req.query.includeArchived === "true";
+      if (req.query.all === "true") {
+        const me = await storage.getUser(req.user?.claims?.sub);
+        if (!me?.isPlatformOwner) {
+          return res.status(403).json({ error: "Only platform owners can list all properties" });
+        }
+        const props2 = await storage.getAllProperties(includeArchived);
+        return res.json(props2);
+      }
       const ctx = await resolveOrgContext(req, res);
       if (!ctx) return;
-      const includeArchived = req.query.includeArchived === "true";
       const props = await storage.getPropertiesByOrg(ctx.orgId, includeArchived);
       res.json(props);
     } catch (error) {
@@ -29990,12 +30004,23 @@ function registerAccountRoutes(app2) {
       if (ctx.role === "viewer") {
         return res.status(403).json({ error: "read_only" });
       }
-      const { name, code, address, verticalId } = req.body || {};
+      const { name, code, address, verticalId, organizationId } = req.body || {};
       if (!name) {
         return res.status(400).json({ error: "name required" });
       }
+      let targetOrgId = ctx.orgId;
+      if (organizationId && organizationId !== ctx.orgId) {
+        const me = await storage.getUser(req.user?.claims?.sub);
+        if (!me?.isPlatformOwner) {
+          const role = await storage.getUserRoleInOrg(req.user?.claims?.sub, organizationId);
+          if (role !== "owner" && role !== "admin") {
+            return res.status(403).json({ error: "Not authorised for that organization" });
+          }
+        }
+        targetOrgId = organizationId;
+      }
       const prop = await storage.createProperty({
-        organizationId: ctx.orgId,
+        organizationId: targetOrgId,
         name,
         code,
         address,
@@ -30026,7 +30051,10 @@ function registerAccountRoutes(app2) {
         return res.status(404).json({ error: "Not found" });
       }
       if (prop.organizationId !== ctx.orgId) {
-        return res.status(403).json({ error: "Access denied" });
+        const me = await storage.getUser(req.user?.claims?.sub);
+        if (!me?.isPlatformOwner) {
+          return res.status(403).json({ error: "Access denied" });
+        }
       }
       const { name, code, address, status, verticalId } = req.body || {};
       const updated = await storage.updateProperty(req.params.id, {
@@ -30059,7 +30087,10 @@ function registerAccountRoutes(app2) {
         return res.status(404).json({ error: "Not found" });
       }
       if (prop.organizationId !== ctx.orgId) {
-        return res.status(403).json({ error: "Access denied" });
+        const me = await storage.getUser(req.user?.claims?.sub);
+        if (!me?.isPlatformOwner) {
+          return res.status(403).json({ error: "Access denied" });
+        }
       }
       await storage.updateProperty(req.params.id, { status: "archived" });
       audit(req, {
@@ -30085,7 +30116,10 @@ function registerAccountRoutes(app2) {
         return res.status(404).json({ error: "Not found" });
       }
       if (prop.organizationId !== ctx.orgId) {
-        return res.status(403).json({ error: "Access denied" });
+        const me = await storage.getUser(req.user?.claims?.sub);
+        if (!me?.isPlatformOwner) {
+          return res.status(403).json({ error: "Access denied" });
+        }
       }
       await storage.updateProperty(req.params.id, { status: "active" });
       audit(req, {

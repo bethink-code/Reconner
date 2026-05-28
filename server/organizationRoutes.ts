@@ -39,17 +39,18 @@ export function registerOrganizationRoutes(app: Express): void {
       const { name, slug, billingEmail, billingAddress, vatNumber, verticalId } = req.body;
       if (!name || !slug) return res.status(400).json({ error: "name and slug required" });
       if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "slug must be lowercase alphanumeric with hyphens" });
-      const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber });
+      const resolvedVertical = getVertical(verticalId).id;
+      const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber, verticalId: resolvedVertical });
       // Auto-add the platform owner as admin so they can manage it
       await storage.addOrganizationMember(org.id, userId, "admin");
       // Auto-create a default "Main" property so the org has somewhere to put periods immediately.
-      // Seed it with the org's chosen business type so the admin doesn't have to flip it after.
+      // Property inherits the org's business type — there is no per-property override.
       await storage.createProperty({
         organizationId: org.id,
         name: "Main",
         code: null,
         address: null,
-        verticalId: getVertical(verticalId).id,
+        verticalId: resolvedVertical,
       });
       audit(req, { action: "org.create", resourceType: "organization", resourceId: org.id, detail: name });
       res.json(org);
@@ -90,19 +91,25 @@ export function registerOrganizationRoutes(app: Express): void {
       }
       if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can update" });
       const { name, billingEmail, billingAddress, vatNumber, status, verticalId } = req.body;
-      const updated = await storage.updateOrganization(req.params.id, { name, billingEmail, billingAddress, vatNumber, status });
+      const resolvedVertical = verticalId !== undefined ? getVertical(verticalId).id : undefined;
+      const updated = await storage.updateOrganization(req.params.id, {
+        name,
+        billingEmail,
+        billingAddress,
+        vatNumber,
+        status,
+        ...(resolvedVertical !== undefined ? { verticalId: resolvedVertical } : {}),
+      });
       audit(req, { action: "org.update", resourceType: "organization", resourceId: req.params.id });
-      // Optional cascade: bulk-flip the business type of every active property in this org.
-      // The "vertical lives on properties" model means this is how an org-level vertical change
-      // actually happens — there is no org-side vertical column. Validates via getVertical (unknown → fuel).
-      if (verticalId !== undefined) {
-        const resolved = getVertical(verticalId).id;
-        const count = await storage.setPropertiesVerticalForOrg(req.params.id, resolved);
+      // When the org's vertical changes, cascade to every active property so the denormalised
+      // per-property cache stays in sync. The org row remains the source of truth.
+      if (resolvedVertical !== undefined) {
+        const count = await storage.setPropertiesVerticalForOrg(req.params.id, resolvedVertical);
         audit(req, {
           action: "org.set_vertical",
           resourceType: "organization",
           resourceId: req.params.id,
-          detail: `${resolved} (${count} ${count === 1 ? "property" : "properties"})`,
+          detail: `${resolvedVertical} (${count} ${count === 1 ? "property" : "properties"})`,
         });
       }
       res.json(updated);

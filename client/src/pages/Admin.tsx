@@ -74,10 +74,10 @@ export default function Admin() {
   const [inviteRole, setInviteRole] = useState<OrgRole>("viewer");
   const [newOrgForm, setNewOrgForm] = useState({ name: "", slug: "", billingEmail: "", verticalId: DEFAULT_VERTICAL_ID });
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
-  const [editOrgForm, setEditOrgForm] = useState({ name: "", billingEmail: "", billingAddress: "", vatNumber: "", verticalId: "" });
-  const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID, organizationId: "" });
+  const [editOrgForm, setEditOrgForm] = useState({ name: "", billingEmail: "", billingAddress: "", vatNumber: "", verticalId: DEFAULT_VERTICAL_ID });
+  const [newPropertyForm, setNewPropertyForm] = useState({ name: "", code: "", address: "", organizationId: "" });
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
-  const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID });
+  const [editPropertyForm, setEditPropertyForm] = useState({ name: "", code: "", address: "" });
   const AUDIT_LIMIT = 50;
 
   // Organizations — for invite picker and Organizations tab
@@ -179,8 +179,8 @@ export default function Admin() {
     queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/properties") });
   };
 
-  // Group properties by org for the Admin Properties tab. Each org section shows its name plus
-  // a derived "primary vertical" badge (most common verticalId among its active properties).
+  // Group properties by org for the Admin Properties tab. The vertical comes straight from the
+  // org row — property's vertical is just a cached copy, kept in sync via cascade.
   const propertyGroups = useMemo(() => {
     const byOrg = new Map<string, { active: Property[]; archived: Property[] }>();
     for (const p of allProperties) {
@@ -190,19 +190,8 @@ export default function Admin() {
     }
     return organizations.map(org => {
       const bucket = byOrg.get(org.id) ?? { active: [], archived: [] };
-      const verticalCounts = new Map<string, number>();
-      for (const p of bucket.active) {
-        const v = p.verticalId || DEFAULT_VERTICAL_ID;
-        verticalCounts.set(v, (verticalCounts.get(v) ?? 0) + 1);
-      }
-      let primaryVertical = DEFAULT_VERTICAL_ID;
-      let bestCount = 0;
-      let mixed = false;
-      for (const [v, c] of verticalCounts) {
-        if (c > bestCount) { primaryVertical = v; bestCount = c; mixed = false; }
-        else if (c === bestCount && v !== primaryVertical) { mixed = true; }
-      }
-      return { org, active: bucket.active, archived: bucket.archived, primaryVertical, mixed };
+      const verticalId = (org as any).verticalId || DEFAULT_VERTICAL_ID;
+      return { org, active: bucket.active, archived: bucket.archived, verticalId };
     });
   }, [allProperties, organizations]);
 
@@ -219,13 +208,13 @@ export default function Admin() {
   }, [currentOrgId, organizations, newPropertyForm.organizationId]);
 
   const createPropertyMutation = useMutation({
-    mutationFn: async (payload: { name: string; code?: string; address?: string; verticalId?: string; organizationId?: string }) => {
+    mutationFn: async (payload: { name: string; code?: string; address?: string; organizationId?: string }) => {
       return await apiRequest("POST", "/api/properties", payload);
     },
     onSuccess: () => {
       invalidateProperties();
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setNewPropertyForm({ name: "", code: "", address: "", verticalId: DEFAULT_VERTICAL_ID, organizationId: currentOrgId ?? "" });
+      setNewPropertyForm({ name: "", code: "", address: "", organizationId: currentOrgId ?? "" });
       toast({ title: "Property created" });
     },
     onError: (error: Error) => {
@@ -258,7 +247,7 @@ export default function Admin() {
   });
 
   const updatePropertyMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { name: string; code?: string; address?: string; verticalId?: string } }) =>
+    mutationFn: async ({ id, data }: { id: string; data: { name: string; code?: string; address?: string } }) =>
       apiRequest("PATCH", `/api/properties/${id}`, data),
     onSuccess: () => {
       invalidateProperties();
@@ -591,7 +580,12 @@ export default function Admin() {
                       <div className="flex items-center gap-3">
                         <Building2 className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <p className="text-sm font-medium">{org.name}</p>
+                          <p className="text-sm font-medium flex items-center gap-2">
+                            {org.name}
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {VERTICALS[(org as any).verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? (org as any).verticalId}
+                            </Badge>
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {org.slug}
                             {org.billingEmail && ` · ${org.billingEmail}`}
@@ -609,7 +603,7 @@ export default function Admin() {
                               billingEmail: org.billingEmail || "",
                               billingAddress: org.billingAddress || "",
                               vatNumber: org.vatNumber || "",
-                              verticalId: "",
+                              verticalId: (org as any).verticalId || DEFAULT_VERTICAL_ID,
                             });
                           }}
                           className="text-muted-foreground hover:text-foreground"
@@ -696,7 +690,6 @@ export default function Admin() {
                         name: newPropertyForm.name,
                         code: newPropertyForm.code || undefined,
                         address: newPropertyForm.address || undefined,
-                        verticalId: newPropertyForm.verticalId,
                         organizationId: newPropertyForm.organizationId,
                       });
                     }
@@ -708,18 +701,9 @@ export default function Admin() {
                   <div className="flex flex-col md:flex-row gap-2">
                     <Select
                       value={newPropertyForm.organizationId}
-                      onValueChange={(value) => {
-                        // When the org changes, pre-fill the business type from that org's primary vertical
-                        // so the dropdown matches what the org typically is.
-                        const group = propertyGroups.find(g => g.org.id === value);
-                        setNewPropertyForm({
-                          ...newPropertyForm,
-                          organizationId: value,
-                          verticalId: group?.primaryVertical ?? newPropertyForm.verticalId,
-                        });
-                      }}
+                      onValueChange={(value) => setNewPropertyForm({ ...newPropertyForm, organizationId: value })}
                     >
-                      <SelectTrigger className="md:w-[200px]" data-testid="select-new-property-org">
+                      <SelectTrigger className="md:w-[220px]" data-testid="select-new-property-org">
                         <SelectValue placeholder="Organization" />
                       </SelectTrigger>
                       <SelectContent>
@@ -740,47 +724,33 @@ export default function Admin() {
                       placeholder="Code (optional)"
                       value={newPropertyForm.code}
                       onChange={(e) => setNewPropertyForm({ ...newPropertyForm, code: e.target.value })}
-                      className="md:w-[140px]"
+                      className="md:w-[160px]"
                     />
                     <Input
                       placeholder="Address (optional)"
                       value={newPropertyForm.address}
                       onChange={(e) => setNewPropertyForm({ ...newPropertyForm, address: e.target.value })}
-                      className="md:w-[200px]"
+                      className="md:w-[220px]"
                     />
-                    <Select
-                      value={newPropertyForm.verticalId}
-                      onValueChange={(value) => setNewPropertyForm({ ...newPropertyForm, verticalId: value })}
-                    >
-                      <SelectTrigger className="md:w-[140px]" data-testid="select-new-property-vertical">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {VERTICAL_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <Button type="submit" disabled={createPropertyMutation.isPending || !newPropertyForm.name || !newPropertyForm.organizationId}>
                       {createPropertyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Business type is inherited from the chosen organization.
+                  </p>
                 </form>
               )}
 
               {properties.length > 0 ? (
                 <div className="space-y-6">
-                  {propertyGroups.map(({ org, active, primaryVertical, mixed }) => (
+                  {propertyGroups.map(({ org, active, verticalId }) => (
                     <div key={org.id} className="space-y-2" data-testid={`group-org-${org.slug}`}>
                       <div className="flex items-center gap-2 px-1">
                         <Building2 className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm font-semibold">{org.name}</span>
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          {mixed
-                            ? "Mixed"
-                            : VERTICALS[primaryVertical]?.vocabulary.businessType ?? primaryVertical}
+                          {VERTICALS[verticalId]?.vocabulary.businessType ?? verticalId}
                         </Badge>
                         <span className="text-xs text-muted-foreground ml-1">
                           {active.length} {active.length === 1 ? "property" : "properties"}
@@ -819,7 +789,6 @@ export default function Admin() {
                                       name: p.name,
                                       code: p.code || "",
                                       address: p.address || "",
-                                      verticalId: p.verticalId || DEFAULT_VERTICAL_ID,
                                     });
                                   }}
                                   className="text-muted-foreground hover:text-foreground"
@@ -1597,7 +1566,6 @@ export default function Admin() {
                   name: editPropertyForm.name,
                   code: editPropertyForm.code || undefined,
                   address: editPropertyForm.address || undefined,
-                  verticalId: editPropertyForm.verticalId,
                 },
               });
             }}
@@ -1630,24 +1598,15 @@ export default function Admin() {
                 onChange={(e) => setEditPropertyForm({ ...editPropertyForm, address: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-property-vertical">Business type</Label>
-              <Select
-                value={editPropertyForm.verticalId}
-                onValueChange={(value) => setEditPropertyForm({ ...editPropertyForm, verticalId: value })}
-              >
-                <SelectTrigger id="edit-property-vertical" data-testid="select-edit-property-vertical">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VERTICAL_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {editingProperty && (
+              <p className="text-xs text-muted-foreground">
+                Business type:{" "}
+                <span className="font-medium">
+                  {VERTICALS[editingProperty.verticalId || DEFAULT_VERTICAL_ID]?.vocabulary.businessType ?? editingProperty.verticalId}
+                </span>{" "}
+                — inherited from the organization. Change it on the org instead.
+              </p>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingProperty(null)}>
                 Cancel
@@ -1678,7 +1637,7 @@ export default function Admin() {
                   billingEmail: editOrgForm.billingEmail || undefined,
                   billingAddress: editOrgForm.billingAddress || undefined,
                   vatNumber: editOrgForm.vatNumber || undefined,
-                  ...(editOrgForm.verticalId ? { verticalId: editOrgForm.verticalId } : {}),
+                  verticalId: editOrgForm.verticalId,
                 },
               });
             }}
@@ -1720,13 +1679,13 @@ export default function Admin() {
               />
             </div>
             <div className="space-y-2 pt-2 border-t">
-              <Label htmlFor="edit-org-vertical">Change business type for all properties</Label>
+              <Label htmlFor="edit-org-vertical">Business type</Label>
               <Select
                 value={editOrgForm.verticalId}
                 onValueChange={(value) => setEditOrgForm({ ...editOrgForm, verticalId: value })}
               >
                 <SelectTrigger id="edit-org-vertical" data-testid="select-edit-org-vertical">
-                  <SelectValue placeholder="Leave unchanged" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {VERTICAL_OPTIONS.map((opt) => (
@@ -1737,7 +1696,7 @@ export default function Admin() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Picking a business type will flip every active property in this org. Leave unset to keep current values.
+                Every property in this organization inherits this. Changing it updates all active properties.
               </p>
             </div>
             <DialogFooter>

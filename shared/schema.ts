@@ -41,6 +41,10 @@ export const organizations = pgTable("organizations", {
   billingEmail: varchar("billing_email"),
   billingAddress: text("billing_address"),
   vatNumber: varchar("vat_number"),
+  // Business type — every property in this org inherits this vertical. Property-level
+  // overrides aren't supported (an org IS a business). Defaults to 'fuel' for safety on
+  // existing rows; new orgs pick at create time via the admin form.
+  verticalId: text("vertical_id").notNull().default("fuel"),
   status: text("status").notNull().default("active"), // 'active', 'suspended'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

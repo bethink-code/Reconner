@@ -27735,6 +27735,10 @@ var organizations = pgTable("organizations", {
   billingEmail: varchar("billing_email"),
   billingAddress: text("billing_address"),
   vatNumber: varchar("vat_number"),
+  // Business type — every property in this org inherits this vertical. Property-level
+  // overrides aren't supported (an org IS a business). Defaults to 'fuel' for safety on
+  // existing rows; new orgs pick at create time via the admin form.
+  verticalId: text("vertical_id").notNull().default("fuel"),
   status: text("status").notNull().default("active"),
   // 'active', 'suspended'
   createdAt: timestamp("created_at").defaultNow(),
@@ -30004,7 +30008,7 @@ function registerAccountRoutes(app2) {
       if (ctx.role === "viewer") {
         return res.status(403).json({ error: "read_only" });
       }
-      const { name, code, address, verticalId, organizationId } = req.body || {};
+      const { name, code, address, organizationId } = req.body || {};
       if (!name) {
         return res.status(400).json({ error: "name required" });
       }
@@ -30019,13 +30023,14 @@ function registerAccountRoutes(app2) {
         }
         targetOrgId = organizationId;
       }
+      const targetOrg = await storage.getOrganization(targetOrgId);
+      const inheritedVertical = getVertical(targetOrg?.verticalId).id;
       const prop = await storage.createProperty({
         organizationId: targetOrgId,
         name,
         code,
         address,
-        verticalId: getVertical(verticalId).id
-        // validated; unknown/missing → "fuel"
+        verticalId: inheritedVertical
       });
       audit(req, {
         action: "property.create",
@@ -30056,13 +30061,12 @@ function registerAccountRoutes(app2) {
           return res.status(403).json({ error: "Access denied" });
         }
       }
-      const { name, code, address, status, verticalId } = req.body || {};
+      const { name, code, address, status } = req.body || {};
       const updated = await storage.updateProperty(req.params.id, {
         name,
         code,
         address,
-        status,
-        ...verticalId !== void 0 ? { verticalId: getVertical(verticalId).id } : {}
+        status
       });
       audit(req, {
         action: "property.update",
@@ -30405,14 +30409,15 @@ function registerOrganizationRoutes(app2) {
       const { name, slug, billingEmail, billingAddress, vatNumber, verticalId } = req.body;
       if (!name || !slug) return res.status(400).json({ error: "name and slug required" });
       if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "slug must be lowercase alphanumeric with hyphens" });
-      const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber });
+      const resolvedVertical = getVertical(verticalId).id;
+      const org = await storage.createOrganization({ name, slug, billingEmail, billingAddress, vatNumber, verticalId: resolvedVertical });
       await storage.addOrganizationMember(org.id, userId, "admin");
       await storage.createProperty({
         organizationId: org.id,
         name: "Main",
         code: null,
         address: null,
-        verticalId: getVertical(verticalId).id
+        verticalId: resolvedVertical
       });
       audit(req, { action: "org.create", resourceType: "organization", resourceId: org.id, detail: name });
       res.json(org);
@@ -30449,16 +30454,23 @@ function registerOrganizationRoutes(app2) {
       }
       if (!allowed) return res.status(403).json({ error: "Only owner or platform owner can update" });
       const { name, billingEmail, billingAddress, vatNumber, status, verticalId } = req.body;
-      const updated = await storage.updateOrganization(req.params.id, { name, billingEmail, billingAddress, vatNumber, status });
+      const resolvedVertical = verticalId !== void 0 ? getVertical(verticalId).id : void 0;
+      const updated = await storage.updateOrganization(req.params.id, {
+        name,
+        billingEmail,
+        billingAddress,
+        vatNumber,
+        status,
+        ...resolvedVertical !== void 0 ? { verticalId: resolvedVertical } : {}
+      });
       audit(req, { action: "org.update", resourceType: "organization", resourceId: req.params.id });
-      if (verticalId !== void 0) {
-        const resolved = getVertical(verticalId).id;
-        const count = await storage.setPropertiesVerticalForOrg(req.params.id, resolved);
+      if (resolvedVertical !== void 0) {
+        const count = await storage.setPropertiesVerticalForOrg(req.params.id, resolvedVertical);
         audit(req, {
           action: "org.set_vertical",
           resourceType: "organization",
           resourceId: req.params.id,
-          detail: `${resolved} (${count} ${count === 1 ? "property" : "properties"})`
+          detail: `${resolvedVertical} (${count} ${count === 1 ? "property" : "properties"})`
         });
       }
       res.json(updated);

@@ -160,7 +160,7 @@ export function registerAccountRoutes(app: Express) {
         return res.status(403).json({ error: "read_only" });
       }
 
-      const { name, code, address, verticalId, organizationId } = req.body || {};
+      const { name, code, address, organizationId } = req.body || {};
       if (!name) {
         return res.status(400).json({ error: "name required" });
       }
@@ -179,12 +179,17 @@ export function registerAccountRoutes(app: Express) {
         targetOrgId = organizationId;
       }
 
+      // Property inherits the vertical from its org — there is no per-property override.
+      // Falls back to fuel if the org somehow has an unknown id (defensive; should never happen).
+      const targetOrg = await storage.getOrganization(targetOrgId);
+      const inheritedVertical = getVertical(targetOrg?.verticalId).id;
+
       const prop = await storage.createProperty({
         organizationId: targetOrgId,
         name,
         code,
         address,
-        verticalId: getVertical(verticalId).id, // validated; unknown/missing → "fuel"
+        verticalId: inheritedVertical,
       });
       audit(req, {
         action: "property.create",
@@ -219,13 +224,14 @@ export function registerAccountRoutes(app: Express) {
         }
       }
 
-      const { name, code, address, status, verticalId } = req.body || {};
+      // verticalId is deliberately NOT accepted here — property's vertical is inherited from its
+      // org and changed by editing the org (which cascades to every property in it).
+      const { name, code, address, status } = req.body || {};
       const updated = await storage.updateProperty(req.params.id, {
         name,
         code,
         address,
         status,
-        ...(verticalId !== undefined ? { verticalId: getVertical(verticalId).id } : {}),
       });
       audit(req, {
         action: "property.update",

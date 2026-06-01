@@ -43,6 +43,7 @@ export function registerExportRoutes(app: Express) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
+      const vertical = await resolveVertical(period.propertyId);
 
       const [
         allTransactions,
@@ -58,7 +59,7 @@ export function registerExportRoutes(app: Express) {
         storage.getResolutionsByPeriod(req.params.periodId),
         storage.getAttendantSummary(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
-        storage.getPeriodSummary(req.params.periodId),
+        storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType),
         storage.getCashPayments(req.params.periodId),
       ]);
 
@@ -109,7 +110,6 @@ export function registerExportRoutes(app: Express) {
         (transaction) => transaction.matchStatus === "unmatchable",
       );
 
-      const vertical = await resolveVertical(period.propertyId);
       const dashboardModel = buildResultsDashboardReadModel(periodSummary, resolutions);
       const reviewModel = buildReviewQueueReadModel(
         period,

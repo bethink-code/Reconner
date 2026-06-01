@@ -45,6 +45,7 @@ import { db } from "./db";
 import { pool } from "./db";
 import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
 import { buildMatchAssignments } from "./reconciliation/matchAssignments";
+import { scopeToSalesSource } from "./reconciliation/salesSourceQuery";
 
 export interface PeriodSummary {
   totalTransactions: number;
@@ -295,9 +296,9 @@ export interface IStorage {
     unmatchableBankIds: string[],
   ): Promise<Match[]>;
   
-  getPeriodSummary(periodId: string): Promise<PeriodSummary>;
+  getPeriodSummary(periodId: string, salesSourceType?: string): Promise<PeriodSummary>;
   getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]>;
-  getVerificationSummary(periodId: string): Promise<VerificationSummary>;
+  getVerificationSummary(periodId: string, salesSourceType?: string): Promise<VerificationSummary>;
   
   getMatchingRules(periodId: string): Promise<MatchingRulesConfig>;
   saveMatchingRules(periodId: string, rules: MatchingRulesConfig): Promise<MatchingRules>;
@@ -891,8 +892,8 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPeriodSummary(periodId: string): Promise<PeriodSummary> {
-    const result = await pool.query(`
+  async getPeriodSummary(periodId: string, salesSourceType: string = "fuel"): Promise<PeriodSummary> {
+    const result = await pool.query(scopeToSalesSource(`
       WITH period_dates AS (
         SELECT start_date AS min_date, end_date AS max_date
         FROM reconciliation_periods
@@ -1128,7 +1129,7 @@ export class DatabaseStorage implements IStorage {
       FROM tx_stats tx
       CROSS JOIN match_stats ms
       CROSS JOIN bank_coverage bc
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
 
     const row = result.rows[0] || {};
     
@@ -1431,9 +1432,9 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getVerificationSummary(periodId: string): Promise<VerificationSummary> {
+  async getVerificationSummary(periodId: string, salesSourceType: string = "fuel"): Promise<VerificationSummary> {
     // Get comprehensive verification-based metrics
-    const result = await pool.query(`
+    const result = await pool.query(scopeToSalesSource(`
       WITH period_scope AS (
         SELECT
           rp.start_date AS min_date,
@@ -1590,7 +1591,7 @@ export class DatabaseStorage implements IStorage {
       CROSS JOIN match_quality mq
       CROSS JOIN match_date_offsets md
       CROSS JOIN invoice_groups ig
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
 
     // Get bank sources breakdown — unscoped so we can report actual file coverage
     const sourcesResult = await pool.query(`
@@ -1608,7 +1609,7 @@ export class DatabaseStorage implements IStorage {
     // Unscoped file coverage — the date range actually present in uploaded files,
     // independent of period bounds. Used by the Data Coverage display so users can
     // see whether their uploads cover the period.
-    const coverageResult = await pool.query(`
+    const coverageResult = await pool.query(scopeToSalesSource(`
       SELECT
         MIN(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_min,
         MAX(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_max,
@@ -1616,7 +1617,7 @@ export class DatabaseStorage implements IStorage {
         MAX(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_max
       FROM transactions
       WHERE period_id = $1
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
     const coverageRow = coverageResult.rows[0] || {};
 
     const row = result.rows[0] || {};

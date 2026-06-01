@@ -68,7 +68,7 @@ const PRESETS: PresetConfig[] = [
   {
     id: "moderate",
     name: "Moderate",
-    description: "Balanced for most stations",
+    description: "Balanced for most businesses",
     icon: Scale,
     tolerance: "±R1.00",
     timing: "60 min close · 120 min exact",
@@ -279,24 +279,24 @@ export function ConfigureMatchingStep({
               {selectedPreset === "conservative" && (
                 <>
                   <span className="font-medium">Conservative</span> requires exact matches.
-                  Uses a 30 minute operational-close window and a 120 minute attendant exact-delay window.
+                  Uses a 30 minute operational-close window and a 120 minute exact-match window.
                 </>
               )}
               {selectedPreset === "moderate" && (
                 <>
                   <span className="font-medium">Moderate</span> is recommended for most businesses.
-                  Uses a 60 minute operational-close window and a 120 minute attendant exact-delay window.
+                  Uses a 60 minute operational-close window and a 120 minute exact-match window.
                 </>
               )}
               {selectedPreset === "aggressive" && (
                 <>
                   <span className="font-medium">Aggressive</span> maximizes match rate.
-                  Uses a 120 minute operational-close window and a 120 minute attendant exact-delay window.
+                  Uses a 120 minute operational-close window and a 120 minute exact-match window.
                 </>
               )}
               {selectedPreset === "custom" && (
                 <>
-                  <span className="font-medium">Custom</span> uses your saved station rules.
+                  <span className="font-medium">Custom</span> uses your saved rules.
                   {isPlatformOwner && " The cards above are presets only, and the live stages below reflect the actual rules that will run."}
                 </>
               )}

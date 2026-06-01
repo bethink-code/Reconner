@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import {
   Fuel,
+  Store,
   Upload,
   FileSpreadsheet,
   Check,
@@ -24,6 +25,7 @@ import {
   Columns,
   Loader2
 } from "lucide-react";
+import { getVertical } from "@shared/verticals";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { DataQualityWarnings } from "@/components/DataQualityWarnings";
@@ -49,6 +51,23 @@ type SubStep = "upload" | "quality" | "mapping" | "complete";
 
 export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSourceType = "fuel" }: FuelUploadStepProps) {
   const { toast } = useToast();
+
+  // Vertical-aware copy. Fuel keeps its exact wording (byte-identical); other verticals get
+  // vocabulary-driven copy with guidance that fits their export (e.g. retail receipt-level files).
+  const vertical = getVertical(salesSideSourceType);
+  const vocab = vertical.vocabulary;
+  const isFuel = vertical.id === "fuel";
+  const SalesIcon = isFuel ? Fuel : Store;
+  const salesNoun = vocab.salesSide.toLowerCase();
+  const introCopy = isFuel
+    ? "Upload your fuel transactions first — this is your source of truth. We'll match your bank transactions against these records."
+    : `Upload your ${vocab.salePlural} first — this is your source of truth. We'll match your bank deposits against these receipts.`;
+  const dropCopy = isFuel
+    ? "Drag and drop your fuel export file here"
+    : `Drag and drop your ${salesNoun} export file here`;
+  const tipCopy = isFuel
+    ? "Export your daily transaction report from your fuel management system. Make sure it includes the date, amount, and payment type for each sale. For best results, include fuel data for 3 days before and after your bank statement period."
+    : `Export your receipt-level report from your point-of-sale system — one row per receipt, with a payment type column. Make sure it includes the date, amount, and payment type for each ${vocab.saleSingular}. For best results, include ${salesNoun} data for 3 days before and after your bank statement period.`;
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [subStep, setSubStep] = useState<SubStep>(
@@ -435,7 +454,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSo
         <div className="bg-section rounded-2xl p-6" data-testid="card-quality-check">
           <div className="mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Fuel className="h-5 w-5 text-primary" />
+              <SalesIcon className="h-5 w-5 text-primary" />
               Checking Your File
             </h2>
             <p className="text-sm text-muted-foreground mt-1">{currentFile?.fileName}</p>
@@ -465,13 +484,10 @@ export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSo
     <div className="bg-section rounded-2xl max-w-2xl mx-auto p-8" data-testid="card-fuel-upload">
       <div className="text-center mb-6">
         <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
-          <Fuel className="h-6 w-6 text-primary" />
+          <SalesIcon className="h-6 w-6 text-primary" />
         </div>
         <h2 className="text-2xl font-semibold tracking-tight">Upload Sales Data</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Upload your fuel transactions first — this is your source of truth.
-          We'll match your bank transactions against these records.
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">{introCopy}</p>
       </div>
       <div className="space-y-4">
         {uploadMutation.isPending ? (
@@ -499,7 +515,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSo
           >
             <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
             <p className="text-sm font-medium mb-1">
-              Drag and drop your fuel export file here
+              {dropCopy}
             </p>
             <p className="text-xs text-muted-foreground mb-4">
               or click to browse
@@ -533,11 +549,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSo
 
         <div className="flex items-start gap-2 p-3 bg-card rounded-lg">
           <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            Export your daily transaction report from your fuel management system.
-            Make sure it includes the date, amount, and payment type for each sale.
-            For best results, include fuel data for 3 days before and after your bank statement period.
-          </p>
+          <p className="text-xs text-muted-foreground">{tipCopy}</p>
         </div>
       </div>
     </div>

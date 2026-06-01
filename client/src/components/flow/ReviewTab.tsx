@@ -31,12 +31,16 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const [sortField, setSortField] = useState<"date" | "amount">("date");
   // Default: newest transactions at the top.
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  // "No action" (surplus) leftovers have no partner to match — hidden by default so the list shows
+  // only what needs attention. Revealable via the footer toggle.
+  const [showNoAction, setShowNoAction] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitialIndex, setModalInitialIndex] = useState(0);
   const [modalItems, setModalItems] = useState<CategorizedTransaction[]>([]);
 
   useEffect(() => {
     setSearchQuery("");
+    setShowNoAction(false);
   }, [side]);
 
   useEffect(() => {
@@ -93,13 +97,25 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     return items;
   }, [filteredTransactions, sortField, sortDir]);
 
+  const surplusCount = useMemo(
+    () => sortedTransactions.filter((item) => item.noMatchReason === "surplus").length,
+    [sortedTransactions],
+  );
+  const visibleTransactions = useMemo(
+    () =>
+      showNoAction
+        ? sortedTransactions
+        : sortedTransactions.filter((item) => item.noMatchReason !== "surplus"),
+    [sortedTransactions, showNoAction],
+  );
+
   const totalUnresolved = sideModel?.transactions.length || 0;
 
   const openModal = (transactionId: string) => {
-    const index = sortedTransactions.findIndex((item) => item.transaction.id === transactionId);
+    const index = visibleTransactions.findIndex((item) => item.transaction.id === transactionId);
     if (index < 0) return;
 
-    setModalItems(sortedTransactions);
+    setModalItems(visibleTransactions);
     setModalInitialIndex(index);
     setModalOpen(true);
   };
@@ -296,9 +312,19 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   Clear search
                 </Button>
               </div>
+            ) : visibleTransactions.length === 0 ? (
+              <div className="py-6 text-center">
+                <Check className="mx-auto mb-2 h-8 w-8 text-[#166534]" />
+                <p className="text-sm text-muted-foreground">Nothing needs your attention on this side.</p>
+                {surplusCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setShowNoAction(true)}>
+                    Show {surplusCount} no-action item{surplusCount === 1 ? "" : "s"}
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
-                {sortedTransactions.map((item) => {
+                {visibleTransactions.map((item) => {
                   const isResolved = item.category === "resolved";
                   const isSurplus = item.noMatchReason === "surplus";
                   const isUnaccounted = item.noMatchReason === "unaccounted";
@@ -349,6 +375,18 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   );
                 })}
               </div>
+            )}
+
+            {visibleTransactions.length > 0 && surplusCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowNoAction((value) => !value)}
+                className="w-full py-2 text-center text-xs text-muted-foreground transition-colors hover:text-[#1A1200]"
+              >
+                {showNoAction
+                  ? `Hide ${surplusCount} no-action item${surplusCount === 1 ? "" : "s"}`
+                  : `Show ${surplusCount} no-action item${surplusCount === 1 ? "" : "s"} — no partner to match`}
+              </button>
             )}
           </div>
         )}

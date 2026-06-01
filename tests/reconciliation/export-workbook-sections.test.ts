@@ -148,6 +148,8 @@ test("workbook section builders package reconciliation and insight reports witho
           matchedAmount: 0,
           flaggedCount: 0,
           flaggedAmount: 0,
+          noActionCount: 0,
+          noActionAmount: 0,
         },
         transactions: [],
       },
@@ -161,6 +163,8 @@ test("workbook section builders package reconciliation and insight reports witho
           matchedAmount: 0,
           flaggedCount: 0,
           flaggedAmount: 0,
+          noActionCount: 0,
+          noActionAmount: 0,
         },
         transactions: [],
       },
@@ -202,7 +206,7 @@ test("workbook section builders package reconciliation and insight reports witho
       },
     ],
     suspicious: [],
-  }, []);
+  }, [], { salesTransactions: [], received: null, spent: [] });
 
   const rules = {
     amountTolerance: 2,

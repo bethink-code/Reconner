@@ -101,6 +101,9 @@ export const reconciliationPeriods = pgTable("reconciliation_periods", {
   endDate: text("end_date").notNull(),
   status: text("status").notNull().default("in_progress"),
   userId: varchar("user_id").references(() => users.id), // creator (kept for audit/history)
+  // Cash Gap input — total cash the owner says they received this period. Null = not yet entered.
+  // Discrepancy (the leak) = POS cash sales − this. See shared/cashGap.ts.
+  cashReceivedAmount: decimal("cash_received_amount", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -116,6 +119,32 @@ export const insertReconciliationPeriodSchema = createInsertSchema(reconciliatio
 
 export type InsertReconciliationPeriod = z.infer<typeof insertReconciliationPeriodSchema>;
 export type ReconciliationPeriod = typeof reconciliationPeriods.$inferSelect;
+
+// Cash spent — one row per item the owner spent from the till in cash during a period
+// (food, Uber, paid-for-X). Each item has an amount, a date, and a reason. Trusted because
+// the owner captured it. Summed, it feeds the "cash in hand" line (received − spent) — it does
+// NOT affect the leak. paymentDate lets the daily breakdown attribute spend to specific days.
+export const periodCashPayments = pgTable("period_cash_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  paymentDate: text("payment_date").notNull(),
+  reason: text("reason").notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  userName: text("user_name"),
+  userEmail: text("user_email"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_period_cash_payments_period_id").on(table.periodId),
+]);
+
+export const insertPeriodCashPaymentSchema = createInsertSchema(periodCashPayments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPeriodCashPayment = z.infer<typeof insertPeriodCashPaymentSchema>;
+export type PeriodCashPayment = typeof periodCashPayments.$inferSelect;
 
 // Uploaded Files
 export const uploadedFiles = pgTable("uploaded_files", {

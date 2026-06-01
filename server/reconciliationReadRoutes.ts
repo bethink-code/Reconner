@@ -64,7 +64,8 @@ export function registerReconciliationReadRoutes(app: Express) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
-      const summary = await storage.getVerificationSummary(req.params.periodId);
+      const vertical = await resolveVertical(period.propertyId);
+      const summary = await storage.getVerificationSummary(req.params.periodId, vertical.salesSideSourceType);
       res.json(summary);
     } catch (error) {
       console.error("Error fetching verification summary:", error);
@@ -410,12 +411,13 @@ export function registerReconciliationReadRoutes(app: Express) {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
 
-      const [summary, attendantSummary, transactions] = await Promise.all([
-        storage.getPeriodSummary(req.params.periodId),
+      const vertical = await resolveVertical(period.propertyId);
+      const [summary, attendantSummary, transactions, cashPayments] = await Promise.all([
+        storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType),
         storage.getAttendantSummary(req.params.periodId),
         storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getCashPayments(req.params.periodId),
       ]);
-      const vertical = await resolveVertical(period.propertyId);
 
       const fuelTransactions = transactions.filter((tx) => tx.sourceType === vertical.salesSideSourceType);
       const bankTransactions = transactions.filter(
@@ -423,7 +425,11 @@ export function registerReconciliationReadRoutes(app: Express) {
       );
       const declineResult = computeDeclineAnalysis(bankTransactions, fuelTransactions);
 
-      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions));
+      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions, {
+        salesTransactions: fuelTransactions,
+        received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
+        spent: cashPayments,
+      }));
     } catch (error) {
       console.error("Error fetching insights read model:", error);
       res.status(500).json({ error: "Failed to fetch insights data" });
@@ -471,7 +477,8 @@ export function registerReconciliationReadRoutes(app: Express) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
-      const summary = await storage.getPeriodSummary(req.params.periodId);
+      const vertical = await resolveVertical(period.propertyId);
+      const summary = await storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType);
       res.json(summary);
     } catch (error) {
       console.error("Error fetching period summary:", error);
@@ -483,9 +490,10 @@ export function registerReconciliationReadRoutes(app: Express) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
+      const vertical = await resolveVertical(period.propertyId);
 
       const [summary, resolutions] = await Promise.all([
-        storage.getPeriodSummary(req.params.periodId),
+        storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType),
         storage.getResolutionsByPeriod(req.params.periodId),
       ]);
 

@@ -161,7 +161,7 @@ test("buildReviewQueueReadModel centralizes review queues without hiding the opp
       makeResolution(bankFlagged.id, "flagged"),
     ],
     rules,
-    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false },
+    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true },
   );
 
   const fuelCategories = Object.fromEntries(
@@ -262,7 +262,7 @@ test("reviewing a fuel item does not reshuffle the bank review queue", () => {
       }),
     ],
     rules,
-    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false },
+    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true },
   );
 
   assert.equal(model.sides.fuel.summary.unresolvedCount, 1);
@@ -271,4 +271,68 @@ test("reviewing a fuel item does not reshuffle the bank review queue", () => {
     model.sides.bank.transactions.map((item) => item.transaction.id),
     [bankFirst.id, bankSecond.id],
   );
+});
+
+test("review separates structural surplus from genuinely unaccounted leftovers", () => {
+  const rules: MatchingRulesConfig = { ...defaultRules, groupByInvoice: true };
+
+  // A card sale of R100 that already matched its bank line.
+  const saleMatched = asTransaction(
+    makeFuelTransaction({ amount: "100.00", transactionDate: "2026-04-10" }),
+    { id: "sale-matched", matchStatus: "matched" },
+  );
+  // A bank line of R100 with no FREE sale to take — its only R100 sale already matched. Surplus.
+  const bankSurplus = asTransaction(
+    makeBankTransaction({ amount: "100.00", transactionDate: "2026-04-10" }),
+    { id: "bank-surplus", sourceType: "bank", matchStatus: "unmatched" },
+  );
+  // A bank line with no sale anywhere near its amount — money in, no sale. Unaccounted.
+  const bankUnaccounted = asTransaction(
+    makeBankTransaction({ amount: "777.77", transactionDate: "2026-04-12" }),
+    { id: "bank-unaccounted", sourceType: "bank", matchStatus: "unmatched" },
+  );
+
+  const model = buildReviewQueueReadModel(
+    { startDate: "2026-04-01", endDate: "2026-04-30" },
+    [saleMatched, bankSurplus, bankUnaccounted],
+    [],
+    rules,
+    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true },
+  );
+
+  const byId = Object.fromEntries(model.sides.bank.transactions.map((item) => [item.transaction.id, item]));
+  assert.equal(byId["bank-surplus"].noMatchReason, "surplus");
+  assert.equal(byId["bank-unaccounted"].noMatchReason, "unaccounted");
+
+  // Only the unaccounted line is real work; surplus is excluded from "needs attention".
+  assert.equal(model.sides.bank.summary.unresolvedCount, 2);
+  assert.equal(model.sides.bank.summary.noActionCount, 1);
+  assert.equal(model.sides.bank.summary.noActionAmount, 100);
+});
+
+test("retail isolation: review model scopes the sales side to the vertical, not source_type='fuel'", () => {
+  const rules: MatchingRulesConfig = { ...defaultRules, groupByInvoice: true };
+
+  // In a retail period, a genuine retail receipt is the sales side; a stray fuel-typed row must
+  // NOT leak into the retail Sales review queue (it isn't this vertical's sales side).
+  const retailReceipt = asTransaction(
+    makeFuelTransaction({ amount: "100.00", transactionDate: "2026-04-25", isCardTransaction: "yes" }),
+    { id: "retail-receipt", sourceType: "retail", matchStatus: "unmatched" },
+  );
+  const fuelStray = asTransaction(
+    makeFuelTransaction({ amount: "200.00", transactionDate: "2026-04-25", isCardTransaction: "yes" }),
+    { id: "fuel-stray", sourceType: "fuel", matchStatus: "unmatched" },
+  );
+
+  const model = buildReviewQueueReadModel(
+    { startDate: "2026-04-01", endDate: "2026-04-30" },
+    [retailReceipt, fuelStray],
+    [],
+    rules,
+    { sourceType: "retail", requireCardFlag: true, forceInvoiceGrouping: true, intradayTimeSignal: false },
+  );
+
+  const salesIds = model.sides.fuel.transactions.map((item) => item.transaction.id);
+  assert.deepEqual(salesIds, ["retail-receipt"]);
+  assert.ok(!salesIds.includes("fuel-stray"));
 });

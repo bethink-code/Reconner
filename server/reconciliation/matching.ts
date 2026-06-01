@@ -134,6 +134,9 @@ export function scoreBankToInvoices<TBank extends BankTxnLike, TFuel extends Fue
     minimumConfidence: rules.minimumConfidence,
     autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence,
     boundaryMode: "none",
+    // Legacy single-pass is only used for cross-day lag scoring, where dateDiff !== 0 so the
+    // intraday-time block never runs — the value is immaterial; keep the fuel default.
+    intradayTimeSignal: true,
   });
 }
 
@@ -248,7 +251,10 @@ function scoreBankToInvoiceCandidate<TBank extends BankTxnLike, TFuel extends Fu
   else confidence = 65;
 
   let timeDiff = 0;
-  if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+  // Intraday time only discriminates matches when the bank line tracks the sale time (fuel). For
+  // batch-settled verticals (retail) the bank time is a daily posting time, so we skip it entirely:
+  // a same-day candidate keeps its 85% base and is never rejected on the time window.
+  if (stage.intradayTimeSignal && dateDiff === 0 && fuelTime !== null && bankTime !== null) {
     timeDiff = Math.abs(bankTime - fuelTime);
     if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) return null;
     if (timeDiff <= 5) confidence = 100;

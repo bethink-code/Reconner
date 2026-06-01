@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Search, X, Check } from "lucide-react";
+import { Search, X, Check, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRand } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
@@ -28,12 +28,19 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const userName = user?.firstName || "User";
   const [side, setSide] = useState<ReviewSide>(initialSide || "fuel");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<"date" | "amount">("date");
+  // Default: newest transactions at the top.
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  // "No action" (surplus) leftovers have no partner to match — hidden by default so the list shows
+  // only what needs attention. Revealable via the footer toggle.
+  const [showNoAction, setShowNoAction] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitialIndex, setModalInitialIndex] = useState(0);
   const [modalItems, setModalItems] = useState<CategorizedTransaction[]>([]);
 
   useEffect(() => {
     setSearchQuery("");
+    setShowNoAction(false);
   }, [side]);
 
   useEffect(() => {
@@ -72,14 +79,43 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     });
   }, [searchQuery, sideModel]);
 
+  const sortedTransactions = useMemo(() => {
+    const items = [...filteredTransactions];
+    const dir = sortDir === "asc" ? 1 : -1;
+    items.sort((a, b) => {
+      if (sortField === "amount") {
+        const diff = parseFloat(a.transaction.amount) - parseFloat(b.transaction.amount);
+        if (diff !== 0) return diff * dir;
+      } else {
+        const aKey = `${a.transaction.transactionDate ?? ""} ${a.transaction.transactionTime ?? ""}`;
+        const bKey = `${b.transaction.transactionDate ?? ""} ${b.transaction.transactionTime ?? ""}`;
+        const cmp = aKey.localeCompare(bKey);
+        if (cmp !== 0) return cmp * dir;
+      }
+      return a.transaction.id.localeCompare(b.transaction.id);
+    });
+    return items;
+  }, [filteredTransactions, sortField, sortDir]);
+
+  const surplusCount = useMemo(
+    () => sortedTransactions.filter((item) => item.noMatchReason === "surplus").length,
+    [sortedTransactions],
+  );
+  const visibleTransactions = useMemo(
+    () =>
+      showNoAction
+        ? sortedTransactions
+        : sortedTransactions.filter((item) => item.noMatchReason !== "surplus"),
+    [sortedTransactions, showNoAction],
+  );
+
   const totalUnresolved = sideModel?.transactions.length || 0;
 
   const openModal = (transactionId: string) => {
-    if (!sideModel) return;
-    const index = sideModel.transactions.findIndex((item) => item.transaction.id === transactionId);
+    const index = visibleTransactions.findIndex((item) => item.transaction.id === transactionId);
     if (index < 0) return;
 
-    setModalItems(sideModel.transactions);
+    setModalItems(visibleTransactions);
     setModalInitialIndex(index);
     setModalOpen(true);
   };
@@ -113,6 +149,9 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
           {sideCards.map((card) => {
             const isActive = side === card.key;
             const summary = reviewModel.sides[card.key].summary;
+            // "Surplus" leftovers have no partner to match — don't count them as work to do.
+            const attentionCount = summary.unresolvedCount - summary.noActionCount;
+            const attentionAmount = summary.unresolvedAmount - summary.noActionAmount;
             return (
               <button
                 key={card.key}
@@ -131,25 +170,27 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   <p
                     className={cn(
                       "text-3xl font-bold tabular-nums",
-                      summary.unresolvedCount > 0 ? "text-[#B45309]" : "text-[#166534]",
+                      attentionCount > 0 ? "text-[#B45309]" : "text-[#166534]",
                     )}
                   >
-                    {summary.unresolvedCount}
+                    {attentionCount}
                   </p>
                   <p
                     className={cn(
                       "text-base font-bold tabular-nums",
-                      summary.unresolvedCount > 0 ? "text-[#B45309]" : "text-[#1A1200]",
+                      attentionCount > 0 ? "text-[#B45309]" : "text-[#1A1200]",
                     )}
                   >
-                    {formatRand(summary.unresolvedAmount)}
+                    {formatRand(attentionAmount)}
                   </p>
                 </div>
 
                 <div className="mb-4 flex items-baseline justify-between">
-                  <p className="text-xs text-muted-foreground">To review</p>
+                  <p className="text-xs text-muted-foreground">Need attention</p>
                   <p className="text-[10px] text-muted-foreground">
-                    across {summary.originalCount} {card.key === "bank" ? "bank" : "sales"} transactions
+                    {summary.noActionCount > 0
+                      ? `${summary.noActionCount} more with no partner — no action`
+                      : `across ${summary.originalCount} ${card.key === "bank" ? "bank" : "sales"} transactions`}
                   </p>
                 </div>
 
@@ -209,24 +250,58 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
           </div>
         ) : (
           <div className="bg-section rounded-xl p-4 space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by amount, description, reference, or date..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                className="bg-card pl-9"
-              />
-              {searchQuery && (
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by amount, description, reference, or date..."
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  className="bg-card pl-9"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-muted-foreground">Sort</span>
+                <div className="flex overflow-hidden rounded-lg border border-border/50 bg-card">
+                  {(["date", "amount"] as const).map((field) => (
+                    <button
+                      key={field}
+                      type="button"
+                      onClick={() => setSortField(field)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs capitalize transition-colors",
+                        field === "amount" && "border-l border-border/50",
+                        sortField === field
+                          ? "bg-section font-medium text-[#1A1200]"
+                          : "text-muted-foreground hover:bg-section/50",
+                      )}
+                    >
+                      {field}
+                    </button>
+                  ))}
+                </div>
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="icon"
-                  className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
-                  onClick={() => setSearchQuery("")}
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setSortDir((dir) => (dir === "asc" ? "desc" : "asc"))}
+                  title={sortDir === "asc" ? "Ascending" : "Descending"}
+                  aria-label={`Sort ${sortDir === "asc" ? "ascending" : "descending"}`}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  {sortDir === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
                 </Button>
-              )}
+              </div>
             </div>
 
             {searchQuery && filteredTransactions.length === 0 ? (
@@ -237,35 +312,81 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   Clear search
                 </Button>
               </div>
+            ) : visibleTransactions.length === 0 ? (
+              <div className="py-6 text-center">
+                <Check className="mx-auto mb-2 h-8 w-8 text-[#166534]" />
+                <p className="text-sm text-muted-foreground">Nothing needs your attention on this side.</p>
+                {surplusCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setShowNoAction(true)}>
+                    Show {surplusCount} no-action item{surplusCount === 1 ? "" : "s"}
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
-                {filteredTransactions.map((item) => {
+                {visibleTransactions.map((item) => {
                   const isResolved = item.category === "resolved";
-                  const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
-                  const bestStageLabel = item.bestMatch?.stageLabel;
-                  const badgeLabel =
-                    !isResolved && bestStageLabel ? `${categoryLabel} · ${bestStageLabel}` : categoryLabel;
+                  const isSurplus = item.noMatchReason === "surplus";
+                  const isUnaccounted = item.noMatchReason === "unaccounted";
+
+                  let badgeLabel: string;
+                  let badgeClass: string;
+                  let subtitle: string | undefined;
+                  let subtitleColor: string | undefined;
+
+                  if (isResolved) {
+                    badgeLabel = CATEGORY_LABELS[item.category] || item.category;
+                    badgeClass = "text-[#166534] border-[#166534]/30";
+                  } else if (isSurplus) {
+                    badgeLabel = "No action";
+                    badgeClass = "text-muted-foreground border-border/50";
+                    subtitle = "A matching counterpart settled elsewhere — nothing to reconcile here";
+                    subtitleColor = "text-muted-foreground";
+                  } else if (isUnaccounted) {
+                    badgeLabel = side === "bank" ? "No sale found" : "Not in bank yet";
+                    badgeClass = "text-[#B45309] border-[#B45309]/30";
+                    subtitle =
+                      side === "bank"
+                        ? "Bank received money with no matching sale — worth a look"
+                        : "Sale with no bank settlement in the window — not settled or missing";
+                    subtitleColor = "text-[#B45309]";
+                  } else {
+                    // A viable candidate exists — this is a confirm/flag decision.
+                    badgeLabel = CATEGORY_LABELS[item.category] || item.category;
+                    badgeClass = "";
+                    subtitle = item.insights.length > 0 ? item.insights[0].message : undefined;
+                    subtitleColor = item.insights.length > 0 ? "text-[#B45309]" : undefined;
+                  }
 
                   return (
                     <TransactionRow
                       key={item.transaction.id}
                       transaction={item.transaction}
                       onClick={() => openModal(item.transaction.id)}
-                      dimmed={isResolved}
+                      dimmed={isResolved || isSurplus}
                       badge={
-                        <Badge
-                          variant="outline"
-                          className={cn("text-xs", isResolved && "text-[#166534] border-[#166534]/30")}
-                        >
+                        <Badge variant="outline" className={cn("text-xs", badgeClass)}>
                           {badgeLabel}
                         </Badge>
                       }
-                      subtitle={!isResolved && item.insights.length > 0 ? item.insights[0].message : undefined}
-                      subtitleColor={!isResolved && item.insights.length > 0 ? "text-[#B45309]" : undefined}
+                      subtitle={subtitle}
+                      subtitleColor={subtitleColor}
                     />
                   );
                 })}
               </div>
+            )}
+
+            {visibleTransactions.length > 0 && surplusCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowNoAction((value) => !value)}
+                className="w-full py-2 text-center text-xs text-muted-foreground transition-colors hover:text-[#1A1200]"
+              >
+                {showNoAction
+                  ? `Hide ${surplusCount} no-action item${surplusCount === 1 ? "" : "s"}`
+                  : `Show ${surplusCount} no-action item${surplusCount === 1 ? "" : "s"} — no partner to match`}
+              </button>
             )}
           </div>
         )}

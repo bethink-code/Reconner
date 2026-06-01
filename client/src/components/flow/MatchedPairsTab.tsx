@@ -26,6 +26,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import { cn } from "@/lib/utils";
 import { formatRand } from "@/lib/format";
+import { getVertical } from "@shared/verticals";
 
 interface MatchedPair {
   match: {
@@ -108,6 +109,16 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
     queryKey: ["/api/periods", periodId, "matches", "details"],
     enabled: !!periodId,
   });
+
+  // Labels come from the vertical (e.g. "Fuel"/"Sales", "Attendant"/"Cashier"), never hardcoded.
+  const { data: period } = useQuery<{ verticalId?: string }>({
+    queryKey: ["/api/periods", periodId],
+    enabled: !!periodId,
+  });
+  const vertical = getVertical(period?.verticalId);
+  const salesSideLabel = vertical.vocabulary.salesSide;
+  const staffLabel = vertical.vocabulary.staff;
+  const saleSingular = vertical.vocabulary.saleSingular;
 
   const invalidateAll = useInvalidateReconciliation(periodId);
 
@@ -245,7 +256,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   if (pairs.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">
-        No transactions yet. Upload fuel and bank data to see results here.
+        No transactions yet. Upload {salesSideLabel.toLowerCase()} and bank data to see results here.
       </div>
     );
   }
@@ -390,7 +401,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by amount, description, card, attendant..."
+            placeholder={`Search by amount, description, card, ${staffLabel.toLowerCase()}...`}
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0); }}
             className="pl-9 h-8 text-sm bg-white dark:bg-card"
@@ -468,7 +479,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
               {displayFuel && (!p.fuelItems || p.fuelItems.length <= 1) && (
                 <div className="min-w-0 space-y-0.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    Fuel
+                    {salesSideLabel}
                     {displayFuel.referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {displayFuel.referenceNumber}</span>}
                   </p>
                   <p className="text-sm font-semibold tabular-nums">{formatRand(fuelAmt)}</p>
@@ -486,7 +497,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
               {p.fuelItems && p.fuelItems.length > 1 && (
                 <div className="min-w-0 space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    Fuel · {p.fuelItems.length} items
+                    {salesSideLabel} · {p.fuelItems.length} items
                     {p.fuelItems[0].referenceNumber && <span className="normal-case tracking-normal font-normal text-[11px]"> · Inv: {p.fuelItems[0].referenceNumber}</span>}
                   </p>
                   {p.fuelItems.map((item, idx) => (
@@ -607,7 +618,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
             <AlertDialogHeader>
               <AlertDialogTitle>Remove match?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will unlink the bank transaction ({pendingUnmatch?.bankTransaction ? formatRand(pendingUnmatch.bankTransaction.amount) : ""}) from its fuel match.
+                This will unlink the bank transaction ({pendingUnmatch?.bankTransaction ? formatRand(pendingUnmatch.bankTransaction.amount) : ""}) from its matched {saleSingular}.
                 Both transactions will return to the unmatched pool for re-investigation.
               </AlertDialogDescription>
             </AlertDialogHeader>

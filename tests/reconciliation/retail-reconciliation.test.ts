@@ -14,7 +14,7 @@ import { defaultRules, makeBankTransaction, makeFuelTransaction } from "./helper
 
 const period = { id: "period-retail", name: "25/4", startDate: "2026-04-25", endDate: "2026-04-25" };
 const rules = { ...defaultRules, groupByInvoice: false }; // vertical forces grouping itself
-const RETAIL = { sourceType: "retail", requireCardFlag: true, forceInvoiceGrouping: true } as const;
+const RETAIL = { sourceType: "retail", requireCardFlag: true, forceInvoiceGrouping: true, intradayTimeSignal: false } as const;
 
 function receipt(ref: string, amount: number, time: string, payment: "Card" | "Cash") {
   return makeFuelTransaction({
@@ -49,6 +49,26 @@ test("retail card-aware: card receipts reconcile to the bank; cash is excluded e
   assert.ok(!plan.pendingMatches.some((m) => m.bankTxId === "ned-cashamt"));
 });
 
+test("retail ignores intraday time: a late batch settlement still reconciles its same-day card sale", () => {
+  // The Nedbank batch posts at end of day (23:30), hours after the 09:00 card sale. Their amounts
+  // match exactly and it's the same day, but the timestamps are far apart. With a strict quality
+  // threshold (80%), fuel-style time scoring would knock this same-day match down to 75% and reject
+  // it. Retail (intradayTimeSignal: false) keeps the 85% same-day base and reconciles it.
+  const strictRules = { ...rules, minimumConfidence: 80 };
+  const fixture = [
+    receipt("4-50001", 200.0, "09:00:00", "Card"),
+    makeBankTransaction({ id: "ned-batch", sourceType: "bank", amount: "200.00", transactionDate: "2026-04-25", transactionTime: "23:30:00" }),
+  ];
+
+  const retail = planAutoMatch(period, strictRules, fixture, RETAIL);
+  assert.equal(retail.metrics.matchesCreated, 1);
+  assert.equal(retail.pendingMatches[0].bankTxId, "ned-batch");
+
+  // Contrast: fuel-style time sensitivity degrades the far-apart same-day pair below the threshold.
+  const timeSensitive = planAutoMatch(period, strictRules, fixture, { ...RETAIL, intradayTimeSignal: true });
+  assert.equal(timeSensitive.metrics.matchesCreated, 0);
+});
+
 test("retail without the card flag would wrongly pull a cash sale into matching", () => {
   // Contrast: if we did NOT pre-filter card (requireCardFlag false), the cash R159.49 receipt
   // would match the R159.49 settlement — the bug the Payment type column lets us avoid.
@@ -60,6 +80,6 @@ test("retail without the card flag would wrongly pull a cash sale into matching"
   const cardAware = planAutoMatch(period, rules, fixture, RETAIL);
   assert.equal(cardAware.metrics.matchesCreated, 0); // cash excluded
 
-  const naive = planAutoMatch(period, rules, fixture, { sourceType: "retail", requireCardFlag: false, forceInvoiceGrouping: true });
+  const naive = planAutoMatch(period, rules, fixture, { sourceType: "retail", requireCardFlag: false, forceInvoiceGrouping: true, intradayTimeSignal: false });
   assert.equal(naive.metrics.matchesCreated, 1); // would have matched the cash sale
 });

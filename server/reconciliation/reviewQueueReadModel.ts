@@ -71,6 +71,45 @@ function isInPeriod(transaction: Transaction, period: ReviewPeriodLike) {
   return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
 }
 
+function dayDiff(later: string, earlier: string) {
+  return Math.round((new Date(later).getTime() - new Date(earlier).getTime()) / 86400000);
+}
+
+/**
+ * For a leftover with no viable match candidate, decide whether it is structural "surplus" (a
+ * same-amount counterpart settled within the window but already matched another line — nothing to
+ * do) or genuinely "unaccounted" (no comparable counterpart on the other side at all). We look at
+ * the WHOLE opposite side, matched included — the scorer only sees unmatched candidates, so it
+ * cannot tell these apart, which is why dense same-amount periods (retail) cried wolf.
+ */
+export function classifyNoMatch(
+  item: Transaction,
+  oppositeSide: Transaction[],
+  side: ReviewSide,
+  rules: MatchingRulesConfig,
+): "surplus" | "unaccounted" {
+  const amount = parseFloat(item.amount);
+  const tolerance = rules.amountTolerance;
+  const window = rules.dateWindowDays;
+  const itemDate = item.transactionDate;
+  if (!itemDate) return "unaccounted";
+
+  const inSettlementBox = (opposite: Transaction) => {
+    if (!opposite.transactionDate) return false;
+    if (Math.abs(parseFloat(opposite.amount) - amount) > tolerance) return false;
+    // A bank line settles a sale on the same day or up to `window` days later.
+    const lag = side === "bank"
+      ? dayDiff(itemDate, opposite.transactionDate) // item is bank, opposite is the sale
+      : dayDiff(opposite.transactionDate, itemDate); // item is the sale, opposite is bank
+    return lag >= 0 && lag <= window;
+  };
+
+  const hasMatchedCounterpart = oppositeSide.some(
+    (opposite) => opposite.matchStatus === "matched" && inSettlementBox(opposite),
+  );
+  return hasMatchedCounterpart ? "surplus" : "unaccounted";
+}
+
 function isBankTransaction(transaction: Transaction) {
   return !!transaction.sourceType?.startsWith("bank");
 }
@@ -156,6 +195,7 @@ function scoreSuggestion(
   side: ReviewSide,
   matchingRules: MatchingRulesConfig,
   fuelBoundaryPositions: Map<string, "start" | "end" | "both" | "none">,
+  intradayTimeSignal: boolean,
 ): PotentialMatch | null {
   const matchingStages = buildMatchingStages({
     amountTolerance: matchingRules.amountTolerance,
@@ -165,7 +205,7 @@ function scoreSuggestion(
     requireCardMatch: matchingRules.requireCardMatch,
     minimumConfidence: matchingRules.minimumConfidence,
     autoMatchThreshold: matchingRules.autoMatchThreshold,
-  });
+  }, { intradayTimeSignal });
 
   const primaryAmount = parseFloat(primaryTransaction.amount);
   const candidateAmount = parseFloat(candidateTransaction.amount);
@@ -194,7 +234,7 @@ function scoreSuggestion(
       if (!isDirectionalBoundary) continue;
     }
 
-    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+    if (intradayTimeSignal && dayDiff === 0 && fuelTime !== null && bankTime !== null) {
       const timeGap = Math.abs(bankTime - fuelTime);
       if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
     }
@@ -206,7 +246,7 @@ function scoreSuggestion(
     else confidence = 65;
 
     let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
-    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+    if (intradayTimeSignal && dayDiff === 0 && fuelTime !== null && bankTime !== null) {
       const timeGap = Math.abs(bankTime - fuelTime);
       timeDiffLabel = timeGap === 0 ? "Same time" : `${timeGap} min`;
       if (timeGap <= 5) confidence = 100;
@@ -348,6 +388,8 @@ function buildCategorizedTransactions(
   matchingRules: MatchingRulesConfig,
   fuelBoundaryPositions: Map<string, "start" | "end" | "both" | "none">,
   latestResolutionByTransactionId: Map<string, TransactionResolution>,
+  intradayTimeSignal: boolean,
+  oppositeSide: Transaction[],
 ) {
   const result = primaryTransactions
     .map((primaryTransaction): CategorizedTransaction => {
@@ -360,6 +402,7 @@ function buildCategorizedTransactions(
           side,
           matchingRules,
           fuelBoundaryPositions,
+          intradayTimeSignal,
         ))
         .filter((match): match is PotentialMatch => !!match);
 
@@ -392,6 +435,11 @@ function buildCategorizedTransactions(
         nearestByAmount,
         insights: [],
         resolution,
+        // A viable candidate means it's a decision to make; otherwise classify why there's no match.
+        noMatchReason:
+          category === "resolved" || bestMatch
+            ? null
+            : classifyNoMatch(primaryTransaction, oppositeSide, side, matchingRules),
       };
 
       item.insights = buildInsights(item, side);
@@ -417,11 +465,13 @@ function buildInvestigateItems(
 }
 
 function buildSideSummary(
-  unresolvedTransactions: Transaction[],
+  unresolvedItems: CategorizedTransaction[],
   counts: SideResolutionCounts,
 ): ReviewSideSummary {
-  const unresolvedCount = unresolvedTransactions.length;
-  const unresolvedAmount = unresolvedTransactions.reduce((sum, transaction) => sum + parseFloat(transaction.amount), 0);
+  const unresolvedCount = unresolvedItems.length;
+  const unresolvedAmount = unresolvedItems.reduce((sum, item) => sum + parseFloat(item.transaction.amount), 0);
+  const noActionItems = unresolvedItems.filter((item) => item.noMatchReason === "surplus");
+  const noActionAmount = noActionItems.reduce((sum, item) => sum + parseFloat(item.transaction.amount), 0);
 
   return {
     unresolvedCount,
@@ -432,6 +482,8 @@ function buildSideSummary(
     matchedAmount: counts.matchedAmount,
     flaggedCount: counts.flagged,
     flaggedAmount: counts.flaggedAmount,
+    noActionCount: noActionItems.length,
+    noActionAmount,
   };
 }
 
@@ -479,6 +531,8 @@ export function buildReviewQueueReadModel(
     matchingRules,
     fuelBoundaryPositions,
     latestResolutionByTransactionId,
+    salesSide.intradayTimeSignal,
+    inPeriodBankTransactions,
   );
   const bankTransactions = buildCategorizedTransactions(
     "bank",
@@ -487,6 +541,8 @@ export function buildReviewQueueReadModel(
     matchingRules,
     fuelBoundaryPositions,
     latestResolutionByTransactionId,
+    salesSide.intradayTimeSignal,
+    inPeriodFuelTransactions,
   );
   const flaggedBank = buildInvestigateItems(
     buildCategorizedTransactions(
@@ -496,6 +552,8 @@ export function buildReviewQueueReadModel(
       matchingRules,
       fuelBoundaryPositions,
       latestResolutionByTransactionId,
+      salesSide.intradayTimeSignal,
+      inPeriodFuelTransactions,
     ),
     latestResolutionByTransactionId,
   );
@@ -507,6 +565,8 @@ export function buildReviewQueueReadModel(
       matchingRules,
       fuelBoundaryPositions,
       latestResolutionByTransactionId,
+      salesSide.intradayTimeSignal,
+      inPeriodBankTransactions,
     ),
     latestResolutionByTransactionId,
   );
@@ -516,17 +576,11 @@ export function buildReviewQueueReadModel(
     matchingRules,
     sides: {
       fuel: {
-        summary: buildSideSummary(
-          reviewFuelTransactions,
-          perSideCounts.fuel,
-        ),
+        summary: buildSideSummary(fuelTransactions, perSideCounts.fuel),
         transactions: fuelTransactions,
       },
       bank: {
-        summary: buildSideSummary(
-          reviewBankTransactions,
-          perSideCounts.bank,
-        ),
+        summary: buildSideSummary(bankTransactions, perSideCounts.bank),
         transactions: bankTransactions,
       },
     },

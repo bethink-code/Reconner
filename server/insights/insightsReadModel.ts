@@ -5,12 +5,24 @@ import { buildAttendantsReport } from "./attendantsReport.ts";
 import { buildDeclinedTransactionsReport } from "./declinedTransactionsReport.ts";
 import { buildReconciliationOverviewReport } from "./reconciliationOverviewReport.ts";
 import { buildReprintScamReadModel, type ReprintScamFuelLike } from "./reprintScamReport.ts";
+import {
+  buildCashGapReadModel,
+  type CashGapSpentLike,
+  type CashGapSaleLike,
+} from "./cashGapReport.ts";
+
+export interface CashGapInputsForReport {
+  salesTransactions: CashGapSaleLike[];
+  received: number | null;
+  spent: CashGapSpentLike[];
+}
 
 export function buildInsightsReadModel(
   summary: PeriodSummary,
   attendantSummary: AttendantSummaryRow[],
   declineResult: DeclineAnalysisResult,
   fuelTransactions: ReprintScamFuelLike[],
+  cashGapInputs: CashGapInputsForReport,
 ): PeriodInsightsReadModel {
   return {
     detail: buildReconciliationOverviewReport(summary),
@@ -22,5 +34,10 @@ export function buildInsightsReadModel(
     }),
     declines: buildDeclinedTransactionsReport(declineResult),
     reprints: buildReprintScamReadModel(fuelTransactions),
+    cashGap: buildCashGapReadModel(
+      cashGapInputs.salesTransactions,
+      cashGapInputs.received,
+      cashGapInputs.spent,
+    ),
   };
 }

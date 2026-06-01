@@ -297,14 +297,15 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <PeriodCard title="Total Periods" value={displayPeriods.length} icon="total" />
+          <PeriodCard title="Total Periods" value={displayPeriods.length} icon="total" loading={isLoading} />
           <PeriodCard
             title="Completed"
             value={completedCount}
             icon="complete"
+            loading={isLoading}
             subtitle={displayPeriods.length > 0 ? `${Math.round((completedCount / displayPeriods.length) * 100)}% of total` : undefined}
           />
-          <PeriodCard title="In Progress" value={inProgressCount} icon="inProgress" />
+          <PeriodCard title="In Progress" value={inProgressCount} icon="inProgress" loading={isLoading} />
         </div>
 
         {/* Periods Table */}

@@ -122,7 +122,7 @@ export default function Admin() {
       return await apiRequest("POST", "/api/organizations", payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/organizations") });
       setNewOrgForm({ name: "", slug: "", billingEmail: "", verticalId: DEFAULT_VERTICAL_ID });
       toast({ title: "Organization created" });
     },
@@ -135,7 +135,7 @@ export default function Admin() {
     mutationFn: async ({ id, data }: { id: string; data: { name?: string; billingEmail?: string; billingAddress?: string; vatNumber?: string; verticalId?: string } }) =>
       apiRequest("PATCH", `/api/organizations/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/organizations") });
       queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/properties") });
       setEditingOrg(null);
       toast({ title: "Organization updated" });
@@ -381,7 +381,7 @@ export default function Admin() {
   });
   const invalidateMemberships = () => {
     if (accessUserId) queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${accessUserId}/memberships`] });
-    queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+    queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/organizations") });
   };
   const addMembershipMutation = useMutation({
     mutationFn: async ({ orgId, userId, role }: { orgId: string; userId: string; role: OrgRole }) =>

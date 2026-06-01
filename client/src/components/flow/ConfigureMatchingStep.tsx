@@ -20,6 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { buildMatchingStages } from "@shared/matchingStages";
@@ -67,7 +68,7 @@ const PRESETS: PresetConfig[] = [
   {
     id: "moderate",
     name: "Moderate",
-    description: "Balanced for most stations",
+    description: "Balanced for most businesses",
     icon: Scale,
     tolerance: "±R1.00",
     timing: "60 min close · 120 min exact",
@@ -118,6 +119,8 @@ export function ConfigureMatchingStep({
   stepColor
 }: ConfigureMatchingStepProps) {
   const { toast } = useToast();
+  // The ordered-passes hierarchy is Lekana's internal matching logic — internal (platform owner) only.
+  const { isPlatformOwner } = useAuth();
 
   // Fetch verification summary for data coverage
   const { data: verSummary, isLoading: verLoading } = useQuery<{
@@ -276,30 +279,31 @@ export function ConfigureMatchingStep({
               {selectedPreset === "conservative" && (
                 <>
                   <span className="font-medium">Conservative</span> requires exact matches.
-                  Uses a 30 minute operational-close window and a 120 minute attendant exact-delay window.
+                  Uses a 30 minute operational-close window and a 120 minute exact-match window.
                 </>
               )}
               {selectedPreset === "moderate" && (
                 <>
                   <span className="font-medium">Moderate</span> is recommended for most businesses.
-                  Uses a 60 minute operational-close window and a 120 minute attendant exact-delay window.
+                  Uses a 60 minute operational-close window and a 120 minute exact-match window.
                 </>
               )}
               {selectedPreset === "aggressive" && (
                 <>
                   <span className="font-medium">Aggressive</span> maximizes match rate.
-                  Uses a 120 minute operational-close window and a 120 minute attendant exact-delay window.
+                  Uses a 120 minute operational-close window and a 120 minute exact-match window.
                 </>
               )}
               {selectedPreset === "custom" && (
                 <>
-                  <span className="font-medium">Custom</span> uses your saved station rules.
-                  The cards above are presets only, and the live stages below reflect the actual rules that will run.
+                  <span className="font-medium">Custom</span> uses your saved rules.
+                  {isPlatformOwner && " The cards above are presets only, and the live stages below reflect the actual rules that will run."}
                 </>
               )}
             </p>
           </div>
 
+          {isPlatformOwner && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -355,6 +359,7 @@ export function ConfigureMatchingStep({
               ))}
             </div>
           </div>
+          )}
 
           {/* Data Coverage Preview */}
           {verLoading && (

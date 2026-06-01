@@ -24,6 +24,8 @@ import {
   type InsertProperty,
   type PricingScenario,
   type InsertPricingScenario,
+  type PeriodCashPayment,
+  type InsertPeriodCashPayment,
   users,
   reconciliationPeriods,
   uploadedFiles,
@@ -36,11 +38,14 @@ import {
   organizations,
   organizationMembers,
   properties,
-  pricingScenarios
+  pricingScenarios,
+  periodCashPayments
 } from "../shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
 import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
+import { buildMatchAssignments } from "./reconciliation/matchAssignments";
+import { scopeToSalesSource } from "./reconciliation/salesSourceQuery";
 
 export interface PeriodSummary {
   totalTransactions: number;
@@ -291,9 +296,9 @@ export interface IStorage {
     unmatchableBankIds: string[],
   ): Promise<Match[]>;
   
-  getPeriodSummary(periodId: string): Promise<PeriodSummary>;
+  getPeriodSummary(periodId: string, salesSourceType?: string): Promise<PeriodSummary>;
   getAttendantSummary(periodId: string): Promise<AttendantSummaryRow[]>;
-  getVerificationSummary(periodId: string): Promise<VerificationSummary>;
+  getVerificationSummary(periodId: string, salesSourceType?: string): Promise<VerificationSummary>;
   
   getMatchingRules(periodId: string): Promise<MatchingRulesConfig>;
   saveMatchingRules(periodId: string, rules: MatchingRulesConfig): Promise<MatchingRules>;
@@ -305,6 +310,13 @@ export interface IStorage {
   getResolvedTransactionIds(periodId: string): Promise<string[]>;
   clearResolutionsByPeriod(periodId: string): Promise<number>;
   deleteResolutionByTransaction(transactionId: string): Promise<number>;
+
+  // Cash Gap inputs — period-level cash-received total + list of cash-spent items
+  getCashPayments(periodId: string): Promise<PeriodCashPayment[]>;
+  getCashPayment(id: string): Promise<PeriodCashPayment | undefined>;
+  setCashReceivedAmount(periodId: string, amount: number | null): Promise<ReconciliationPeriod | undefined>;
+  createCashPayment(payment: InsertPeriodCashPayment): Promise<PeriodCashPayment>;
+  deleteCashPayment(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -832,19 +844,38 @@ export class DatabaseStorage implements IStorage {
       }
 
       const createdMatches: Match[] = [];
-      const BATCH_SIZE = 100;
-      for (let i = 0; i < pendingMatches.length; i += BATCH_SIZE) {
-        const batch = pendingMatches.slice(i, i + BATCH_SIZE);
+      const INSERT_BATCH_SIZE = 100;
+      for (let i = 0; i < pendingMatches.length; i += INSERT_BATCH_SIZE) {
+        const batch = pendingMatches.slice(i, i + INSERT_BATCH_SIZE);
         const inserted = await tx.insert(matches).values(batch.map(pm => pm.matchData)).returning();
         createdMatches.push(...inserted);
+      }
 
-        for (let j = 0; j < inserted.length; j++) {
-          const match = inserted[j];
-          const pending = batch[j];
-          await tx.update(transactions)
-            .set({ matchStatus: 'matched', matchId: match.id })
-            .where(inArray(transactions.id, [pending.bankTxId, ...pending.fuelItemIds]));
-        }
+      // Mark every matched transaction in bulk. createdMatches[idx] aligns with
+      // pendingMatches[idx] (insert RETURNING preserves input order), so we zip
+      // them into a flat (txId -> matchId) list and apply it with a single
+      // UPDATE ... FROM (VALUES ...) per batch — not one UPDATE per match.
+      const assignments = buildMatchAssignments(
+        createdMatches.map((match, idx) => ({
+          matchId: match.id,
+          bankTxId: pendingMatches[idx].bankTxId,
+          fuelItemIds: pendingMatches[idx].fuelItemIds,
+        })),
+      );
+
+      const UPDATE_BATCH_SIZE = 500;
+      for (let i = 0; i < assignments.length; i += UPDATE_BATCH_SIZE) {
+        const chunk = assignments.slice(i, i + UPDATE_BATCH_SIZE);
+        const valuesSql = sql.join(
+          chunk.map(a => sql`(${a.txId}, ${a.matchId})`),
+          sql`, `,
+        );
+        await tx.execute(sql`
+          UPDATE transactions AS t
+          SET match_status = 'matched', match_id = v.match_id
+          FROM (VALUES ${valuesSql}) AS v(tx_id, match_id)
+          WHERE t.id = v.tx_id
+        `);
       }
 
       if (lagExplainedBankIds.length > 0) {
@@ -861,8 +892,8 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPeriodSummary(periodId: string): Promise<PeriodSummary> {
-    const result = await pool.query(`
+  async getPeriodSummary(periodId: string, salesSourceType: string = "fuel"): Promise<PeriodSummary> {
+    const result = await pool.query(scopeToSalesSource(`
       WITH period_dates AS (
         SELECT start_date AS min_date, end_date AS max_date
         FROM reconciliation_periods
@@ -1098,7 +1129,7 @@ export class DatabaseStorage implements IStorage {
       FROM tx_stats tx
       CROSS JOIN match_stats ms
       CROSS JOIN bank_coverage bc
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
 
     const row = result.rows[0] || {};
     
@@ -1401,9 +1432,9 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getVerificationSummary(periodId: string): Promise<VerificationSummary> {
+  async getVerificationSummary(periodId: string, salesSourceType: string = "fuel"): Promise<VerificationSummary> {
     // Get comprehensive verification-based metrics
-    const result = await pool.query(`
+    const result = await pool.query(scopeToSalesSource(`
       WITH period_scope AS (
         SELECT
           rp.start_date AS min_date,
@@ -1560,7 +1591,7 @@ export class DatabaseStorage implements IStorage {
       CROSS JOIN match_quality mq
       CROSS JOIN match_date_offsets md
       CROSS JOIN invoice_groups ig
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
 
     // Get bank sources breakdown — unscoped so we can report actual file coverage
     const sourcesResult = await pool.query(`
@@ -1578,7 +1609,7 @@ export class DatabaseStorage implements IStorage {
     // Unscoped file coverage — the date range actually present in uploaded files,
     // independent of period bounds. Used by the Data Coverage display so users can
     // see whether their uploads cover the period.
-    const coverageResult = await pool.query(`
+    const coverageResult = await pool.query(scopeToSalesSource(`
       SELECT
         MIN(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_min,
         MAX(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_max,
@@ -1586,7 +1617,7 @@ export class DatabaseStorage implements IStorage {
         MAX(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_max
       FROM transactions
       WHERE period_id = $1
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
     const coverageRow = coverageResult.rows[0] || {};
 
     const row = result.rows[0] || {};
@@ -1944,6 +1975,43 @@ export class DatabaseStorage implements IStorage {
       .from(transactionResolutions)
       .where(eq(transactionResolutions.periodId, periodId));
     return resolutions.map(r => r.transactionId);
+  }
+
+  // Cash Gap inputs — ownership is asserted at the route layer (assertPeriodAccess);
+  // these functions trust the periodId they receive, matching the resolution-method pattern.
+  async getCashPayments(periodId: string): Promise<PeriodCashPayment[]> {
+    return await db.select()
+      .from(periodCashPayments)
+      .where(eq(periodCashPayments.periodId, periodId))
+      .orderBy(desc(periodCashPayments.createdAt));
+  }
+
+  async getCashPayment(id: string): Promise<PeriodCashPayment | undefined> {
+    const [row] = await db.select()
+      .from(periodCashPayments)
+      .where(eq(periodCashPayments.id, id))
+      .limit(1);
+    return row || undefined;
+  }
+
+  async setCashReceivedAmount(periodId: string, amount: number | null): Promise<ReconciliationPeriod | undefined> {
+    const [updated] = await db.update(reconciliationPeriods)
+      .set({
+        cashReceivedAmount: amount === null ? null : amount.toFixed(2),
+        updatedAt: new Date(),
+      })
+      .where(eq(reconciliationPeriods.id, periodId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async createCashPayment(payment: InsertPeriodCashPayment): Promise<PeriodCashPayment> {
+    const [created] = await db.insert(periodCashPayments).values(payment).returning();
+    return created;
+  }
+
+  async deleteCashPayment(id: string): Promise<void> {
+    await db.delete(periodCashPayments).where(eq(periodCashPayments.id, id));
   }
 
   // Invite management — invites are now scoped to a specific org with a role.

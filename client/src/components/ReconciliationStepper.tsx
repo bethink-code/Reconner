@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ReconciliationStep = "fuel" | "bank" | "configure" | "results";
+export type ReconciliationStep = "fuel" | "bank" | "cash" | "configure" | "results";
 
 interface StepConfig {
   id: ReconciliationStep;
@@ -24,6 +24,12 @@ const STEPS: StepConfig[] = [
     description: "Transactions to verify",
   },
   {
+    id: "cash",
+    label: "Enter Cash",
+    shortLabel: "Cash",
+    description: "Cash received + spent",
+  },
+  {
     id: "configure",
     label: "Configure Matching",
     shortLabel: "Match",
@@ -41,6 +47,7 @@ const STEPS: StepConfig[] = [
 export const STEP_CANVAS_COLORS: Record<ReconciliationStep, string> = {
   fuel: "#6B2D6B",       // Plum
   bank: "#1B7A6E",       // Deep Teal
+  cash: "#4A6B3A",       // Moss — sits between teal and burnt orange, distinct from sunshine
   configure: "#E8601C",  // Burnt Orange
   results: "#F5C400",    // Sunshine — earned
 };

@@ -12,6 +12,7 @@ import { registerFilePreparationRoutes } from "./filePreparationRoutes";
 import { registerFileWorkflowRoutes } from "./fileWorkflowRoutes";
 import { registerPdfConversionRoutes } from "./pdfConversionRoutes";
 import { registerPeriodRoutes } from "./periodRoutes";
+import { registerCashRoutes } from "./cashRoutes";
 import { registerReconciliationReadRoutes } from "./reconciliationReadRoutes";
 import { registerReconciliationWriteRoutes } from "./reconciliationWriteRoutes";
 import { registerRequestAccessRoutes } from "./requestAccessRoutes";
@@ -41,6 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerFileWorkflowRoutes(app, upload, computeContentHash);
   registerPdfConversionRoutes(app, upload);
   registerPeriodRoutes(app);
+  registerCashRoutes(app);
   registerReconciliationReadRoutes(app);
   registerReconciliationWriteRoutes(app);
   registerRequestAccessRoutes(app);

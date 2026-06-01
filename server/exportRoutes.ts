@@ -43,6 +43,7 @@ export function registerExportRoutes(app: Express) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
+      const vertical = await resolveVertical(period.propertyId);
 
       const [
         allTransactions,
@@ -51,13 +52,15 @@ export function registerExportRoutes(app: Express) {
         attendantSummary,
         matchingRulesData,
         periodSummary,
+        cashPayments,
       ] = await Promise.all([
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getMatchesByPeriod(req.params.periodId),
         storage.getResolutionsByPeriod(req.params.periodId),
         storage.getAttendantSummary(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
-        storage.getPeriodSummary(req.params.periodId),
+        storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType),
+        storage.getCashPayments(req.params.periodId),
       ]);
 
       const transactions = allTransactions.filter(
@@ -107,7 +110,6 @@ export function registerExportRoutes(app: Express) {
         (transaction) => transaction.matchStatus === "unmatchable",
       );
 
-      const vertical = await resolveVertical(period.propertyId);
       const dashboardModel = buildResultsDashboardReadModel(periodSummary, resolutions);
       const reviewModel = buildReviewQueueReadModel(
         period,
@@ -125,6 +127,11 @@ export function registerExportRoutes(app: Express) {
         attendantSummary,
         declineResult,
         allFuelTransactions,
+        {
+          salesTransactions: allFuelTransactions,
+          received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
+          spent: cashPayments,
+        },
       );
 
       const XLSX = await import("xlsx");

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { PeriodInsightsReadModel } from "@shared/periodInsights";
+import type { InsightModuleId } from "@shared/verticals/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +16,7 @@ import {
   TrendingUp,
   BarChart3,
   ShieldAlert,
+  Banknote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRand } from "@/lib/format";
@@ -22,15 +24,20 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recha
 import { getBankColor } from "@/lib/bankColors";
 import { AttendantReport } from "./AttendantReport";
 import { ReprintScamReport } from "./ReprintScamReport";
+import { CashGapReport } from "./CashGapReport";
 
-type InsightsView = "landing" | "detail" | "attendants" | "declined" | "reprints";
+type InsightsView = "landing" | "detail" | "attendants" | "declined" | "reprints" | "cashGap";
 
 interface InsightsTabProps {
   periodId: string;
   initialView?: InsightsView;
+  /** Which insight modules to show for this vertical. Defaults to all. */
+  enabledInsights?: readonly InsightModuleId[];
 }
 
-export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
+export function InsightsTab({ periodId, initialView, enabledInsights }: InsightsTabProps) {
+  const insightEnabled = (id: InsightModuleId) =>
+    !enabledInsights || enabledInsights.includes(id);
   const [view, setView] = useState<InsightsView>(initialView || "landing");
 
   const { data: insights, isLoading } = useQuery<PeriodInsightsReadModel>({
@@ -88,30 +95,50 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <LandingCard
-            icon={<FileText className="h-5 w-5 text-muted-foreground" />}
-            title="Reconciliation overview"
-            description="Fuel card sales reconciliation, surplus/shortfall analysis, and full transaction-level breakdown."
-            onClick={() => setView("detail")}
-          />
-          <LandingCard
-            icon={<Users className="h-5 w-5 text-muted-foreground" />}
-            title="Attendants"
-            description="Performance by attendant. Sales totals, match rates, and flagged transactions per person."
-            onClick={() => setView("attendants")}
-          />
-          <LandingCard
-            icon={<MinusCircle className="h-5 w-5 text-muted-foreground" />}
-            title="Declined card transactions"
-            description="Transactions declined at point of sale. Patterns by card type, pump, time of day."
-            onClick={() => setView("declined")}
-          />
-          <LandingCard
-            icon={<ShieldAlert className="h-5 w-5 text-muted-foreground" />}
-            title="Reprint-scam check"
-            description="Round-amount card sales clustered by day, and reused card numbers — the phantom-slip signal."
-            onClick={() => setView("reprints")}
-          />
+          {insightEnabled("cash-gap") && insights.cashGap.state !== "no_cash_data" && (
+            <LandingCard
+              icon={<Banknote className="h-5 w-5 text-muted-foreground" />}
+              title="Cash gap"
+              description={
+                insights.cashGap.state === "awaiting_input"
+                  ? "Cash received not yet captured for this period — enter it on Step 3 to see the gap."
+                  : "What the till rang up as cash versus what you said you received. The leak."
+              }
+              onClick={() => setView("cashGap")}
+            />
+          )}
+          {insightEnabled("overview") && (
+            <LandingCard
+              icon={<FileText className="h-5 w-5 text-muted-foreground" />}
+              title="Reconciliation overview"
+              description="Fuel card sales reconciliation, surplus/shortfall analysis, and full transaction-level breakdown."
+              onClick={() => setView("detail")}
+            />
+          )}
+          {insightEnabled("attendants") && (
+            <LandingCard
+              icon={<Users className="h-5 w-5 text-muted-foreground" />}
+              title="Attendants"
+              description="Performance by attendant. Sales totals, match rates, and flagged transactions per person."
+              onClick={() => setView("attendants")}
+            />
+          )}
+          {insightEnabled("declines") && (
+            <LandingCard
+              icon={<MinusCircle className="h-5 w-5 text-muted-foreground" />}
+              title="Declined card transactions"
+              description="Transactions declined at point of sale. Patterns by card type, pump, time of day."
+              onClick={() => setView("declined")}
+            />
+          )}
+          {insightEnabled("reprint-scam") && (
+            <LandingCard
+              icon={<ShieldAlert className="h-5 w-5 text-muted-foreground" />}
+              title="Reprint-scam check"
+              description="Round-amount card sales clustered by day, and reused card numbers — the phantom-slip signal."
+              onClick={() => setView("reprints")}
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -716,6 +743,18 @@ export function InsightsTab({ periodId, initialView }: InsightsTabProps) {
           "Round-amount card sales clustered by day, and reused card numbers — the phantom-slip signal.",
         )}
         <ReprintScamReport data={insights.reprints} />
+      </div>
+    );
+  }
+
+  if (view === "cashGap") {
+    return (
+      <div className="mx-auto space-y-4">
+        {backHeader(
+          "Cash gap",
+          "What the till rang up as cash versus what you said you received. The leak — plus a cash-in-hand breakdown.",
+        )}
+        <CashGapReport data={insights.cashGap} />
       </div>
     );
   }

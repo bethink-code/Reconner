@@ -107,7 +107,7 @@ test("planAutoMatch keeps orchestration out of the route while preserving staged
     }),
   ];
 
-  const plan = planAutoMatch(period, rules, transactions, { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false });
+  const plan = planAutoMatch(period, rules, transactions, { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true });
 
   assert.equal(plan.metrics.matchesCreated, 4);
   assert.equal(plan.metrics.cardTransactionsProcessed, 5);
@@ -182,7 +182,7 @@ test("planAutoMatch reserves exact labels for the strict same-day pass", () => {
     }),
   ];
 
-  const plan = planAutoMatch(period, rules, transactions, { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false });
+  const plan = planAutoMatch(period, rules, transactions, { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true });
   const matchTypeByStage = new Map(
     plan.pendingMatches.map((match) => [match.stageId, match.matchData.matchType]),
   );
@@ -222,7 +222,7 @@ test("planAutoMatch replans previously matched transactions on rerun", () => {
     }),
   ];
 
-  const plan = planAutoMatch(period, rules, transactions, { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false });
+  const plan = planAutoMatch(period, rules, transactions, { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true });
 
   assert.equal(plan.metrics.matchesCreated, 1);
   assert.equal(plan.pendingMatches[0]?.matchData.matchType, "auto_exact");

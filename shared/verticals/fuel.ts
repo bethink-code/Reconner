@@ -20,9 +20,11 @@ export const fuelAdapter: VerticalAdapter = {
   matching: {
     requiresInvoiceGrouping: false,
     salesSideRequiresCardFlag: true,
+    // Card terminals settle in real time — the bank line's time tracks the sale, so it's signal.
+    intradayTimeSignal: true,
   },
   summaryView: "fuel",
-  insights: ["overview", "attendants", "declines", "reprint-scam"],
+  insights: ["overview", "attendants", "declines", "reprint-scam", "cash-gap"],
   resolutionReasons: [
     // Fuel-specific first
     { value: "attendant_overfill", label: "Attendant error / overfill" },

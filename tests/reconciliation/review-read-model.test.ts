@@ -309,3 +309,30 @@ test("review separates structural surplus from genuinely unaccounted leftovers",
   assert.equal(model.sides.bank.summary.noActionCount, 1);
   assert.equal(model.sides.bank.summary.noActionAmount, 100);
 });
+
+test("retail isolation: review model scopes the sales side to the vertical, not source_type='fuel'", () => {
+  const rules: MatchingRulesConfig = { ...defaultRules, groupByInvoice: true };
+
+  // In a retail period, a genuine retail receipt is the sales side; a stray fuel-typed row must
+  // NOT leak into the retail Sales review queue (it isn't this vertical's sales side).
+  const retailReceipt = asTransaction(
+    makeFuelTransaction({ amount: "100.00", transactionDate: "2026-04-25", isCardTransaction: "yes" }),
+    { id: "retail-receipt", sourceType: "retail", matchStatus: "unmatched" },
+  );
+  const fuelStray = asTransaction(
+    makeFuelTransaction({ amount: "200.00", transactionDate: "2026-04-25", isCardTransaction: "yes" }),
+    { id: "fuel-stray", sourceType: "fuel", matchStatus: "unmatched" },
+  );
+
+  const model = buildReviewQueueReadModel(
+    { startDate: "2026-04-01", endDate: "2026-04-30" },
+    [retailReceipt, fuelStray],
+    [],
+    rules,
+    { sourceType: "retail", requireCardFlag: true, forceInvoiceGrouping: true, intradayTimeSignal: false },
+  );
+
+  const salesIds = model.sides.fuel.transactions.map((item) => item.transaction.id);
+  assert.deepEqual(salesIds, ["retail-receipt"]);
+  assert.ok(!salesIds.includes("fuel-stray"));
+});

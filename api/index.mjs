@@ -275,11 +275,11 @@ var require_dommatrix = __commonJS({
           });
           var x = components[0];
           var y = components[1];
-          var z8 = components[2];
+          var z9 = components[2];
           var a = components[3];
-          var xyz = [x, y, z8];
-          var xyza = [x, y, z8, a];
-          if (prop === "perspective" && x && [y, z8].every(function(n) {
+          var xyz = [x, y, z9];
+          var xyza = [x, y, z9, a];
+          if (prop === "perspective" && x && [y, z9].every(function(n) {
             return n === void 0;
           })) {
             m.m34 = -1 / x;
@@ -293,14 +293,14 @@ var require_dommatrix = __commonJS({
           } else if (prop === "translate3d" && xyz.every(function(n) {
             return !Number.isNaN(+n);
           })) {
-            m = m.translate(x, y, z8);
-          } else if (prop === "translate" && x && z8 === void 0) {
+            m = m.translate(x, y, z9);
+          } else if (prop === "translate" && x && z9 === void 0) {
             m = m.translate(x, y || 0, 0);
           } else if (prop === "rotate3d" && xyza.every(function(n) {
             return !Number.isNaN(+n);
           }) && a) {
-            m = m.rotateAxisAngle(x, y, z8, a);
-          } else if (prop === "rotate" && x && [y, z8].every(function(n) {
+            m = m.rotateAxisAngle(x, y, z9, a);
+          } else if (prop === "rotate" && x && [y, z9].every(function(n) {
             return n === void 0;
           })) {
             m = m.rotate(0, 0, x);
@@ -309,15 +309,15 @@ var require_dommatrix = __commonJS({
           }) && xyz.some(function(n) {
             return n !== 1;
           })) {
-            m = m.scale(x, y, z8);
-          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z8 === void 0) {
+            m = m.scale(x, y, z9);
+          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z9 === void 0) {
             var nosy = Number.isNaN(+y);
             var sy = nosy ? x : y;
             m = m.scale(x, sy, 1);
-          } else if (prop === "skew" && x && z8 === void 0) {
+          } else if (prop === "skew" && x && z9 === void 0) {
             m = m.skewX(x);
             m = y ? m.skewY(y) : m;
-          } else if (/[XYZ]/.test(prop) && x && [y, z8].every(function(n) {
+          } else if (/[XYZ]/.test(prop) && x && [y, z9].every(function(n) {
             return n === void 0;
           }) && ["translate", "rotate", "scale", "skew"].some(function(p) {
             return prop.includes(p);
@@ -341,13 +341,13 @@ var require_dommatrix = __commonJS({
         });
         return m;
       }
-      function Translate(x, y, z8) {
+      function Translate(x, y, z9) {
         var m = new CSSMatrix();
         m.m41 = x;
         m.e = x;
         m.m42 = y;
         m.f = y;
-        m.m43 = z8;
+        m.m43 = z9;
         return m;
       }
       function Rotate(rx, ry, rz) {
@@ -381,16 +381,16 @@ var require_dommatrix = __commonJS({
         m.m33 = cosx * cosy;
         return m;
       }
-      function RotateAxisAngle(x, y, z8, alpha) {
+      function RotateAxisAngle(x, y, z9, alpha) {
         var m = new CSSMatrix();
         var angle = alpha * (Math.PI / 360);
         var sinA = Math.sin(angle);
         var cosA = Math.cos(angle);
         var sinA2 = sinA * sinA;
-        var length = Math.sqrt(x * x + y * y + z8 * z8);
+        var length = Math.sqrt(x * x + y * y + z9 * z9);
         var X = x;
         var Y = y;
-        var Z = z8;
+        var Z = z9;
         if (length === 0) {
           X = 0;
           Y = 0;
@@ -422,13 +422,13 @@ var require_dommatrix = __commonJS({
         m.m33 = 1 - 2 * (x2 + y2) * sinA2;
         return m;
       }
-      function Scale(x, y, z8) {
+      function Scale(x, y, z9) {
         var m = new CSSMatrix();
         m.m11 = x;
         m.a = x;
         m.m22 = y;
         m.d = y;
-        m.m33 = z8;
+        m.m33 = z9;
         return m;
       }
       function SkewX(angle) {
@@ -594,10 +594,10 @@ var require_dommatrix = __commonJS({
       CSSMatrix.prototype.multiply = function multiply(m2) {
         return Multiply(this, m2);
       };
-      CSSMatrix.prototype.translate = function translate(x, y, z8) {
+      CSSMatrix.prototype.translate = function translate(x, y, z9) {
         var X = x;
         var Y = y;
-        var Z = z8;
+        var Z = z9;
         if (Z === void 0) {
           Z = 0;
         }
@@ -606,10 +606,10 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Translate(X, Y, Z));
       };
-      CSSMatrix.prototype.scale = function scale(x, y, z8) {
+      CSSMatrix.prototype.scale = function scale(x, y, z9) {
         var X = x;
         var Y = y;
-        var Z = z8;
+        var Z = z9;
         if (Y === void 0) {
           Y = x;
         }
@@ -631,13 +631,13 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Rotate(RX, RY, RZ));
       };
-      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z8, angle) {
-        if ([x, y, z8, angle].some(function(n) {
+      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z9, angle) {
+        if ([x, y, z9, angle].some(function(n) {
           return Number.isNaN(n);
         })) {
           throw new TypeError("CSSMatrix: expecting 4 values");
         }
-        return Multiply(this, RotateAxisAngle(x, y, z8, angle));
+        return Multiply(this, RotateAxisAngle(x, y, z9, angle));
       };
       CSSMatrix.prototype.skewX = function skewX(angle) {
         return Multiply(this, SkewX(angle));
@@ -661,12 +661,12 @@ var require_dommatrix = __commonJS({
         var m = this;
         var x = m.m11 * t.x + m.m12 * t.y + m.m13 * t.z + m.m14 * t.w;
         var y = m.m21 * t.x + m.m22 * t.y + m.m23 * t.z + m.m24 * t.w;
-        var z8 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
+        var z9 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
         var w = m.m41 * t.x + m.m42 * t.y + m.m43 * t.z + m.m44 * t.w;
         return {
           x: x / w,
           y: y / w,
-          z: z8 / w,
+          z: z9 / w,
           w
         };
       };
@@ -27682,6 +27682,7 @@ __export(schema_exports, {
   auditLogs: () => auditLogs,
   insertMatchSchema: () => insertMatchSchema,
   insertMatchingRulesSchema: () => insertMatchingRulesSchema,
+  insertPeriodCashPaymentSchema: () => insertPeriodCashPaymentSchema,
   insertReconciliationPeriodSchema: () => insertReconciliationPeriodSchema,
   insertTransactionResolutionSchema: () => insertTransactionResolutionSchema,
   insertTransactionSchema: () => insertTransactionSchema,
@@ -27692,6 +27693,7 @@ __export(schema_exports, {
   matchingRulesConfigSchema: () => matchingRulesConfigSchema,
   organizationMembers: () => organizationMembers,
   organizations: () => organizations,
+  periodCashPayments: () => periodCashPayments,
   pricingScenarios: () => pricingScenarios,
   properties: () => properties,
   reconciliationPeriods: () => reconciliationPeriods,
@@ -27783,6 +27785,9 @@ var reconciliationPeriods = pgTable("reconciliation_periods", {
   status: text("status").notNull().default("in_progress"),
   userId: varchar("user_id").references(() => users.id),
   // creator (kept for audit/history)
+  // Cash Gap input — total cash the owner says they received this period. Null = not yet entered.
+  // Discrepancy (the leak) = POS cash sales − this. See shared/cashGap.ts.
+  cashReceivedAmount: decimal("cash_received_amount", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 }, (table) => [
@@ -27793,6 +27798,23 @@ var insertReconciliationPeriodSchema = createInsertSchema(reconciliationPeriods)
   id: true,
   createdAt: true,
   updatedAt: true
+});
+var periodCashPayments = pgTable("period_cash_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodId: varchar("period_id").notNull().references(() => reconciliationPeriods.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  paymentDate: text("payment_date").notNull(),
+  reason: text("reason").notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  userName: text("user_name"),
+  userEmail: text("user_email"),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("IDX_period_cash_payments_period_id").on(table.periodId)
+]);
+var insertPeriodCashPaymentSchema = createInsertSchema(periodCashPayments).omit({
+  id: true,
+  createdAt: true
 });
 var uploadedFiles = pgTable("uploaded_files", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -28023,6 +28045,29 @@ var db = drizzle({ client: pool, schema: schema_exports });
 
 // server/storage.ts
 import { eq, and, or, desc, sql as sql2, inArray } from "drizzle-orm";
+
+// server/reconciliation/matchAssignments.ts
+function buildMatchAssignments(pairs) {
+  const assignments = [];
+  for (const pair of pairs) {
+    assignments.push({ txId: pair.bankTxId, matchId: pair.matchId });
+    for (const fuelItemId of pair.fuelItemIds) {
+      assignments.push({ txId: fuelItemId, matchId: pair.matchId });
+    }
+  }
+  return assignments;
+}
+
+// server/reconciliation/salesSourceQuery.ts
+function scopeToSalesSource(query, salesSourceType) {
+  if (salesSourceType === "fuel") return query;
+  if (!/^[a-z_]+$/.test(salesSourceType)) {
+    throw new Error(`Unsupported sales source type: ${salesSourceType}`);
+  }
+  return query.replace(/source_type = 'fuel'/g, `source_type = '${salesSourceType}'`);
+}
+
+// server/storage.ts
 var DatabaseStorage = class {
   async getUser(id) {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -28348,16 +28393,32 @@ var DatabaseStorage = class {
         await tx.update(transactions).set({ matchStatus: "unmatchable", matchId: null }).where(inArray(transactions.id, unmatchableBankIds));
       }
       const createdMatches = [];
-      const BATCH_SIZE = 100;
-      for (let i = 0; i < pendingMatches.length; i += BATCH_SIZE) {
-        const batch = pendingMatches.slice(i, i + BATCH_SIZE);
+      const INSERT_BATCH_SIZE = 100;
+      for (let i = 0; i < pendingMatches.length; i += INSERT_BATCH_SIZE) {
+        const batch = pendingMatches.slice(i, i + INSERT_BATCH_SIZE);
         const inserted = await tx.insert(matches).values(batch.map((pm) => pm.matchData)).returning();
         createdMatches.push(...inserted);
-        for (let j = 0; j < inserted.length; j++) {
-          const match = inserted[j];
-          const pending = batch[j];
-          await tx.update(transactions).set({ matchStatus: "matched", matchId: match.id }).where(inArray(transactions.id, [pending.bankTxId, ...pending.fuelItemIds]));
-        }
+      }
+      const assignments = buildMatchAssignments(
+        createdMatches.map((match, idx) => ({
+          matchId: match.id,
+          bankTxId: pendingMatches[idx].bankTxId,
+          fuelItemIds: pendingMatches[idx].fuelItemIds
+        }))
+      );
+      const UPDATE_BATCH_SIZE = 500;
+      for (let i = 0; i < assignments.length; i += UPDATE_BATCH_SIZE) {
+        const chunk = assignments.slice(i, i + UPDATE_BATCH_SIZE);
+        const valuesSql = sql2.join(
+          chunk.map((a) => sql2`(${a.txId}, ${a.matchId})`),
+          sql2`, `
+        );
+        await tx.execute(sql2`
+          UPDATE transactions AS t
+          SET match_status = 'matched', match_id = v.match_id
+          FROM (VALUES ${valuesSql}) AS v(tx_id, match_id)
+          WHERE t.id = v.tx_id
+        `);
       }
       if (lagExplainedBankIds.length > 0) {
         await tx.update(transactions).set({ matchStatus: "lag_explained", matchId: null }).where(inArray(transactions.id, lagExplainedBankIds));
@@ -28366,8 +28427,8 @@ var DatabaseStorage = class {
       return createdMatches;
     });
   }
-  async getPeriodSummary(periodId) {
-    const result = await pool.query(`
+  async getPeriodSummary(periodId, salesSourceType = "fuel") {
+    const result = await pool.query(scopeToSalesSource(`
       WITH period_dates AS (
         SELECT start_date AS min_date, end_date AS max_date
         FROM reconciliation_periods
@@ -28603,7 +28664,7 @@ var DatabaseStorage = class {
       FROM tx_stats tx
       CROSS JOIN match_stats ms
       CROSS JOIN bank_coverage bc
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
     const row = result.rows[0] || {};
     const fuelTransactions = parseInt(row.fuel_transactions || "0");
     const bankTransactions = parseInt(row.bank_transactions || "0");
@@ -28868,8 +28929,8 @@ var DatabaseStorage = class {
       inRangeCount: parseInt(row.in_range_count || "0")
     }));
   }
-  async getVerificationSummary(periodId) {
-    const result = await pool.query(`
+  async getVerificationSummary(periodId, salesSourceType = "fuel") {
+    const result = await pool.query(scopeToSalesSource(`
       WITH period_scope AS (
         SELECT
           rp.start_date AS min_date,
@@ -29026,7 +29087,7 @@ var DatabaseStorage = class {
       CROSS JOIN match_quality mq
       CROSS JOIN match_date_offsets md
       CROSS JOIN invoice_groups ig
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
     const sourcesResult = await pool.query(`
       SELECT
         source_name,
@@ -29038,7 +29099,7 @@ var DatabaseStorage = class {
       WHERE period_id = $1 AND source_type LIKE 'bank%'
       GROUP BY source_name
     `, [periodId]);
-    const coverageResult = await pool.query(`
+    const coverageResult = await pool.query(scopeToSalesSource(`
       SELECT
         MIN(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_min,
         MAX(CASE WHEN source_type = 'fuel' THEN transaction_date END) as fuel_max,
@@ -29046,7 +29107,7 @@ var DatabaseStorage = class {
         MAX(CASE WHEN source_type LIKE 'bank%' THEN transaction_date END) as bank_max
       FROM transactions
       WHERE period_id = $1
-    `, [periodId]);
+    `, salesSourceType), [periodId]);
     const coverageRow = coverageResult.rows[0] || {};
     const row = result.rows[0] || {};
     const bankSources = sourcesResult.rows.map((s) => ({
@@ -29341,6 +29402,29 @@ var DatabaseStorage = class {
   async getResolvedTransactionIds(periodId) {
     const resolutions = await db.select({ transactionId: transactionResolutions.transactionId }).from(transactionResolutions).where(eq(transactionResolutions.periodId, periodId));
     return resolutions.map((r) => r.transactionId);
+  }
+  // Cash Gap inputs — ownership is asserted at the route layer (assertPeriodAccess);
+  // these functions trust the periodId they receive, matching the resolution-method pattern.
+  async getCashPayments(periodId) {
+    return await db.select().from(periodCashPayments).where(eq(periodCashPayments.periodId, periodId)).orderBy(desc(periodCashPayments.createdAt));
+  }
+  async getCashPayment(id) {
+    const [row] = await db.select().from(periodCashPayments).where(eq(periodCashPayments.id, id)).limit(1);
+    return row || void 0;
+  }
+  async setCashReceivedAmount(periodId, amount) {
+    const [updated] = await db.update(reconciliationPeriods).set({
+      cashReceivedAmount: amount === null ? null : amount.toFixed(2),
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq(reconciliationPeriods.id, periodId)).returning();
+    return updated || void 0;
+  }
+  async createCashPayment(payment) {
+    const [created] = await db.insert(periodCashPayments).values(payment).returning();
+    return created;
+  }
+  async deleteCashPayment(id) {
+    await db.delete(periodCashPayments).where(eq(periodCashPayments.id, id));
   }
   // Invite management — invites are now scoped to a specific org with a role.
   async getInvitedUserByEmail(email) {
@@ -29818,10 +29902,12 @@ var fuelAdapter = {
   },
   matching: {
     requiresInvoiceGrouping: false,
-    salesSideRequiresCardFlag: true
+    salesSideRequiresCardFlag: true,
+    // Card terminals settle in real time — the bank line's time tracks the sale, so it's signal.
+    intradayTimeSignal: true
   },
   summaryView: "fuel",
-  insights: ["overview", "attendants", "declines", "reprint-scam"],
+  insights: ["overview", "attendants", "declines", "reprint-scam", "cash-gap"],
   resolutionReasons: [
     // Fuel-specific first
     { value: "attendant_overfill", label: "Attendant error / overfill" },
@@ -29852,14 +29938,18 @@ var retailAdapter = {
     requiresInvoiceGrouping: true,
     // The Loyverse Receipts export carries Payment type, so we DO know card vs cash up front —
     // pre-filter card sales (like fuel). Cash receipts are excluded from matching, not flagged.
-    salesSideRequiresCardFlag: true
+    salesSideRequiresCardFlag: true,
+    // Nedbank posts one batch settlement per day — its time is unrelated to any one sale, so
+    // intraday time is noise here. Matching ignores it (same-day stays 85%, never time-rejected).
+    intradayTimeSignal: false
   },
   // Retail summary: total takings = card + cash, with card reconciled to the bank.
   summaryView: "retail",
-  // No retail insight reports are ready yet (the overview report is still fuel-shaped, and a
-  // settled card batch has no declines). Empty → the Insights tab is hidden for retail until
-  // Phase 3 builds retail-specific reports. This is the per-vertical "hide it" mechanism.
-  insights: [],
+  // Cash Gap is the first insight that's also meaningful for retail (cash sales,
+  // banking, petty cash). The auto-hide rule inside the report handles periods with
+  // no cash data. Other reports (overview, attendants, declines, reprint-scam) are
+  // still fuel-shaped and not yet retail-ready.
+  insights: ["cash-gap"],
   // Generic reasons only — no attendant/fuel-specific options. Add retail-specific ones as needed.
   resolutionReasons: [...GENERIC_RESOLUTION_REASONS, OTHER_RESOLUTION_REASON]
 };
@@ -31699,8 +31789,125 @@ function buildReprintScamReadModel(fuelTransactions) {
   };
 }
 
+// shared/cashGap.ts
+function buildCashGapView(inputs) {
+  const cashSalesAmount = sumAmounts(inputs.cashSales);
+  const spentAmount = sumAmounts(inputs.spent);
+  const hasNoData = inputs.cashSales.length === 0 && inputs.received === null && inputs.spent.length === 0;
+  if (hasNoData) {
+    return {
+      state: "no_cash_data",
+      summary: emptySummary(),
+      daily: []
+    };
+  }
+  if (inputs.received === null) {
+    return {
+      state: "awaiting_input",
+      summary: {
+        cashSalesCount: inputs.cashSales.length,
+        cashSalesAmount,
+        received: null,
+        discrepancy: null,
+        spentCount: inputs.spent.length,
+        spentAmount,
+        cashInHand: null
+      },
+      daily: buildDailyRows(inputs)
+    };
+  }
+  return {
+    state: "ready",
+    summary: {
+      cashSalesCount: inputs.cashSales.length,
+      cashSalesAmount,
+      received: inputs.received,
+      discrepancy: cashSalesAmount - inputs.received,
+      spentCount: inputs.spent.length,
+      spentAmount,
+      cashInHand: inputs.received - spentAmount
+    },
+    daily: buildDailyRows(inputs)
+  };
+}
+function emptySummary() {
+  return {
+    cashSalesCount: 0,
+    cashSalesAmount: 0,
+    received: null,
+    discrepancy: null,
+    spentCount: 0,
+    spentAmount: 0,
+    cashInHand: null
+  };
+}
+function sumAmounts(items) {
+  return items.reduce((acc, item) => acc + item.amount, 0);
+}
+function buildDailyRows(inputs) {
+  const byDate = /* @__PURE__ */ new Map();
+  for (const sale of inputs.cashSales) {
+    const row = ensureRow(byDate, sale.date);
+    row.cashSalesCount += 1;
+    row.cashSalesAmount += sale.amount;
+  }
+  for (const item of inputs.spent) {
+    const row = ensureRow(byDate, item.date);
+    row.spentCount += 1;
+    row.spentAmount += item.amount;
+  }
+  return Array.from(byDate.values()).sort(
+    (a, b) => a.date.localeCompare(b.date)
+  );
+}
+function ensureRow(map, date) {
+  let row = map.get(date);
+  if (!row) {
+    row = {
+      date,
+      cashSalesCount: 0,
+      cashSalesAmount: 0,
+      spentCount: 0,
+      spentAmount: 0
+    };
+    map.set(date, row);
+  }
+  return row;
+}
+
+// server/insights/cashGapReport.ts
+function isCashSale(tx) {
+  if (!tx.paymentType) return false;
+  return /\bcash\b/i.test(tx.paymentType);
+}
+function extractCashSales(salesTransactions) {
+  const items = [];
+  for (const tx of salesTransactions) {
+    if (!isCashSale(tx)) continue;
+    if (!tx.transactionDate) continue;
+    const amount = parseFloat(tx.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    items.push({ id: tx.id, date: tx.transactionDate, amount });
+  }
+  return items;
+}
+function buildCashGapReadModel(salesTransactions, received, spent) {
+  const cashSales = extractCashSales(salesTransactions);
+  const spentItems = spent.map((s) => ({
+    id: s.id,
+    date: s.paymentDate,
+    amount: parseFloat(s.amount),
+    reason: s.reason
+  }));
+  return buildCashGapView({
+    cashSales,
+    received,
+    spent: spentItems
+  });
+}
+
 // server/insights/insightsReadModel.ts
-function buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions) {
+function buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions, cashGapInputs) {
   return {
     detail: buildReconciliationOverviewReport(summary),
     attendants: buildAttendantsReport({
@@ -31710,7 +31917,12 @@ function buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTr
       unmatchedBankAmount: summary.unmatchedBankAmount
     }),
     declines: buildDeclinedTransactionsReport(declineResult),
-    reprints: buildReprintScamReadModel(fuelTransactions)
+    reprints: buildReprintScamReadModel(fuelTransactions),
+    cashGap: buildCashGapReadModel(
+      cashGapInputs.salesTransactions,
+      cashGapInputs.received,
+      cashGapInputs.spent
+    )
   };
 }
 
@@ -31759,9 +31971,10 @@ function buildResultsDashboardReadModel(summary, resolutions) {
 
 // shared/matchingStages.ts
 var clampPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
-function buildMatchingStages(rules) {
+function buildMatchingStages(rules, options = {}) {
   const minimumConfidence = clampPercent(rules.minimumConfidence);
   const autoConfirmConfidence = clampPercent(rules.autoMatchThreshold);
+  const intradayTimeSignal = options.intradayTimeSignal ?? true;
   const strictStage = {
     id: "strict_same_day_exact",
     name: "Strict Same-Day Exact",
@@ -31775,7 +31988,8 @@ function buildMatchingStages(rules) {
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence,
     autoConfirmConfidence,
-    boundaryMode: "none"
+    boundaryMode: "none",
+    intradayTimeSignal
   };
   const closeOperationalStage = {
     id: "operational_close_match",
@@ -31790,7 +32004,8 @@ function buildMatchingStages(rules) {
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence,
     autoConfirmConfidence,
-    boundaryMode: "none"
+    boundaryMode: "none",
+    intradayTimeSignal
   };
   const boundaryStage = {
     id: "boundary_transactions",
@@ -31805,7 +32020,8 @@ function buildMatchingStages(rules) {
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence,
     autoConfirmConfidence,
-    boundaryMode: "boundary"
+    boundaryMode: "boundary",
+    intradayTimeSignal
   };
   const settlementFallbackStage = {
     id: "settlement_fallback",
@@ -31820,7 +32036,8 @@ function buildMatchingStages(rules) {
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence,
     autoConfirmConfidence,
-    boundaryMode: "none"
+    boundaryMode: "none",
+    intradayTimeSignal
   };
   return [
     strictStage,
@@ -31893,7 +32110,10 @@ function scoreBankToInvoices(bankTx, candidateInvoices, usedInvoices, rules) {
     requireCardMatch: rules.requireCardMatch,
     minimumConfidence: rules.minimumConfidence,
     autoConfirmConfidence: rules.autoMatchThreshold ?? rules.minimumConfidence,
-    boundaryMode: "none"
+    boundaryMode: "none",
+    // Legacy single-pass is only used for cross-day lag scoring, where dateDiff !== 0 so the
+    // intraday-time block never runs — the value is immaterial; keep the fuel default.
+    intradayTimeSignal: true
   });
 }
 function scoreBankToInvoicesForStage(bankTx, candidateInvoices, usedInvoices, stage, getBoundaryPosition) {
@@ -31974,7 +32194,7 @@ function scoreBankToInvoiceCandidate(bankTx, invoice, stage, getBoundaryPosition
   else if (Math.abs(dateDiff) === 2) confidence = 68;
   else confidence = 65;
   let timeDiff = 0;
-  if (dateDiff === 0 && fuelTime !== null && bankTime !== null) {
+  if (stage.intradayTimeSignal && dateDiff === 0 && fuelTime !== null && bankTime !== null) {
     timeDiff = Math.abs(bankTime - fuelTime);
     if (stage.maxTimeDiffMinutes !== null && timeDiff > stage.maxTimeDiffMinutes) return null;
     if (timeDiff <= 5) confidence = 100;
@@ -32140,6 +32360,26 @@ function buildLatestResolutionMap(resolutions) {
 function isInPeriod(transaction, period) {
   return transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate;
 }
+function dayDiff(later, earlier) {
+  return Math.round((new Date(later).getTime() - new Date(earlier).getTime()) / 864e5);
+}
+function classifyNoMatch(item, oppositeSide, side, rules) {
+  const amount = parseFloat(item.amount);
+  const tolerance = rules.amountTolerance;
+  const window2 = rules.dateWindowDays;
+  const itemDate = item.transactionDate;
+  if (!itemDate) return "unaccounted";
+  const inSettlementBox = (opposite) => {
+    if (!opposite.transactionDate) return false;
+    if (Math.abs(parseFloat(opposite.amount) - amount) > tolerance) return false;
+    const lag = side === "bank" ? dayDiff(itemDate, opposite.transactionDate) : dayDiff(opposite.transactionDate, itemDate);
+    return lag >= 0 && lag <= window2;
+  };
+  const hasMatchedCounterpart = oppositeSide.some(
+    (opposite) => opposite.matchStatus === "matched" && inSettlementBox(opposite)
+  );
+  return hasMatchedCounterpart ? "surplus" : "unaccounted";
+}
 function isBankTransaction(transaction) {
   return !!transaction.sourceType?.startsWith("bank");
 }
@@ -32201,7 +32441,7 @@ function buildPerSideCounts(bankTransactions, fuelTransactions, resolutions) {
   }
   return counts;
 }
-function scoreSuggestion(primaryTransaction, candidateTransaction, side, matchingRules2, fuelBoundaryPositions) {
+function scoreSuggestion(primaryTransaction, candidateTransaction, side, matchingRules2, fuelBoundaryPositions, intradayTimeSignal) {
   const matchingStages = buildMatchingStages({
     amountTolerance: matchingRules2.amountTolerance,
     dateWindowDays: matchingRules2.dateWindowDays,
@@ -32210,13 +32450,13 @@ function scoreSuggestion(primaryTransaction, candidateTransaction, side, matchin
     requireCardMatch: matchingRules2.requireCardMatch,
     minimumConfidence: matchingRules2.minimumConfidence,
     autoMatchThreshold: matchingRules2.autoMatchThreshold
-  });
+  }, { intradayTimeSignal });
   const primaryAmount = parseFloat(primaryTransaction.amount);
   const candidateAmount = parseFloat(candidateTransaction.amount);
   const amountDiff = Math.abs(candidateAmount - primaryAmount);
   const primaryDate = new Date(primaryTransaction.transactionDate).getTime();
   const candidateDate = new Date(candidateTransaction.transactionDate).getTime();
-  const dayDiff = Math.round((candidateDate - primaryDate) / 864e5);
+  const dayDiff2 = Math.round((candidateDate - primaryDate) / 864e5);
   const bankTransaction = side === "fuel" ? candidateTransaction : primaryTransaction;
   const fuelTransaction = side === "fuel" ? primaryTransaction : candidateTransaction;
   const fuelTime = parseTimeToMinutes(fuelTransaction.transactionTime || "");
@@ -32225,24 +32465,24 @@ function scoreSuggestion(primaryTransaction, candidateTransaction, side, matchin
   for (const stage of matchingStages) {
     if (amountDiff > stage.maxAmountDiff) continue;
     if (stage.requireExactAmount && amountDiff > 0.01) continue;
-    if (dayDiff < stage.minDateDiffDays || dayDiff > stage.maxDateDiffDays) continue;
+    if (dayDiff2 < stage.minDateDiffDays || dayDiff2 > stage.maxDateDiffDays) continue;
     if (stage.boundaryMode === "boundary") {
       const allowsPreviousDay = boundaryPosition === "start" || boundaryPosition === "both";
       const allowsNextDay = boundaryPosition === "end" || boundaryPosition === "both";
-      const isDirectionalBoundary = dayDiff === -1 && allowsPreviousDay || dayDiff === 1 && allowsNextDay;
+      const isDirectionalBoundary = dayDiff2 === -1 && allowsPreviousDay || dayDiff2 === 1 && allowsNextDay;
       if (!isDirectionalBoundary) continue;
     }
-    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+    if (intradayTimeSignal && dayDiff2 === 0 && fuelTime !== null && bankTime !== null) {
       const timeGap = Math.abs(bankTime - fuelTime);
       if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
     }
     let confidence = 70;
-    if (dayDiff === 0) confidence = 85;
-    else if (Math.abs(dayDiff) === 1) confidence = 75;
-    else if (Math.abs(dayDiff) === 2) confidence = 68;
+    if (dayDiff2 === 0) confidence = 85;
+    else if (Math.abs(dayDiff2) === 1) confidence = 75;
+    else if (Math.abs(dayDiff2) === 2) confidence = 68;
     else confidence = 65;
-    let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
-    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+    let timeDiffLabel = dayDiff2 === 0 ? "Same day" : `${Math.abs(dayDiff2)} day${Math.abs(dayDiff2) >= 2 ? "s" : ""}`;
+    if (intradayTimeSignal && dayDiff2 === 0 && fuelTime !== null && bankTime !== null) {
       const timeGap = Math.abs(bankTime - fuelTime);
       timeDiffLabel = timeGap === 0 ? "Same time" : `${timeGap} min`;
       if (timeGap <= 5) confidence = 100;
@@ -32345,7 +32585,7 @@ function applyDuplicateInsights(result, side, candidateTransactions) {
     }
   }
 }
-function buildCategorizedTransactions(side, primaryTransactions, candidateTransactions, matchingRules2, fuelBoundaryPositions, latestResolutionByTransactionId) {
+function buildCategorizedTransactions(side, primaryTransactions, candidateTransactions, matchingRules2, fuelBoundaryPositions, latestResolutionByTransactionId, intradayTimeSignal, oppositeSide) {
   const result = primaryTransactions.map((primaryTransaction) => {
     const primaryAmount = parseFloat(primaryTransaction.amount);
     const allScored = candidateTransactions.map((candidateTransaction) => scoreSuggestion(
@@ -32353,7 +32593,8 @@ function buildCategorizedTransactions(side, primaryTransactions, candidateTransa
       candidateTransaction,
       side,
       matchingRules2,
-      fuelBoundaryPositions
+      fuelBoundaryPositions,
+      intradayTimeSignal
     )).filter((match) => !!match);
     const potentialMatches = [...allScored].sort((a, b) => {
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
@@ -32375,7 +32616,9 @@ function buildCategorizedTransactions(side, primaryTransactions, candidateTransa
       potentialMatches,
       nearestByAmount,
       insights: [],
-      resolution
+      resolution,
+      // A viable candidate means it's a decision to make; otherwise classify why there's no match.
+      noMatchReason: category === "resolved" || bestMatch ? null : classifyNoMatch(primaryTransaction, oppositeSide, side, matchingRules2)
     };
     item.insights = buildInsights(item, side);
     return item;
@@ -32390,9 +32633,11 @@ function buildInvestigateItems(items, latestResolutionByTransactionId) {
     analysis: item
   })).sort((a, b) => parseFloat(b.transaction.amount) - parseFloat(a.transaction.amount));
 }
-function buildSideSummary(unresolvedTransactions, counts) {
-  const unresolvedCount = unresolvedTransactions.length;
-  const unresolvedAmount = unresolvedTransactions.reduce((sum, transaction) => sum + parseFloat(transaction.amount), 0);
+function buildSideSummary(unresolvedItems, counts) {
+  const unresolvedCount = unresolvedItems.length;
+  const unresolvedAmount = unresolvedItems.reduce((sum, item) => sum + parseFloat(item.transaction.amount), 0);
+  const noActionItems = unresolvedItems.filter((item) => item.noMatchReason === "surplus");
+  const noActionAmount = noActionItems.reduce((sum, item) => sum + parseFloat(item.transaction.amount), 0);
   return {
     unresolvedCount,
     unresolvedAmount,
@@ -32401,7 +32646,9 @@ function buildSideSummary(unresolvedTransactions, counts) {
     matchedCount: counts.matched,
     matchedAmount: counts.matchedAmount,
     flaggedCount: counts.flagged,
-    flaggedAmount: counts.flaggedAmount
+    flaggedAmount: counts.flaggedAmount,
+    noActionCount: noActionItems.length,
+    noActionAmount
   };
 }
 function buildReviewQueueReadModel(period, transactions2, resolutions, matchingRules2, salesSide) {
@@ -32435,7 +32682,9 @@ function buildReviewQueueReadModel(period, transactions2, resolutions, matchingR
     unmatchedBankTransactions,
     matchingRules2,
     fuelBoundaryPositions,
-    latestResolutionByTransactionId
+    latestResolutionByTransactionId,
+    salesSide.intradayTimeSignal,
+    inPeriodBankTransactions
   );
   const bankTransactions = buildCategorizedTransactions(
     "bank",
@@ -32443,7 +32692,9 @@ function buildReviewQueueReadModel(period, transactions2, resolutions, matchingR
     unmatchedFuelTransactions,
     matchingRules2,
     fuelBoundaryPositions,
-    latestResolutionByTransactionId
+    latestResolutionByTransactionId,
+    salesSide.intradayTimeSignal,
+    inPeriodFuelTransactions
   );
   const flaggedBank = buildInvestigateItems(
     buildCategorizedTransactions(
@@ -32452,7 +32703,9 @@ function buildReviewQueueReadModel(period, transactions2, resolutions, matchingR
       unmatchedFuelTransactions,
       matchingRules2,
       fuelBoundaryPositions,
-      latestResolutionByTransactionId
+      latestResolutionByTransactionId,
+      salesSide.intradayTimeSignal,
+      inPeriodFuelTransactions
     ),
     latestResolutionByTransactionId
   );
@@ -32463,7 +32716,9 @@ function buildReviewQueueReadModel(period, transactions2, resolutions, matchingR
       unmatchedBankTransactions,
       matchingRules2,
       fuelBoundaryPositions,
-      latestResolutionByTransactionId
+      latestResolutionByTransactionId,
+      salesSide.intradayTimeSignal,
+      inPeriodBankTransactions
     ),
     latestResolutionByTransactionId
   );
@@ -32472,17 +32727,11 @@ function buildReviewQueueReadModel(period, transactions2, resolutions, matchingR
     matchingRules: matchingRules2,
     sides: {
       fuel: {
-        summary: buildSideSummary(
-          reviewFuelTransactions,
-          perSideCounts.fuel
-        ),
+        summary: buildSideSummary(fuelTransactions, perSideCounts.fuel),
         transactions: fuelTransactions
       },
       bank: {
-        summary: buildSideSummary(
-          reviewBankTransactions,
-          perSideCounts.bank
-        ),
+        summary: buildSideSummary(bankTransactions, perSideCounts.bank),
         transactions: bankTransactions
       }
     },
@@ -32507,7 +32756,8 @@ function salesSideConfig(vertical) {
   return {
     sourceType: vertical.salesSideSourceType,
     requireCardFlag: vertical.matching.salesSideRequiresCardFlag,
-    forceInvoiceGrouping: vertical.matching.requiresInvoiceGrouping
+    forceInvoiceGrouping: vertical.matching.requiresInvoiceGrouping,
+    intradayTimeSignal: vertical.matching.intradayTimeSignal
   };
 }
 
@@ -32532,20 +32782,23 @@ function registerExportRoutes(app2) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
+      const vertical = await resolveVertical(period.propertyId);
       const [
         allTransactions,
         matchesData,
         resolutions,
         attendantSummary,
         matchingRulesData,
-        periodSummary
+        periodSummary,
+        cashPayments
       ] = await Promise.all([
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getMatchesByPeriod(req.params.periodId),
         storage.getResolutionsByPeriod(req.params.periodId),
         storage.getAttendantSummary(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
-        storage.getPeriodSummary(req.params.periodId)
+        storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType),
+        storage.getCashPayments(req.params.periodId)
       ]);
       const transactions2 = allTransactions.filter(
         (transaction) => transaction.transactionDate && transaction.transactionDate >= period.startDate && transaction.transactionDate <= period.endDate
@@ -32585,7 +32838,6 @@ function registerExportRoutes(app2) {
       const outsideRange = bankTxns.filter(
         (transaction) => transaction.matchStatus === "unmatchable"
       );
-      const vertical = await resolveVertical(period.propertyId);
       const dashboardModel = buildResultsDashboardReadModel(periodSummary, resolutions);
       const reviewModel = buildReviewQueueReadModel(
         period,
@@ -32602,7 +32854,12 @@ function registerExportRoutes(app2) {
         periodSummary,
         attendantSummary,
         declineResult,
-        allFuelTransactions
+        allFuelTransactions,
+        {
+          salesTransactions: allFuelTransactions,
+          received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
+          spent: cashPayments
+        }
       );
       const XLSX2 = await import("xlsx");
       const wb = XLSX2.utils.book_new();
@@ -35593,11 +35850,22 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
           console.warn(
             `Source type mismatch: expected ${expectedCategory}, detected ${detectedCategory} (${detectedPreset.name})`
           );
+          const fileTypeLabel = (cat) => cat === "bank" ? "bank statement" : cat === "retail" ? "retail sales export" : "fuel system export";
+          const slotLabel = (cat) => cat === "bank" ? "bank data" : cat === "retail" ? "sales data" : "fuel data";
           return res.status(400).json({
-            error: `This looks like a ${detectedCategory === "bank" ? "bank statement" : "fuel system export"}, but you're uploading it as ${expectedCategory === "bank" ? "bank data" : "fuel data"}. Please check you're on the right step.`,
+            error: `This looks like a ${fileTypeLabel(detectedCategory)}, but you're uploading it as ${slotLabel(expectedCategory)}. Please check you're on the right step.`,
             detectedType: detectedCategory,
             expectedType: expectedCategory,
             detectedPreset: detectedPreset.name
+          });
+        }
+        const isRetailSales = normalizeSourceType(sourceType) === "retail" || detectedPreset?.category === "retail";
+        const hasPaymentType = columnMappings.some((m) => m.suggestedMapping === "paymentType");
+        if (isRetailSales && !hasPaymentType) {
+          return res.status(400).json({
+            error: "This sales export has no payment-type column, so card and cash sales can't be told apart - every sale would be counted as cash. Upload the receipt-level Loyverse export (one row per receipt, with a 'Payment type' column), not the per-item export.",
+            detectedPreset: detectedPreset?.name,
+            missingPaymentType: true
           });
         }
         const suggestedMappingsObject = {};
@@ -36267,8 +36535,128 @@ function registerPeriodRoutes(app2) {
   });
 }
 
-// server/reconciliationReadRoutes.ts
+// server/cashRoutes.ts
 import { z as z3 } from "zod";
+var setReceivedSchema = z3.object({
+  amount: z3.number().min(0).nullable()
+});
+var createPaymentSchema = z3.object({
+  amount: z3.number().positive().max(1e6),
+  paymentDate: z3.string().min(1),
+  reason: z3.string().trim().min(1).max(500)
+});
+function registerCashRoutes(app2) {
+  app2.get("/api/periods/:periodId/cash", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodOwner(req.params.periodId, req, res);
+      if (!period) return;
+      const payments = await storage.getCashPayments(req.params.periodId);
+      res.json({
+        received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
+        spent: payments.map((p) => ({
+          id: p.id,
+          amount: Number(p.amount),
+          paymentDate: p.paymentDate,
+          reason: p.reason,
+          userName: p.userName,
+          createdAt: p.createdAt
+        }))
+      });
+    } catch (error) {
+      console.error("Error fetching cash inputs:", error);
+      res.status(500).json({ error: "Failed to fetch cash inputs" });
+    }
+  });
+  app2.put("/api/periods/:periodId/cash/received", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
+      if (!period) return;
+      const { amount } = setReceivedSchema.parse(req.body);
+      const updated = await storage.setCashReceivedAmount(req.params.periodId, amount);
+      if (!updated) {
+        return res.status(404).json({ error: "Period not found" });
+      }
+      audit(req, {
+        action: "cash.received.set",
+        resourceType: "period",
+        resourceId: req.params.periodId,
+        detail: amount === null ? "cleared" : `amount=${amount.toFixed(2)}`
+      });
+      res.json({
+        received: updated.cashReceivedAmount === null ? null : Number(updated.cashReceivedAmount)
+      });
+    } catch (error) {
+      if (error instanceof z3.ZodError) {
+        return res.status(400).json({ error: "Invalid amount", details: error.flatten() });
+      }
+      console.error("Error setting cash received amount:", error);
+      res.status(500).json({ error: "Failed to set cash received amount" });
+    }
+  });
+  app2.post("/api/periods/:periodId/cash/payments", isAuthenticated, async (req, res) => {
+    try {
+      const period = await assertPeriodWrite(req.params.periodId, req, res);
+      if (!period) return;
+      const validated = createPaymentSchema.parse(req.body);
+      const userId = req.user?.claims?.sub;
+      const userName = [req.user?.claims?.first_name, req.user?.claims?.last_name].filter(Boolean).join(" ") || null;
+      const userEmail = req.user?.claims?.email || null;
+      const created = await storage.createCashPayment({
+        periodId: req.params.periodId,
+        amount: validated.amount.toFixed(2),
+        paymentDate: validated.paymentDate,
+        reason: validated.reason,
+        userId: userId || null,
+        userName,
+        userEmail
+      });
+      audit(req, {
+        action: "cash.payment.create",
+        resourceType: "period",
+        resourceId: req.params.periodId,
+        detail: `amount=${validated.amount.toFixed(2)} date=${validated.paymentDate}`
+      });
+      res.json({
+        id: created.id,
+        amount: Number(created.amount),
+        paymentDate: created.paymentDate,
+        reason: created.reason,
+        userName: created.userName,
+        createdAt: created.createdAt
+      });
+    } catch (error) {
+      if (error instanceof z3.ZodError) {
+        return res.status(400).json({ error: "Invalid payment", details: error.flatten() });
+      }
+      console.error("Error creating cash payment:", error);
+      res.status(500).json({ error: "Failed to create cash payment" });
+    }
+  });
+  app2.delete("/api/cash-payments/:id", isAuthenticated, async (req, res) => {
+    try {
+      const payment = await storage.getCashPayment(req.params.id);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      const period = await assertPeriodWrite(payment.periodId, req, res);
+      if (!period) return;
+      await storage.deleteCashPayment(req.params.id);
+      audit(req, {
+        action: "cash.payment.delete",
+        resourceType: "period",
+        resourceId: payment.periodId,
+        detail: `paymentId=${req.params.id}`
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting cash payment:", error);
+      res.status(500).json({ error: "Failed to delete cash payment" });
+    }
+  });
+}
+
+// server/reconciliationReadRoutes.ts
+import { z as z4 } from "zod";
 
 // shared/retailSummary.ts
 var ZERO = { count: 0, amount: 0 };
@@ -36365,7 +36753,8 @@ function registerReconciliationReadRoutes(app2) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
-      const summary = await storage.getVerificationSummary(req.params.periodId);
+      const vertical = await resolveVertical(period.propertyId);
+      const summary = await storage.getVerificationSummary(req.params.periodId, vertical.salesSideSourceType);
       res.json(summary);
     } catch (error) {
       console.error("Error fetching verification summary:", error);
@@ -36391,7 +36780,7 @@ function registerReconciliationReadRoutes(app2) {
       const saved = await storage.saveMatchingRules(req.params.periodId, validatedRules);
       res.json({ success: true, rules: saved });
     } catch (error) {
-      if (error instanceof z3.ZodError) {
+      if (error instanceof z4.ZodError) {
         console.error("Validation error:", error.errors);
         console.error("Matching rules validation:", error.errors);
         return res.status(400).json({ error: "Invalid matching rules data" });
@@ -36459,13 +36848,13 @@ function registerReconciliationReadRoutes(app2) {
         );
         const fuelDate = new Date(anchorFuel.transactionDate).getTime();
         const bankDate = new Date(bankTransaction.transactionDate).getTime();
-        const dayDiff = Math.round((bankDate - fuelDate) / 864e5);
+        const dayDiff2 = Math.round((bankDate - fuelDate) / 864e5);
         const boundary = boundaryPositions.get(anchorFuel.id) || "none";
-        if (amountDiff <= 0.01 && dayDiff === 0) return "strict_same_day_exact";
-        if ((boundary === "start" || boundary === "both") && dayDiff === -1 || (boundary === "end" || boundary === "both") && dayDiff === 1) {
+        if (amountDiff <= 0.01 && dayDiff2 === 0) return "strict_same_day_exact";
+        if ((boundary === "start" || boundary === "both") && dayDiff2 === -1 || (boundary === "end" || boundary === "both") && dayDiff2 === 1) {
           return "boundary_transactions";
         }
-        if (dayDiff === 0) return "operational_close_match";
+        if (dayDiff2 === 0) return "operational_close_match";
         return "settlement_fallback";
       };
       for (const transaction of transactions2) {
@@ -36647,18 +37036,23 @@ function registerReconciliationReadRoutes(app2) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
-      const [summary, attendantSummary, transactions2] = await Promise.all([
-        storage.getPeriodSummary(req.params.periodId),
-        storage.getAttendantSummary(req.params.periodId),
-        storage.getTransactionsByPeriod(req.params.periodId)
-      ]);
       const vertical = await resolveVertical(period.propertyId);
+      const [summary, attendantSummary, transactions2, cashPayments] = await Promise.all([
+        storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType),
+        storage.getAttendantSummary(req.params.periodId),
+        storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getCashPayments(req.params.periodId)
+      ]);
       const fuelTransactions = transactions2.filter((tx) => tx.sourceType === vertical.salesSideSourceType);
       const bankTransactions = transactions2.filter(
         (tx) => tx.sourceType && tx.sourceType.startsWith("bank")
       );
       const declineResult = computeDeclineAnalysis(bankTransactions, fuelTransactions);
-      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions));
+      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions, {
+        salesTransactions: fuelTransactions,
+        received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
+        spent: cashPayments
+      }));
     } catch (error) {
       console.error("Error fetching insights read model:", error);
       res.status(500).json({ error: "Failed to fetch insights data" });
@@ -36701,7 +37095,8 @@ function registerReconciliationReadRoutes(app2) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
-      const summary = await storage.getPeriodSummary(req.params.periodId);
+      const vertical = await resolveVertical(period.propertyId);
+      const summary = await storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType);
       res.json(summary);
     } catch (error) {
       console.error("Error fetching period summary:", error);
@@ -36712,8 +37107,9 @@ function registerReconciliationReadRoutes(app2) {
     try {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
+      const vertical = await resolveVertical(period.propertyId);
       const [summary, resolutions] = await Promise.all([
-        storage.getPeriodSummary(req.params.periodId),
+        storage.getPeriodSummary(req.params.periodId, vertical.salesSideSourceType),
         storage.getResolutionsByPeriod(req.params.periodId)
       ]);
       res.json(buildResultsDashboardReadModel(summary, resolutions));
@@ -36736,7 +37132,7 @@ function registerReconciliationReadRoutes(app2) {
 }
 
 // server/reconciliationWriteRoutes.ts
-import { z as z4 } from "zod";
+import { z as z5 } from "zod";
 
 // server/reconciliation/autoMatchPlanner.ts
 function toDateOnly(timestampMs) {
@@ -36777,7 +37173,7 @@ function planAutoMatch(period, rules, transactions2, salesSide) {
     (transaction) => !unmatchableBankTransactions.includes(transaction)
   );
   const fuelInvoices = groupFuelByInvoice(fuelTransactions, groupByInvoice);
-  const stages = buildMatchingStages(rules);
+  const stages = buildMatchingStages(rules, { intradayTimeSignal: salesSide.intradayTimeSignal });
   const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
   const stageMatches = runSequentialMatchingStages(
     matchableBankTransactions,
@@ -36909,32 +37305,32 @@ function planAutoMatch(period, rules, transactions2, salesSide) {
 
 // server/reconciliationWriteRoutes.ts
 var reconciliationCommandService2 = new ReconciliationCommandService(reconciliationStateWriter);
-var resolutionTypeSchema = z4.enum(["linked", "reviewed", "dismissed", "flagged", "partial"]);
-var reviewLinkSchema = z4.object({
-  bankTransactionId: z4.string().min(1),
-  fuelTransactionId: z4.string().min(1),
-  reviewTransactionId: z4.string().min(1),
-  notes: z4.string().trim().optional().nullable()
+var resolutionTypeSchema = z5.enum(["linked", "reviewed", "dismissed", "flagged", "partial"]);
+var reviewLinkSchema = z5.object({
+  bankTransactionId: z5.string().min(1),
+  fuelTransactionId: z5.string().min(1),
+  reviewTransactionId: z5.string().min(1),
+  notes: z5.string().trim().optional().nullable()
 });
-var resolutionSchema = z4.object({
-  transactionId: z4.string().min(1),
-  periodId: z4.string().min(1),
+var resolutionSchema = z5.object({
+  transactionId: z5.string().min(1),
+  periodId: z5.string().min(1),
   resolutionType: resolutionTypeSchema,
-  reason: z4.string().trim().optional().nullable(),
-  notes: z4.string().trim().optional().nullable(),
-  linkedTransactionId: z4.string().trim().optional().nullable(),
-  assignee: z4.string().trim().optional().nullable()
+  reason: z5.string().trim().optional().nullable(),
+  notes: z5.string().trim().optional().nullable(),
+  linkedTransactionId: z5.string().trim().optional().nullable(),
+  assignee: z5.string().trim().optional().nullable()
 });
-var bulkResolutionSchema = z4.object({
-  transactionIds: z4.array(z4.string().min(1)).min(1),
-  periodId: z4.string().min(1)
+var bulkResolutionSchema = z5.object({
+  transactionIds: z5.array(z5.string().min(1)).min(1),
+  periodId: z5.string().min(1)
 });
-var bulkConfirmSchema = z4.object({
-  matches: z4.array(z4.object({
-    bankId: z4.string().min(1),
-    fuelId: z4.string().min(1)
+var bulkConfirmSchema = z5.object({
+  matches: z5.array(z5.object({
+    bankId: z5.string().min(1),
+    fuelId: z5.string().min(1)
   })).min(1),
-  periodId: z4.string().min(1)
+  periodId: z5.string().min(1)
 });
 function buildActor(user) {
   return {
@@ -36947,7 +37343,7 @@ function handleWriteError(res, error, fallbackMessage) {
   if (error instanceof ReconciliationCommandError) {
     return res.status(error.status).json({ error: error.code, message: error.message });
   }
-  if (error instanceof z4.ZodError) {
+  if (error instanceof z5.ZodError) {
     return res.status(400).json({ error: "invalid_request", message: "Invalid request data" });
   }
   console.error(fallbackMessage, error);
@@ -37198,7 +37594,7 @@ function registerReconciliationWriteRoutes(app2) {
 
 // server/requestAccessRoutes.ts
 import rateLimit2 from "express-rate-limit";
-import { z as z5 } from "zod";
+import { z as z6 } from "zod";
 
 // server/email.ts
 import { readFileSync as readFileSync2 } from "node:fs";
@@ -37367,11 +37763,11 @@ async function sendEmail(accessToken, message) {
 }
 
 // server/requestAccessRoutes.ts
-var submissionSchema = z5.object({
-  name: z5.string().trim().min(1, "Your name is required").max(120),
-  email: z5.string().trim().email("A valid email is required").max(200),
-  cell: z5.string().trim().min(1, "A cell number is required").max(40),
-  business: z5.string().trim().max(200).optional().default("")
+var submissionSchema = z6.object({
+  name: z6.string().trim().min(1, "Your name is required").max(120),
+  email: z6.string().trim().email("A valid email is required").max(200),
+  cell: z6.string().trim().min(1, "A cell number is required").max(40),
+  business: z6.string().trim().max(200).optional().default("")
 });
 async function dispatchEmails(request) {
   const token = await getAccessToken();
@@ -37422,11 +37818,11 @@ function registerRequestAccessRoutes(app2) {
 
 // server/contactRoutes.ts
 import rateLimit3 from "express-rate-limit";
-import { z as z6 } from "zod";
-var messageSchema = z6.object({
-  name: z6.string().trim().min(1, "Your name is required").max(120),
-  email: z6.string().trim().email("A valid email is required").max(200),
-  message: z6.string().trim().min(1, "A message is required").max(4e3)
+import { z as z7 } from "zod";
+var messageSchema = z7.object({
+  name: z7.string().trim().min(1, "Your name is required").max(120),
+  email: z7.string().trim().email("A valid email is required").max(200),
+  message: z7.string().trim().min(1, "A message is required").max(4e3)
 });
 async function dispatchEmails2(contact) {
   const token = await getAccessToken();
@@ -37475,18 +37871,18 @@ function registerContactRoutes(app2) {
 
 // server/pilotApplicationRoutes.ts
 import rateLimit4 from "express-rate-limit";
-import { z as z7 } from "zod";
+import { z as z8 } from "zod";
 var BANKS = ["FNB", "ABSA", "Standard Bank", "Nedbank", "Other"];
-var applicationSchema = z7.object({
-  name: z7.string().trim().min(1, "Your name is required").max(120),
-  business: z7.string().trim().min(1, "A business name is required").max(200),
-  email: z7.string().trim().email("A valid email is required").max(200),
-  cell: z7.string().trim().min(1, "A cell number is required").max(40),
-  sites: z7.coerce.number().int("Number of sites must be a whole number").min(1, "At least one site is required"),
-  pos_system: z7.string().trim().min(1, "Tell us which POS or fuel system you use").max(200),
-  banks: z7.array(z7.enum(BANKS)).min(1, "Choose at least one bank"),
-  success_definition: z7.string().trim().min(1, "Tell us what success looks like").max(500),
-  terms_accepted: z7.literal(true, {
+var applicationSchema = z8.object({
+  name: z8.string().trim().min(1, "Your name is required").max(120),
+  business: z8.string().trim().min(1, "A business name is required").max(200),
+  email: z8.string().trim().email("A valid email is required").max(200),
+  cell: z8.string().trim().min(1, "A cell number is required").max(40),
+  sites: z8.coerce.number().int("Number of sites must be a whole number").min(1, "At least one site is required"),
+  pos_system: z8.string().trim().min(1, "Tell us which POS or fuel system you use").max(200),
+  banks: z8.array(z8.enum(BANKS)).min(1, "Choose at least one bank"),
+  success_definition: z8.string().trim().min(1, "Tell us what success looks like").max(500),
+  terms_accepted: z8.literal(true, {
     errorMap: () => ({ message: "Please confirm you have read the pilot terms" })
   })
 });
@@ -37577,6 +37973,7 @@ async function registerRoutes(app2) {
   registerFileWorkflowRoutes(app2, upload, computeContentHash);
   registerPdfConversionRoutes(app2, upload);
   registerPeriodRoutes(app2);
+  registerCashRoutes(app2);
   registerReconciliationReadRoutes(app2);
   registerReconciliationWriteRoutes(app2);
   registerRequestAccessRoutes(app2);

@@ -26,6 +26,7 @@ import { ReviewTab } from "./ReviewTab";
 import { InvestigateTab } from "./InvestigateTab";
 import { InsightsTab } from "./InsightsTab";
 import { RetailSummary } from "./RetailSummary";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ResultsDashboardProps {
   periodId: string;
@@ -47,6 +48,8 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   const [reviewSide, setReviewSide] = useState<'bank' | 'fuel'>('fuel');
   const [insightsView, setInsightsView] = useState<'landing' | 'detail' | 'attendants' | 'declined' | 'cashGap'>('landing');
   const [rulesExpanded, setRulesExpanded] = useState(false);
+  // The matching-logic panel exposes Lekana's internal passes — internal (platform owner) only.
+  const { isPlatformOwner } = useAuth();
 
   const { data: dashboard, isLoading: isDashboardLoading } = useQuery<ResultsDashboardReadModel>({
     queryKey: ["/api/periods", periodId, "dashboard"],
@@ -169,6 +172,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
         {/* ════════════════════════════════════════════════════════════
             SUMMARY TAB — 4 action cards
         ════════════════════════════════════════════════════════════ */}
+      {isPlatformOwner && (
       <div className="bg-section rounded-2xl max-w-4xl mx-auto px-6 py-4 mb-4">
         <button
           type="button"
@@ -254,6 +258,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
           </div>
         )}
       </div>
+      )}
 
         {showSummary && (
         <TabsContent value="summary" className="mt-0 max-w-4xl mx-auto">

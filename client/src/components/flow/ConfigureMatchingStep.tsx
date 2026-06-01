@@ -20,6 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { buildMatchingStages } from "@shared/matchingStages";
@@ -118,6 +119,8 @@ export function ConfigureMatchingStep({
   stepColor
 }: ConfigureMatchingStepProps) {
   const { toast } = useToast();
+  // The ordered-passes hierarchy is Lekana's internal matching logic — internal (platform owner) only.
+  const { isPlatformOwner } = useAuth();
 
   // Fetch verification summary for data coverage
   const { data: verSummary, isLoading: verLoading } = useQuery<{
@@ -294,12 +297,13 @@ export function ConfigureMatchingStep({
               {selectedPreset === "custom" && (
                 <>
                   <span className="font-medium">Custom</span> uses your saved station rules.
-                  The cards above are presets only, and the live stages below reflect the actual rules that will run.
+                  {isPlatformOwner && " The cards above are presets only, and the live stages below reflect the actual rules that will run."}
                 </>
               )}
             </p>
           </div>
 
+          {isPlatformOwner && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -355,6 +359,7 @@ export function ConfigureMatchingStep({
               ))}
             </div>
           </div>
+          )}
 
           {/* Data Coverage Preview */}
           {verLoading && (

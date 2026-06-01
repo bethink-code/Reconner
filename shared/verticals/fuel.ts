@@ -22,7 +22,7 @@ export const fuelAdapter: VerticalAdapter = {
     salesSideRequiresCardFlag: true,
   },
   summaryView: "fuel",
-  insights: ["overview", "attendants", "declines", "reprint-scam"],
+  insights: ["overview", "attendants", "declines", "reprint-scam", "cash-gap"],
   resolutionReasons: [
     // Fuel-specific first
     { value: "attendant_overfill", label: "Attendant error / overfill" },

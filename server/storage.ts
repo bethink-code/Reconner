@@ -24,6 +24,8 @@ import {
   type InsertProperty,
   type PricingScenario,
   type InsertPricingScenario,
+  type PeriodCashPayment,
+  type InsertPeriodCashPayment,
   users,
   reconciliationPeriods,
   uploadedFiles,
@@ -36,7 +38,8 @@ import {
   organizations,
   organizationMembers,
   properties,
-  pricingScenarios
+  pricingScenarios,
+  periodCashPayments
 } from "../shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -305,6 +308,13 @@ export interface IStorage {
   getResolvedTransactionIds(periodId: string): Promise<string[]>;
   clearResolutionsByPeriod(periodId: string): Promise<number>;
   deleteResolutionByTransaction(transactionId: string): Promise<number>;
+
+  // Cash Gap inputs — period-level cash-received total + list of cash-spent items
+  getCashPayments(periodId: string): Promise<PeriodCashPayment[]>;
+  getCashPayment(id: string): Promise<PeriodCashPayment | undefined>;
+  setCashReceivedAmount(periodId: string, amount: number | null): Promise<ReconciliationPeriod | undefined>;
+  createCashPayment(payment: InsertPeriodCashPayment): Promise<PeriodCashPayment>;
+  deleteCashPayment(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1944,6 +1954,43 @@ export class DatabaseStorage implements IStorage {
       .from(transactionResolutions)
       .where(eq(transactionResolutions.periodId, periodId));
     return resolutions.map(r => r.transactionId);
+  }
+
+  // Cash Gap inputs — ownership is asserted at the route layer (assertPeriodAccess);
+  // these functions trust the periodId they receive, matching the resolution-method pattern.
+  async getCashPayments(periodId: string): Promise<PeriodCashPayment[]> {
+    return await db.select()
+      .from(periodCashPayments)
+      .where(eq(periodCashPayments.periodId, periodId))
+      .orderBy(desc(periodCashPayments.createdAt));
+  }
+
+  async getCashPayment(id: string): Promise<PeriodCashPayment | undefined> {
+    const [row] = await db.select()
+      .from(periodCashPayments)
+      .where(eq(periodCashPayments.id, id))
+      .limit(1);
+    return row || undefined;
+  }
+
+  async setCashReceivedAmount(periodId: string, amount: number | null): Promise<ReconciliationPeriod | undefined> {
+    const [updated] = await db.update(reconciliationPeriods)
+      .set({
+        cashReceivedAmount: amount === null ? null : amount.toFixed(2),
+        updatedAt: new Date(),
+      })
+      .where(eq(reconciliationPeriods.id, periodId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async createCashPayment(payment: InsertPeriodCashPayment): Promise<PeriodCashPayment> {
+    const [created] = await db.insert(periodCashPayments).values(payment).returning();
+    return created;
+  }
+
+  async deleteCashPayment(id: string): Promise<void> {
+    await db.delete(periodCashPayments).where(eq(periodCashPayments.id, id));
   }
 
   // Invite management — invites are now scoped to a specific org with a role.

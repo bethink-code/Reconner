@@ -17,6 +17,7 @@ import { formatRand } from "@/lib/format";
 import type { MatchingRulesConfig } from "@shared/schema";
 import type { ResultsDashboardReadModel } from "@shared/reconciliationDashboard";
 import type { ReviewQueueReadModel } from "@shared/reconciliationReview";
+import type { PeriodInsightsReadModel } from "@shared/periodInsights";
 import { buildMatchingStages } from "@shared/matchingStages";
 import { deriveResultsDashboardQueueMetrics } from "@shared/reconciliationResultsView";
 import { getVertical } from "@shared/verticals";
@@ -44,7 +45,7 @@ interface Period {
 export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: ResultsDashboardProps) {
   const [activeTab, setActiveTab] = useState("summary");
   const [reviewSide, setReviewSide] = useState<'bank' | 'fuel'>('fuel');
-  const [insightsView, setInsightsView] = useState<'landing' | 'detail' | 'attendants' | 'declined'>('landing');
+  const [insightsView, setInsightsView] = useState<'landing' | 'detail' | 'attendants' | 'declined' | 'cashGap'>('landing');
   const [rulesExpanded, setRulesExpanded] = useState(false);
 
   const { data: dashboard, isLoading: isDashboardLoading } = useQuery<ResultsDashboardReadModel>({
@@ -69,7 +70,7 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
   useEffect(() => {
     if (!showSummary && activeTab === "summary") setActiveTab("transactions");
   }, [showSummary, activeTab]);
-  const goToInsights = (view: 'landing' | 'detail' | 'attendants' | 'declined') => {
+  const goToInsights = (view: 'landing' | 'detail' | 'attendants' | 'declined' | 'cashGap') => {
     if (!showInsights) return;
     setInsightsView(view);
     setActiveTab('insights');
@@ -90,6 +91,15 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
     queryKey: ["/api/periods", periodId, "decline-analysis"],
     enabled: !!periodId && (dashboard?.summary.excludedBankTransactions || 0) > 0,
   });
+
+  // Insights model — used here for the Cash Gap headline on the Summary tab.
+  // Same query Insights tab uses, so the React Query cache is shared between tabs.
+  const { data: insightsModel } = useQuery<PeriodInsightsReadModel>({
+    queryKey: ["/api/periods", periodId, "insights"],
+    enabled: !!periodId,
+  });
+  const cashGap = insightsModel?.cashGap;
+  const showCashGapCard = showInsights && cashGap && cashGap.state !== "no_cash_data";
 
   if (isDashboardLoading || isReviewLoading || !dashboard || !reviewModel) {
     return <ResultsDashboardSkeleton />;
@@ -248,7 +258,11 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
         {showSummary && (
         <TabsContent value="summary" className="mt-0 max-w-4xl mx-auto">
           {vertical.summaryView === "retail" ? (
-          <RetailSummary periodId={periodId} />
+          <RetailSummary
+            periodId={periodId}
+            cashGap={showCashGapCard ? cashGap : undefined}
+            onViewCashGap={() => goToInsights('cashGap')}
+          />
           ) : (
           <div className="bg-section rounded-2xl p-6 space-y-5">
 
@@ -309,6 +323,62 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
                 <InfoCardAction className="mt-2">Review bank side <ArrowRight className="h-3 w-3" /></InfoCardAction>
               </InfoCard>
             </div>
+
+            {/* Cash Gap card — visible whenever there's any cash signal. Two looks: */}
+            {/*   ready = full number; awaiting_input = "not captured" advert nudging toward Step 3. */}
+            {showCashGapCard && cashGap && cashGap.state === "ready" && cashGap.summary.discrepancy !== null && (
+              <InfoCard
+                className="cursor-pointer hover:bg-card/80 transition-colors"
+                onClick={() => goToInsights('cashGap')}
+                data-testid="card-cash-gap"
+              >
+                <InfoCardLabel>Cash gap</InfoCardLabel>
+                <div className="flex items-center justify-between mt-3">
+                  <div>
+                    <p className={cn(
+                      "text-2xl font-bold tabular-nums",
+                      cashGap.summary.discrepancy !== 0 ? "text-[#B45309]" : "text-[#166534]",
+                    )}>
+                      {formatRand(cashGap.summary.discrepancy)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {cashGap.summary.discrepancy !== 0 ? "unaccounted" : "fully accounted"}
+                    </p>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground space-y-0.5">
+                    <p>Cash sales <span className="tabular-nums">{formatRand(cashGap.summary.cashSalesAmount)}</span></p>
+                    <p>Received <span className="tabular-nums">{formatRand(cashGap.summary.received ?? 0)}</span></p>
+                  </div>
+                </div>
+                <InfoCardAction className="mt-3">View report <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
+            )}
+
+            {showCashGapCard && cashGap && cashGap.state === "awaiting_input" && (
+              <InfoCard
+                className="cursor-pointer hover:bg-card/80 transition-colors border-dashed"
+                onClick={() => goToInsights('cashGap')}
+                data-testid="card-cash-gap-awaiting"
+              >
+                <InfoCardLabel>Cash gap</InfoCardLabel>
+                <div className="flex items-center justify-between mt-3">
+                  <div>
+                    <p className="text-2xl font-semibold tabular-nums text-muted-foreground">
+                      Not captured
+                    </p>
+                    <p className="text-xs text-muted-foreground">cash received not entered</p>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground space-y-0.5">
+                    <p className="text-[10px] uppercase tracking-wider">POS cash sales</p>
+                    <p className="text-base font-semibold tabular-nums text-foreground">
+                      {formatRand(cashGap.summary.cashSalesAmount)}
+                    </p>
+                    <p>{cashGap.summary.cashSalesCount} transactions</p>
+                  </div>
+                </div>
+                <InfoCardAction className="mt-3">Enter on Step 3 <ArrowRight className="h-3 w-3" /></InfoCardAction>
+              </InfoCard>
+            )}
 
             {/* Row 2: Reconciliation + Declined + Investigate */}
             <div className={cn("grid gap-4", excludedBank > 0 ? "grid-cols-3" : "grid-cols-2")}>
@@ -416,7 +486,12 @@ export function ResultsDashboard({ periodId, onRerunMatching, stepColor }: Resul
 
         {showInsights && (
           <TabsContent value="insights" className="mt-0 max-w-4xl mx-auto">
-            <InsightsTab periodId={periodId} initialView={insightsView} key={insightsView} />
+            <InsightsTab
+              periodId={periodId}
+              initialView={insightsView}
+              enabledInsights={vertical.insights}
+              key={insightsView}
+            />
           </TabsContent>
         )}
     </Tabs>

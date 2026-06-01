@@ -29,10 +29,11 @@ export const retailAdapter: VerticalAdapter = {
   },
   // Retail summary: total takings = card + cash, with card reconciled to the bank.
   summaryView: "retail",
-  // No retail insight reports are ready yet (the overview report is still fuel-shaped, and a
-  // settled card batch has no declines). Empty → the Insights tab is hidden for retail until
-  // Phase 3 builds retail-specific reports. This is the per-vertical "hide it" mechanism.
-  insights: [],
+  // Cash Gap is the first insight that's also meaningful for retail (cash sales,
+  // banking, petty cash). The auto-hide rule inside the report handles periods with
+  // no cash data. Other reports (overview, attendants, declines, reprint-scam) are
+  // still fuel-shaped and not yet retail-ready.
+  insights: ["cash-gap"],
   // Generic reasons only — no attendant/fuel-specific options. Add retail-specific ones as needed.
   resolutionReasons: [...GENERIC_RESOLUTION_REASONS, OTHER_RESOLUTION_REASON],
 };

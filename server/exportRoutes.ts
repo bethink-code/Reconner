@@ -51,6 +51,7 @@ export function registerExportRoutes(app: Express) {
         attendantSummary,
         matchingRulesData,
         periodSummary,
+        cashPayments,
       ] = await Promise.all([
         storage.getTransactionsByPeriod(req.params.periodId),
         storage.getMatchesByPeriod(req.params.periodId),
@@ -58,6 +59,7 @@ export function registerExportRoutes(app: Express) {
         storage.getAttendantSummary(req.params.periodId),
         storage.getMatchingRules(req.params.periodId),
         storage.getPeriodSummary(req.params.periodId),
+        storage.getCashPayments(req.params.periodId),
       ]);
 
       const transactions = allTransactions.filter(
@@ -125,6 +127,11 @@ export function registerExportRoutes(app: Express) {
         attendantSummary,
         declineResult,
         allFuelTransactions,
+        {
+          salesTransactions: allFuelTransactions,
+          received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
+          spent: cashPayments,
+        },
       );
 
       const XLSX = await import("xlsx");

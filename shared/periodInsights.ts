@@ -1,4 +1,5 @@
 import type { ReprintScamReadModel } from "./reprintScam.ts";
+import type { CashGapView } from "./cashGap.ts";
 
 export interface InsightsBankBreakdown {
   bankName: string;
@@ -177,4 +178,5 @@ export interface PeriodInsightsReadModel {
   attendants: InsightsAttendantsReadModel;
   declines: InsightsDeclinesReadModel;
   reprints: ReprintScamReadModel;
+  cashGap: CashGapView;
 }

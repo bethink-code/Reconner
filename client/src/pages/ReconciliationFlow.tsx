@@ -22,8 +22,10 @@ import { Eye } from "lucide-react";
 import { FuelUploadStep } from "@/components/flow/FuelUploadStep";
 import { BankUploadStep } from "@/components/flow/BankUploadStep";
 import { BankStatusScreen } from "@/components/flow/BankStatusScreen";
+import { CashInputStep } from "@/components/flow/CashInputStep";
 import { ConfigureMatchingStep } from "@/components/flow/ConfigureMatchingStep";
 import { ResultsDashboard } from "@/components/flow/ResultsDashboard";
+import { RetailSummary } from "@/components/flow/RetailSummary";
 
 type BankSubStep = "status" | "upload";
 
@@ -69,7 +71,8 @@ export default function ReconciliationFlow() {
   });
 
   const bankFiles = files.filter((f) => f.sourceType === "bank" && f.status === "processed");
-  const fuelFile = files.find((f) => f.sourceType === "fuel" && f.status === "processed");
+  // Sales-side file for this vertical (fuel → "fuel", retail → "retail"). Drives step eligibility.
+  const fuelFile = files.find((f) => f.sourceType === vertical.salesSideSourceType && f.status === "processed");
 
   // Fetch verification summary for fuel breakdown on matching complete screen
   const { data: verSummary } = useQuery<{
@@ -161,26 +164,26 @@ export default function ReconciliationFlow() {
       // Check URL for explicit step override (e.g. ?step=fuel for "Edit Data")
       const urlParams = new URLSearchParams(window.location.search);
       const rawStep = urlParams.get("step");
-      const validSteps: ReconciliationStep[] = ["fuel", "bank", "configure", "results"];
+      const validSteps: ReconciliationStep[] = ["fuel", "bank", "cash", "configure", "results"];
       const requestedStep = rawStep && validSteps.includes(rawStep as ReconciliationStep)
         ? (rawStep as ReconciliationStep)
         : null;
 
       // Completed periods go straight to results (no re-running reconciliation)
       if (period?.status === "complete" && !requestedStep) {
-        setCompletedSteps(["fuel", "bank", "configure"]);
+        setCompletedSteps(["fuel", "bank", "cash", "configure"]);
         setCurrentStep("results");
       } else if (fuelFile && bankFiles.length > 0) {
         // Both data sources uploaded
         // If going to results (default), matching must have run — mark configure complete
         // If explicitly navigating to an earlier step, don't assume matching ran
-        if (requestedStep === "fuel" || requestedStep === "bank" || requestedStep === "configure") {
+        if (requestedStep === "fuel" || requestedStep === "bank" || requestedStep === "cash" || requestedStep === "configure") {
           setCompletedSteps(["fuel", "bank"]);
           setCurrentStep(requestedStep);
           if (requestedStep === "bank") setBankSubStep("status");
         } else {
           // Default to results — matching has run before
-          setCompletedSteps(["fuel", "bank", "configure"]);
+          setCompletedSteps(["fuel", "bank", "cash", "configure"]);
           setCurrentStep("results");
         }
       } else if (fuelFile) {
@@ -248,12 +251,17 @@ export default function ReconciliationFlow() {
       setBankSubStep("status");
       return;
     }
-    
+
+    if (step === "cash" && fuelProcessed && hasAnyBank) {
+      setCurrentStep(step);
+      return;
+    }
+
     if (step === "configure" && fuelProcessed && hasAnyBank) {
       setCurrentStep(step);
       return;
     }
-    
+
     if (step === "results" && fuelProcessed && hasAnyBank && completedSteps.includes("configure")) {
       setCurrentStep(step);
       return;
@@ -285,7 +293,17 @@ export default function ReconciliationFlow() {
   const handleContinueToMatching = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId, "files"] });
     queryClient.invalidateQueries({ queryKey: ["/api/periods", periodId] });
+    setCurrentStep("cash");
+  };
+
+  const handleContinueFromCash = () => {
+    setCompletedSteps((prev) => [...prev.filter(s => s !== "cash"), "cash"]);
     setCurrentStep("configure");
+  };
+
+  const handleBackToBankFromCash = () => {
+    setCurrentStep("bank");
+    setBankSubStep("status");
   };
 
   const handleStartMatching = () => {
@@ -313,6 +331,7 @@ export default function ReconciliationFlow() {
   const stepEligibility: StepEligibility = {
     fuel: true,
     bank: fuelProcessed,
+    cash: fuelProcessed && hasAnyBank,
     configure: fuelProcessed && hasAnyBank,
     results: fuelProcessed && hasAnyBank && configureCompleted,
   };
@@ -365,7 +384,7 @@ export default function ReconciliationFlow() {
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-heading font-semibold">Reconciliation</h1>
                 <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                  Step {(['fuel', 'bank', 'configure', 'results'] as const).indexOf(currentStep) + 1} of 4
+                  Step {(['fuel', 'bank', 'cash', 'configure', 'results'] as const).indexOf(currentStep) + 1} of 5
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -438,6 +457,10 @@ export default function ReconciliationFlow() {
               <CardTitle className="text-2xl">Matching Complete</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              {vertical.summaryView === "retail" ? (
+                <RetailSummary periodId={periodId} compact />
+              ) : (
+              <>
               {completionMetrics ? (
                 <>
                   {/* Hero: the answer to "how well did my period match?" */}
@@ -522,6 +545,9 @@ export default function ReconciliationFlow() {
                 </div>
               )}
 
+              </>
+              )}
+
               {/* Secondary info: data outside range */}
               {matchResult.bankTransactionsUnmatchable > 0 && (
                 <div className="rounded-lg bg-muted/20 p-3 text-center">
@@ -579,14 +605,23 @@ export default function ReconciliationFlow() {
               />
             )}
 
+            {currentStep === "cash" && period && (
+              <CashInputStep
+                periodId={periodId}
+                periodStart={period.startDate}
+                periodEnd={period.endDate}
+                onBack={handleBackToBankFromCash}
+                onContinue={handleContinueFromCash}
+                stepColor={STEP_CANVAS_COLORS[currentStep]}
+                readOnly={isViewer}
+              />
+            )}
+
             {currentStep === "configure" && (
               <ConfigureMatchingStep
                 periodId={periodId}
                 onStartMatching={handleStartMatching}
-                onBack={() => {
-                  setCurrentStep("bank");
-                  setBankSubStep("status");
-                }}
+                onBack={() => setCurrentStep("cash")}
                 isMatching={autoMatchMutation.isPending}
                 stepColor={STEP_CANVAS_COLORS[currentStep]}
               />

@@ -410,10 +410,11 @@ export function registerReconciliationReadRoutes(app: Express) {
       const period = await assertPeriodOwner(req.params.periodId, req, res);
       if (!period) return;
 
-      const [summary, attendantSummary, transactions] = await Promise.all([
+      const [summary, attendantSummary, transactions, cashPayments] = await Promise.all([
         storage.getPeriodSummary(req.params.periodId),
         storage.getAttendantSummary(req.params.periodId),
         storage.getTransactionsByPeriod(req.params.periodId),
+        storage.getCashPayments(req.params.periodId),
       ]);
       const vertical = await resolveVertical(period.propertyId);
 
@@ -423,7 +424,11 @@ export function registerReconciliationReadRoutes(app: Express) {
       );
       const declineResult = computeDeclineAnalysis(bankTransactions, fuelTransactions);
 
-      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions));
+      res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions, {
+        salesTransactions: fuelTransactions,
+        received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
+        spent: cashPayments,
+      }));
     } catch (error) {
       console.error("Error fetching insights read model:", error);
       res.status(500).json({ error: "Failed to fetch insights data" });

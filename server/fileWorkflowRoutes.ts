@@ -196,8 +196,12 @@ export function registerFileWorkflowRoutes(
           console.warn(
             `Source type mismatch: expected ${expectedCategory}, detected ${detectedCategory} (${detectedPreset.name})`,
           );
+          const fileTypeLabel = (cat: string) =>
+            cat === "bank" ? "bank statement" : cat === "retail" ? "retail sales export" : "fuel system export";
+          const slotLabel = (cat: string) =>
+            cat === "bank" ? "bank data" : cat === "retail" ? "sales data" : "fuel data";
           return res.status(400).json({
-            error: `This looks like a ${detectedCategory === "bank" ? "bank statement" : "fuel system export"}, but you're uploading it as ${expectedCategory === "bank" ? "bank data" : "fuel data"}. Please check you're on the right step.`,
+            error: `This looks like a ${fileTypeLabel(detectedCategory)}, but you're uploading it as ${slotLabel(expectedCategory)}. Please check you're on the right step.`,
             detectedType: detectedCategory,
             expectedType: expectedCategory,
             detectedPreset: detectedPreset.name,

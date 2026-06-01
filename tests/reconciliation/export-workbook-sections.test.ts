@@ -202,7 +202,7 @@ test("workbook section builders package reconciliation and insight reports witho
       },
     ],
     suspicious: [],
-  }, []);
+  }, [], { salesTransactions: [], received: null, spent: [] });
 
   const rules = {
     amountTolerance: 2,

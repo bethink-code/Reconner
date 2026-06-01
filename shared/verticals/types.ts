@@ -9,7 +9,7 @@
  * columnMapping). Adding a retail-like vertical (e.g. a shoe shop) is a new descriptor, not code.
  */
 
-export type InsightModuleId = "overview" | "attendants" | "declines" | "reprint-scam";
+export type InsightModuleId = "overview" | "attendants" | "declines" | "reprint-scam" | "cash-gap";
 
 /** A manual-review resolution reason offered in the case modal. */
 export interface ResolutionReason {

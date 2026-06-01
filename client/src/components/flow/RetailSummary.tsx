@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { RetailSummaryReadModel } from "@shared/retailSummary";
+import type { ReviewQueueReadModel } from "@shared/reconciliationReview";
+import { deriveResultsDashboardQueueMetrics } from "@shared/reconciliationResultsView";
 import type { CashGapView } from "@shared/cashGap";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InfoCard, InfoCardLabel, InfoCardAction } from "@/components/ui/info-card";
@@ -22,6 +24,12 @@ export function RetailSummary({ periodId, compact = false, cashGap, onViewCashGa
     queryKey: ["/api/periods", periodId, "retail-summary"],
     enabled: !!periodId,
   });
+  // Shares the dashboard's review-model query (same key → React Query dedupes) for the honest
+  // "needs attention" count — surplus leftovers with no partner are excluded.
+  const { data: reviewModel } = useQuery<ReviewQueueReadModel>({
+    queryKey: ["/api/periods", periodId, "review-model"],
+    enabled: !!periodId,
+  });
 
   if (isLoading || !data) {
     return (
@@ -37,7 +45,9 @@ export function RetailSummary({ periodId, compact = false, cashGap, onViewCashGa
   const rateColor = rate >= 95 ? "text-[#166534]" : rate >= 80 ? "text-[#B45309]" : "text-[#B91C1C]";
   const ringStroke = rate >= 80 ? "#166534" : rate >= 60 ? "#B45309" : "#B91C1C";
   const settles = rec.difference === 0;
-  const toReview = rec.unmatchedCard.count + rec.unmatchedBank.count;
+  // "To review" = items that actually need attention (matches the Review tab badge), not raw
+  // unmatched. null until the review model loads, so we never flash the inflated count.
+  const reviewCount = reviewModel ? deriveResultsDashboardQueueMetrics(reviewModel).reviewCount : null;
 
   // ── Matching screen: headline rate + tender split only ──
   if (compact) {
@@ -48,7 +58,7 @@ export function RetailSummary({ periodId, compact = false, cashGap, onViewCashGa
           <p className="text-lg font-medium">of card sales reconciled to the bank</p>
           <p className="text-sm text-muted-foreground">
             {rec.matched.count} of {rec.cardSales.count} card sales matched
-            {toReview > 0 && ` · ${toReview} to review`}
+            {reviewCount !== null && reviewCount > 0 && ` · ${reviewCount} to review`}
           </p>
         </div>
         <div className="rounded-xl bg-section p-4">
@@ -87,7 +97,7 @@ export function RetailSummary({ periodId, compact = false, cashGap, onViewCashGa
           </div>
           <p className="text-sm font-semibold">Card reconciled to bank</p>
           <p className="text-xs text-muted-foreground">
-            {rec.matched.count} of {rec.cardSales.count} matched{toReview > 0 ? ` · ${toReview} to review` : ""}
+            {rec.matched.count} of {rec.cardSales.count} matched{reviewCount !== null && reviewCount > 0 ? ` · ${reviewCount} to review` : ""}
           </p>
         </InfoCard>
 

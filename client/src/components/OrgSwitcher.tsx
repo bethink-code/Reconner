@@ -13,6 +13,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { VERTICALS, DEFAULT_VERTICAL_ID } from "@shared/verticals";
+
+function verticalLabel(verticalId: string | null | undefined): string {
+  const id = verticalId || DEFAULT_VERTICAL_ID;
+  return VERTICALS[id]?.vocabulary.businessType ?? id;
+}
 
 // Shows the current organization. For platform owners (Lekana staff) it's a dropdown
 // switcher; for everyone else it's a static label since they only ever belong to one org.
@@ -81,7 +87,9 @@ export function OrgSwitcher() {
             <div className="flex items-center justify-between w-full">
               <div className="flex flex-col">
                 <span className="font-medium">{org.name}</span>
-                <span className="text-xs text-muted-foreground capitalize">{org.role}</span>
+                <span className="text-xs text-muted-foreground">
+                  <span className="capitalize">{org.role}</span> · {verticalLabel((org as any).verticalId)}
+                </span>
               </div>
               {org.id === currentOrg.id && <Check className="h-4 w-4 ml-2" />}
             </div>

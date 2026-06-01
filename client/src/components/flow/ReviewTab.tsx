@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Search, X, Check } from "lucide-react";
+import { Search, X, Check, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRand } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
@@ -28,6 +28,9 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
   const userName = user?.firstName || "User";
   const [side, setSide] = useState<ReviewSide>(initialSide || "fuel");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<"date" | "amount">("date");
+  // Default: newest transactions at the top.
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitialIndex, setModalInitialIndex] = useState(0);
   const [modalItems, setModalItems] = useState<CategorizedTransaction[]>([]);
@@ -72,14 +75,31 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
     });
   }, [searchQuery, sideModel]);
 
+  const sortedTransactions = useMemo(() => {
+    const items = [...filteredTransactions];
+    const dir = sortDir === "asc" ? 1 : -1;
+    items.sort((a, b) => {
+      if (sortField === "amount") {
+        const diff = parseFloat(a.transaction.amount) - parseFloat(b.transaction.amount);
+        if (diff !== 0) return diff * dir;
+      } else {
+        const aKey = `${a.transaction.transactionDate ?? ""} ${a.transaction.transactionTime ?? ""}`;
+        const bKey = `${b.transaction.transactionDate ?? ""} ${b.transaction.transactionTime ?? ""}`;
+        const cmp = aKey.localeCompare(bKey);
+        if (cmp !== 0) return cmp * dir;
+      }
+      return a.transaction.id.localeCompare(b.transaction.id);
+    });
+    return items;
+  }, [filteredTransactions, sortField, sortDir]);
+
   const totalUnresolved = sideModel?.transactions.length || 0;
 
   const openModal = (transactionId: string) => {
-    if (!sideModel) return;
-    const index = sideModel.transactions.findIndex((item) => item.transaction.id === transactionId);
+    const index = sortedTransactions.findIndex((item) => item.transaction.id === transactionId);
     if (index < 0) return;
 
-    setModalItems(sideModel.transactions);
+    setModalItems(sortedTransactions);
     setModalInitialIndex(index);
     setModalOpen(true);
   };
@@ -209,24 +229,58 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
           </div>
         ) : (
           <div className="bg-section rounded-xl p-4 space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by amount, description, reference, or date..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                className="bg-card pl-9"
-              />
-              {searchQuery && (
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by amount, description, reference, or date..."
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  className="bg-card pl-9"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-muted-foreground">Sort</span>
+                <div className="flex overflow-hidden rounded-lg border border-border/50 bg-card">
+                  {(["date", "amount"] as const).map((field) => (
+                    <button
+                      key={field}
+                      type="button"
+                      onClick={() => setSortField(field)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs capitalize transition-colors",
+                        field === "amount" && "border-l border-border/50",
+                        sortField === field
+                          ? "bg-section font-medium text-[#1A1200]"
+                          : "text-muted-foreground hover:bg-section/50",
+                      )}
+                    >
+                      {field}
+                    </button>
+                  ))}
+                </div>
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="icon"
-                  className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
-                  onClick={() => setSearchQuery("")}
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setSortDir((dir) => (dir === "asc" ? "desc" : "asc"))}
+                  title={sortDir === "asc" ? "Ascending" : "Descending"}
+                  aria-label={`Sort ${sortDir === "asc" ? "ascending" : "descending"}`}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  {sortDir === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
                 </Button>
-              )}
+              </div>
             </div>
 
             {searchQuery && filteredTransactions.length === 0 ? (
@@ -239,7 +293,7 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredTransactions.map((item) => {
+                {sortedTransactions.map((item) => {
                   const isResolved = item.category === "resolved";
                   const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
                   const bestStageLabel = item.bestMatch?.stageLabel;

@@ -133,6 +133,9 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
           {sideCards.map((card) => {
             const isActive = side === card.key;
             const summary = reviewModel.sides[card.key].summary;
+            // "Surplus" leftovers have no partner to match — don't count them as work to do.
+            const attentionCount = summary.unresolvedCount - summary.noActionCount;
+            const attentionAmount = summary.unresolvedAmount - summary.noActionAmount;
             return (
               <button
                 key={card.key}
@@ -151,25 +154,27 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
                   <p
                     className={cn(
                       "text-3xl font-bold tabular-nums",
-                      summary.unresolvedCount > 0 ? "text-[#B45309]" : "text-[#166534]",
+                      attentionCount > 0 ? "text-[#B45309]" : "text-[#166534]",
                     )}
                   >
-                    {summary.unresolvedCount}
+                    {attentionCount}
                   </p>
                   <p
                     className={cn(
                       "text-base font-bold tabular-nums",
-                      summary.unresolvedCount > 0 ? "text-[#B45309]" : "text-[#1A1200]",
+                      attentionCount > 0 ? "text-[#B45309]" : "text-[#1A1200]",
                     )}
                   >
-                    {formatRand(summary.unresolvedAmount)}
+                    {formatRand(attentionAmount)}
                   </p>
                 </div>
 
                 <div className="mb-4 flex items-baseline justify-between">
-                  <p className="text-xs text-muted-foreground">To review</p>
+                  <p className="text-xs text-muted-foreground">Need attention</p>
                   <p className="text-[10px] text-muted-foreground">
-                    across {summary.originalCount} {card.key === "bank" ? "bank" : "sales"} transactions
+                    {summary.noActionCount > 0
+                      ? `${summary.noActionCount} more with no partner — no action`
+                      : `across ${summary.originalCount} ${card.key === "bank" ? "bank" : "sales"} transactions`}
                   </p>
                 </div>
 
@@ -295,27 +300,51 @@ export function ReviewTab({ periodId, initialSide }: ReviewTabProps) {
               <div className="space-y-2">
                 {sortedTransactions.map((item) => {
                   const isResolved = item.category === "resolved";
-                  const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
-                  const bestStageLabel = item.bestMatch?.stageLabel;
-                  const badgeLabel =
-                    !isResolved && bestStageLabel ? `${categoryLabel} · ${bestStageLabel}` : categoryLabel;
+                  const isSurplus = item.noMatchReason === "surplus";
+                  const isUnaccounted = item.noMatchReason === "unaccounted";
+
+                  let badgeLabel: string;
+                  let badgeClass: string;
+                  let subtitle: string | undefined;
+                  let subtitleColor: string | undefined;
+
+                  if (isResolved) {
+                    badgeLabel = CATEGORY_LABELS[item.category] || item.category;
+                    badgeClass = "text-[#166534] border-[#166534]/30";
+                  } else if (isSurplus) {
+                    badgeLabel = "No action";
+                    badgeClass = "text-muted-foreground border-border/50";
+                    subtitle = "A matching counterpart settled elsewhere — nothing to reconcile here";
+                    subtitleColor = "text-muted-foreground";
+                  } else if (isUnaccounted) {
+                    badgeLabel = side === "bank" ? "No sale found" : "Not in bank yet";
+                    badgeClass = "text-[#B45309] border-[#B45309]/30";
+                    subtitle =
+                      side === "bank"
+                        ? "Bank received money with no matching sale — worth a look"
+                        : "Sale with no bank settlement in the window — not settled or missing";
+                    subtitleColor = "text-[#B45309]";
+                  } else {
+                    // A viable candidate exists — this is a confirm/flag decision.
+                    badgeLabel = CATEGORY_LABELS[item.category] || item.category;
+                    badgeClass = "";
+                    subtitle = item.insights.length > 0 ? item.insights[0].message : undefined;
+                    subtitleColor = item.insights.length > 0 ? "text-[#B45309]" : undefined;
+                  }
 
                   return (
                     <TransactionRow
                       key={item.transaction.id}
                       transaction={item.transaction}
                       onClick={() => openModal(item.transaction.id)}
-                      dimmed={isResolved}
+                      dimmed={isResolved || isSurplus}
                       badge={
-                        <Badge
-                          variant="outline"
-                          className={cn("text-xs", isResolved && "text-[#166534] border-[#166534]/30")}
-                        >
+                        <Badge variant="outline" className={cn("text-xs", badgeClass)}>
                           {badgeLabel}
                         </Badge>
                       }
-                      subtitle={!isResolved && item.insights.length > 0 ? item.insights[0].message : undefined}
-                      subtitleColor={!isResolved && item.insights.length > 0 ? "text-[#B45309]" : undefined}
+                      subtitle={subtitle}
+                      subtitleColor={subtitleColor}
                     />
                   );
                 })}

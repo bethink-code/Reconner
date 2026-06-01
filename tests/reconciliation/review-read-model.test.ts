@@ -272,3 +272,40 @@ test("reviewing a fuel item does not reshuffle the bank review queue", () => {
     [bankFirst.id, bankSecond.id],
   );
 });
+
+test("review separates structural surplus from genuinely unaccounted leftovers", () => {
+  const rules: MatchingRulesConfig = { ...defaultRules, groupByInvoice: true };
+
+  // A card sale of R100 that already matched its bank line.
+  const saleMatched = asTransaction(
+    makeFuelTransaction({ amount: "100.00", transactionDate: "2026-04-10" }),
+    { id: "sale-matched", matchStatus: "matched" },
+  );
+  // A bank line of R100 with no FREE sale to take — its only R100 sale already matched. Surplus.
+  const bankSurplus = asTransaction(
+    makeBankTransaction({ amount: "100.00", transactionDate: "2026-04-10" }),
+    { id: "bank-surplus", sourceType: "bank", matchStatus: "unmatched" },
+  );
+  // A bank line with no sale anywhere near its amount — money in, no sale. Unaccounted.
+  const bankUnaccounted = asTransaction(
+    makeBankTransaction({ amount: "777.77", transactionDate: "2026-04-12" }),
+    { id: "bank-unaccounted", sourceType: "bank", matchStatus: "unmatched" },
+  );
+
+  const model = buildReviewQueueReadModel(
+    { startDate: "2026-04-01", endDate: "2026-04-30" },
+    [saleMatched, bankSurplus, bankUnaccounted],
+    [],
+    rules,
+    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true },
+  );
+
+  const byId = Object.fromEntries(model.sides.bank.transactions.map((item) => [item.transaction.id, item]));
+  assert.equal(byId["bank-surplus"].noMatchReason, "surplus");
+  assert.equal(byId["bank-unaccounted"].noMatchReason, "unaccounted");
+
+  // Only the unaccounted line is real work; surplus is excluded from "needs attention".
+  assert.equal(model.sides.bank.summary.unresolvedCount, 2);
+  assert.equal(model.sides.bank.summary.noActionCount, 1);
+  assert.equal(model.sides.bank.summary.noActionAmount, 100);
+});

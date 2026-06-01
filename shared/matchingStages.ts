@@ -22,13 +22,28 @@ export interface MatchingStage {
   minimumConfidence: number;
   autoConfirmConfidence: number;
   boundaryMode: "none" | "boundary";
+  /**
+   * Whether intraday time difference is a matching signal for this vertical. When false (retail
+   * batch settlements) the scorer ignores intraday time on same-day candidates — no time-based
+   * confidence and no time-window rejection. Defaults true (fuel) so existing callers are unchanged.
+   */
+  intradayTimeSignal: boolean;
+}
+
+export interface BuildMatchingStagesOptions {
+  /** See MatchingStage.intradayTimeSignal. Defaults true to preserve fuel behaviour. */
+  intradayTimeSignal?: boolean;
 }
 
 const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
 
-export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingStage[] {
+export function buildMatchingStages(
+  rules: MatchingRulesStageInput,
+  options: BuildMatchingStagesOptions = {},
+): MatchingStage[] {
   const minimumConfidence = clampPercent(rules.minimumConfidence);
   const autoConfirmConfidence = clampPercent(rules.autoMatchThreshold);
+  const intradayTimeSignal = options.intradayTimeSignal ?? true;
 
   const strictStage: MatchingStage = {
     id: "strict_same_day_exact",
@@ -44,6 +59,7 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     minimumConfidence,
     autoConfirmConfidence,
     boundaryMode: "none",
+    intradayTimeSignal,
   };
 
   const closeOperationalStage: MatchingStage = {
@@ -60,6 +76,7 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     minimumConfidence,
     autoConfirmConfidence,
     boundaryMode: "none",
+    intradayTimeSignal,
   };
 
   const boundaryStage: MatchingStage = {
@@ -76,6 +93,7 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     minimumConfidence,
     autoConfirmConfidence,
     boundaryMode: "boundary",
+    intradayTimeSignal,
   };
 
   const settlementFallbackStage: MatchingStage = {
@@ -92,6 +110,7 @@ export function buildMatchingStages(rules: MatchingRulesStageInput): MatchingSta
     minimumConfidence,
     autoConfirmConfidence,
     boundaryMode: "none",
+    intradayTimeSignal,
   };
 
   return [

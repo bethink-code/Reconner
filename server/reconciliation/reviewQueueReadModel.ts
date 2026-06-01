@@ -156,6 +156,7 @@ function scoreSuggestion(
   side: ReviewSide,
   matchingRules: MatchingRulesConfig,
   fuelBoundaryPositions: Map<string, "start" | "end" | "both" | "none">,
+  intradayTimeSignal: boolean,
 ): PotentialMatch | null {
   const matchingStages = buildMatchingStages({
     amountTolerance: matchingRules.amountTolerance,
@@ -165,7 +166,7 @@ function scoreSuggestion(
     requireCardMatch: matchingRules.requireCardMatch,
     minimumConfidence: matchingRules.minimumConfidence,
     autoMatchThreshold: matchingRules.autoMatchThreshold,
-  });
+  }, { intradayTimeSignal });
 
   const primaryAmount = parseFloat(primaryTransaction.amount);
   const candidateAmount = parseFloat(candidateTransaction.amount);
@@ -194,7 +195,7 @@ function scoreSuggestion(
       if (!isDirectionalBoundary) continue;
     }
 
-    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+    if (intradayTimeSignal && dayDiff === 0 && fuelTime !== null && bankTime !== null) {
       const timeGap = Math.abs(bankTime - fuelTime);
       if (stage.maxTimeDiffMinutes !== null && timeGap > stage.maxTimeDiffMinutes) continue;
     }
@@ -206,7 +207,7 @@ function scoreSuggestion(
     else confidence = 65;
 
     let timeDiffLabel = dayDiff === 0 ? "Same day" : `${Math.abs(dayDiff)} day${Math.abs(dayDiff) >= 2 ? "s" : ""}`;
-    if (dayDiff === 0 && fuelTime !== null && bankTime !== null) {
+    if (intradayTimeSignal && dayDiff === 0 && fuelTime !== null && bankTime !== null) {
       const timeGap = Math.abs(bankTime - fuelTime);
       timeDiffLabel = timeGap === 0 ? "Same time" : `${timeGap} min`;
       if (timeGap <= 5) confidence = 100;
@@ -348,6 +349,7 @@ function buildCategorizedTransactions(
   matchingRules: MatchingRulesConfig,
   fuelBoundaryPositions: Map<string, "start" | "end" | "both" | "none">,
   latestResolutionByTransactionId: Map<string, TransactionResolution>,
+  intradayTimeSignal: boolean,
 ) {
   const result = primaryTransactions
     .map((primaryTransaction): CategorizedTransaction => {
@@ -360,6 +362,7 @@ function buildCategorizedTransactions(
           side,
           matchingRules,
           fuelBoundaryPositions,
+          intradayTimeSignal,
         ))
         .filter((match): match is PotentialMatch => !!match);
 
@@ -479,6 +482,7 @@ export function buildReviewQueueReadModel(
     matchingRules,
     fuelBoundaryPositions,
     latestResolutionByTransactionId,
+    salesSide.intradayTimeSignal,
   );
   const bankTransactions = buildCategorizedTransactions(
     "bank",
@@ -487,6 +491,7 @@ export function buildReviewQueueReadModel(
     matchingRules,
     fuelBoundaryPositions,
     latestResolutionByTransactionId,
+    salesSide.intradayTimeSignal,
   );
   const flaggedBank = buildInvestigateItems(
     buildCategorizedTransactions(
@@ -496,6 +501,7 @@ export function buildReviewQueueReadModel(
       matchingRules,
       fuelBoundaryPositions,
       latestResolutionByTransactionId,
+      salesSide.intradayTimeSignal,
     ),
     latestResolutionByTransactionId,
   );
@@ -507,6 +513,7 @@ export function buildReviewQueueReadModel(
       matchingRules,
       fuelBoundaryPositions,
       latestResolutionByTransactionId,
+      salesSide.intradayTimeSignal,
     ),
     latestResolutionByTransactionId,
   );

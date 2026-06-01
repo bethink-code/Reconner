@@ -48,6 +48,14 @@ export interface SalesSideConfig {
   /** Force grouping line-items by reference into one total (retail receipts), regardless of the
    *  per-period toggle. Loyverse exports one row per item; only the receipt total matches the bank. */
   forceInvoiceGrouping: boolean;
+  /**
+   * Whether the bank-side timestamp tracks the individual sale's time so that an intraday time
+   * gap is a real matching signal. Fuel: true — card terminals settle in real time, so a same-day
+   * sale and its bank line are minutes apart. Retail: false — the bank line is a once-a-day batch
+   * settlement, so its time is unrelated to any one sale. When false, same-day matches are neither
+   * scored nor rejected on intraday time difference (see VerticalMatching.intradayTimeSignal).
+   */
+  intradayTimeSignal: boolean;
 }
 
 /** Shared predicate: is this transaction the sales side for the given vertical config? */
@@ -72,6 +80,15 @@ export interface VerticalMatching {
    * receipt was card (unmatched receipts are cash).
    */
   salesSideRequiresCardFlag: boolean;
+  /**
+   * Whether an intraday time gap between a same-day sale and its bank line is a real matching
+   * signal. Fuel: true — card terminals settle in real time, so the gap discriminates good matches
+   * and the matcher both scores by it (≤5min → 100% down to >30min → 75%) and hard-rejects gaps
+   * beyond the close-match window. Retail: false — the bank line is a daily batch settlement whose
+   * time is unrelated to any one sale, so the matcher ignores intraday time entirely (a same-day
+   * match keeps its 85% base and is never rejected on time).
+   */
+  intradayTimeSignal: boolean;
 }
 
 export interface VerticalAdapter {

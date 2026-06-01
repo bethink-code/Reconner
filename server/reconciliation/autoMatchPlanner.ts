@@ -137,7 +137,7 @@ export function planAutoMatch(
   );
 
   const fuelInvoices = groupFuelByInvoice(fuelTransactions, groupByInvoice);
-  const stages = buildMatchingStages(rules);
+  const stages = buildMatchingStages(rules, { intradayTimeSignal: salesSide.intradayTimeSignal });
   const operationalStage = stages.find((stage) => stage.id === "operational_close_match");
   const stageMatches = runSequentialMatchingStages(
     matchableBankTransactions,

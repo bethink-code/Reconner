@@ -26,6 +26,9 @@ export const retailAdapter: VerticalAdapter = {
     // The Loyverse Receipts export carries Payment type, so we DO know card vs cash up front —
     // pre-filter card sales (like fuel). Cash receipts are excluded from matching, not flagged.
     salesSideRequiresCardFlag: true,
+    // Nedbank posts one batch settlement per day — its time is unrelated to any one sale, so
+    // intraday time is noise here. Matching ignores it (same-day stays 85%, never time-rejected).
+    intradayTimeSignal: false,
   },
   // Retail summary: total takings = card + cash, with card reconciled to the bank.
   summaryView: "retail",

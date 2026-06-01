@@ -16,5 +16,6 @@ export function salesSideConfig(vertical: VerticalAdapter): SalesSideConfig {
     sourceType: vertical.salesSideSourceType,
     requireCardFlag: vertical.matching.salesSideRequiresCardFlag,
     forceInvoiceGrouping: vertical.matching.requiresInvoiceGrouping,
+    intradayTimeSignal: vertical.matching.intradayTimeSignal,
   };
 }

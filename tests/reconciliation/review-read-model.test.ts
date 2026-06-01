@@ -161,7 +161,7 @@ test("buildReviewQueueReadModel centralizes review queues without hiding the opp
       makeResolution(bankFlagged.id, "flagged"),
     ],
     rules,
-    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false },
+    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true },
   );
 
   const fuelCategories = Object.fromEntries(
@@ -262,7 +262,7 @@ test("reviewing a fuel item does not reshuffle the bank review queue", () => {
       }),
     ],
     rules,
-    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false },
+    { sourceType: "fuel", requireCardFlag: true, forceInvoiceGrouping: false, intradayTimeSignal: true },
   );
 
   assert.equal(model.sides.fuel.summary.unresolvedCount, 1);

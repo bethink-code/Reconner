@@ -44,6 +44,7 @@ import {
 import { db } from "./db";
 import { pool } from "./db";
 import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
+import { buildMatchAssignments } from "./reconciliation/matchAssignments";
 
 export interface PeriodSummary {
   totalTransactions: number;
@@ -842,19 +843,38 @@ export class DatabaseStorage implements IStorage {
       }
 
       const createdMatches: Match[] = [];
-      const BATCH_SIZE = 100;
-      for (let i = 0; i < pendingMatches.length; i += BATCH_SIZE) {
-        const batch = pendingMatches.slice(i, i + BATCH_SIZE);
+      const INSERT_BATCH_SIZE = 100;
+      for (let i = 0; i < pendingMatches.length; i += INSERT_BATCH_SIZE) {
+        const batch = pendingMatches.slice(i, i + INSERT_BATCH_SIZE);
         const inserted = await tx.insert(matches).values(batch.map(pm => pm.matchData)).returning();
         createdMatches.push(...inserted);
+      }
 
-        for (let j = 0; j < inserted.length; j++) {
-          const match = inserted[j];
-          const pending = batch[j];
-          await tx.update(transactions)
-            .set({ matchStatus: 'matched', matchId: match.id })
-            .where(inArray(transactions.id, [pending.bankTxId, ...pending.fuelItemIds]));
-        }
+      // Mark every matched transaction in bulk. createdMatches[idx] aligns with
+      // pendingMatches[idx] (insert RETURNING preserves input order), so we zip
+      // them into a flat (txId -> matchId) list and apply it with a single
+      // UPDATE ... FROM (VALUES ...) per batch — not one UPDATE per match.
+      const assignments = buildMatchAssignments(
+        createdMatches.map((match, idx) => ({
+          matchId: match.id,
+          bankTxId: pendingMatches[idx].bankTxId,
+          fuelItemIds: pendingMatches[idx].fuelItemIds,
+        })),
+      );
+
+      const UPDATE_BATCH_SIZE = 500;
+      for (let i = 0; i < assignments.length; i += UPDATE_BATCH_SIZE) {
+        const chunk = assignments.slice(i, i + UPDATE_BATCH_SIZE);
+        const valuesSql = sql.join(
+          chunk.map(a => sql`(${a.txId}, ${a.matchId})`),
+          sql`, `,
+        );
+        await tx.execute(sql`
+          UPDATE transactions AS t
+          SET match_status = 'matched', match_id = v.match_id
+          FROM (VALUES ${valuesSql}) AS v(tx_id, match_id)
+          WHERE t.id = v.tx_id
+        `);
       }
 
       if (lagExplainedBankIds.length > 0) {

@@ -67,3 +67,40 @@ test("deriveResultsDashboardQueueMetrics uses the canonical review model totals"
     unmatchedFuelCount: 15,
   });
 });
+
+test("deriveResultsDashboardQueueMetrics excludes no-action surplus from the review counts", () => {
+  const reviewModel: ReviewQueueReadModel = {
+    matchingRules,
+    sides: {
+      fuel: {
+        summary: {
+          unresolvedCount: 24, unresolvedAmount: 3037.33,
+          originalCount: 1005, originalAmount: 141868.51,
+          matchedCount: 981, matchedAmount: 138831.18,
+          flaggedCount: 0, flaggedAmount: 0,
+          noActionCount: 14, noActionAmount: 1800,
+        },
+        transactions: [],
+      },
+      bank: {
+        summary: {
+          unresolvedCount: 41, unresolvedAmount: 3934.74,
+          originalCount: 1018, originalAmount: 142339.65,
+          matchedCount: 981, matchedAmount: 138831.18,
+          flaggedCount: 0, flaggedAmount: 0,
+          noActionCount: 34, noActionAmount: 3100,
+        },
+        transactions: [],
+      },
+    },
+    investigate: { totalCount: 0, totalAmount: 0, bankAmount: 0, fuelAmount: 0, bank: [], fuel: [] },
+  };
+
+  const metrics = deriveResultsDashboardQueueMetrics(reviewModel);
+
+  // 65 raw leftovers (24 + 41) collapse to 17 that actually need attention (10 + 7).
+  assert.equal(metrics.reviewCount, 17);
+  assert.equal(metrics.unmatchedFuelCount, 10);
+  assert.equal(metrics.unmatchedBankCount, 7);
+  assert.equal(Math.round(metrics.unmatchedBankAmount * 100) / 100, 834.74);
+});

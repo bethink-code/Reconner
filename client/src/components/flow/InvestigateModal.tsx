@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronLeft, ChevronRight, Link2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,8 @@ export function InvestigateModal({
   side = 'bank',
 }: InvestigateModalProps) {
   const { toast } = useToast();
+  // The "ordered passes" phrasing reveals Lekana's internal matching logic — internal only.
+  const { isPlatformOwner } = useAuth();
   const invalidateAll = useInvalidateReconciliation(periodId);
   const { data: period } = useQuery<{ verticalId?: string }>({
     queryKey: ["/api/periods", periodId],
@@ -254,7 +257,7 @@ export function InvestigateModal({
             {matchingRules && (
               <div className="px-5 py-3 border-t border-[#E5E3DC]/40 bg-section">
                 <p className="text-xs text-muted-foreground">
-                  Current matching settings: {matchingRules.dateWindowDays} day date window, R{Number(matchingRules.amountTolerance).toFixed(0)} amount tolerance, {matchingRules.timeWindowMinutes} min close-match window, {matchingRules.attendantSubmissionDelayMinutes} min submission delay, and {matchingRules.minimumConfidence}% minimum confidence. Lekana works through ordered passes rather than one blended rule.
+                  Current matching settings: {matchingRules.dateWindowDays} day date window, R{Number(matchingRules.amountTolerance).toFixed(0)} amount tolerance, {matchingRules.timeWindowMinutes} min close-match window, {matchingRules.attendantSubmissionDelayMinutes} min submission delay, and {matchingRules.minimumConfidence}% minimum confidence.{isPlatformOwner && " Lekana works through ordered passes rather than one blended rule."}
                 </p>
               </div>
             )}

@@ -4,6 +4,7 @@ import { Banknote, ArrowLeft, ArrowRight, Plus, Trash2, Loader2 } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useInvalidateReconciliation } from "@/hooks/useInvalidateReconciliation";
@@ -107,6 +108,20 @@ export function CashInputStep({
       </div>
 
       <div className="space-y-6">
+        {isLoading ? (
+          <div className="space-y-6" data-testid="cash-input-loading">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-9 w-[200px]" />
+              <Skeleton className="h-3 w-full max-w-md" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-9 w-44" />
+            </div>
+          </div>
+        ) : (
+        <>
         <section className="space-y-2" data-testid="received-section">
           <Label htmlFor="cash-received" className="text-sm font-medium">
             Cash received this period
@@ -153,16 +168,23 @@ export function CashInputStep({
         </section>
 
         <CashInHandPreview cashData={cashData} />
+        </>
+        )}
 
         <div className="flex justify-between gap-3 pt-2">
           <Button variant="outline" onClick={onBack} data-testid="button-back">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-          <Button onClick={onContinue} data-testid="button-continue">
-            Continue
-            <ArrowRight className="h-4 w-4 ml-2" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={onContinue} data-testid="button-skip">
+              Skip for now
+            </Button>
+            <Button onClick={onContinue} data-testid="button-continue">
+              Continue
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

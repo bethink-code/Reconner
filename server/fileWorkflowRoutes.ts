@@ -208,6 +208,22 @@ export function registerFileWorkflowRoutes(
           });
         }
 
+        // Retail card reconciliation needs a payment-type column to tell card from cash.
+        // The per-item Loyverse export has no payment type, so every sale would read as cash
+        // (Card R0.00, 0% reconciled) — a confidently-wrong result. Block it with a clear pointer
+        // to the receipt-level export. (Fuel files always carry a payment type, so this is retail-only.)
+        const isRetailSales =
+          normalizeSourceType(sourceType) === "retail" || detectedPreset?.category === "retail";
+        const hasPaymentType = columnMappings.some((m) => m.suggestedMapping === "paymentType");
+        if (isRetailSales && !hasPaymentType) {
+          return res.status(400).json({
+            error:
+              "This sales export has no payment-type column, so card and cash sales can't be told apart - every sale would be counted as cash. Upload the receipt-level Loyverse export (one row per receipt, with a 'Payment type' column), not the per-item export.",
+            detectedPreset: detectedPreset?.name,
+            missingPaymentType: true,
+          });
+        }
+
         const suggestedMappingsObject: Record<string, string> = {};
         for (const mapping of columnMappings) {
           suggestedMappingsObject[mapping.detectedColumn] = mapping.suggestedMapping;

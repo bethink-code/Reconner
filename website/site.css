@@ -240,6 +240,8 @@ h1 strong, .brush {
 
 .section { padding: 60px 0; }
 .section--tight { padding: 44px 0; }
+/* In-page anchor targets clear the fixed topbar instead of tucking under it. */
+section[id], [id].step { scroll-margin-top: 90px; }
 
 /* Dark contrast band (full-width). Reserved for the money moment + final CTA. */
 .band-dark {

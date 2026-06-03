@@ -621,8 +621,8 @@ figure { margin: 0; }
 .price-card--recommended h3, .price-card--recommended .price-amount { color: var(--lk-cream); }
 .price-card--recommended .price-tagline, .price-card--recommended .price-foot { color: rgba(245, 237, 230, 0.6); }
 .price-card--recommended .price-amount span { color: rgba(245, 237, 230, 0.5); }
-.price-card--recommended .list-clean li { color: rgba(245, 237, 230, 0.85); }
-.price-card--recommended .list-clean li::before { background: var(--lk-cream); }
+.price-card--recommended .list-clean li { color: rgba(245, 237, 230, 0.85); border-color: rgba(245, 237, 230, 0.12); }
+.price-card--recommended .list-clean li::before { color: var(--lk-cream); background: transparent; }
 
 /* ---------- FAQ ---------- */
 

@@ -1,21 +1,21 @@
 {
   "people": [
     {
-      "slug": "savannah",
-      "firstName": "Savannah",
-      "lastName": "",
-      "title": "Bethink team",
-      "role": "Role and direct line to be confirmed",
-      "bestFor": "General enquiries, coordination, and the Bethink side of lekana. Full details to follow.",
-      "email": "savannah@bethink.co.za",
-      "phoneE164": "",
-      "phoneDisplay": "To be confirmed",
-      "whatsapp": "",
+      "slug": "pieter",
+      "firstName": "Pieter",
+      "lastName": "Bosman",
+      "title": "Co-founder, lekana",
+      "role": "Pilot lead and fuel station business owner",
+      "bestFor": "Pilot questions, fuel operations, onboarding.",
+      "email": "pieter@bethink.co.za",
+      "phoneE164": "+27832252986",
+      "phoneDisplay": "+27 83 225 2986",
+      "whatsapp": "https://wa.me/27832252986",
       "linkedin": "",
-      "photo": "/assets/people/Savannah_Shoebridge.jpg",
-      "intro": "I am part of the Bethink team behind lekana. This page is live now with placeholder details while my full contact card is being finalised.",
+      "photo": "/assets/people/Pieter_Bosman.jpg",
+      "intro": "I run a fuel station. I am also a co-founder of lekana, the tool we built to fix the reconciliation problem I lived with for years.",
       "vcardOrg": "Bethink (Pty) Ltd",
-      "vcardTitle": "Bethink team"
+      "vcardTitle": "Co-founder, lekana"
     },
     {
       "slug": "garth",

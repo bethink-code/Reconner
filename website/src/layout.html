@@ -43,6 +43,32 @@
     document.querySelectorAll('[data-nav-open]').forEach(function (b) { b.addEventListener('click', open); });
     document.querySelectorAll('[data-nav-close]').forEach(function (b) { b.addEventListener('click', close); });
   })();
+
+  // Sticky-nav state: solid background + hairline once scrolled past the hero edge.
+  (function () {
+    var bar = document.querySelector('.topbar');
+    if (!bar) return;
+    function onScroll() { bar.classList.toggle('scrolled', window.scrollY > 30); }
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  })();
+
+  // Scroll reveal: fade-up on enter. Degrades to visible (no-JS leaves content
+  // shown; reduced-motion handled in CSS). Anything tagged .reveal is observed.
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!els.length) return;
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
 </script>
 </body>
 </html>

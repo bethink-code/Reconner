@@ -7,15 +7,17 @@
 }
 -->
 <section class="hero">
-  <div class="container container--narrow">
-    <p class="tag">Reconciliation</p>
-    <h1>The foundation. Without this, the leak stays hidden.</h1>
+  <div class="container">
+    <p class="crumb">Reconciliation</p>
+    <h1>The foundation. Without this, <strong>the leak stays hidden.</strong></h1>
     <p class="lead">Reconciliation isn't the product. It's the instrument that turns a hunch into a number. Match every card. Match every debtor. Account for every cent of cash. What used to take a day takes under five minutes, and the gap that remains is exactly what you're looking for.</p>
-    <div class="btn-row" style="margin-top:8px;">
+    <div class="btn-row" style="justify-content:center;">
       <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
       <a class="btn btn-ghost" href="/insights">See the leak surface &rarr;</a>
     </div>
-    <figure class="shot">
+  </div>
+  <div class="container">
+    <figure class="shot reveal">
       <img src="/assets/screenshots/summary.png" alt="The lekana Summary tab showing a reconciliation result" loading="lazy">
       <figcaption>The Summary tab. A real result from a May 2026 reconciliation.</figcaption>
     </figure>
@@ -23,36 +25,36 @@
 </section>
 
 <section class="section--tight">
-  <div class="container container--narrow">
+  <div class="container container--narrow reveal">
     <p class="tag">What gets matched</p>
     <h2>Three sides of the same day, all reconciled.</h2>
     <div class="prose" style="margin-top:16px;">
-      <p>Most reconciliation tools handle the easy side. Card transactions match the bank because both sides emit a digital record. lekana goes further. We treat <strong>cash</strong> as a ledger in its own right, with its own opening, outflows and closing count, so the side most likely to leak is held to the same standard as the bank.</p>
+      <p>Most reconciliation tools handle the easy side. Card transactions match the bank because both sides emit a digital record. lekana goes further. We treat <strong style="font-weight:500;">cash</strong> as a ledger in its own right, with its own opening, outflows and closing count, so the side most likely to leak is held to the same standard as the bank.</p>
     </div>
   </div>
 </section>
 
 <section class="section--tight">
   <div class="container">
-    <div class="grid grid-3">
+    <div class="grid grid-3 reveal">
       <div class="card">
         <h3>Card &amp; bank</h3>
-        <p style="margin:8px 0 0;">Transaction by transaction. Strict same-day first, then operational close, then settlement fallback. Every match scored.</p>
+        <p>Transaction by transaction. Strict same-day first, then operational close, then settlement fallback. Every match scored.</p>
       </div>
       <div class="card">
         <h3>Debtors</h3>
-        <p style="margin:8px 0 0;">Monthly cycles reconciled against EFTs. Long-tail receipts grouped to the right account, not lost as orphans.</p>
+        <p>Monthly cycles reconciled against EFTs. Long-tail receipts grouped to the right account, not lost as orphans.</p>
       </div>
       <div class="card card--highlight">
         <h3>Cash <span class="tag-new">New</span></h3>
-        <p style="margin:8px 0 0;">Expected cash from the till versus actual cash that left the building. The gap nobody else is checking.</p>
+        <p>Expected cash from the till versus actual cash that left the building. The gap nobody else is checking.</p>
       </div>
     </div>
   </div>
 </section>
 
 <section class="section--tight">
-  <div class="container container--narrow">
+  <div class="container container--narrow reveal">
     <p class="tag">Human in the loop</p>
     <h2>The engine matches what it can. You confirm what it can't.</h2>
     <div class="prose" style="margin-top:16px;">
@@ -67,97 +69,79 @@
 </section>
 
 <section class="section" id="how-it-works">
-  <div class="container container--narrow">
+  <div class="container container--narrow reveal" style="text-align:center;">
     <p class="tag">Four steps, in order</p>
     <h2>A flow, not a dashboard.</h2>
-    <p class="lead" style="margin-top:12px;">You move from upload to result in a single pass. The stepper changes colour at each step. Sunshine is earned.</p>
+    <p class="lead" style="margin-top:12px;">You move from upload to result in a single pass. No dashboards to configure, no setup. Bring the files you already export.</p>
+  </div>
+  <div class="container" style="margin-top:36px;">
+    <div class="step reveal">
+      <div class="step-text">
+        <p class="step-num">Step 01</p>
+        <h3>Upload your sales data.</h3>
+        <p>Export from your point-of-sale or fuel management system. Drop it in. Format is auto-detected. This is your source of truth, the data the bank will be verified against.</p>
+      </div>
+      <div class="step-shot"><img src="/assets/screenshots/step1-fuel.png" alt="Step 1: upload sales data" loading="lazy"></div>
+    </div>
+
+    <div class="step step--reverse reveal">
+      <div class="step-text">
+        <p class="step-num">Step 02</p>
+        <h3>Upload your bank statements.</h3>
+        <p>Statements from FNB, ABSA, Standard Bank or Nedbank. Multiple banks in the same period are fine. This is how the card and EFT side gets verified.</p>
+      </div>
+      <div class="step-shot"><img src="/assets/screenshots/step2-bank.png" alt="Step 2: upload bank statements" loading="lazy"></div>
+    </div>
+
+    <div class="step reveal">
+      <div class="step-text">
+        <p class="step-num">Step 03 <span class="tag-new">New</span></p>
+        <h3>Enter the day's cash.</h3>
+        <p>One number. The cash that actually left the premises, whether to the bank, to cash-in-transit, or counted in the drawer. This is what closes the loop on the side that's hardest to track and the side where the tricks live.</p>
+      </div>
+      <div class="step-shot"><img src="/assets/screenshots/step3-configure.png" alt="Step 3: enter the day's cash" loading="lazy"></div>
+    </div>
+
+    <div class="step step--reverse reveal">
+      <div class="step-text">
+        <p class="step-num">Step 04</p>
+        <h3>Results.</h3>
+        <p>The match rate. The verified total. The cash gap. The items needing your attention. This is the payoff: the few things that actually need you, separated from the noise.</p>
+      </div>
+      <div class="step-shot"><img src="/assets/screenshots/matching-complete.png" alt="Step 4: results" loading="lazy"></div>
+    </div>
   </div>
 </section>
-
-<div class="step">
-  <div class="step-band" style="--band: var(--lk-step-plum);">
-    <div class="container container--narrow">
-      <p class="step-num">01</p>
-      <h3>Upload your fuel data.</h3>
-      <p>Export from your fuel management system. Drop it in. Format is auto-detected. This is your source of truth, the data the bank will be verified against.</p>
-    </div>
-  </div>
-  <div class="container container--narrow">
-    <figure class="shot"><img src="/assets/screenshots/step1-fuel.png" alt="Step 1: upload fuel data" loading="lazy"></figure>
-  </div>
-</div>
-
-<div class="step">
-  <div class="step-band" style="--band: var(--lk-step-teal);">
-    <div class="container container--narrow">
-      <p class="step-num">02</p>
-      <h3>Upload your bank statements.</h3>
-      <p>Statements from FNB, ABSA, Standard Bank or Nedbank. Multiple banks in the same period are fine. This is how the card and EFT side gets verified.</p>
-    </div>
-  </div>
-  <div class="container container--narrow">
-    <figure class="shot"><img src="/assets/screenshots/step2-bank.png" alt="Step 2: upload bank statements" loading="lazy"></figure>
-  </div>
-</div>
-
-<div class="step">
-  <div class="step-band" style="--band: var(--lk-step-orange);">
-    <div class="container container--narrow">
-      <p class="step-num">03 <span class="tag-new tag-new--on-dark">New</span></p>
-      <h3>Enter the day's cash.</h3>
-      <p>One number. The cash that actually left the premises, whether to the bank, to cash-in-transit, or counted in the drawer. This is what closes the loop on the side that's hardest to track and the side where the tricks live.</p>
-    </div>
-  </div>
-  <div class="container container--narrow">
-    <figure class="shot"><img src="/assets/screenshots/step3-configure.png" alt="Step 3: enter the day's cash" loading="lazy"></figure>
-  </div>
-</div>
-
-<div class="step">
-  <div class="step-band step-band--light" style="--band: var(--lk-sunshine);">
-    <div class="container container--narrow">
-      <p class="step-num">04</p>
-      <h3>Results.</h3>
-      <p>The match rate. The verified total. The cash gap. The items needing your attention. The payoff. It is the only place yellow appears as a full canvas in the app.</p>
-    </div>
-  </div>
-  <div class="container container--narrow">
-    <figure class="shot"><img src="/assets/screenshots/matching-complete.png" alt="Step 4: results" loading="lazy"></figure>
-  </div>
-</div>
 
 <section class="section">
   <div class="container">
-    <p class="tag">One engine, three vocabularies</p>
-    <h2>Same instrument. Tuned to your trade.</h2>
-    <p class="lead" style="margin-top:12px;max-width:64ch;">The matching engine is the same. What changes is the domain knowledge. The way the data is named, the patterns the insights look for, the reports your accountant expects.</p>
-    <div class="grid grid-3" style="margin-top:24px;">
+    <div class="reveal" style="text-align:center;">
+      <p class="tag">One engine, every trade</p>
+      <h2>Same instrument. Tuned to your trade.</h2>
+      <p class="lead" style="margin:12px auto 0;max-width:64ch;">The matching engine is the same. What changes is the language it speaks and the patterns it looks for. Pumps and attendants for fuel. Tills and cashiers for retail. Your accountant's reports, in the words your trade uses.</p>
+    </div>
+    <div class="grid grid-2 reveal" style="margin-top:32px;max-width:880px;margin-left:auto;margin-right:auto;">
       <div class="card">
-        <p class="block-label" style="color:var(--lk-orange);">Available</p>
+        <p class="block-label">Available</p>
         <h3>lekana fuel</h3>
-        <p style="margin:8px 0 0;">Pump-level matching for service stations. Tested on a real forecourt for six months.</p>
+        <p>Pump-level matching for service stations. Attendant shortfalls, declined cards and reprint scams. Proven on a real forecourt for six months.</p>
       </div>
       <div class="card">
-        <p class="block-label">Soon</p>
+        <p class="block-label">Available</p>
         <h3>lekana retail</h3>
-        <p style="margin:8px 0 0;">Cashier and till reconciliation for shops. The cash-heavy use case the engine was built for.</p>
-      </div>
-      <div class="card">
-        <p class="block-label">Soon</p>
-        <h3>lekana butchery</h3>
-        <p style="margin:8px 0 0;">Weight-based and scale-based POS reconciliation. Proven on a single-site butchery already.</p>
+        <p>Cashier and till reconciliation for shops. Cash sales held to the same standard as the bank. Live on a butchery today, built for grocers, liquor stores and general retail too.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section band-dark">
-  <div class="container container--narrow">
-    <h2>Reconciliation is the foundation. Insights is where the value lives.</h2>
-    <p class="lead" style="margin-top:12px;">The engine is honest. What it surfaces is what you came for.</p>
-    <div class="btn-row" style="margin-top:8px;">
-      <a class="btn btn-cream" href="/insights">See the leak surface &rarr;</a>
-      <a class="btn btn-ghost" href="/pilot" style="color:var(--lk-cream);">Apply for the pilot</a>
+<section class="final">
+  <div class="container container--narrow reveal">
+    <h2>Reconciliation is the foundation. <strong>Insights is where the value lives.</strong></h2>
+    <p>The engine is honest. What it surfaces is what you came for.</p>
+    <div class="btn-row" style="justify-content:center;">
+      <a class="btn btn-primary" href="/insights">See the leak surface &rarr;</a>
+      <a class="btn btn-ghost" href="/pilot">Apply for the pilot</a>
     </div>
   </div>
 </section>

@@ -17,8 +17,8 @@
   "description": "Find the money you're losing. Reconciliation and Insights for South African businesses.",
   "contactPoint": [{
     "@type": "ContactPoint",
-    "email": "savannah@bethink.co.za",
-    "contactType": "General enquiries",
+    "email": "pieter@bethink.co.za",
+    "contactType": "Pilot enquiries",
     "areaServed": "ZA",
     "availableLanguage": "English"
   }, {
@@ -34,66 +34,62 @@
 }
 </script>
 
-<section class="hero-sun" id="opener">
+<section class="opener" id="opener">
 
   <!-- Stage A: question 1 -->
-  <div class="container container--narrow opener-stage" data-stage="q1">
-    <p class="pilot-tag">Before the pitch, two questions</p>
+  <div class="opener-stage" data-stage="q1">
+    <p class="tag">Before the pitch, two questions</p>
     <h1>Do you ever feel that <strong>less money lands</strong> than your sales say it should?</h1>
     <p class="lead">Not a number you can point to. Just the feeling that something doesn't add up at the end of the day.</p>
     <div class="opener-answers">
       <button class="opener-answer" type="button" data-q="q1" data-a="yes">
-        <span class="opener-answer-main">Yes, I've felt that</span>
+        <span class="opener-answer-main">Yes, I've felt that<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
         <span class="opener-answer-sub">There's a gap I can't explain</span>
-        <span class="opener-answer-arrow" aria-hidden="true">&rarr;</span>
       </button>
       <button class="opener-answer" type="button" data-q="q1" data-a="no">
-        <span class="opener-answer-main">No, everything ties up</span>
+        <span class="opener-answer-main">No, everything ties up<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
         <span class="opener-answer-sub">My books always balance</span>
-        <span class="opener-answer-arrow" aria-hidden="true">&rarr;</span>
       </button>
     </div>
     <p class="opener-progress">Question 1 of 2</p>
   </div>
 
   <!-- Stage B: question 2 (hidden initially) -->
-  <div class="container container--narrow opener-stage" data-stage="q2" hidden>
-    <p class="pilot-tag opener-context" data-context-q1="yes">You're not imagining it. Now the one that matters.</p>
-    <p class="pilot-tag opener-context" data-context-q1="no">Then let's test that. Here's the one that matters.</p>
+  <div class="opener-stage" data-stage="q2" hidden>
+    <button class="opener-back" type="button" data-opener-back>&larr; back</button>
+    <p class="opener-context" data-context-q1="yes">You're not imagining it. Now the one that matters.</p>
+    <p class="opener-context" data-context-q1="no">Then let's test that. Here's the one that matters.</p>
     <h1>If I asked you to <strong>prove</strong>, today, that not a cent went missing between the sale and the deposit, <strong>could you?</strong></h1>
     <p class="lead">Your reconciliation shows the numbers agree with each other. That isn't the same as proving the numbers are honest.</p>
     <div class="opener-answers">
       <button class="opener-answer" type="button" data-q="q2" data-a="no">
-        <span class="opener-answer-main">No, not to the cent</span>
+        <span class="opener-answer-main">No, not to the cent<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
         <span class="opener-answer-sub">I'd have to trust it balanced</span>
-        <span class="opener-answer-arrow" aria-hidden="true">&rarr;</span>
       </button>
       <button class="opener-answer" type="button" data-q="q2" data-a="yes">
-        <span class="opener-answer-main">Yes, every cent</span>
+        <span class="opener-answer-main">Yes, every cent<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
         <span class="opener-answer-sub">I can trace it all</span>
-        <span class="opener-answer-arrow" aria-hidden="true">&rarr;</span>
       </button>
     </div>
-    <button class="opener-back" type="button" data-opener-back>&larr; back</button>
     <p class="opener-progress">Question 2 of 2</p>
   </div>
 
   <!-- Stage C: result hero (hidden initially; one of two paths shown) -->
-  <div class="container container--narrow opener-stage" data-stage="result-no" hidden>
-    <p class="pilot-tag">You're not imagining it</p>
+  <div class="opener-stage" data-stage="result-no" hidden>
+    <p class="tag">You're not imagining it</p>
     <h1>You reconcile. <strong>And you're still losing money.</strong></h1>
     <p class="lead">Reconciliation was never going to catch this. It confirms your numbers agree with each other. It cannot tell you whether the money that should exist actually does. lekana can.</p>
-    <div class="btn-row" style="margin-top:8px;">
+    <div class="btn-row" style="justify-content:center;margin-top:8px;">
       <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
       <a class="btn btn-ghost" href="#proof">See what we found &darr;</a>
     </div>
   </div>
 
-  <div class="container container--narrow opener-stage" data-stage="result-yes" hidden>
-    <p class="pilot-tag">Then you're rarer than most</p>
+  <div class="opener-stage" data-stage="result-yes" hidden>
+    <p class="tag">Then you're rarer than most</p>
     <h1>If you can trace every cent, <strong>you're already ahead.</strong></h1>
     <p class="lead">Most businesses that say that are proving their totals balanced, not that nothing was taken. lekana proves it down to the transaction, in five minutes a day, so certainty stops being a feeling and becomes a record.</p>
-    <div class="btn-row" style="margin-top:8px;">
+    <div class="btn-row" style="justify-content:center;margin-top:8px;">
       <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
       <a class="btn btn-ghost" href="#proof">See what we found &darr;</a>
     </div>
@@ -102,7 +98,7 @@
 </section>
 
 <section class="section">
-  <div class="container container--narrow">
+  <div class="container container--narrow reveal">
     <p class="tag">The blind spot</p>
     <h2>Balancing and certainty are not the same thing.</h2>
     <div class="prose" style="margin-top:16px;">
@@ -114,59 +110,59 @@
 
 <section class="section">
   <div class="container">
-    <p class="tag">Where the leak actually lives</p>
-    <h2>Most of the tricks happen in physical cash.</h2>
-    <p class="lead" style="margin-top:12px;max-width:64ch;">Card and bank settle automatically, so that side reconciles itself. Cash is the side everyone treats as loose change. It isn't. The drawer is a ledger in its own right, with an opening float, payouts, petty cash and a closing count, and almost nobody holds it to the standard of a bank account.</p>
-    <div class="prose" style="margin-top:8px;max-width:64ch;">
-      <p>That's the gap lekana closes. You give us two numbers a day. <strong>The cash your point-of-sale says you should have.</strong> And <strong>the cash that actually left the building.</strong> Nine times out of ten they don't match, and that gap is the leak made visible.</p>
-    </div>
-    <div class="grid grid-3" style="margin-top:24px;">
-      <div class="card">
-        <p class="block-label">01</p>
-        <h3>Card &amp; bank</h3>
-        <p style="margin:8px 0 0;">Matched against your statement, transaction by transaction. The side that already behaves.</p>
-      </div>
-      <div class="card">
-        <p class="block-label">02</p>
-        <h3>Expected cash</h3>
-        <p style="margin:8px 0 0;">What the till says should be in the drawer, net of petty cash and documented payouts.</p>
-      </div>
-      <div class="card card--highlight">
-        <p class="block-label">03</p>
-        <h3>Actual cash</h3>
-        <p style="margin:8px 0 0;">What truly left the premises. One simple input. The number nobody else is checking.</p>
+    <div class="wedge reveal">
+      <p class="tag">Where the leak actually lives</p>
+      <h2>Most of the tricks happen in physical cash.</h2>
+      <p class="lead" style="margin-top:12px;max-width:64ch;">Card and bank settle automatically, so that side reconciles itself. Cash is the side everyone treats as loose change. It isn't. The drawer is a ledger in its own right, with an opening float, payouts, petty cash and a closing count, and almost nobody holds it to the standard of a bank account.</p>
+      <p style="margin-top:8px;max-width:64ch;color:var(--lk-muted);">That's the gap lekana closes. You give us two numbers a day. <strong style="color:var(--lk-dark);font-weight:500;">The cash your point-of-sale says you should have.</strong> And <strong style="color:var(--lk-dark);font-weight:500;">the cash that actually left the building.</strong> Nine times out of ten they don't match, and that gap is the leak made visible.</p>
+      <div class="three-num">
+        <div class="num-card">
+          <p class="block-label">01</p>
+          <h3>Card &amp; bank</h3>
+          <p>Matched against your statement, transaction by transaction. The side that already behaves.</p>
+        </div>
+        <div class="num-card">
+          <p class="block-label">02</p>
+          <h3>Expected cash</h3>
+          <p>What the till says should be in the drawer, net of petty cash and documented payouts.</p>
+        </div>
+        <div class="num-card card--highlight">
+          <p class="block-label">03</p>
+          <h3>Actual cash</h3>
+          <p>What truly left the premises. One simple input. The number nobody else is checking.</p>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
 <section class="section">
-  <div class="container container--narrow">
+  <div class="container container--narrow reveal">
     <p class="tag">From gap to answer</p>
     <h2>Find the discrepancy. Then find out why.</h2>
     <p class="lead" style="margin-top:12px;">The reconciliation engine is the foundation. Insights is where the discrepancy becomes a name and a number you can recover.</p>
   </div>
   <div class="container">
-    <div class="grid grid-4 flow-grid" style="margin-top:32px;">
-      <div class="card flow-card">
+    <div class="grid grid-4" style="margin-top:32px;">
+      <div class="card flow-card reveal">
         <p class="block-label">Step 01</p>
         <h3>Upload</h3>
         <p>Point-of-sale and bank in. Cash total in. Under five minutes, every day.</p>
         <figure class="flow-shot"><img src="/assets/screenshots/step1-fuel.png" alt="Upload" loading="lazy"></figure>
       </div>
-      <div class="card flow-card">
+      <div class="card flow-card reveal">
         <p class="block-label">Step 02</p>
         <h3>Reconcile</h3>
         <p>Every transaction matched. The cash gap calculated. Down to rounding.</p>
         <figure class="flow-shot"><img src="/assets/screenshots/matching-complete.png" alt="Reconcile" loading="lazy"></figure>
       </div>
-      <div class="card flow-card">
+      <div class="card flow-card reveal">
         <p class="block-label">Step 03</p>
         <h3>Investigate</h3>
         <p>Insights digs into the gap and surfaces the pattern. Reprints. Declines. Shortfalls.</p>
         <figure class="flow-shot"><img src="/assets/screenshots/insights-declined.png" alt="Investigate" loading="lazy"></figure>
       </div>
-      <div class="card flow-card">
+      <div class="card flow-card reveal">
         <p class="block-label">Step 04</p>
         <h3>Recover</h3>
         <p>A named scam, an amount, a record you can act on and stop repeating.</p>
@@ -176,30 +172,32 @@
   </div>
 </section>
 
-<section class="section band-dark" id="proof">
-  <div class="container container--narrow">
-    <p class="tag" style="color:var(--lk-cream);opacity:0.8;">From the pilot. Six months in.</p>
-    <h2>For one business, the leak was R 42 000 to R 100 000 a month.</h2>
-    <p class="lead" style="margin-top:12px;">Money that balanced on paper and still never arrived. Once the reconciliation ran, the patterns surfaced. Then they could be stopped.</p>
-    <div class="leak-tags" style="margin-top:20px;">
-      <span class="leak-tag">Reprint scams</span>
-      <span class="leak-tag">Declines never resubmitted</span>
-      <span class="leak-tag">Pump shortfalls daily totals couldn't show</span>
-    </div>
-    <div class="stats" style="margin-top:24px;">
-      <div class="stat"><p class="stat-label" style="color:var(--lk-cream);opacity:0.7;">Lowest month</p><p class="stat-value">R 42 000</p></div>
-      <div class="stat"><p class="stat-label" style="color:var(--lk-cream);opacity:0.7;">Highest month</p><p class="stat-value">R 100 000</p></div>
-      <div class="stat"><p class="stat-label" style="color:var(--lk-cream);opacity:0.7;">Months running</p><p class="stat-value">6</p></div>
-    </div>
-    <p class="footnote" style="color:var(--lk-cream);opacity:0.7;margin-top:20px;">One site. One business. Figures shared with permission, anonymised here. Yours will differ. The patterns will not.</p>
-    <div class="btn-row" style="margin-top:16px;">
-      <a class="btn btn-cream" href="/pilot">Apply for the pilot</a>
+<section class="section" id="proof">
+  <div class="container">
+    <div class="proof reveal">
+      <p class="tag">From the pilot. Six months in.</p>
+      <h2>For one business, the leak was R 42 000 to R 100 000 a month.</h2>
+      <p class="lead">Money that balanced on paper and still never arrived. Once the reconciliation ran, the patterns surfaced. Then they could be stopped.</p>
+      <div class="leak-tags">
+        <span class="leak-tag">Reprint scams</span>
+        <span class="leak-tag">Declines never resubmitted</span>
+        <span class="leak-tag">Pump shortfalls daily totals couldn't show</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><p class="stat-value">R 42 000</p><p class="stat-label">Lowest month</p></div>
+        <div class="stat"><p class="stat-value">R 100 000</p><p class="stat-label">Highest month</p></div>
+        <div class="stat"><p class="stat-value">6</p><p class="stat-label">Months running</p></div>
+      </div>
+      <p class="footnote" style="margin-top:24px;">One site. One business. Figures shared with permission, anonymised here. Yours will differ. The patterns will not.</p>
+      <div class="btn-row" style="justify-content:center;margin-top:20px;">
+        <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
+      </div>
     </div>
   </div>
 </section>
 
 <section class="section--tight">
-  <div class="container container--narrow">
+  <div class="container container--narrow reveal" style="text-align:center;">
     <h2>Works with FNB, ABSA, Standard Bank and Nedbank.</h2>
     <p class="lead" style="margin-top:12px;">Bring statements from one bank or several in the same period. lekana handles the mix.</p>
   </div>
@@ -207,31 +205,31 @@
 
 <section class="section">
   <div class="container">
-    <p class="tag">Your data stays yours</p>
-    <h2>Built for South African businesses, the way they expect.</h2>
-    <div class="grid grid-3" style="margin-top:24px;">
-      <div class="card">
-        <h3>Hosting</h3>
-        <p style="margin:8px 0 0;">South African data kept in the regions you'd expect for POPIA-compliant work.</p>
+    <p class="tag" style="text-align:center;">Your data stays yours</p>
+    <h2 style="text-align:center;">Built for South African businesses, the way they expect.</h2>
+    <div class="trust reveal" style="margin-top:36px;">
+      <div class="trust-item">
+        <h4>Hosting</h4>
+        <p>South African data kept in the regions you'd expect for POPIA-compliant work.</p>
       </div>
-      <div class="card">
-        <h3>Access</h3>
-        <p style="margin:8px 0 0;">Google sign-in. No passwords on our side. We never see or store yours.</p>
+      <div class="trust-item">
+        <h4>Access</h4>
+        <p>Google sign-in. No passwords on our side. We never see or store yours.</p>
       </div>
-      <div class="card">
-        <h3>Audit</h3>
-        <p style="margin:8px 0 0;">Every match traceable. Every engine decision logged. Every override you apply logged.</p>
+      <div class="trust-item">
+        <h4>Audit</h4>
+        <p>Every match traceable. Every engine decision logged. Every override you apply logged.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section band-dark">
-  <div class="container container--narrow">
-    <h2>Stop trusting that it balanced. Start knowing.</h2>
-    <p class="lead" style="margin-top:12px;">We're onboarding businesses one at a time, free for six weeks.</p>
-    <div class="btn-row" style="margin-top:8px;">
-      <a class="btn btn-cream" href="/pilot">Apply for the pilot</a>
+<section class="final">
+  <div class="container container--narrow reveal">
+    <h2>Stop trusting that it balanced. <strong>Start knowing.</strong></h2>
+    <p>We're onboarding businesses one at a time, free for six weeks.</p>
+    <div class="btn-row" style="justify-content:center;">
+      <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
     </div>
   </div>
 </section>

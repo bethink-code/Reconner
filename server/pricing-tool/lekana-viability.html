@@ -1101,10 +1101,14 @@ const DEFAULT_INPUTS = {
   hours_bookkeeping_baseline: 8,     // per month
   hours_bookkeeping_per_customer: 0.3, // grows with customer count
 
-  // Support capacity — economies of scale. Ops/CS cost is headcount-driven, not
-  // a flat per-customer charge: one ops person covers this many STATIONS. Raise
-  // it to model tooling/efficiency gains as you scale.
-  stations_per_ops_person: 60,
+  // Support capacity — economies of scale via AUTOMATION. Ops/CS cost is
+  // headcount-driven, and capacity-per-person RAMPS as automation matures:
+  // manual today, far higher once the engine auto-resolves and humans only
+  // handle exceptions. This is what makes per-station cost FALL as you grow
+  // instead of rising linearly.
+  ops_capacity_start: 40,            // stations one ops person covers today (manual)
+  ops_capacity_ceiling: 400,         // stations one ops person covers once automated
+  ops_automation_ramp_months: 12,    // months for automation to mature (start → ceiling)
   ops_hours_per_month: 160,          // full-time hours per ops person per month
 
   // Acquisition
@@ -1240,8 +1244,10 @@ const FIELD_DEFS = {
     { key: 'hours_cs_per_onboarding', label: 'CS hours per new onboarding', suffix: 'hrs', min: 0, max: 24, step: 1, hint: 'One-time onboarding effort per new customer.' },
     { key: 'hours_bookkeeping_baseline', label: 'Bookkeeping hours / month', suffix: 'hrs', min: 0, max: 40, step: 1 },
     { key: 'hours_bookkeeping_per_customer', label: 'Bookkeeping hours per customer / month', suffix: 'hrs', min: 0, max: 2, step: 0.1, hint: 'Grows with customer count — invoicing, debtor management.' },
-    { section: 'Support capacity (economies of scale)' },
-    { key: 'stations_per_ops_person', label: 'Stations per ops person', suffix: 'sites', min: 5, max: 300, step: 5, hint: 'How many stations one ops/CS person can support. Raise it to model tooling/efficiency gains as you scale — this is what stops support cost rising linearly.' },
+    { section: 'Support capacity (economies of scale via automation)' },
+    { key: 'ops_capacity_start', label: 'Stations per ops person — today (manual)', suffix: 'sites', min: 5, max: 300, step: 5, hint: 'How many stations one ops/CS person can support TODAY, working manually. The expensive starting point.' },
+    { key: 'ops_capacity_ceiling', label: 'Stations per ops person — automated', suffix: 'sites', min: 20, max: 2000, step: 20, hint: 'How many stations one person covers once automation matures — the engine auto-resolves and they handle exceptions only. This is what makes cost-per-station FALL as you grow.' },
+    { key: 'ops_automation_ramp_months', label: 'Automation ramp', suffix: 'mo', min: 1, max: 36, step: 1, hint: 'Months for capacity to climb from today\'s manual rate to the automated ceiling.' },
     { key: 'ops_hours_per_month', label: 'Ops hours / month (full-time)', suffix: 'hrs', min: 80, max: 200, step: 10, hint: 'Support hours per ops person per month, costed at the customer-success rate.' },
   ],
   platform: [
@@ -1383,7 +1389,7 @@ async function loadScenariosFromServer() {
 // MODEL: takes inputs, returns derived state
 // ==========================================================================
 
-function computeModel(inp, customerCount) {
+function computeModel(inp, customerCount, opsCapacity) {
   // Compute current customer count if not specified
   if (customerCount === undefined) customerCount = inp.starting_customers;
 
@@ -1442,11 +1448,14 @@ function computeModel(inp, customerCount) {
   // Simpler: assume sales hours per month = new_customers_per_month * hours_per_close / (conversion_rate%)
   const monthlySalesHours = inp.new_customers_per_month * inp.hours_per_customer_close / Math.max(inp.conversion_rate_pct, 1) * 100;
   const engineeringHours = inp.hours_engineering_baseline;
-  // Support is headcount-driven (economies of scale), not a flat per-customer
-  // charge: ops people scale with total STATIONS and step up at capacity, so
-  // cost-per-station falls as you grow.
+  // Support is headcount-driven, and capacity-per-person RAMPS as automation
+  // matures. The projection passes the month's ramped capacity; a standalone
+  // steady-state snapshot defaults to the automated ceiling. This is the
+  // economies-of-scale lever: as automation lands, one person covers more
+  // stations, so cost-per-station FALLS as you grow instead of rising linearly.
   const stationsServed = customerCount * avgSitesPerCustomer;
-  const opsHeadcount = stationsServed > 0 ? Math.ceil(stationsServed / Math.max(inp.stations_per_ops_person, 1)) : 0;
+  const opsCapacityEffective = Math.max(opsCapacity !== undefined ? opsCapacity : inp.ops_capacity_ceiling, 1);
+  const opsHeadcount = stationsServed > 0 ? Math.ceil(stationsServed / opsCapacityEffective) : 0;
   const csHours = opsHeadcount * inp.ops_hours_per_month;
   const bookkeepingHours = inp.hours_bookkeeping_baseline + customerCount * inp.hours_bookkeeping_per_customer;
 
@@ -1510,6 +1519,7 @@ function computeModel(inp, customerCount) {
       engineering: engineeringCost,
       cs: csCost,
       opsHeadcount,
+      opsCapacity: opsCapacityEffective,
       bookkeeping: bookkeepingCost,
       people: totalPeopleCost,
       platformBase,
@@ -1561,6 +1571,13 @@ function compute12Month(inp) {
   let breakEvenMonth = null;
   let cumulative = 0;
 
+  // Automation ramp: capacity-per-ops-person climbs from the manual start to the
+  // automated ceiling over the ramp window. Early months are deliberately
+  // expensive (manual); scale earns leverage as automation lands.
+  const capStart = inp.ops_capacity_start;
+  const capCeil = inp.ops_capacity_ceiling;
+  const rampMonths = Math.max(inp.ops_automation_ramp_months, 1);
+
   for (let m = 0; m < 18; m++) {
     // Convert pilots to paid at the end of the pilot period
     if (m === inp.pilot_period_months) {
@@ -1587,10 +1604,13 @@ function compute12Month(inp) {
     const paidCustomers = paidOrganic + paidPartner;
     const customerCount = pilotCustomers + paidCustomers;
 
+    // Capacity for this month along the automation ramp (linear start → ceiling)
+    const opsCapacity = capStart + (capCeil - capStart) * Math.min(m / rampMonths, 1);
+
     // Revenue on paid, cost on all. Partner cohort takes its reseller discount.
-    const m_paid = computeModel(inp, paidCustomers);
-    const m_all = computeModel(inp, customerCount);
-    const partnerGross = paidPartner > 0 ? computeModel(inp, paidPartner).revenue.gross : 0;
+    const m_paid = computeModel(inp, paidCustomers, opsCapacity);
+    const m_all = computeModel(inp, customerCount, opsCapacity);
+    const partnerGross = paidPartner > 0 ? computeModel(inp, paidPartner, opsCapacity).revenue.gross : 0;
     const partnerDiscount = partnerGross * (inp.partner_discount_pct / 100);
 
     const monthlyRev = m_paid.revenue.net - partnerDiscount;
@@ -1609,6 +1629,7 @@ function compute12Month(inp) {
       paidCustomers: Math.round(paidCustomers),
       stations: Math.round(customerCount * avgSites),
       opsHeadcount: m_all.cost.opsHeadcount,
+      opsCapacity: Math.round(opsCapacity),
       revenue: monthlyRev,
       cost: monthlyCost,
       profit: monthlyProfit,
@@ -1628,7 +1649,7 @@ function computeSensitivity(inp) {
     { key: 'insights_price', label: 'Insights price' },
     { key: 'insights_uptake_pct', label: 'Insights uptake' },
     { key: 'recon_per_site_addon', label: 'Per-site add-on' },
-    { key: 'stations_per_ops_person', label: 'Stations per ops person' },
+    { key: 'ops_capacity_ceiling', label: 'Automation ceiling (stations/person)' },
     { key: 'new_customers_per_month', label: 'Organic adds / month' },
     { key: 'acquisition_growth_pct', label: 'Acquisition growth' },
     { key: 'partner_stations', label: 'Partner stations' },
@@ -1878,7 +1899,7 @@ function renderSummary() {
     <li>PDF extraction: ${pdfModel}</li>`;
 
   const costLines = `
-    <li>Ops team: <strong>${model.cost.opsHeadcount}</strong> ${model.cost.opsHeadcount === 1 ? 'person' : 'people'} (1 per ${inputs.stations_per_ops_person} stations)</li>
+    <li>Ops team: <strong>${model.cost.opsHeadcount}</strong> ${model.cost.opsHeadcount === 1 ? 'person' : 'people'} (1 per ${Math.round(model.cost.opsCapacity)} stations, automated)</li>
     <li>People (all-in): <strong>${fmtZAR(model.cost.people)}</strong>/mo</li>
     <li>Platform: ${fmtZAR(model.cost.platform)}/mo (${inputs.platform_tier} tier)</li>
     <li>AI / PDF: ${fmtZAR(model.cost.pdf)}/mo</li>
@@ -2447,7 +2468,9 @@ function renderAssumptions() {
       ['CS hrs / onboarding', inputs.hours_cs_per_onboarding],
       ['Bookkeeping baseline hrs/mo', inputs.hours_bookkeeping_baseline],
       ['Bookkeeping hrs / customer / mo', inputs.hours_bookkeeping_per_customer],
-      ['Stations per ops person', inputs.stations_per_ops_person],
+      ['Ops capacity — today (manual)', inputs.ops_capacity_start],
+      ['Ops capacity — automated ceiling', inputs.ops_capacity_ceiling],
+      ['Automation ramp (months)', inputs.ops_automation_ramp_months],
       ['Ops hours / mo (full-time)', inputs.ops_hours_per_month],
     ],
     'Platform': [

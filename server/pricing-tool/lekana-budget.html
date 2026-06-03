@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lekana · budget model (Model 2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500&family=Inter+Tight:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #14171A; --ink-2: #3A4047; --ink-3: #6B7280; --ink-4: #9AA1AB;
+    --line: #E4E2DC; --line-2: #EDEBE5; --paper: #FAF8F3; --card: #FFFFFF;
+    --accent: #B8843B; --accent-soft: #F5EAD4;
+    --positive: #2D6A4F; --positive-soft: #DCEBE2;
+    --warning: #8B5A1A; --warning-soft: #F5E4C8;
+    --danger: #8B2F2F; --danger-soft: #F1DCDC;
+    --shadow-sm: 0 1px 0 rgba(20,23,26,0.04);
+    --shadow-md: 0 4px 20px -8px rgba(20,23,26,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: 'Inter Tight', sans-serif; font-feature-settings: 'ss01','cv11';
+    background: var(--paper); color: var(--ink); font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'tnum'; }
+  .serif { font-family: 'Fraunces', serif; font-feature-settings: 'tnum'; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px; border-bottom: 1px solid var(--line); background: var(--paper);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand-name { font-family: 'Fraunces', serif; font-weight: 400; font-size: 21px; letter-spacing: -0.02em; }
+  .brand-sub { font-size: 12px; color: var(--ink-3); letter-spacing: 0.02em; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500;
+    padding: 4px 12px; border-radius: 999px; background: var(--accent-soft);
+    color: var(--warning); border: 1px solid var(--accent);
+  }
+
+  .layout { display: flex; align-items: flex-start; }
+  .sidebar {
+    width: 320px; flex: 0 0 320px; border-right: 1px solid var(--line);
+    height: calc(100vh - 65px); overflow-y: auto; padding: 20px;
+  }
+  .main { flex: 1; height: calc(100vh - 65px); overflow-y: auto; padding: 24px 28px; }
+
+  .group { margin-bottom: 22px; }
+  .group-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-4); margin-bottom: 10px;
+  }
+  .field { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .field label { font-size: 12.5px; color: var(--ink-2); flex: 1; }
+  .field .input-wrap { position: relative; flex: 0 0 110px; }
+  .field input {
+    width: 100%; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; text-align: right;
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; color: var(--ink);
+  }
+  .field input:focus { outline: none; border-color: var(--accent); }
+  .field .prefix { color: var(--ink-4); }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .tab {
+    font-family: inherit; font-size: 13px; background: none; border: none; cursor: pointer;
+    padding: 9px 14px; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .metric { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-sm); }
+  .metric-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-4); margin-bottom: 6px; }
+  .metric-value { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+  .metric-sub { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+  .positive { color: var(--positive); } .danger { color: var(--danger); } .warning { color: var(--warning); }
+
+  .banner { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; border-radius: 12px; margin-bottom: 22px; background: var(--accent-soft); border: 1px solid var(--accent); }
+  .banner.good { background: var(--positive-soft); border-color: var(--positive); }
+  .banner .serif { font-size: 18px; line-height: 1.45; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-4); font-weight: 600; border-bottom: 1px solid var(--line); }
+  td.num, th.num { font-family: 'JetBrains Mono', monospace; }
+  tr.divider td { border-top: 1px solid var(--line); }
+  tr.total td { font-weight: 600; }
+  td.over { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+  .row-label-2 { color: var(--ink-3); font-size: 11px; }
+  .hint { font-size: 12px; color: var(--ink-3); margin: 6px 0 16px; max-width: 720px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; box-shadow: var(--shadow-sm); }
+  .btn {
+    font-family: inherit; font-size: 12.5px; cursor: pointer; padding: 7px 14px; border-radius: 7px;
+    background: var(--ink); color: #fff; border: 1px solid var(--ink);
+  }
+  .btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--line); }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-name">lekana</span>
+    <span class="brand-sub">budget model</span>
+    <span class="badge">Model 2 · envelope lens</span>
+  </div>
+  <button class="btn ghost" id="reset-btn">Reset to defaults</button>
+</div>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="summary">Summary</button>
+      <button class="tab" data-tab="grid">Budget grid</button>
+      <button class="tab" data-tab="months">Month-by-month</button>
+      <button class="tab" data-tab="assumptions">Assumptions</button>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<script>
+// ==========================================================================
+// MODEL 2 — THE BUDGET LENS
+// Revenue is the pool. Some lines are forced (platform, AI, hired support past
+// the hours founders cover free); the rest are discretionary envelopes you set
+// per "switch" (start month + monthly amount) and shift around. Two profit
+// lines: CASH (what hits the bank) and LOADED (your own time valued in).
+// Single-site R850 peg = 1 station per customer. Deterministic, no LLM.
+// ==========================================================================
+
+const DEFAULTS = {
+  horizon: 24,
+  price: 850,
+  // Growth
+  convert_month: 1,        // month the first pilots convert to paying
+  convert_count: 10,       // how many of the 20 pilots convert
+  organic_add_start: 4,    // organic new paying customers, month after conversion
+  acq_growth_pct: 12,      // month-over-month growth in the organic add rate
+  // Support workload (hours per station / month) — brutal at launch, decays as
+  // bugs are ironed out, then keeps easing as automation lands.
+  hps_start: 2.0, hps_floor: 0.15, hps_tau: 3,
+  free_founder_hours: 100, // support hours you two cover FOR FREE before hiring
+  founder_build_hours: 80, // strategy + dev you do (free cash, but real time)
+  hired_rate: 500,         // R/hr you pay hired ops/CS for work past the free hours
+  founder_time_rate: 1200, // R/hr opportunity value of founder time (LOADED line only)
+  // Forced platform cost — steps with customer count
+  platform_t1: 30, platform_t2: 100,
+  platform_pilot: 1500, platform_commercial: 3500, platform_scale: 8000,
+  ai_per_customer: 5,      // AI / PDF marginal cost per customer / month
+  // Founder draw — a deliberate "pay ourselves" envelope, taken before growth.
+  founder_start: 12, founder_amount: 40000,
+  // Reinvestment policy — "whatever's left, spend it on growth." After forced
+  // costs + the founder draw, this % of the surplus is ploughed back, split
+  // between platform development and sales. Sales spend buys customers at sales_cac.
+  reinvest_pct: 100,           // % of monthly surplus reinvested (rest banks as reserve)
+  reinvest_split_sales: 50,    // % of reinvestment to sales (rest to platform dev)
+  sales_cac: 4000,             // R to acquire one customer via sales spend
+};
+
+const FIELDS = [
+  { group: 'Pricing (pegged)', items: [
+    { key: 'price', label: 'Recon price / customer', prefix: 'R' },
+  ]},
+  { group: 'Growth', items: [
+    { key: 'convert_count', label: 'Pilots that convert' },
+    { key: 'convert_month', label: 'Conversion month' },
+    { key: 'organic_add_start', label: 'Organic adds / mo (start)' },
+    { key: 'acq_growth_pct', label: 'Acquisition growth %' },
+  ]},
+  { group: 'Support workload', items: [
+    { key: 'hps_start', label: 'Support hrs / station (launch)' },
+    { key: 'hps_floor', label: 'Support hrs / station (floor)' },
+    { key: 'hps_tau', label: 'Decay speed (months)' },
+    { key: 'free_founder_hours', label: 'Free founder support hrs / mo' },
+  ]},
+  { group: 'Rates & time', items: [
+    { key: 'founder_build_hours', label: 'Founder build hrs / mo' },
+    { key: 'hired_rate', label: 'Hired ops rate', prefix: 'R' },
+    { key: 'founder_time_rate', label: 'Founder time value', prefix: 'R' },
+  ]},
+  { group: 'Forced — platform & AI', items: [
+    { key: 'platform_pilot', label: 'Platform: pilot', prefix: 'R' },
+    { key: 'platform_commercial', label: 'Platform: commercial', prefix: 'R' },
+    { key: 'platform_scale', label: 'Platform: scale', prefix: 'R' },
+    { key: 'ai_per_customer', label: 'AI / PDF per customer', prefix: 'R' },
+  ]},
+  { group: 'Founder draw (taken first)', items: [
+    { key: 'founder_start', label: 'Start month' },
+    { key: 'founder_amount', label: 'R / month', prefix: 'R' },
+  ]},
+  { group: 'Reinvest surplus → growth', items: [
+    { key: 'reinvest_pct', label: '% of surplus reinvested' },
+    { key: 'reinvest_split_sales', label: '% of that to sales' },
+    { key: 'sales_cac', label: 'Cost per customer (sales)', prefix: 'R' },
+  ]},
+];
+
+let I = loadInputs();
+let currentTab = 'summary';
+
+function loadInputs() {
+  try {
+    const raw = localStorage.getItem('lekana_budget_inputs');
+    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch (e) {}
+  return { ...DEFAULTS };
+}
+function saveInputs() {
+  try { localStorage.setItem('lekana_budget_inputs', JSON.stringify(I)); } catch (e) {}
+}
+
+// ---- the engine ----
+function compute(inp) {
+  const months = [];
+  let paying = 0, add = inp.organic_add_start, reserve = 0;
+  let salesDrivenNext = 0;   // customers bought by last month's sales reinvestment
+  let totalReinvest = 0;
+  let cashBE = null, loadedBE = null, lowReserve = Infinity, lowReserveMonth = 0;
+  // Reserve low point AFTER revenue starts — the pre-revenue pilot months are
+  // accepted startup runway, not insolvency.
+  let lowReserveOp = Infinity, lowReserveOpMonth = 0;
+  // Operating-solvency test: the tightest month where revenue must still cover
+  // forced costs + the founder draw (reinvestment is discretionary on top).
+  let lowPreReinvestOp = Infinity, lowPreReinvestOpMonth = 0;
+  let sweatToLoadedBE = 0, totalSweat = 0, hireMonth = null;
+
+  for (let m = 0; m <= inp.horizon; m++) {
+    if (m === inp.convert_month) paying += inp.convert_count;
+    else if (m > inp.convert_month) { paying += Math.round(add); add *= (1 + inp.acq_growth_pct / 100); }
+    paying += salesDrivenNext;   // customers acquired by previous month's sales spend
+    salesDrivenNext = 0;
+
+    const customers = paying;
+    const stations = customers;                 // single-site peg
+    const revenue = customers * inp.price;
+    const hps = inp.hps_floor + (inp.hps_start - inp.hps_floor) * Math.exp(-m / Math.max(inp.hps_tau, 0.01));
+    const supportHours = stations * hps;
+    const excessHours = Math.max(0, supportHours - inp.free_founder_hours);
+    if (hireMonth === null && excessHours > 0) hireMonth = m;
+
+    const platform = customers < inp.platform_t1 ? inp.platform_pilot
+      : customers < inp.platform_t2 ? inp.platform_commercial : inp.platform_scale;
+    const ai = customers * inp.ai_per_customer;
+    const hiredSupport = excessHours * inp.hired_rate;
+    const forcedTotal = platform + ai + hiredSupport;
+
+    // Allocation waterfall: forced costs, then the founder draw, then reinvest
+    // what's left into growth (split platform dev / sales). The unreinvested
+    // remainder banks as reserve. Sales spend buys customers for NEXT month.
+    const founderDraw = m >= inp.founder_start ? inp.founder_amount : 0;
+    const preReinvest = revenue - forcedTotal - founderDraw;
+    if (m >= inp.convert_month && preReinvest < lowPreReinvestOp) { lowPreReinvestOp = preReinvest; lowPreReinvestOpMonth = m; }
+
+    let reinvest = 0, salesSpend = 0, devSpend = 0, banked = preReinvest;
+    if (preReinvest > 0) {
+      reinvest = preReinvest * (inp.reinvest_pct / 100);
+      salesSpend = reinvest * (inp.reinvest_split_sales / 100);
+      devSpend = reinvest - salesSpend;
+      banked = preReinvest - reinvest;
+    }
+    totalReinvest += reinvest;
+    salesDrivenNext = inp.sales_cac > 0 ? salesSpend / inp.sales_cac : 0;
+
+    const budgeted = forcedTotal + founderDraw + reinvest;
+    const surplus = banked;            // final leftover after reinvestment
+    reserve += banked;
+
+    const founderHours = inp.founder_build_hours + Math.min(supportHours, inp.free_founder_hours);
+    const sweat = founderHours * inp.founder_time_rate;
+    totalSweat += sweat;
+    const loadedProfit = preReinvest - sweat;   // operating cash vs your time value
+
+    if (cashBE === null && preReinvest >= 0 && m >= inp.convert_month) cashBE = m;
+    if (loadedBE === null && loadedProfit >= 0 && m >= inp.convert_month) loadedBE = m;
+    if (loadedBE === null) sweatToLoadedBE += sweat;
+    if (reserve < lowReserve) { lowReserve = reserve; lowReserveMonth = m; }
+    if (m >= inp.convert_month && reserve < lowReserveOp) { lowReserveOp = reserve; lowReserveOpMonth = m; }
+
+    months.push({ m, customers, revenue, platform, ai, hiredSupport, forcedTotal,
+      founderDraw, devSpend, salesSpend, reinvest, banked, budgeted, surplus, reserve,
+      loadedProfit, sweat, supportHours, excessHours, salesAdds: salesDrivenNext });
+  }
+  return { months, cashBE, loadedBE, lowReserve, lowReserveMonth, lowReserveOp,
+    lowReserveOpMonth, lowPreReinvestOp, lowPreReinvestOpMonth,
+    sweatToLoadedBE, totalSweat, totalReinvest, hireMonth };
+}
+
+// Solve: earliest month the founder draw can switch on while the operating cash
+// reserve (after revenue starts) never goes negative (everything else fixed).
+function solveFounderStart() {
+  for (let start = I.convert_month; start <= I.horizon; start++) {
+    const test = compute({ ...I, founder_start: start });
+    if (test.lowPreReinvestOp >= 0) return start;
+  }
+  return null;
+}
+
+// ---- formatting ----
+const R = n => 'R' + Math.round(n).toLocaleString('en-ZA');
+const Rsign = n => (n >= 0 ? '+' : '') + R(n);
+
+// ---- render: sidebar inputs ----
+function renderSidebar() {
+  const el = document.getElementById('sidebar');
+  el.innerHTML = FIELDS.map(g => `
+    <div class="group">
+      <div class="group-title">${g.group}</div>
+      ${g.items.map(f => `
+        <div class="field">
+          <label>${f.label}</label>
+          <div class="input-wrap">
+            <input type="number" data-key="${f.key}" value="${I[f.key]}" step="any" />
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+  el.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const v = parseFloat(inp.value);
+      if (!Number.isNaN(v)) { I[inp.dataset.key] = v; saveInputs(); renderView(); }
+    });
+  });
+}
+
+// ---- render: views ----
+const COLS = m => [1, 3, 6, 9, 12, 18, 24].filter(c => c <= m);
+
+function renderView() {
+  const r = compute(I);
+  const v = document.getElementById('view');
+  if (currentTab === 'summary') v.innerHTML = renderSummary(r);
+  else if (currentTab === 'grid') v.innerHTML = renderGrid(r);
+  else if (currentTab === 'months') v.innerHTML = renderMonths(r);
+  else v.innerHTML = renderAssumptions(r);
+  const sb = document.getElementById('solve-btn');
+  if (sb) sb.addEventListener('click', () => {
+    const s = solveFounderStart();
+    document.getElementById('solve-out').textContent = s === null
+      ? `Even starting at month ${I.horizon}, revenue can't cover forced costs + the ${R(I.founder_amount)}/mo draw — it isn't affordable on this plan.`
+      : `Earliest you can switch on the ${R(I.founder_amount)}/mo founder draw and still cover forced costs + the draw every month: month ${s}. (You have it set to month ${I.founder_start}.)`;
+  });
+}
+
+function renderSummary(r) {
+  const last = r.months[r.months.length - 1];
+  const runway = Math.max(0, -r.lowReserve);
+  const good = r.lowPreReinvestOp >= 0;
+  const verdict = good
+    ? `The model holds: every month from launch, revenue covers forced costs + your draw, and ${R(r.totalReinvest)} of surplus is ploughed into growth over the horizon — pulling you to ${Math.round(last.customers)} customers by month ${last.m}. Tightest operating month is month ${r.lowPreReinvestOpMonth} (${R(r.lowPreReinvestOp)} to spare). Starting runway needed: ${R(runway)}.`
+    : `In month ${r.lowPreReinvestOpMonth}, revenue doesn't cover forced costs + the founder draw — short ${R(-r.lowPreReinvestOp)}. The draw is too big or too early for where growth is by then. Use the solver, or lean harder on reinvested sales to grow faster.`;
+  return `
+    <div class="banner ${good ? 'good' : ''}">
+      <span>${good ? '✓' : '!'}</span>
+      <div class="serif">${verdict}</div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">Cash-positive from</div><div class="metric-value ${r.cashBE!==null?'positive':'danger'}">${r.cashBE!==null?'month '+r.cashBE:'never'}</div><div class="metric-sub">revenue covers forced + draw</div></div>
+      <div class="metric"><div class="metric-label">Pays back your time from</div><div class="metric-value ${r.loadedBE!==null?'positive':'warning'}">${r.loadedBE!==null?'month '+r.loadedBE:'> horizon'}</div><div class="metric-sub">loaded profit ≥ 0</div></div>
+      <div class="metric"><div class="metric-label">Starting runway needed</div><div class="metric-value ${runway>0?'warning':'positive'}">${R(runway)}</div><div class="metric-sub">deepest dip · month ${r.lowReserveMonth}</div></div>
+      <div class="metric"><div class="metric-label">Customers by month ${last.m}</div><div class="metric-value">${Math.round(last.customers)}</div><div class="metric-sub">growth incl. reinvested sales</div></div>
+      <div class="metric"><div class="metric-label">Reinvested into growth</div><div class="metric-value mono positive">${R(r.totalReinvest)}</div><div class="metric-sub">ploughed back, to horizon</div></div>
+      <div class="metric"><div class="metric-label">Reserve by month ${last.m}</div><div class="metric-value mono ${last.reserve>=0?'positive':'danger'}">${R(last.reserve)}</div><div class="metric-sub">war chest (unreinvested)</div></div>
+    </div>
+    <div class="panel">
+      <div class="group-title">Solve: when can the founder draw start?</div>
+      <p class="hint">Holds everything else; finds the earliest month you can switch on your ${R(I.founder_amount)}/mo draw while revenue still covers forced costs + the draw every month.</p>
+      <button class="btn" id="solve-btn">Solve founder-draw start</button>
+      <p class="hint" id="solve-out" style="margin-top:12px;"></p>
+    </div>`;
+}
+
+function renderGrid(r) {
+  const cols = COLS(I.horizon);
+  const byMonth = {}; r.months.forEach(x => byMonth[x.m] = x);
+  const cell = (val, over) => `<td class="num${over ? ' over' : ''}">${R(val)}</td>`;
+  const rowForced = (label, get) => `<tr><td>${label}</td>${cols.map(c => cell(get(byMonth[c]))).join('')}</tr>`;
+  return `
+    <p class="hint">Each month's <strong>revenue is the pool</strong>. <strong>Forced</strong> lines are costs reality bills you; the <strong>founder draw</strong> is a switch you set; then <strong>whatever's left is reinvested into growth</strong> (platform dev + sales), and sales spend buys next month's customers. A red total = revenue can't even cover forced + draw. Lower the reinvest % to bank a war chest instead.</p>
+    <table>
+      <thead><tr><th>Component</th>${cols.map(c => `<th class="num">M${c}</th>`).join('')}</tr></thead>
+      <tbody>
+        <tr class="total"><td>REVENUE (pool)</td>${cols.map(c => `<td class="num">${R(byMonth[c].revenue)}</td>`).join('')}</tr>
+        <tr><td class="row-label-2">customers</td>${cols.map(c => `<td class="num row-label-2">${Math.round(byMonth[c].customers)}</td>`).join('')}</tr>
+        ${rowForced('Platform / hosting', m => m.platform)}
+        ${rowForced('AI / PDF', m => m.ai)}
+        ${rowForced('Support (hired)', m => m.hiredSupport)}
+        <tr class="divider"><td>Founder draw</td>${cols.map(c => cell(byMonth[c].founderDraw)).join('')}</tr>
+        <tr><td>Platform dev (reinvest)</td>${cols.map(c => cell(byMonth[c].devSpend)).join('')}</tr>
+        <tr><td>Sales (reinvest)</td>${cols.map(c => cell(byMonth[c].salesSpend)).join('')}</tr>
+        <tr class="total divider"><td>TOTAL ALLOCATED</td>${cols.map(c => { const x=byMonth[c]; return `<td class="num${x.budgeted>x.revenue+0.5?' over':''}">${R(x.budgeted)}</td>`; }).join('')}</tr>
+        <tr class="total"><td>↳ reinvested to growth</td>${cols.map(c => `<td class="num positive">${R(byMonth[c].reinvest)}</td>`).join('')}</tr>
+        <tr class="total"><td>↳ banked to reserve</td>${cols.map(c => { const x=byMonth[c]; return `<td class="num ${x.banked>=0?'':'danger'}">${Rsign(x.banked)}</td>`; }).join('')}</tr>
+        <tr class="total"><td>RESERVE (cumulative)</td>${cols.map(c => { const x=byMonth[c]; return `<td class="num ${x.reserve>=0?'positive':'danger'}">${R(x.reserve)}</td>`; }).join('')}</tr>
+        <tr><td class="row-label-2">% of pool used</td>${cols.map(c => { const x=byMonth[c]; return `<td class="num row-label-2">${x.revenue?Math.round(100*x.budgeted/x.revenue):0}%</td>`; }).join('')}</tr>
+      </tbody>
+    </table>`;
+}
+
+function renderMonths(r) {
+  return `
+    <p class="hint">Every month. After forced costs + the founder draw, the surplus is reinvested into growth (sales buys next month's customers — the "→ custs" column). Banked = what's left over reserve; LOADED = operating cash after valuing your own time at ${R(I.founder_time_rate)}/hr.</p>
+    <table>
+      <thead><tr><th>Mo</th><th class="num">Cust</th><th class="num">Revenue</th><th class="num">Forced</th><th class="num">Founder</th><th class="num">Reinvest</th><th class="num">→ custs</th><th class="num">Banked</th><th class="num">Reserve</th><th class="num">Loaded</th></tr></thead>
+      <tbody>
+        ${r.months.map(x => `<tr>
+          <td>${x.m}</td>
+          <td class="num">${Math.round(x.customers)}</td>
+          <td class="num">${R(x.revenue)}</td>
+          <td class="num">${R(x.forcedTotal)}</td>
+          <td class="num">${R(x.founderDraw)}</td>
+          <td class="num positive">${R(x.reinvest)}</td>
+          <td class="num row-label-2">${x.salesAdds ? '+' + (Math.round(x.salesAdds * 10) / 10) : ''}</td>
+          <td class="num ${x.banked>=0?'':'danger'}">${Rsign(x.banked)}</td>
+          <td class="num ${x.reserve>=0?'positive':'danger'}">${R(x.reserve)}</td>
+          <td class="num ${x.loadedProfit>=0?'positive':'warning'}">${Rsign(x.loadedProfit)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderAssumptions() {
+  return `
+    <p class="hint">Every input behind the model. Single-site R850 peg: 1 customer = 1 station. Edit anything in the left panel; it saves to this browser.</p>
+    <table>
+      <thead><tr><th>Input</th><th class="num">Value</th></tr></thead>
+      <tbody>${FIELDS.flatMap(g => g.items).map(f => `<tr><td>${f.label}</td><td class="num">${(f.prefix||'')}${I[f.key]}</td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
+// ---- wire up ----
+document.getElementById('tabs').addEventListener('click', e => {
+  const t = e.target.closest('.tab'); if (!t) return;
+  currentTab = t.dataset.tab;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+  renderView();
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+  I = { ...DEFAULTS }; saveInputs(); renderSidebar(); renderView();
+});
+
+renderSidebar();
+renderView();
+</script>
+</body>
+</html>

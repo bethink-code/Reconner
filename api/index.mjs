@@ -30699,21 +30699,27 @@ var toolHtml = readFileSync(
   join(__dirname2, "pricing-tool", "lekana-viability.html"),
   "utf8"
 );
+var budgetHtml = readFileSync(
+  join(__dirname2, "pricing-tool", "lekana-budget.html"),
+  "utf8"
+);
+var TOOL_CSP = [
+  "default-src 'self'",
+  "script-src 'unsafe-inline' 'self'",
+  "style-src 'unsafe-inline' 'self' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com data:",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'self'"
+].join("; ");
 function registerPricingRoutes(app2) {
   app2.get("/api/admin/pricing-tool", isAuthenticated, isPlatformOwner, (_req, res) => {
-    res.setHeader(
-      "Content-Security-Policy",
-      [
-        "default-src 'self'",
-        "script-src 'unsafe-inline' 'self'",
-        "style-src 'unsafe-inline' 'self' https://fonts.googleapis.com",
-        "font-src https://fonts.gstatic.com data:",
-        "img-src 'self' data:",
-        "connect-src 'self'",
-        "frame-ancestors 'self'"
-      ].join("; ")
-    );
+    res.setHeader("Content-Security-Policy", TOOL_CSP);
     res.type("html").send(toolHtml);
+  });
+  app2.get("/api/admin/budget-tool", isAuthenticated, isPlatformOwner, (_req, res) => {
+    res.setHeader("Content-Security-Policy", TOOL_CSP);
+    res.type("html").send(budgetHtml);
   });
   app2.get("/api/admin/pricing-scenarios", isAuthenticated, isPlatformOwner, async (_req, res) => {
     try {

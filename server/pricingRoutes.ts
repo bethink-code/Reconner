@@ -15,28 +15,40 @@ const toolHtml = readFileSync(
   join(__dirname, "pricing-tool", "lekana-viability.html"),
   "utf8",
 );
+// "Model 2" — the budget-envelope model. A parallel, self-contained tool that
+// reframes the same economics as a monthly budget (pool = revenue, forced vs
+// discretionary envelopes, cash vs loaded profit). Lives beside the viability
+// model so both can be compared; same platform-owner gate.
+const budgetHtml = readFileSync(
+  join(__dirname, "pricing-tool", "lekana-budget.html"),
+  "utf8",
+);
+
+// Scoped CSP for a hand-authored, platform-owner-only tool document. helmet's
+// global default (default-src 'self') would block its inline script/styles +
+// Google Fonts; relaxed for these gated routes only.
+const TOOL_CSP = [
+  "default-src 'self'",
+  "script-src 'unsafe-inline' 'self'",
+  "style-src 'unsafe-inline' 'self' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com data:",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'self'",
+].join("; ");
 
 export function registerPricingRoutes(app: Express): void {
   // Serve the gated tool document. The Admin "Pricing" tab embeds this in a
   // same-origin iframe, so the session cookie flows and the gate applies.
   app.get("/api/admin/pricing-tool", isAuthenticated, isPlatformOwner, (_req, res) => {
-    // Trusted internal document, served only to platform owners. It relies on
-    // inline <script>/<style> and Google Fonts, which helmet's global default
-    // CSP (default-src 'self') would block in production. Relax CSP for THIS
-    // response only — scoped to a single gated, hand-authored document.
-    res.setHeader(
-      "Content-Security-Policy",
-      [
-        "default-src 'self'",
-        "script-src 'unsafe-inline' 'self'",
-        "style-src 'unsafe-inline' 'self' https://fonts.googleapis.com",
-        "font-src https://fonts.gstatic.com data:",
-        "img-src 'self' data:",
-        "connect-src 'self'",
-        "frame-ancestors 'self'",
-      ].join("; "),
-    );
+    res.setHeader("Content-Security-Policy", TOOL_CSP);
     res.type("html").send(toolHtml);
+  });
+
+  // "Model 2" — the budget-envelope model, embedded by the Admin "Model 2" tab.
+  app.get("/api/admin/budget-tool", isAuthenticated, isPlatformOwner, (_req, res) => {
+    res.setHeader("Content-Security-Policy", TOOL_CSP);
+    res.type("html").send(budgetHtml);
   });
 
   // Shared saved scenarios — both platform owners read/write the same list.

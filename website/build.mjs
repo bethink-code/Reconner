@@ -65,7 +65,7 @@ for (const file of pageFiles) {
   routes.push(meta.route);
 }
 
-// Per-person share pages (/pieter, /garth) + matching .vcf downloads.
+// Per-person share pages (for example /garth) + matching .vcf downloads.
 // Each page personalises the lekana site; the .vcf is what the "Save to contacts"
 // button downloads. The QR encodes the page URL so scanning opens the page on a
 // phone, from where the visitor can save contacts or read about lekana.
@@ -83,10 +83,10 @@ for (const person of people) {
     `FN:${fullName}`,
     `ORG:${person.vcardOrg}`,
     `TITLE:${person.vcardTitle}`,
-    `TEL;TYPE=CELL,VOICE:${person.phoneE164}`,
     `EMAIL;TYPE=INTERNET:${person.email}`,
     `URL:${url}`,
   ];
+  if (person.phoneE164) vcardLines.push(`TEL;TYPE=CELL,VOICE:${person.phoneE164}`);
   if (person.linkedin) vcardLines.push(`URL;TYPE=LinkedIn:${person.linkedin}`);
   vcardLines.push("END:VCARD");
   const vcardText = vcardLines.join("\r\n") + "\r\n";
@@ -104,6 +104,9 @@ for (const person of people) {
   const linkedinRow = person.linkedin
     ? `<li><span class="k">LinkedIn</span> <a href="${person.linkedin}">View profile</a></li>`
     : "";
+  const whatsappRow = person.whatsapp
+    ? `<li><span class="k">WhatsApp</span> <a href="${person.whatsapp}">${person.phoneDisplay}</a></li>`
+    : `<li><span class="k">WhatsApp</span> ${person.phoneDisplay || "To be confirmed"}</li>`;
   const photoBlock = person.photo
     ? `<div class="person-photo"><img src="${person.photo}" alt="${fullName}" width="120" height="120"></div>`
     : "";
@@ -117,8 +120,7 @@ for (const person of people) {
   body = put(body, "{{INTRO}}", person.intro);
   body = put(body, "{{BEST_FOR}}", person.bestFor);
   body = put(body, "{{EMAIL}}", person.email);
-  body = put(body, "{{WHATSAPP}}", person.whatsapp);
-  body = put(body, "{{PHONE_DISPLAY}}", person.phoneDisplay);
+  body = put(body, "{{WHATSAPP_ROW}}", whatsappRow);
   body = put(body, "{{LINKEDIN_ROW}}", linkedinRow);
   body = put(body, "{{PHOTO_BLOCK}}", photoBlock);
   body = put(body, "{{QR_SVG}}", qrSvg);
@@ -126,12 +128,15 @@ for (const person of people) {
   const pageTitle = `${fullName} - ${person.title}.`;
   const pageDescription = `${fullName}, ${person.title}. ${person.role}. Save my contact card or share the link. lekana is a POS to bank reconciliation tool built by Bethink (Pty) Ltd in South Africa.`;
   const route = `/${person.slug}`;
+  const personOgImage = existsSync(join(__dirname, `og-${person.slug}.png`))
+    ? `/og-${person.slug}.png`
+    : "/og-image.png";
 
   let html = layout;
   html = put(html, "{{TITLE}}", pageTitle);
   html = put(html, "{{DESCRIPTION}}", pageDescription);
   html = put(html, "{{CANONICAL}}", canonicalFor(route));
-  html = put(html, "{{OG_IMAGE}}", absUrl(`/og-${person.slug}.png`));
+  html = put(html, "{{OG_IMAGE}}", absUrl(personOgImage));
   html = put(html, "{{HEAD_EXTRA}}", "");
   html = put(html, "{{NAV}}", navPartial);
   html = put(html, "{{FOOTER}}", footerPartial);

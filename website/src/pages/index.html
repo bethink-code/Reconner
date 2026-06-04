@@ -1,7 +1,7 @@
 <!--meta
 {
   "title": "lekana - find the money you're losing.",
-  "description": "Reconciliation confirms your numbers agree. It doesn't confirm they're honest. lekana matches every card, debtor and cash transaction, then surfaces the gap. For South African businesses with the nagging certainty that something's wrong.",
+  "description": "Your books balance but your bank account doesn't make sense? Your merchant batch doesn't match your POS? lekana reconciles in minutes and shows you where the money actually went. For South African businesses.",
   "route": "/",
   "ogImage": "/og-image.png"
 }
@@ -36,243 +36,272 @@
 
 <section class="opener" id="opener">
 
-  <!-- Stage A: question 1 -->
-  <div class="opener-stage" data-stage="q1">
+  <!-- Stage: multi-select questions -->
+  <div class="opener-stage" data-stage="questions">
     <p class="tag">Before the pitch, two questions</p>
-    <h1>Do you ever feel that <strong>less money lands</strong> than your sales say it should?</h1>
-    <p class="lead">Not a number you can point to. Just the feeling that something doesn't add up at the end of the day.</p>
-    <div class="opener-answers">
-      <button class="opener-answer" type="button" data-q="q1" data-a="yes">
-        <span class="opener-answer-main">Yes, I've felt that<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
-        <span class="opener-answer-sub">There's a gap I can't explain</span>
+    <h1>Which of these <strong>sounds like you?</strong></h1>
+    <div class="q-list">
+      <button class="q-card" type="button" data-q="q1" aria-pressed="false">
+        <span class="q-check" aria-hidden="true">&#10003;</span>
+        <span>
+          <span class="q-card-q">Does your bank balance ever just not make sense?</span>
+          <span class="q-card-sub">The books balance. Everything reconciles. But when you look at your bank account, something feels off. You expected more. Money's gone, and you can't explain where.</span>
+        </span>
       </button>
-      <button class="opener-answer" type="button" data-q="q1" data-a="no">
-        <span class="opener-answer-main">No, everything ties up<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
-        <span class="opener-answer-sub">My books always balance</span>
+      <button class="q-card" type="button" data-q="q2" aria-pressed="false">
+        <span class="q-check" aria-hidden="true">&#10003;</span>
+        <span>
+          <span class="q-card-q">Does your merchant batch sometimes not match your POS?</span>
+          <span class="q-card-sub">It might not happen every day. But when it does, it's a nightmare. You have to manually check thousands of transactions to figure out what's different and why.</span>
+        </span>
+      </button>
+      <button class="q-card q-card--quiet" type="button" data-q="neither" aria-pressed="false">
+        <span class="q-check" aria-hidden="true">&#10003;</span>
+        <span>
+          <span class="q-card-q">Neither of these. My bank and POS are solid.</span>
+        </span>
       </button>
     </div>
-    <p class="opener-progress">Question 1 of 2</p>
+    <p class="q-hint">Select any that sound like you.</p>
+    <div class="q-continue">
+      <button class="btn btn-primary" type="button" data-continue disabled>Continue &rarr;</button>
+    </div>
   </div>
 
-  <!-- Stage B: question 2 (hidden initially) -->
-  <div class="opener-stage" data-stage="q2" hidden>
+  <!-- Result hero A: bank balance (Q1 only) -->
+  <div class="opener-stage" data-stage="hero-a" hidden>
     <button class="opener-back" type="button" data-opener-back>&larr; back</button>
-    <p class="opener-context" data-context-q1="yes">You're not imagining it. Now the one that matters.</p>
-    <p class="opener-context" data-context-q1="no">Then let's test that. Here's the one that matters.</p>
-    <h1>If I asked you to <strong>prove</strong>, today, that not a cent went missing between the sale and the deposit, <strong>could you?</strong></h1>
-    <p class="lead">Your reconciliation shows the numbers agree with each other. That isn't the same as proving the numbers are honest.</p>
-    <div class="opener-answers">
-      <button class="opener-answer" type="button" data-q="q2" data-a="no">
-        <span class="opener-answer-main">No, not to the cent<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
-        <span class="opener-answer-sub">I'd have to trust it balanced</span>
-      </button>
-      <button class="opener-answer" type="button" data-q="q2" data-a="yes">
-        <span class="opener-answer-main">Yes, every cent<span class="opener-answer-arrow" aria-hidden="true">&rarr;</span></span>
-        <span class="opener-answer-sub">I can trace it all</span>
-      </button>
-    </div>
-    <p class="opener-progress">Question 2 of 2</p>
+    <p class="tag">Your bank balance doesn't make sense</p>
+    <h1>Your books balance. Your bank account <strong>doesn't.</strong></h1>
+    <p class="lead">You did the math. You know what you sold. You know what you spent. So your bank balance should be a certain number. But it's less. Where did the money go? The reconciliation says everything ties. But something is taking money out that you can't explain. lekana finds it, by looking at patterns, gaps, and what actually moved money out of your business, so you can see where the leak is hidden.</p>
+    <div class="btn-row" style="justify-content:center;"><a class="btn btn-ghost" href="#after">See how &darr;</a></div>
   </div>
 
-  <!-- Stage C: result hero (hidden initially; one of two paths shown) -->
-  <div class="opener-stage" data-stage="result-no" hidden>
-    <p class="tag">You're not imagining it</p>
-    <h1>You reconcile. <strong>And you're still losing money.</strong></h1>
-    <p class="lead">Reconciliation was never going to catch this. It confirms your numbers agree with each other. It cannot tell you whether the money that should exist actually does. lekana can.</p>
-    <div class="btn-row" style="justify-content:center;margin-top:8px;">
-      <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
-      <a class="btn btn-ghost" href="#more">See what we found &darr;</a>
-    </div>
+  <!-- Result hero B: merchant batch vs POS (Q2 only) -->
+  <div class="opener-stage" data-stage="hero-b" hidden>
+    <button class="opener-back" type="button" data-opener-back>&larr; back</button>
+    <p class="tag">Merchant batch vs POS</p>
+    <h1>Reconciliation <strong>shouldn't take this long.</strong></h1>
+    <p class="lead">Your merchant batch has thousands of transactions. Your POS shows something different. So you match them by hand, one by one. It takes hours and it lets errors through. lekana does it automatically with transaction-based matching: every sale from your POS cross-referenced against every line on your merchant batch, mismatches flagged instantly, and an audit trail so you know who confirmed what and when. Under five minutes. Zero manual line-by-line checking. A permanent record.</p>
+    <div class="btn-row" style="justify-content:center;"><a class="btn btn-ghost" href="#after">See how &darr;</a></div>
   </div>
 
-  <div class="opener-stage" data-stage="result-yes" hidden>
-    <p class="tag">Then you're rarer than most</p>
-    <h1>If you can trace every cent, <strong>you're already ahead.</strong></h1>
-    <p class="lead">Most businesses that say that are proving their totals balanced, not that nothing was taken. lekana proves it down to the transaction, in five minutes a day, so certainty stops being a feeling and becomes a record.</p>
-    <div class="btn-row" style="justify-content:center;margin-top:8px;">
-      <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
-      <a class="btn btn-ghost" href="#more">See what we found &darr;</a>
-    </div>
+  <!-- Result hero Combined: both -->
+  <div class="opener-stage" data-stage="hero-combined" hidden>
+    <button class="opener-back" type="button" data-opener-back>&larr; back</button>
+    <p class="tag">Losing time and money</p>
+    <h1>You're <strong>losing time and losing money.</strong></h1>
+    <p class="lead">Your bank balance doesn't match what it should be. And your merchant batch doesn't match your POS. So you spend hours reconciling by hand, and you still don't know where the money went. lekana solves both. It reconciles your batch in under five minutes. Then it shows you where the leak actually is, the patterns and gaps you couldn't see before.</p>
+    <div class="btn-row" style="justify-content:center;"><a class="btn btn-ghost" href="#after">See how &darr;</a></div>
   </div>
 
-</section>
-
-<section class="section" id="more">
-  <div class="container container--narrow reveal">
-    <p class="tag">The blind spot</p>
-    <h2>Balancing and certainty are not the same thing.</h2>
-    <div class="prose" style="margin-top:16px;">
-      <p>Most businesses check three numbers at the end of the day. What the point-of-sale rang up. What the bank settled. What cash was counted. If they tie, you assume you're clean.</p>
-      <p>But that check can only catch a leak that <strong>breaks the totals</strong>. It is blind to the leak baked into the numbers before they were ever written down. The void that was never a sale. The under-ring. The cash skimmed before the count. Reconciliation confirms the numbers agree. It does not confirm they're honest.</p>
-    </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="container">
-    <div class="wedge reveal">
-      <p class="tag">Where the leak actually lives</p>
-      <h2>Most of the tricks happen in physical cash.</h2>
-      <p class="lead" style="margin-top:12px;max-width:64ch;">Card and bank settle automatically, so that side reconciles itself. Cash is the side everyone treats as loose change. It isn't. The drawer is a ledger in its own right, with an opening float, payouts, petty cash and a closing count, and almost nobody holds it to the standard of a bank account.</p>
-      <p style="margin-top:8px;max-width:64ch;color:var(--lk-muted);">That's the gap lekana closes. You give us two numbers a day. <strong style="color:var(--lk-dark);font-weight:500;">The cash your point-of-sale says you should have.</strong> And <strong style="color:var(--lk-dark);font-weight:500;">the cash that actually left the building.</strong> Nine times out of ten they don't match, and that gap is the leak made visible.</p>
-      <div class="three-num">
-        <div class="num-card">
-          <p class="block-label">01</p>
-          <h3>Card &amp; bank</h3>
-          <p>Matched against your statement, transaction by transaction. The side that already behaves.</p>
+  <!-- Result hero Neither: improvement form -->
+  <div class="opener-stage" data-stage="hero-neither" hidden>
+    <button class="opener-back" type="button" data-opener-back>&larr; back</button>
+    <p class="tag">Solid books</p>
+    <h1>Amazing. <strong>You have your ducks in a row.</strong></h1>
+    <p class="lead">Looks like your bank and POS are solid. But if there's anything in your business you'd like to change, fix, remove or add, we can help. We build automations and applications to solve business problems. What would you like to improve?</p>
+    <div class="form-block" style="margin-top:24px;text-align:left;">
+      <noscript><p class="callout">Email <a href="mailto:garth@bethink.co.za">garth@bethink.co.za</a> with what you'd like to improve.</p></noscript>
+      <form id="improve-form" novalidate>
+        <div class="form-field">
+          <label for="im-name">Your name <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="im-name" name="name" required autocomplete="name">
         </div>
-        <div class="num-card">
-          <p class="block-label">02</p>
-          <h3>Expected cash</h3>
-          <p>What the till says should be in the drawer, net of petty cash and documented payouts.</p>
+        <div class="form-field">
+          <label for="im-email">Email <span class="req" aria-hidden="true">*</span></label>
+          <input type="email" id="im-email" name="email" required autocomplete="email">
         </div>
-        <div class="num-card card--highlight">
-          <p class="block-label">03</p>
-          <h3>Actual cash</h3>
-          <p>What truly left the premises. One simple input. The number nobody else is checking.</p>
+        <div class="form-field">
+          <label for="im-message">What would you like to improve in your business? <span class="req" aria-hidden="true">*</span></label>
+          <textarea id="im-message" name="message" maxlength="4000" required></textarea>
         </div>
-      </div>
+        <button type="submit" class="btn btn-primary">Send it to us</button>
+        <p class="form-legal">No marketing emails. Ever. We'll reply personally.</p>
+      </form>
     </div>
   </div>
+
 </section>
 
-<section class="section">
-  <div class="container container--narrow reveal">
-    <p class="tag">From gap to answer</p>
-    <h2>Find the discrepancy. Then find out why.</h2>
-    <p class="lead" style="margin-top:12px;">The reconciliation engine is the foundation. Insights is where the discrepancy becomes a name and a number you can recover.</p>
-  </div>
-  <div class="container">
-    <div class="grid grid-4" style="margin-top:32px;">
-      <div class="card flow-card reveal">
-        <p class="block-label">Step 01</p>
-        <h3>Upload</h3>
-        <p>Point-of-sale and bank in. Cash total in. Under five minutes, every day.</p>
-        <figure class="flow-shot"><img src="/assets/screenshots/step1-fuel.png" alt="Upload" loading="lazy"></figure>
-      </div>
-      <div class="card flow-card reveal">
-        <p class="block-label">Step 02</p>
-        <h3>Reconcile</h3>
-        <p>Every transaction matched. The cash gap calculated. Down to rounding.</p>
-        <figure class="flow-shot"><img src="/assets/screenshots/matching-complete.png" alt="Reconcile" loading="lazy"></figure>
-      </div>
-      <div class="card flow-card reveal">
-        <p class="block-label">Step 03</p>
-        <h3>Investigate</h3>
-        <p>Insights digs into the gap and surfaces the pattern. Reprints. Declines. Shortfalls.</p>
-        <figure class="flow-shot"><img src="/assets/screenshots/insights-declined.png" alt="Investigate" loading="lazy"></figure>
-      </div>
-      <div class="card flow-card reveal">
-        <p class="block-label">Step 04</p>
-        <h3>Recover</h3>
-        <p>A named scam, an amount, a record you can act on and stop repeating.</p>
-        <figure class="flow-shot"><img src="/assets/screenshots/insights-attendants.png" alt="Recover" loading="lazy"></figure>
+<!-- Shared below-flow: shown for A/B/Combined, hidden for Neither -->
+<div id="after" hidden>
+
+  <section class="section">
+    <div class="container">
+      <div class="panel-cream reveal">
+        <p class="tag">Your data stays yours</p>
+        <h2 style="font-size:clamp(24px,3.5vw,32px);">You stay in control.</h2>
+        <p style="margin-top:12px;color:rgba(26,18,0,0.78);max-width:60ch;">We don't touch your POS, bank or batch data unless you allow it. It's encrypted, handled under POPIA, and never shared or sold. Ask us and we delete everything, no lock-in, no questions.</p>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section class="section" id="proof">
-  <div class="container">
-    <div class="proof reveal">
-      <p class="tag">From the pilot. Six months in.</p>
-      <h2>For one business, the leak was R 42 000 to R 100 000 a month.</h2>
-      <p class="lead">Money that balanced on paper and still never arrived. Once the reconciliation ran, the patterns surfaced. Then they could be stopped.</p>
-      <div class="leak-tags">
-        <span class="leak-tag">Reprint scams</span>
-        <span class="leak-tag">Declines never resubmitted</span>
-        <span class="leak-tag">Pump shortfalls daily totals couldn't show</span>
+  <section class="section" id="proof">
+    <div class="container">
+      <div class="proof reveal">
+        <p class="tag">From the pilot. Six months in.</p>
+        <h2>For one business, the leak was R 42 000 to R 100 000 a month.</h2>
+        <p class="lead">Money that balanced on paper and still never arrived. Once the reconciliation ran, the patterns surfaced. Then they could be stopped.</p>
+        <div class="leak-tags">
+          <span class="leak-tag">Reprint scams</span>
+          <span class="leak-tag">Declines never resubmitted</span>
+          <span class="leak-tag">Shortfalls daily totals couldn't show</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><p class="stat-value">R 42 000</p><p class="stat-label">Lowest month</p></div>
+          <div class="stat"><p class="stat-value">R 100 000</p><p class="stat-label">Highest month</p></div>
+          <div class="stat"><p class="stat-value">6</p><p class="stat-label">Months running</p></div>
+        </div>
+        <p class="footnote" style="margin-top:24px;">One site. One business. Figures shared with permission, anonymised here. Yours will differ. The patterns will not.</p>
       </div>
-      <div class="stats">
-        <div class="stat"><p class="stat-value">R 42 000</p><p class="stat-label">Lowest month</p></div>
-        <div class="stat"><p class="stat-value">R 100 000</p><p class="stat-label">Highest month</p></div>
-        <div class="stat"><p class="stat-value">6</p><p class="stat-label">Months running</p></div>
+    </div>
+  </section>
+
+  <section class="section--tight">
+    <div class="container container--narrow reveal" style="text-align:center;">
+      <p class="tag">Not every gap is a leak</p>
+      <h2>Some gaps are just timing.</h2>
+      <p class="lead" style="margin:12px auto 0;">Deposits in transit. A merchant batch that settles a day later. Those are normal, and they're not your fault. lekana knows the difference between a timing lag and money that actually went missing, so you only ever chase what's real.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="reveal" style="text-align:center;">
+        <p class="tag">How this works. What we both get.</p>
+        <h2>A pilot. A fair trade.</h2>
+        <p class="lead" style="margin:12px auto 0;max-width:60ch;">We built lekana because we saw a real problem. But every business is different, so we're running a pilot.</p>
       </div>
-      <p class="footnote" style="margin-top:24px;">One site. One business. Figures shared with permission, anonymised here. Yours will differ. The patterns will not.</p>
-      <div class="btn-row" style="justify-content:center;margin-top:20px;">
+      <div class="grid grid-2 reveal" style="margin-top:32px;max-width:880px;margin-left:auto;margin-right:auto;">
+        <div class="card">
+          <p class="block-label">What we get</p>
+          <p>You use lekana. You tell us if it worked, what broke, what was confusing, what actually helped. That feedback is how we build a better product. Right now that's worth more to us than anything.</p>
+        </div>
+        <div class="card card--highlight">
+          <p class="block-label">What you get</p>
+          <p>If lekana finds gaps, money moving in ways you didn't expect, you get answers: exactly where and how. The leak, found. If it doesn't find gaps, you get something better, certainty. Proof your business is sound, and that you're not imagining things.</p>
+        </div>
+      </div>
+      <p class="win-line reveal">Either way, you win.</p>
+      <p class="lead reveal" style="text-align:center;max-width:60ch;margin:16px auto 0;">No cost. No setup fee. No contract. No pressure to keep going after three weeks if it's not for you. Answers or reassurance, free, and then you decide.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="panel-cream reveal">
+        <p class="tag">Getting started</p>
+        <h2 style="font-size:clamp(24px,3.5vw,32px);">About five minutes.</h2>
+        <p style="margin-top:12px;color:rgba(26,18,0,0.78);max-width:60ch;">Upload your POS data. Upload your merchant batch. Upload your cash count. We run the reconciliation. You see the results. We've tested this with a couple of businesses already, so the bumps are ironed out. If something does need tweaking, we're right here.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="final reveal">
+    <div class="container container--narrow">
+      <p class="tag" style="text-align:center;">What happens next</p>
+      <h2>No pressure. <strong>Just answers.</strong></h2>
+      <p>You click the button. You tell us a bit about your business, how many sites, which POS you're using, what you're hoping to figure out. We onboard you one at a time, personally. You get a login, you upload your data, you get answers. That's it.</p>
+      <div class="btn-row" style="justify-content:center;">
         <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section class="section--tight">
-  <div class="container container--narrow reveal" style="text-align:center;">
-    <h2>Works with FNB, ABSA, Standard Bank and Nedbank.</h2>
-    <p class="lead" style="margin-top:12px;">Bring statements from one bank or several in the same period. lekana handles the mix.</p>
-  </div>
-</section>
-
-<section class="section">
-  <div class="container">
-    <p class="tag" style="text-align:center;">Your data stays yours</p>
-    <h2 style="text-align:center;">Built for South African businesses, the way they expect.</h2>
-    <div class="trust reveal" style="margin-top:36px;">
-      <div class="trust-item">
-        <h4>Hosting</h4>
-        <p>South African data kept in the regions you'd expect for POPIA-compliant work.</p>
-      </div>
-      <div class="trust-item">
-        <h4>Access</h4>
-        <p>Google sign-in. No passwords on our side. We never see or store yours.</p>
-      </div>
-      <div class="trust-item">
-        <h4>Audit</h4>
-        <p>Every match traceable. Every engine decision logged. Every override you apply logged.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="final">
-  <div class="container container--narrow reveal">
-    <h2>Stop trusting that it balanced. <strong>Start knowing.</strong></h2>
-    <p>We're onboarding businesses one at a time, free for three weeks. Then you decide.</p>
-    <div class="btn-row" style="justify-content:center;">
-      <a class="btn btn-primary" href="/pilot">Apply for the pilot</a>
-    </div>
-  </div>
-</section>
+</div>
 
 <script>
-  // Two-question opener state machine. q1 -> q2 -> result-no | result-yes.
-  // Below the opener the rest of the page is always visible, so the page is
-  // bold but not cold - a visitor who doesn't engage still sees everything.
+  // Multi-select opener -> four segment results.
+  // q1 only = A (bank balance), q2 only = B (merchant batch), both = Combined,
+  // neither = the "ducks in a row" improvement form. A/B/Combined reveal the
+  // shared below-flow (#after); Neither keeps it hidden.
   (function () {
     var opener = document.getElementById('opener');
     if (!opener) return;
-    var state = { q1: null, q2: null };
+    var after = document.getElementById('after');
+    var cont = opener.querySelector('[data-continue]');
+    var state = { q1: false, q2: false, neither: false };
 
-    function show(name) {
-      opener.querySelectorAll('.opener-stage').forEach(function (el) {
-        el.hidden = el.getAttribute('data-stage') !== name;
+    function refresh() {
+      opener.querySelectorAll('.q-card').forEach(function (c) {
+        c.setAttribute('aria-pressed', state[c.getAttribute('data-q')] ? 'true' : 'false');
       });
+      cont.disabled = !(state.q1 || state.q2 || state.neither);
     }
 
-    function applyContext() {
-      var q2 = opener.querySelector('[data-stage="q2"]');
-      if (!q2) return;
-      q2.querySelectorAll('.opener-context').forEach(function (el) {
-        el.style.display = el.getAttribute('data-context-q1') === state.q1 ? '' : 'none';
-      });
-    }
-
-    opener.querySelectorAll('.opener-answer').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var q = btn.getAttribute('data-q');
-        var a = btn.getAttribute('data-a');
-        state[q] = a;
-        if (q === 'q1') {
-          applyContext();
-          show('q2');
+    opener.querySelectorAll('.q-card').forEach(function (card) {
+      card.addEventListener('click', function () {
+        var q = card.getAttribute('data-q');
+        if (q === 'neither') {
+          state.neither = !state.neither;
+          if (state.neither) { state.q1 = false; state.q2 = false; }
         } else {
-          show(state.q2 === 'yes' ? 'result-yes' : 'result-no');
+          state[q] = !state[q];
+          if (state[q]) state.neither = false;
         }
+        refresh();
       });
+    });
+
+    function show(stage, showAfter) {
+      opener.querySelectorAll('.opener-stage').forEach(function (el) {
+        el.hidden = el.getAttribute('data-stage') !== stage;
+      });
+      if (after) {
+        after.hidden = !showAfter;
+        if (showAfter) after.querySelectorAll('.reveal').forEach(function (r) { r.classList.add('in'); });
+      }
+      window.scrollTo(0, 0);
+    }
+
+    cont.addEventListener('click', function () {
+      if (state.neither) return show('hero-neither', false);
+      if (state.q1 && state.q2) return show('hero-combined', true);
+      if (state.q1) return show('hero-a', true);
+      if (state.q2) return show('hero-b', true);
     });
 
     opener.querySelectorAll('[data-opener-back]').forEach(function (b) {
-      b.addEventListener('click', function () { show('q1'); });
+      b.addEventListener('click', function () { show('questions', false); });
     });
+
+    refresh();
+
+    // Neither -> improvement enquiry -> /api/contact
+    var im = document.getElementById('improve-form');
+    if (im) {
+      var ibtn = im.querySelector('button[type=submit]');
+      im.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var prev = im.querySelector('.field-error'); if (prev) prev.remove();
+        var payload = {
+          name: document.getElementById('im-name').value.trim(),
+          email: document.getElementById('im-email').value.trim(),
+          message: 'Business improvement enquiry: ' + document.getElementById('im-message').value.trim()
+        };
+        var orig = ibtn.textContent; ibtn.textContent = 'Sending...'; ibtn.disabled = true;
+        fetch('/api/contact', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, body: b }; });
+        }).then(function (r) {
+          if (r.ok && r.body.ok) {
+            im.closest('.form-block').innerHTML = '<h3 style="margin:0 0 8px;">Got it.</h3>'
+              + '<p style="margin:0;">Thanks. We will reply personally by email.</p>';
+            return;
+          }
+          ibtn.textContent = orig; ibtn.disabled = false;
+          var p = document.createElement('p'); p.className = 'field-error';
+          p.textContent = (r.body && r.body.error) || 'Something went wrong. Please email garth@bethink.co.za.';
+          im.appendChild(p);
+        }).catch(function () {
+          ibtn.textContent = orig; ibtn.disabled = false;
+          var p = document.createElement('p'); p.className = 'field-error';
+          p.textContent = 'Could not send. Please email garth@bethink.co.za directly.';
+          im.appendChild(p);
+        });
+      });
+    }
   })();
 </script>

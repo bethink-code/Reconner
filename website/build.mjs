@@ -44,6 +44,36 @@ const put = (html, token, value) => html.replaceAll(token, () => value);
 const pageFiles = readdirSync(join(SRC, "pages")).filter((f) => f.endsWith(".html"));
 const routes = [];
 
+// Pre-render the Contact page's person overlays, with build-time QR codes, so a
+// card opens in-page instead of navigating to /slug. Injected via {{PERSON_OVERLAYS}}.
+let personOverlays = "";
+for (const person of people) {
+  const url = `${SITE}/${person.slug}`;
+  const fullName = [person.firstName, person.lastName].filter(Boolean).join(" ");
+  const qrSvg = await QRCode.toString(url, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+  const linkedinRow = person.linkedin
+    ? `<li><span class="k">LinkedIn</span> <a href="${person.linkedin}">View profile</a></li>`
+    : "";
+  personOverlays += `<div class="overlay-person" data-person-panel="${person.slug}" hidden>`
+    + (person.photo ? `<img class="overlay-photo" src="${person.photo}" alt="${fullName}" loading="lazy">` : "")
+    + `<h3>${fullName}</h3>`
+    + `<p class="overlay-title">${person.title}</p>`
+    + `<p class="overlay-role">${person.role}</p>`
+    + `<p class="overlay-intro">${person.intro}</p>`
+    + `<div class="btn-row" style="justify-content:center;flex-wrap:wrap;">`
+    + `<a class="btn btn-primary" href="/${person.slug}.vcf" download>Save to contacts</a>`
+    + `<button class="btn btn-cream" type="button" data-share-btn data-share-url="${url}" data-share-title="${fullName} - ${person.title}">Share</button>`
+    + `</div>`
+    + `<ul class="overlay-rows">`
+    + `<li><span class="k">Email</span> <a href="mailto:${person.email}">${person.email}</a></li>`
+    + `<li><span class="k">WhatsApp</span> <a href="${person.whatsapp}">${person.phoneDisplay}</a></li>`
+    + linkedinRow
+    + `</ul>`
+    + `<div class="overlay-qr">${qrSvg}</div>`
+    + `<p class="overlay-qr-caption">Scan to open this card on a phone.</p>`
+    + `</div>`;
+}
+
 for (const file of pageFiles) {
   const { meta, body } = parseMeta(readFileSync(join(SRC, "pages", file), "utf8"));
 
@@ -60,6 +90,7 @@ for (const file of pageFiles) {
   html = put(html, "{{NAV}}", nav);
   html = put(html, "{{FOOTER}}", footerPartial);
   html = put(html, "{{BODY}}", body);
+  html = put(html, "{{PERSON_OVERLAYS}}", personOverlays);
 
   writeFileSync(join(DIST, file), html, "utf8");
   routes.push(meta.route);

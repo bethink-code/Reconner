@@ -4,35 +4,35 @@
       "slug": "pieter",
       "firstName": "Pieter",
       "lastName": "Bosman",
-      "title": "Co-founder, lekana",
+      "title": "Co-founder, Lekana",
       "role": "Pilot lead and fuel station business owner",
       "bestFor": "Pilot questions, fuel operations, onboarding.",
       "email": "pieter@bethink.co.za",
       "phoneE164": "+27832252986",
       "phoneDisplay": "+27 83 225 2986",
       "whatsapp": "https://wa.me/27832252986",
-      "linkedin": "",
+      "linkedin": "https://www.linkedin.com/in/pieter-eduard-bosman-rsa/",
       "photo": "/assets/people/Pieter_Bosman.jpg",
-      "intro": "I run a fuel station. I am also a co-founder of lekana, the tool we built to fix the reconciliation problem I lived with for years.",
+      "intro": "I run a fuel station. I am also a co-founder of Lekana, the tool we built to fix the reconciliation problem I lived with for years.",
       "vcardOrg": "Bethink (Pty) Ltd",
-      "vcardTitle": "Co-founder, lekana"
+      "vcardTitle": "Co-founder, Lekana"
     },
     {
       "slug": "garth",
       "firstName": "Garth",
       "lastName": "Shoebridge",
-      "title": "Co-founder, lekana",
+      "title": "Co-founder, Lekana",
       "role": "Product, partnerships and the technical side",
       "bestFor": "Product, partnerships, press, anything technical.",
       "email": "garth@bethink.co.za",
       "phoneE164": "+27834966860",
       "phoneDisplay": "+27 83 496 6860",
       "whatsapp": "https://wa.me/27834966860",
-      "linkedin": "https://www.linkedin.com/company/10775110",
+      "linkedin": "https://www.linkedin.com/in/garth-shoebridge-68965a1/",
       "photo": "/assets/people/Garth_Shoebridge.jpg",
-      "intro": "Twenty-five years building digital products. lekana is a TimeWarp product from my company Bethink. It is the build I am proudest of.",
+      "intro": "Twenty-five years building digital products. Lekana is a TimeShift product from my company Bethink. It is the build I am proudest of.",
       "vcardOrg": "Bethink (Pty) Ltd",
-      "vcardTitle": "Co-founder, lekana"
+      "vcardTitle": "Co-founder, Lekana"
     }
   ]
 }

@@ -1,6 +1,6 @@
 <!--meta
 {
-  "title": "Contact - talk to the people building lekana.",
+  "title": "Contact - talk to the people building Lekana.",
   "description": "Email Pieter or Garth at Bethink (Pty) Ltd, or send us a message. We come back to every enquiry. To join the pilot, use the application form.",
   "route": "/contact",
   "ogImage": "/og-image.png"
@@ -46,35 +46,41 @@
 </section>
 
 <section class="section--tight">
-  <div class="container container--narrow reveal" style="text-align:center;">
-    <h2>Two people. Two cards.</h2>
-  </div>
   <div class="container container--narrow">
-    <div class="grid grid-2 reveal" style="margin-top:24px;">
+    <div class="grid grid-2 reveal">
       <div class="contact-card">
+        <img class="contact-photo" src="/assets/people/Garth_Shoebridge.jpg" alt="Garth Shoebridge" loading="lazy">
         <h3>Garth</h3>
         <p class="role">Product</p>
-        <div class="row"><span class="k">Email</span> <a href="mailto:garth@bethink.co.za">garth@bethink.co.za</a></div>
-        <div class="row"><span class="k">WhatsApp</span> <a href="https://wa.me/27834966860">+27 83 496 6860</a></div>
         <p class="best">Best for: product, partnerships, press, anything technical.</p>
-        <p style="margin:20px 0 0;"><a class="btn btn-ghost" href="/garth" style="padding-left:0;">Open Garth's card &rarr;</a></p>
+        <p style="margin:20px 0 0;"><button class="btn btn-ghost" type="button" data-person="garth" style="padding-left:0;">Open Garth's card &rarr;</button></p>
       </div>
       <div class="contact-card">
+        <img class="contact-photo" src="/assets/people/Pieter_Bosman.jpg" alt="Pieter Bosman" loading="lazy">
         <h3>Pieter</h3>
         <p class="role">Pilot lead</p>
-        <div class="row"><span class="k">Email</span> <a href="mailto:pieter@bethink.co.za">pieter@bethink.co.za</a></div>
-        <div class="row"><span class="k">WhatsApp</span> <a href="https://wa.me/27832252986">+27 83 225 2986</a></div>
         <p class="best">Best for: pilot questions, fuel operations, onboarding.</p>
-        <p style="margin:20px 0 0;"><a class="btn btn-ghost" href="/pieter" style="padding-left:0;">Open Pieter's card &rarr;</a></p>
+        <p style="margin:20px 0 0;"><button class="btn btn-ghost" type="button" data-person="pieter" style="padding-left:0;">Open Pieter's card &rarr;</button></p>
       </div>
     </div>
   </div>
 </section>
 
+<!-- Person card overlay (opened from the contact cards above) -->
+<div class="overlay" id="person-overlay" hidden>
+  <div class="overlay-backdrop" data-overlay-close></div>
+  <div class="overlay-panel" role="dialog" aria-modal="true" aria-label="Contact card">
+    <button class="overlay-close" type="button" data-overlay-close aria-label="Close">&times;</button>
+    <div class="overlay-body">
+      {{PERSON_OVERLAYS}}
+    </div>
+  </div>
+</div>
+
 <section class="section--tight">
   <div class="container container--narrow prose reveal">
     <h2>Bethink (Pty) Ltd.</h2>
-    <p>lekana is a TimeWarp product built by Bethink (Pty) Ltd in South Africa. Registered address available on request.</p>
+    <p>Lekana is a TimeShift product built by Bethink (Pty) Ltd in South Africa. Registered address available on request.</p>
   </div>
 </section>
 
@@ -125,6 +131,60 @@
         p.className = 'field-error';
         p.textContent = 'Could not send. Please email garth@bethink.co.za directly.';
         form.appendChild(p);
+      });
+    });
+  })();
+
+  // Person card overlay (opened from the contact cards above). Panels are
+  // pre-rendered at build time (with QR) and toggled here.
+  (function () {
+    var overlay = document.getElementById('person-overlay');
+    if (!overlay) return;
+    var panels = overlay.querySelectorAll('[data-person-panel]');
+    var lastFocus = null;
+
+    function open(key) {
+      var found = false;
+      panels.forEach(function (p) {
+        var match = p.getAttribute('data-person-panel') === key;
+        p.hidden = !match;
+        if (match) found = true;
+      });
+      if (!found) return;
+      lastFocus = document.activeElement;
+      overlay.hidden = false;
+      document.body.style.overflow = 'hidden';
+      var c = overlay.querySelector('.overlay-close');
+      if (c) c.focus();
+    }
+    function close() {
+      overlay.hidden = true;
+      document.body.style.overflow = '';
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+
+    document.querySelectorAll('[data-person]').forEach(function (btn) {
+      btn.addEventListener('click', function () { open(btn.getAttribute('data-person')); });
+    });
+    overlay.querySelectorAll('[data-overlay-close]').forEach(function (el) {
+      el.addEventListener('click', close);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !overlay.hidden) close();
+    });
+
+    // Share buttons inside the panels: native share sheet on phones, clipboard on desktop.
+    overlay.querySelectorAll('[data-share-btn]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var url = btn.getAttribute('data-share-url');
+        var title = btn.getAttribute('data-share-title');
+        if (navigator.share) { navigator.share({ title: title, url: url }).catch(function () {}); return; }
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(url).then(function () {
+            var orig = btn.textContent; btn.textContent = 'Link copied';
+            setTimeout(function () { btn.textContent = orig; }, 1800);
+          });
+        }
       });
     });
   })();

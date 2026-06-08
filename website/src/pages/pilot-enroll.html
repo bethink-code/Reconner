@@ -1,0 +1,349 @@
+<!--meta
+{
+  "title": "Begin your pilot — Lekana",
+  "description": "A few things before we start. Read how Lekana handles your data and what the three-week pilot commits both sides to.",
+  "route": "/pilot-enroll",
+  "ogImage": "/og-image.png"
+}
+-->
+<section class="hero" style="padding-bottom:32px;">
+  <div class="container container--narrow" style="text-align:center;">
+    <p class="crumb">Pilot enrollment &middot; Step 1 of 3</p>
+    <h1>A few things <strong>before we start.</strong></h1>
+    <div style="display:flex;gap:6px;align-items:center;justify-content:center;margin-top:20px;">
+      <span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-orange);"></span>
+      <span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-hair);"></span>
+      <span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-hair);"></span>
+    </div>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow">
+    <div class="enroll-grid reveal">
+
+      <div class="enroll-card">
+        <p class="block-label">Your data</p>
+        <ul class="enroll-list">
+          <li>Lekana only ever sees your POS transactions and bank statements. Nothing else &mdash; not your books, margins, suppliers, or payroll.</li>
+          <li>Used exclusively for reconciliation and Insights. No secondary use. No selling. No sharing.</li>
+          <li>If you leave at the end of the pilot, your data is permanently deleted within 7&nbsp;days.</li>
+          <li>What we find in your business stays confidential. Anonymous headline outcomes only, and only with your explicit permission.</li>
+          <li>Lekana is a product of Bethink (Pty) Ltd (Reg 2019/034780/07), governed by POPI and South African law.</li>
+        </ul>
+        <button type="button" class="slideover-trigger" data-panel="policy" style="font-size:15px;color:var(--lk-orange);text-decoration:underline;text-underline-offset:3px;background:none;border:none;padding:0;cursor:pointer;">Read the full data policy &rarr;</button>
+      </div>
+
+      <div class="enroll-card">
+        <p class="block-label">The pilot</p>
+        <ul class="enroll-list">
+          <li>Three weeks: one onboarding, two running. You decide at the end &mdash; no obligation either way.</li>
+          <li>The full platform, free &mdash; Reconciliation and Insights together.</li>
+          <li>A direct line to Pieter and Garth. Not a ticket system.</li>
+          <li>Honest feedback required. We may ask to share an anonymous headline outcome with your consent.</li>
+          <li>Subject to approval. We review each business individually before access is granted.</li>
+        </ul>
+        <button type="button" class="slideover-trigger" data-panel="terms" style="font-size:15px;color:var(--lk-orange);text-decoration:underline;text-underline-offset:3px;background:none;border:none;padding:0;cursor:pointer;">Read the full pilot terms &rarr;</button>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow reveal">
+    <div class="form-block">
+      <h2 style="font-size:22px;margin:0 0 6px;">Your details</h2>
+      <p style="margin:0 0 24px;color:var(--lk-muted);">You&rsquo;ll only need to enter this once.</p>
+
+      <noscript>
+        <p class="callout">JavaScript is disabled. Email <a href="mailto:pieter@bethink.co.za">pieter@bethink.co.za</a> directly to start the pilot process.</p>
+      </noscript>
+
+      <form id="enroll-form" novalidate>
+        <div class="form-field">
+          <label for="ef-name">Your name <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="ef-name" name="full_name" required autocomplete="name">
+        </div>
+        <div class="form-field">
+          <label for="ef-business">Business name <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="ef-business" name="business_name" required autocomplete="organization">
+        </div>
+        <div class="form-field">
+          <label for="ef-email">Email <span class="req" aria-hidden="true">*</span></label>
+          <input type="email" id="ef-email" name="email" required autocomplete="email">
+        </div>
+        <div class="form-field">
+          <label for="ef-cell">Cell, for WhatsApp <span class="req" aria-hidden="true">*</span></label>
+          <input type="tel" id="ef-cell" name="cell_number" required autocomplete="tel">
+        </div>
+
+        <div style="border-top:1px solid var(--lk-hair);margin:24px 0 20px;"></div>
+
+        <div class="form-field" data-field="policy_acknowledged">
+          <label class="check check--block">
+            <input type="checkbox" name="policy_acknowledged" required>
+            <span>I understand how Lekana handles my data during and after the pilot. <span class="req" aria-hidden="true">*</span></span>
+          </label>
+        </div>
+        <div class="form-field" data-field="pilot_terms_acknowledged" style="margin-top:12px;">
+          <label class="check check--block">
+            <input type="checkbox" name="pilot_terms_acknowledged" required>
+            <span>I have read the pilot terms and commit to honest feedback, with permission to share anonymous outcomes. <span class="req" aria-hidden="true">*</span></span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:24px;width:100%;">Continue to application &rarr;</button>
+        <p class="form-legal">No marketing emails. Your details are used only to respond and run your pilot.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- Slide-over backdrop -->
+<div id="so-backdrop" style="display:none;position:fixed;inset:0;background:rgba(26,18,0,0.45);z-index:200;" aria-hidden="true"></div>
+
+<!-- Data policy slide-over -->
+<div id="so-policy" class="slideover" role="dialog" aria-modal="true" aria-label="Data &amp; Confidentiality Policy" hidden>
+  <div class="slideover-header">
+    <span class="slideover-title">Data &amp; Confidentiality Policy</span>
+    <button type="button" class="slideover-close" data-close="policy" aria-label="Close">&times;</button>
+  </div>
+  <div class="slideover-body">
+    <h2>What Lekana sees</h2>
+    <p>Lekana only ever sees two things: your point-of-sale transaction records and your bank transactions. That&rsquo;s it.</p>
+    <p>Not your full books. Not your accounting system. Not your margins, your suppliers, your payroll, or anything else that runs your business. Lekana sees what moved through your till and what settled in your account. Nothing more.</p>
+
+    <h2>What Lekana does with your data</h2>
+    <p>Lekana uses POS and bank transaction data to match transactions from your till against bank deposits, identify discrepancies (reconciliation), and detect patterns that indicate leakage (Insights). That&rsquo;s the only purpose. No secondary use. No selling. No sharing.</p>
+
+    <h2>During the pilot</h2>
+    <p>Your POS and bank transaction data flows into Lekana&rsquo;s system. Lekana reconciles them daily. You see all findings in real time. Your data remains your property at all times.</p>
+
+    <h2>After the pilot</h2>
+    <p>If you continue as a customer: your data stays to power your ongoing reconciliation. If you walk away: your data is permanently deleted within 7 days. Lekana does not retain, sell, analyse, or reuse your data for any other purpose.</p>
+
+    <h2>Confidentiality of findings</h2>
+    <p>Whatever Lekana finds in your business stays between us. If Lekana surfaces a useful result and you&rsquo;re comfortable, we may share the headline outcome anonymously &mdash; no data, no specifics. Only with your explicit permission.</p>
+
+    <h2>Your rights</h2>
+    <ul>
+      <li>You own your data. Always.</li>
+      <li>You can request deletion at any time.</li>
+      <li>You can see everything Lekana sees.</li>
+      <li>You can walk away at the end of the pilot with no obligation.</li>
+    </ul>
+
+    <h2>The business behind this</h2>
+    <p>Lekana is a product of Bethink (Pty) Ltd (Reg 2019/034780/07), a South African software company. This confidentiality agreement is between you and Bethink, governed by POPI and South African law.</p>
+  </div>
+</div>
+
+<!-- Pilot terms slide-over -->
+<div id="so-terms" class="slideover" role="dialog" aria-modal="true" aria-label="Pilot Terms" hidden>
+  <div class="slideover-header">
+    <span class="slideover-title">Pilot Terms</span>
+    <button type="button" class="slideover-close" data-close="terms" aria-label="Close">&times;</button>
+  </div>
+  <div class="slideover-body">
+    <h2>Duration</h2>
+    <ul>
+      <li><strong>Week 1:</strong> Onboarding. Get the data flowing. Capture the before.</li>
+      <li><strong>Weeks 2&ndash;3:</strong> Running. Lekana runs against your real operation.</li>
+      <li><strong>End of week 3:</strong> Measure again. Same questions, new numbers.</li>
+    </ul>
+
+    <h2>What we ask of you</h2>
+    <ul>
+      <li>A real business on the platform. Real data, real banks, real cash.</li>
+      <li>Your starting point &mdash; the time you currently spend on reconciliation, the gaps in confidence, the things that don&rsquo;t add up.</li>
+      <li>The full three weeks. One onboarding, two running.</li>
+      <li>Honest feedback. The good, the broken, the surprising.</li>
+      <li>Permission to share an anonymous headline outcome if the pilot surfaces useful results &mdash; only if you&rsquo;re comfortable.</li>
+    </ul>
+
+    <h2>What you get</h2>
+    <ul>
+      <li>The full platform, free, for three weeks &mdash; Reconciliation and Insights together.</li>
+      <li>Onboarding done properly. One week, not a Tuesday afternoon.</li>
+      <li>A direct line to Pieter and Garth. Not a ticket system.</li>
+      <li>Your data stays yours. Always.</li>
+      <li>The choice at the end. Continue as a customer, or walk away. No obligation either way.</li>
+    </ul>
+
+    <h2>Approval &amp; limits</h2>
+    <p>We approve each business individually before access is granted. We stay close to each business through onboarding and the two weeks running, which puts a natural limit on how many we can take at once.</p>
+
+    <h2>Termination</h2>
+    <p>Either party may terminate the pilot with written notice. If terminated early, your data is deleted within 7 days, except as required by law.</p>
+
+    <h2>Jurisdiction</h2>
+    <p>This agreement is governed by South African law.</p>
+  </div>
+</div>
+
+<style>
+.enroll-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:640px) { .enroll-grid { grid-template-columns:1fr; } }
+.enroll-card { background:var(--lk-white); border-radius:var(--radius); padding:24px; }
+.enroll-list { list-style:none; padding:0; margin:0 0 16px; }
+.enroll-list li { font-size:15px; line-height:1.5; color:#3D4450; padding:7px 0 7px 16px; position:relative; border-bottom:1px solid var(--lk-hair); }
+.enroll-list li:last-child { border-bottom:none; }
+.enroll-list li::before { content:""; position:absolute; left:0; top:14px; width:5px; height:5px; border-radius:50%; background:var(--lk-orange); }
+
+/* Slide-over */
+.slideover {
+  position:fixed; top:0; right:0; bottom:0; width:520px; max-width:100vw;
+  background:#fff; z-index:201; display:flex; flex-direction:column;
+  transform:translateX(100%); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  box-shadow:-8px 0 32px rgba(26,18,0,0.12);
+}
+.slideover.open { transform:translateX(0); }
+.slideover-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:20px 24px; border-bottom:1px solid var(--lk-hair); flex-shrink:0;
+}
+.slideover-title { font-family:var(--font-display); font-size:16px; font-weight:600; color:var(--lk-dark); }
+.slideover-close {
+  background:none; border:none; cursor:pointer; font-size:24px; line-height:1;
+  color:var(--lk-muted); padding:0 0 0 16px; flex-shrink:0;
+}
+.slideover-close:hover { color:var(--lk-dark); }
+.slideover-body {
+  flex:1; overflow-y:auto; padding:28px 24px 40px;
+  -webkit-overflow-scrolling:touch;
+}
+.slideover-body h2 { font-size:17px; font-weight:600; color:var(--lk-dark); margin:28px 0 8px; }
+.slideover-body h2:first-child { margin-top:0; }
+.slideover-body p { font-size:15px; line-height:1.6; color:#3D4450; margin:0 0 12px; }
+.slideover-body ul { padding-left:18px; margin:0 0 12px; }
+.slideover-body ul li { font-size:15px; line-height:1.6; color:#3D4450; margin-bottom:5px; }
+.slideover-body strong { font-weight:500; color:var(--lk-dark); }
+
+@media (max-width:640px) {
+  .slideover { top:auto; left:0; right:0; width:100%; height:85vh; border-radius:16px 16px 0 0; transform:translateY(100%); }
+  .slideover.open { transform:translateY(0); }
+}
+</style>
+
+<script>
+(function () {
+  // Slide-over logic
+  var backdrop = document.getElementById('so-backdrop');
+
+  function openPanel(id) {
+    var panel = document.getElementById('so-' + id);
+    if (!panel) return;
+    backdrop.style.display = 'block';
+    panel.hidden = false;
+    // Force reflow then add class for transition
+    panel.offsetHeight;
+    panel.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closePanel(id) {
+    var panel = document.getElementById('so-' + id);
+    if (!panel) return;
+    panel.classList.remove('open');
+    panel.addEventListener('transitionend', function handler() {
+      panel.hidden = true;
+      panel.removeEventListener('transitionend', handler);
+    });
+    backdrop.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.slideover-trigger').forEach(function (btn) {
+    btn.addEventListener('click', function () { openPanel(btn.dataset.panel); });
+  });
+  document.querySelectorAll('.slideover-close').forEach(function (btn) {
+    btn.addEventListener('click', function () { closePanel(btn.dataset.close); });
+  });
+  backdrop.addEventListener('click', function () {
+    ['policy', 'terms'].forEach(closePanel);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') ['policy', 'terms'].forEach(closePanel);
+  });
+
+  // Enrollment form
+  var form = document.getElementById('enroll-form');
+  if (!form) return;
+  var btn = form.querySelector('button[type=submit]');
+
+  function clearErrors() {
+    form.querySelectorAll('.has-error').forEach(function (el) { el.classList.remove('has-error'); });
+    form.querySelectorAll('.field-error').forEach(function (el) { el.remove(); });
+  }
+  function showError(fieldName, message) {
+    var wrap = form.querySelector('[data-field="' + fieldName + '"]')
+      || (form.elements[fieldName] && form.elements[fieldName].closest('.form-field'));
+    if (!wrap) return;
+    wrap.classList.add('has-error');
+    var p = document.createElement('p');
+    p.className = 'field-error';
+    p.textContent = message;
+    wrap.appendChild(p);
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearErrors();
+
+    var payload = {
+      full_name: form.full_name.value.trim(),
+      business_name: form.business_name.value.trim(),
+      email: form.email.value.trim(),
+      cell_number: form.cell_number.value.trim(),
+      policy_acknowledged: form.policy_acknowledged.checked,
+      pilot_terms_acknowledged: form.pilot_terms_acknowledged.checked,
+      feedback_permission_granted: form.pilot_terms_acknowledged.checked
+    };
+
+    var original = btn.textContent;
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+
+    fetch('/api/pilot/enroll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    })
+    .then(function (result) {
+      if (result.ok && result.body.ok) {
+        try {
+          localStorage.setItem('lk_enroll', JSON.stringify({
+            policyId: result.body.policy_acknowledgment_id,
+            termsId: result.body.terms_acknowledgment_id,
+            fullName: payload.full_name,
+            businessName: payload.business_name,
+            email: payload.email,
+            cell: payload.cell_number
+          }));
+        } catch (_) {}
+        window.location.href = '/pilot-apply';
+        return;
+      }
+      btn.textContent = original;
+      btn.disabled = false;
+      var errors = result.body.errors;
+      if (errors && typeof errors === 'object') {
+        Object.keys(errors).forEach(function (field) { showError(field, errors[field]); });
+      } else {
+        showError('full_name', result.body.error || 'Something went wrong. Please try again.');
+      }
+    })
+    .catch(function () {
+      btn.textContent = original;
+      btn.disabled = false;
+      showError('full_name', 'Could not connect. Please try again or email pieter@bethink.co.za.');
+    });
+  });
+})();
+</script>

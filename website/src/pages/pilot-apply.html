@@ -1,0 +1,186 @@
+<!--meta
+{
+  "title": "Your application — Lekana pilot enrollment",
+  "description": "Tell us about your operation and what success looks like. We will be in touch on WhatsApp to confirm your pilot start date.",
+  "route": "/pilot-apply",
+  "ogImage": "/og-image.png"
+}
+-->
+<section id="apply-hero" class="hero" style="padding-bottom:32px;">
+  <div class="container container--narrow" style="text-align:center;">
+    <p class="crumb">Pilot enrollment &middot; Step 2 of 3</p>
+    <h1>Almost <strong>there.</strong></h1>
+    <p class="lead" style="margin:0 auto;">One more step. Then we&rsquo;ll be in touch.</p>
+    <div style="display:flex;gap:6px;align-items:center;justify-content:center;margin-top:20px;">
+      <span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-dark);opacity:0.25;"></span>
+      <span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-orange);"></span>
+      <span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-hair);"></span>
+    </div>
+  </div>
+</section>
+
+<section class="section--tight" id="apply">
+  <div class="container container--narrow reveal">
+    <div class="form-block" id="apply-form-block">
+      <noscript>
+        <p class="callout">JavaScript is disabled. Email <a href="mailto:pieter@bethink.co.za">pieter@bethink.co.za</a> directly to apply for the pilot.</p>
+      </noscript>
+
+      <div id="apply-identity" style="background:var(--lk-bg,#EFEFE8);border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:15px;color:#3D4450;line-height:1.5;">
+        Applying as <strong id="apply-name"></strong> &middot; <span id="apply-email"></span>
+        &nbsp;<a href="/pilot-enroll" style="color:var(--lk-orange);text-decoration:underline;text-underline-offset:3px;font-size:13px;">Change</a>
+      </div>
+
+      <form id="apply-form" novalidate>
+        <div class="form-field">
+          <label for="af-sites">Number of sites <span class="req" aria-hidden="true">*</span></label>
+          <input type="number" id="af-sites" name="num_sites" min="1" step="1" required>
+        </div>
+        <div class="form-field">
+          <label for="af-pos">Which POS or fuel management system do you use? <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="af-pos" name="pos_system" required>
+        </div>
+        <div class="form-field" data-field="banks">
+          <label id="af-banks-label">Which banks do you use? <span class="req" aria-hidden="true">*</span></label>
+          <div class="check-group" role="group" aria-labelledby="af-banks-label" style="margin-top:8px;">
+            <label class="check"><input type="checkbox" name="banks" value="FNB"> FNB</label>
+            <label class="check"><input type="checkbox" name="banks" value="ABSA"> ABSA</label>
+            <label class="check"><input type="checkbox" name="banks" value="Standard Bank"> Standard Bank</label>
+            <label class="check"><input type="checkbox" name="banks" value="Nedbank"> Nedbank</label>
+            <label class="check"><input type="checkbox" name="banks" value="Other"> Other</label>
+          </div>
+        </div>
+        <div class="form-field">
+          <label for="af-success">In one or two sentences, what would success look like for you? <span class="req" aria-hidden="true">*</span></label>
+          <textarea id="af-success" name="success_story" maxlength="500" required></textarea>
+        </div>
+
+        <div class="form-field" data-field="ready_to_proceed" style="margin-top:24px;">
+          <label class="check check--block">
+            <input type="checkbox" name="ready_to_proceed" required>
+            <span>I&rsquo;m ready to discuss next steps. <span class="req" aria-hidden="true">*</span></span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:20px;width:100%;">Send Application</button>
+        <p class="form-legal">No marketing emails. Your details are used only to respond and run your pilot.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // Guard: must have completed Step 1
+  var enrollData;
+  try { enrollData = JSON.parse(localStorage.getItem('lk_enroll') || '{}'); } catch (_) { enrollData = {}; }
+  if (!enrollData.policyId || !enrollData.termsId) {
+    window.location.href = '/pilot-enroll';
+    return;
+  }
+
+  // Show identity summary
+  var nameEl = document.getElementById('apply-name');
+  var emailEl = document.getElementById('apply-email');
+  if (nameEl) nameEl.textContent = enrollData.fullName || '';
+  if (emailEl) emailEl.textContent = enrollData.email || '';
+
+  var form = document.getElementById('apply-form');
+  if (!form) return;
+  var btn = form.querySelector('button[type=submit]');
+
+  function clearErrors() {
+    form.querySelectorAll('.has-error').forEach(function (el) { el.classList.remove('has-error'); });
+    form.querySelectorAll('.field-error').forEach(function (el) { el.remove(); });
+  }
+  function showError(fieldName, message) {
+    var wrap = form.querySelector('[data-field="' + fieldName + '"]')
+      || (form.elements[fieldName] && form.elements[fieldName].closest('.form-field'));
+    if (!wrap) return;
+    wrap.classList.add('has-error');
+    var p = document.createElement('p');
+    p.className = 'field-error';
+    p.textContent = message;
+    wrap.appendChild(p);
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearErrors();
+
+    var banks = Array.prototype.slice
+      .call(form.querySelectorAll('input[name=banks]:checked'))
+      .map(function (b) { return b.value; });
+
+    var payload = {
+      policy_acknowledgment_id: enrollData.policyId,
+      terms_acknowledgment_id: enrollData.termsId,
+      full_name: enrollData.fullName || '',
+      business_name: enrollData.businessName || '',
+      email: enrollData.email || '',
+      cell_number: enrollData.cell || '',
+      num_sites: Number(form.num_sites.value),
+      pos_system: form.pos_system.value.trim(),
+      banks: banks,
+      success_story: form.success_story.value.trim(),
+      ready_to_proceed: form.ready_to_proceed.checked
+    };
+
+    var original = btn.textContent;
+    btn.textContent = 'Sending…';
+    btn.disabled = true;
+
+    fetch('/api/pilot/submit-application', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    })
+    .then(function (result) {
+      if (result.ok && result.body.ok) {
+        try { localStorage.removeItem('lk_enroll'); } catch (_) {}
+
+        var hero = document.getElementById('apply-hero');
+        if (hero) hero.innerHTML = '<div class="container container--narrow" style="text-align:center;">'
+          + '<p class="crumb">Pilot enrollment &middot; Step 3 of 3</p>'
+          + '<h1>You&rsquo;re <strong>in the queue.</strong></h1>'
+          + '<div style="display:flex;gap:6px;align-items:center;justify-content:center;margin-top:20px;">'
+          + '<span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-dark);opacity:0.25;"></span>'
+          + '<span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-dark);opacity:0.25;"></span>'
+          + '<span style="display:inline-block;width:32px;height:4px;border-radius:2px;background:var(--lk-orange);"></span>'
+          + '</div></div>';
+
+        var block = document.getElementById('apply-form-block');
+        block.innerHTML =
+          '<p style="margin:0 0 16px;font-size:17px;line-height:1.6;color:#3D4450;">Thank you, <strong>' + escapeHtml(enrollData.fullName || '') + '</strong>. A confirmation has been sent to ' + escapeHtml(payload.email) + '.</p>'
+          + '<p style="margin:0 0 20px;font-size:17px;line-height:1.6;color:#3D4450;">We&rsquo;ll be in touch on WhatsApp at <strong>' + escapeHtml(payload.cell_number) + '</strong> within 1&ndash;2 business days to confirm your start date.</p>'
+          + '<p style="margin:0;font-size:15px;color:var(--lk-muted);">&mdash; The Lekana team</p>';
+        return;
+      }
+      btn.textContent = original;
+      btn.disabled = false;
+      var errors = result.body.errors;
+      if (errors && typeof errors === 'object') {
+        Object.keys(errors).forEach(function (field) { showError(field, errors[field]); });
+      } else {
+        showError('num_sites', result.body.error || 'Something went wrong. Please try again.');
+      }
+    })
+    .catch(function () {
+      btn.textContent = original;
+      btn.disabled = false;
+      showError('num_sites', 'Could not connect. Please try again or email pieter@bethink.co.za.');
+    });
+  });
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+})();
+</script>

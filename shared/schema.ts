@@ -419,3 +419,97 @@ export type PricingScenario = typeof pricingScenarios.$inferSelect;
 export type InsertPricingScenario = typeof pricingScenarios.$inferInsert;
 
 // Resolution reasons are now vertical-specific — see shared/verticals (resolutionReasons).
+
+// ─── Pilot Enrollment ──────────────────────────────────────────────────────────
+// Three-stage enrollment flow: Data Policy → Pilot Terms → Application.
+// These tables are pre-auth: they capture prospective customers before they have
+// a Lekana account. policyAcknowledgmentId is the stable link across all stages.
+
+export const policyAcknowledgments = pgTable("policy_acknowledgments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fullName: varchar("full_name", { length: 255 }).notNull(),
+  businessName: varchar("business_name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  cellNumber: varchar("cell_number", { length: 20 }).notNull(),
+  dataPolicyAcknowledged: boolean("data_policy_acknowledged").notNull().default(false),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_policy_ack_email").on(table.email),
+  index("IDX_policy_ack_submitted_at").on(table.submittedAt),
+]);
+
+export type PolicyAcknowledgment = typeof policyAcknowledgments.$inferSelect;
+
+export const termsAcknowledgments = pgTable("terms_acknowledgments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Nullable: terms is now step 1, so no policy ID exists yet at creation time.
+  // Linked when policy is submitted in step 2.
+  policyAcknowledgmentId: varchar("policy_acknowledgment_id").references(() => policyAcknowledgments.id, { onDelete: "cascade" }),
+  pilotTermsAcknowledged: boolean("pilot_terms_acknowledged").notNull().default(false),
+  feedbackPermissionGranted: boolean("feedback_permission_granted").notNull().default(false),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_terms_ack_policy_id").on(table.policyAcknowledgmentId),
+  index("IDX_terms_ack_submitted_at").on(table.submittedAt),
+]);
+
+export type TermsAcknowledgment = typeof termsAcknowledgments.$inferSelect;
+
+export const pilotApplications = pgTable("pilot_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  policyAcknowledgmentId: varchar("policy_acknowledgment_id").notNull().references(() => policyAcknowledgments.id, { onDelete: "cascade" }),
+  termsAcknowledgmentId: varchar("terms_acknowledgment_id").notNull().references(() => termsAcknowledgments.id, { onDelete: "cascade" }),
+  fullName: varchar("full_name", { length: 255 }).notNull(),
+  businessName: varchar("business_name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  cellNumber: varchar("cell_number", { length: 20 }).notNull(),
+  numSites: integer("num_sites").notNull(),
+  posSystem: varchar("pos_system", { length: 255 }).notNull(),
+  banks: text("banks").notNull(), // JSON array stored as text: '["FNB","ABSA"]'
+  successStory: text("success_story").notNull(),
+  readyToProceed: boolean("ready_to_proceed").notNull().default(false),
+  pilotStatus: text("pilot_status").notNull().default("pending_approval"), // pending_approval | approved | onboarding | running | completed | withdrawn
+  pilotStartDate: text("pilot_start_date"),
+  pilotEndDate: text("pilot_end_date"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_pilot_apps_email").on(table.email),
+  index("IDX_pilot_apps_submitted_at").on(table.submittedAt),
+  index("IDX_pilot_apps_status").on(table.pilotStatus),
+  index("IDX_pilot_apps_policy_id").on(table.policyAcknowledgmentId),
+]);
+
+export type PilotApplicationRecord = typeof pilotApplications.$inferSelect;
+
+// Audit trail for enrollment + pilot lifecycle.
+// policyAcknowledgmentId is set for all stages.
+// pilotApplicationId is null until Stage 3.
+export const pilotWorkflowLog = pgTable("pilot_workflow_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pilotApplicationId: varchar("pilot_application_id").references(() => pilotApplications.id, { onDelete: "cascade" }),
+  policyAcknowledgmentId: varchar("policy_acknowledgment_id").references(() => policyAcknowledgments.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(), // policy_acknowledged | terms_acknowledged | application_submitted | approved | withdrawn
+  stage: text("stage"), // policy | terms | application | onboarding | running | post_pilot
+  eventDescription: text("event_description"),
+  triggeredBy: text("triggered_by"), // system | pieter@bethink.co.za | etc.
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  eventAt: timestamp("event_at").defaultNow(),
+}, (table) => [
+  index("IDX_workflow_log_app_id").on(table.pilotApplicationId),
+  index("IDX_workflow_log_policy_id").on(table.policyAcknowledgmentId),
+  index("IDX_workflow_log_event_type").on(table.eventType),
+  index("IDX_workflow_log_event_at").on(table.eventAt),
+]);

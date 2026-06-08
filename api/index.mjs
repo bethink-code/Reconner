@@ -18,11 +18,11 @@ var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
-var __copyProps = (to, from, except, desc3) => {
+var __copyProps = (to, from, except, desc4) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc3 = __getOwnPropDesc(from, key)) || desc3.enumerable });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc4 = __getOwnPropDesc(from, key)) || desc4.enumerable });
   }
   return to;
 };
@@ -275,11 +275,11 @@ var require_dommatrix = __commonJS({
           });
           var x = components[0];
           var y = components[1];
-          var z9 = components[2];
+          var z10 = components[2];
           var a = components[3];
-          var xyz = [x, y, z9];
-          var xyza = [x, y, z9, a];
-          if (prop === "perspective" && x && [y, z9].every(function(n) {
+          var xyz = [x, y, z10];
+          var xyza = [x, y, z10, a];
+          if (prop === "perspective" && x && [y, z10].every(function(n) {
             return n === void 0;
           })) {
             m.m34 = -1 / x;
@@ -293,14 +293,14 @@ var require_dommatrix = __commonJS({
           } else if (prop === "translate3d" && xyz.every(function(n) {
             return !Number.isNaN(+n);
           })) {
-            m = m.translate(x, y, z9);
-          } else if (prop === "translate" && x && z9 === void 0) {
+            m = m.translate(x, y, z10);
+          } else if (prop === "translate" && x && z10 === void 0) {
             m = m.translate(x, y || 0, 0);
           } else if (prop === "rotate3d" && xyza.every(function(n) {
             return !Number.isNaN(+n);
           }) && a) {
-            m = m.rotateAxisAngle(x, y, z9, a);
-          } else if (prop === "rotate" && x && [y, z9].every(function(n) {
+            m = m.rotateAxisAngle(x, y, z10, a);
+          } else if (prop === "rotate" && x && [y, z10].every(function(n) {
             return n === void 0;
           })) {
             m = m.rotate(0, 0, x);
@@ -309,15 +309,15 @@ var require_dommatrix = __commonJS({
           }) && xyz.some(function(n) {
             return n !== 1;
           })) {
-            m = m.scale(x, y, z9);
-          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z9 === void 0) {
+            m = m.scale(x, y, z10);
+          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z10 === void 0) {
             var nosy = Number.isNaN(+y);
             var sy = nosy ? x : y;
             m = m.scale(x, sy, 1);
-          } else if (prop === "skew" && x && z9 === void 0) {
+          } else if (prop === "skew" && x && z10 === void 0) {
             m = m.skewX(x);
             m = y ? m.skewY(y) : m;
-          } else if (/[XYZ]/.test(prop) && x && [y, z9].every(function(n) {
+          } else if (/[XYZ]/.test(prop) && x && [y, z10].every(function(n) {
             return n === void 0;
           }) && ["translate", "rotate", "scale", "skew"].some(function(p) {
             return prop.includes(p);
@@ -341,13 +341,13 @@ var require_dommatrix = __commonJS({
         });
         return m;
       }
-      function Translate(x, y, z9) {
+      function Translate(x, y, z10) {
         var m = new CSSMatrix();
         m.m41 = x;
         m.e = x;
         m.m42 = y;
         m.f = y;
-        m.m43 = z9;
+        m.m43 = z10;
         return m;
       }
       function Rotate(rx, ry, rz) {
@@ -381,16 +381,16 @@ var require_dommatrix = __commonJS({
         m.m33 = cosx * cosy;
         return m;
       }
-      function RotateAxisAngle(x, y, z9, alpha) {
+      function RotateAxisAngle(x, y, z10, alpha) {
         var m = new CSSMatrix();
         var angle = alpha * (Math.PI / 360);
         var sinA = Math.sin(angle);
         var cosA = Math.cos(angle);
         var sinA2 = sinA * sinA;
-        var length = Math.sqrt(x * x + y * y + z9 * z9);
+        var length = Math.sqrt(x * x + y * y + z10 * z10);
         var X = x;
         var Y = y;
-        var Z = z9;
+        var Z = z10;
         if (length === 0) {
           X = 0;
           Y = 0;
@@ -422,13 +422,13 @@ var require_dommatrix = __commonJS({
         m.m33 = 1 - 2 * (x2 + y2) * sinA2;
         return m;
       }
-      function Scale(x, y, z9) {
+      function Scale(x, y, z10) {
         var m = new CSSMatrix();
         m.m11 = x;
         m.a = x;
         m.m22 = y;
         m.d = y;
-        m.m33 = z9;
+        m.m33 = z10;
         return m;
       }
       function SkewX(angle) {
@@ -594,10 +594,10 @@ var require_dommatrix = __commonJS({
       CSSMatrix.prototype.multiply = function multiply(m2) {
         return Multiply(this, m2);
       };
-      CSSMatrix.prototype.translate = function translate(x, y, z9) {
+      CSSMatrix.prototype.translate = function translate(x, y, z10) {
         var X = x;
         var Y = y;
-        var Z = z9;
+        var Z = z10;
         if (Z === void 0) {
           Z = 0;
         }
@@ -606,10 +606,10 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Translate(X, Y, Z));
       };
-      CSSMatrix.prototype.scale = function scale(x, y, z9) {
+      CSSMatrix.prototype.scale = function scale(x, y, z10) {
         var X = x;
         var Y = y;
-        var Z = z9;
+        var Z = z10;
         if (Y === void 0) {
           Y = x;
         }
@@ -631,13 +631,13 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Rotate(RX, RY, RZ));
       };
-      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z9, angle) {
-        if ([x, y, z9, angle].some(function(n) {
+      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z10, angle) {
+        if ([x, y, z10, angle].some(function(n) {
           return Number.isNaN(n);
         })) {
           throw new TypeError("CSSMatrix: expecting 4 values");
         }
-        return Multiply(this, RotateAxisAngle(x, y, z9, angle));
+        return Multiply(this, RotateAxisAngle(x, y, z10, angle));
       };
       CSSMatrix.prototype.skewX = function skewX(angle) {
         return Multiply(this, SkewX(angle));
@@ -661,12 +661,12 @@ var require_dommatrix = __commonJS({
         var m = this;
         var x = m.m11 * t.x + m.m12 * t.y + m.m13 * t.z + m.m14 * t.w;
         var y = m.m21 * t.x + m.m22 * t.y + m.m23 * t.z + m.m24 * t.w;
-        var z9 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
+        var z10 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
         var w = m.m41 * t.x + m.m42 * t.y + m.m43 * t.z + m.m44 * t.w;
         return {
           x: x / w,
           y: y / w,
-          z: z9 / w,
+          z: z10 / w,
           w
         };
       };
@@ -15076,9 +15076,9 @@ var require_pdf = __commonJS({
                 ctx._transformMatrix = ctx._transformMatrix || [1, 0, 0, 1, 0, 0];
                 ctx._transformStack = [];
                 try {
-                  var desc3 = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), "lineWidth");
-                  ctx._setLineWidth = desc3.set;
-                  ctx._getLineWidth = desc3.get;
+                  var desc4 = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), "lineWidth");
+                  ctx._setLineWidth = desc4.set;
+                  ctx._getLineWidth = desc4.get;
                   Object.defineProperty(ctx, "lineWidth", {
                     set: function setLineWidth(width) {
                       this._setLineWidth(width * LINEWIDTH_SCALE_FACTOR);
@@ -19672,11 +19672,11 @@ var require_pdf = __commonJS({
                   _get = function _get2(target, property, receiver) {
                     var base = _superPropBase(target, property);
                     if (!base) return;
-                    var desc3 = Object.getOwnPropertyDescriptor(base, property);
-                    if (desc3.get) {
-                      return desc3.get.call(arguments.length < 3 ? target : receiver);
+                    var desc4 = Object.getOwnPropertyDescriptor(base, property);
+                    if (desc4.get) {
+                      return desc4.get.call(arguments.length < 3 ? target : receiver);
                     }
-                    return desc3.value;
+                    return desc4.value;
                   };
                 }
                 return _get.apply(this, arguments);
@@ -27658,7 +27658,7 @@ import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-import rateLimit5 from "express-rate-limit";
+import rateLimit6 from "express-rate-limit";
 
 // server/routes.ts
 import { createServer } from "http";
@@ -27694,10 +27694,14 @@ __export(schema_exports, {
   organizationMembers: () => organizationMembers,
   organizations: () => organizations,
   periodCashPayments: () => periodCashPayments,
+  pilotApplications: () => pilotApplications,
+  pilotWorkflowLog: () => pilotWorkflowLog,
+  policyAcknowledgments: () => policyAcknowledgments,
   pricingScenarios: () => pricingScenarios,
   properties: () => properties,
   reconciliationPeriods: () => reconciliationPeriods,
   sessions: () => sessions,
+  termsAcknowledgments: () => termsAcknowledgments,
   transactionResolutions: () => transactionResolutions,
   transactions: () => transactions,
   uploadedFiles: () => uploadedFiles,
@@ -28028,6 +28032,87 @@ var pricingScenarios = pgTable("pricing_scenarios", {
   updatedAt: timestamp("updated_at").defaultNow()
 }, (table) => [
   index("IDX_pricing_scenarios_created_at").on(table.createdAt)
+]);
+var policyAcknowledgments = pgTable("policy_acknowledgments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fullName: varchar("full_name", { length: 255 }).notNull(),
+  businessName: varchar("business_name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  cellNumber: varchar("cell_number", { length: 20 }).notNull(),
+  dataPolicyAcknowledged: boolean("data_policy_acknowledged").notNull().default(false),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("IDX_policy_ack_email").on(table.email),
+  index("IDX_policy_ack_submitted_at").on(table.submittedAt)
+]);
+var termsAcknowledgments = pgTable("terms_acknowledgments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Nullable: terms is now step 1, so no policy ID exists yet at creation time.
+  // Linked when policy is submitted in step 2.
+  policyAcknowledgmentId: varchar("policy_acknowledgment_id").references(() => policyAcknowledgments.id, { onDelete: "cascade" }),
+  pilotTermsAcknowledged: boolean("pilot_terms_acknowledged").notNull().default(false),
+  feedbackPermissionGranted: boolean("feedback_permission_granted").notNull().default(false),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("IDX_terms_ack_policy_id").on(table.policyAcknowledgmentId),
+  index("IDX_terms_ack_submitted_at").on(table.submittedAt)
+]);
+var pilotApplications = pgTable("pilot_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  policyAcknowledgmentId: varchar("policy_acknowledgment_id").notNull().references(() => policyAcknowledgments.id, { onDelete: "cascade" }),
+  termsAcknowledgmentId: varchar("terms_acknowledgment_id").notNull().references(() => termsAcknowledgments.id, { onDelete: "cascade" }),
+  fullName: varchar("full_name", { length: 255 }).notNull(),
+  businessName: varchar("business_name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  cellNumber: varchar("cell_number", { length: 20 }).notNull(),
+  numSites: integer("num_sites").notNull(),
+  posSystem: varchar("pos_system", { length: 255 }).notNull(),
+  banks: text("banks").notNull(),
+  // JSON array stored as text: '["FNB","ABSA"]'
+  successStory: text("success_story").notNull(),
+  readyToProceed: boolean("ready_to_proceed").notNull().default(false),
+  pilotStatus: text("pilot_status").notNull().default("pending_approval"),
+  // pending_approval | approved | onboarding | running | completed | withdrawn
+  pilotStartDate: text("pilot_start_date"),
+  pilotEndDate: text("pilot_end_date"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  index("IDX_pilot_apps_email").on(table.email),
+  index("IDX_pilot_apps_submitted_at").on(table.submittedAt),
+  index("IDX_pilot_apps_status").on(table.pilotStatus),
+  index("IDX_pilot_apps_policy_id").on(table.policyAcknowledgmentId)
+]);
+var pilotWorkflowLog = pgTable("pilot_workflow_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pilotApplicationId: varchar("pilot_application_id").references(() => pilotApplications.id, { onDelete: "cascade" }),
+  policyAcknowledgmentId: varchar("policy_acknowledgment_id").references(() => policyAcknowledgments.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  // policy_acknowledged | terms_acknowledged | application_submitted | approved | withdrawn
+  stage: text("stage"),
+  // policy | terms | application | onboarding | running | post_pilot
+  eventDescription: text("event_description"),
+  triggeredBy: text("triggered_by"),
+  // system | pieter@bethink.co.za | etc.
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  eventAt: timestamp("event_at").defaultNow()
+}, (table) => [
+  index("IDX_workflow_log_app_id").on(table.pilotApplicationId),
+  index("IDX_workflow_log_policy_id").on(table.policyAcknowledgmentId),
+  index("IDX_workflow_log_event_type").on(table.eventType),
+  index("IDX_workflow_log_event_at").on(table.eventAt)
 ]);
 
 // server/db.ts
@@ -31238,8 +31323,8 @@ function computeDeclineAnalysis(bankTxns, fuelTxns) {
   const approved = bankTxns.filter((t) => t.matchStatus !== "excluded" && t.matchStatus !== "unmatchable");
   const claimedApprovals = /* @__PURE__ */ new Set();
   const analysed = excluded.map((tx) => {
-    const desc3 = (tx.description || "").toLowerCase();
-    const type = desc3.includes("declined") ? "Declined" : desc3.includes("cancel") || desc3.includes("revers") ? "Cancelled / Reversed" : "Excluded";
+    const desc4 = (tx.description || "").toLowerCase();
+    const type = desc4.includes("declined") ? "Declined" : desc4.includes("cancel") || desc4.includes("revers") ? "Cancelled / Reversed" : "Excluded";
     const cleanDesc = tx.description?.replace(/\s*\[Excluded:.*?\]/g, "").trim() || "";
     const amt = parseFloat(tx.amount);
     const card = tx.cardNumber || "";
@@ -37710,6 +37795,40 @@ function buildPilotApplicationNotification(application) {
     ])
   });
 }
+var enrollmentConfirmationTemplate = readFileSync2(
+  join2(TEMPLATE_DIR, "pilot-enrollment-confirmation.html"),
+  "utf8"
+);
+function buildEnrollmentConfirmation(app2) {
+  return render(enrollmentConfirmationTemplate, {
+    CLIENT_NAME: escapeHtml(app2.name),
+    BUSINESS_NAME: escapeHtml(app2.business),
+    NUM_SITES: escapeHtml(String(app2.sites)),
+    POS_SYSTEM: escapeHtml(app2.posSystem),
+    BANKS: escapeHtml(app2.banks.join(", ")),
+    SUCCESS_STORY: escapeHtml(app2.successStory),
+    CELL_NUMBER: escapeHtml(app2.cell),
+    APPLICATION_ID: escapeHtml(app2.applicationId),
+    SUBMITTED_AT: escapeHtml(app2.submittedAt)
+  });
+}
+function buildEnrollmentNotification(app2) {
+  return render(pilotNotificationTemplate, {
+    LEAD_DATE: escapeHtml(app2.submittedAt),
+    RESPONSE: renderAnswers([
+      ["Name", app2.name],
+      ["Business", app2.business],
+      ["Email", app2.email],
+      ["Cell (for WhatsApp)", app2.cell],
+      ["Number of sites", String(app2.sites)],
+      ["POS / fuel management system", app2.posSystem],
+      ["Banks", app2.banks.join(", ")],
+      ["What success looks like", app2.successStory],
+      ["Application ID", app2.applicationId],
+      ["Note", "Enrolled via 3-step policy \u2192 terms \u2192 application flow"]
+    ])
+  });
+}
 var GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 var GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 var GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
@@ -37958,6 +38077,396 @@ function registerPilotApplicationRoutes(app2) {
   });
 }
 
+// server/pilotEnrollmentRoutes.ts
+import rateLimit5 from "express-rate-limit";
+import { z as z9 } from "zod";
+import { eq as eq5, and as and3, desc as desc3, sql as sql4, inArray as inArray3 } from "drizzle-orm";
+var BANKS2 = ["FNB", "ABSA", "Standard Bank", "Nedbank", "Other"];
+function getIp(req) {
+  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || null;
+}
+function johannesburgTimestamp2() {
+  return (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    dateStyle: "long",
+    timeStyle: "short"
+  });
+}
+async function logWorkflowEvent(opts) {
+  try {
+    await db.insert(pilotWorkflowLog).values({
+      policyAcknowledgmentId: opts.policyAcknowledgmentId,
+      pilotApplicationId: opts.pilotApplicationId || null,
+      eventType: opts.eventType,
+      stage: opts.stage,
+      triggeredBy: opts.triggeredBy || "system",
+      ipAddress: opts.ip || null,
+      userAgent: opts.userAgent || null
+    });
+  } catch (err) {
+    console.error("[pilot-enrollment] workflow log failed:", err);
+  }
+}
+var termsSchema = z9.object({
+  pilot_terms_acknowledged: z9.literal(true, {
+    errorMap: () => ({ message: "Please confirm you have read the pilot terms" })
+  }),
+  feedback_permission_granted: z9.literal(true, {
+    errorMap: () => ({ message: "Please confirm your commitment to honest feedback" })
+  })
+});
+var policySchema = z9.object({
+  terms_acknowledgment_id: z9.string().trim().min(1, "Missing enrollment token"),
+  full_name: z9.string().trim().min(1, "Your name is required").max(120),
+  business_name: z9.string().trim().min(1, "A business name is required").max(200),
+  email: z9.string().trim().email("A valid email is required").max(200),
+  cell_number: z9.string().trim().min(1, "A cell number is required").max(40),
+  policy_acknowledged: z9.literal(true, {
+    errorMap: () => ({ message: "Please confirm you have read the data policy" })
+  })
+});
+var applicationSchema2 = z9.object({
+  policy_acknowledgment_id: z9.string().trim().min(1, "Missing enrollment token"),
+  terms_acknowledgment_id: z9.string().trim().min(1, "Missing enrollment token"),
+  full_name: z9.string().trim().min(1, "Your name is required").max(120),
+  business_name: z9.string().trim().min(1, "A business name is required").max(200),
+  email: z9.string().trim().email("A valid email is required").max(200),
+  cell_number: z9.string().trim().min(1, "A cell number is required").max(40),
+  num_sites: z9.coerce.number().int().min(1, "At least one site is required"),
+  pos_system: z9.string().trim().min(1, "Tell us which POS or fuel system you use").max(200),
+  banks: z9.array(z9.enum(BANKS2)).min(1, "Choose at least one bank"),
+  success_story: z9.string().trim().min(1, "Tell us what success looks like").max(500),
+  ready_to_proceed: z9.literal(true, {
+    errorMap: () => ({ message: "Please confirm you are ready to discuss next steps" })
+  })
+});
+function fieldErrors(error) {
+  const errors = {};
+  for (const issue of error.issues) {
+    const key = String(issue.path[0] ?? "form");
+    if (!errors[key]) errors[key] = issue.message;
+  }
+  return errors;
+}
+function registerPilotEnrollmentRoutes(app2) {
+  const stageLimiter = rateLimit5({
+    windowMs: 60 * 60 * 1e3,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, errors: { form: "Too many requests. Please try again later." } }
+  });
+  const submitLimiter = rateLimit5({
+    windowMs: 60 * 60 * 1e3,
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, errors: { form: "Too many requests. Please try again later." } }
+  });
+  app2.post("/api/pilot/acknowledge-terms", stageLimiter, async (req, res) => {
+    const parsed = termsSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ ok: false, errors: fieldErrors(parsed.error) });
+    }
+    let record;
+    try {
+      const inserted = await db.insert(termsAcknowledgments).values({
+        pilotTermsAcknowledged: true,
+        feedbackPermissionGranted: true,
+        ipAddress: getIp(req),
+        userAgent: req.headers["user-agent"] || null
+      }).returning();
+      record = inserted[0];
+    } catch (err) {
+      console.error("[pilot/acknowledge-terms] DB insert failed:", err);
+      return res.status(500).json({ ok: false, errors: { form: "Something went wrong. Please try again." } });
+    }
+    console.log(`[pilot/terms] terms_id=${record.id}`);
+    return res.status(201).json({
+      ok: true,
+      terms_acknowledgment_id: record.id,
+      submitted_at: record.submittedAt,
+      next_step: "/pilot-policy"
+    });
+  });
+  app2.post("/api/pilot/acknowledge-policy", stageLimiter, async (req, res) => {
+    const parsed = policySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ ok: false, errors: fieldErrors(parsed.error) });
+    }
+    const d = parsed.data;
+    const termsRecord = await db.select({ id: termsAcknowledgments.id }).from(termsAcknowledgments).where(eq5(termsAcknowledgments.id, d.terms_acknowledgment_id)).limit(1);
+    if (!termsRecord.length) {
+      return res.status(400).json({ ok: false, errors: { form: "Invalid enrollment token. Please start from the pilot terms page." } });
+    }
+    let record;
+    try {
+      const inserted = await db.insert(policyAcknowledgments).values({
+        fullName: d.full_name,
+        businessName: d.business_name,
+        email: d.email,
+        cellNumber: d.cell_number,
+        dataPolicyAcknowledged: true,
+        ipAddress: getIp(req),
+        userAgent: req.headers["user-agent"] || null
+      }).returning();
+      record = inserted[0];
+    } catch (err) {
+      console.error("[pilot/acknowledge-policy] DB insert failed:", err);
+      return res.status(500).json({ ok: false, errors: { form: "Something went wrong. Please try again." } });
+    }
+    await db.update(termsAcknowledgments).set({ policyAcknowledgmentId: record.id }).where(eq5(termsAcknowledgments.id, d.terms_acknowledgment_id));
+    await logWorkflowEvent({
+      policyAcknowledgmentId: record.id,
+      eventType: "policy_acknowledged",
+      stage: "policy",
+      ip: getIp(req),
+      userAgent: req.headers["user-agent"] || null
+    });
+    console.log(`[pilot/policy] ${d.full_name} <${d.email}> id=${record.id}`);
+    return res.status(201).json({
+      ok: true,
+      policy_acknowledgment_id: record.id,
+      submitted_at: record.submittedAt,
+      next_step: "/pilot-apply"
+    });
+  });
+  app2.post("/api/pilot/submit-application", submitLimiter, async (req, res) => {
+    const parsed = applicationSchema2.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ ok: false, errors: fieldErrors(parsed.error) });
+    }
+    const d = parsed.data;
+    const [policyRecord, termsRecord] = await Promise.all([
+      db.select({ id: policyAcknowledgments.id, email: policyAcknowledgments.email }).from(policyAcknowledgments).where(eq5(policyAcknowledgments.id, d.policy_acknowledgment_id)).limit(1),
+      db.select({ id: termsAcknowledgments.id, policyId: termsAcknowledgments.policyAcknowledgmentId }).from(termsAcknowledgments).where(eq5(termsAcknowledgments.id, d.terms_acknowledgment_id)).limit(1)
+    ]);
+    if (!policyRecord.length) {
+      return res.status(400).json({ ok: false, errors: { form: "Invalid enrollment token. Please start from the pilot terms page." } });
+    }
+    if (!termsRecord.length) {
+      return res.status(400).json({ ok: false, errors: { form: "Invalid enrollment token. Please start from the pilot terms page." } });
+    }
+    let appRecord;
+    try {
+      const inserted = await db.insert(pilotApplications).values({
+        policyAcknowledgmentId: d.policy_acknowledgment_id,
+        termsAcknowledgmentId: d.terms_acknowledgment_id,
+        fullName: d.full_name,
+        businessName: d.business_name,
+        email: d.email,
+        cellNumber: d.cell_number,
+        numSites: d.num_sites,
+        posSystem: d.pos_system,
+        banks: JSON.stringify(d.banks),
+        successStory: d.success_story,
+        readyToProceed: true,
+        pilotStatus: "pending_approval",
+        ipAddress: getIp(req),
+        userAgent: req.headers["user-agent"] || null
+      }).returning();
+      appRecord = inserted[0];
+    } catch (err) {
+      console.error("[pilot/submit-application] DB insert failed:", err);
+      return res.status(500).json({ ok: false, errors: { form: "Something went wrong. Please try again." } });
+    }
+    await logWorkflowEvent({
+      policyAcknowledgmentId: d.policy_acknowledgment_id,
+      pilotApplicationId: appRecord.id,
+      eventType: "application_submitted",
+      stage: "application",
+      ip: getIp(req),
+      userAgent: req.headers["user-agent"] || null
+    });
+    console.log(`[pilot/application] ${d.full_name} <${d.email}> business=${d.business_name} app_id=${appRecord.id}`);
+    const enrollment = {
+      name: d.full_name,
+      business: d.business_name,
+      email: d.email,
+      cell: d.cell_number,
+      sites: d.num_sites,
+      posSystem: d.pos_system,
+      banks: d.banks,
+      successStory: d.success_story,
+      applicationId: appRecord.id,
+      submittedAt: johannesburgTimestamp2()
+    };
+    try {
+      const token = await getAccessToken();
+      await sendEmail(token, {
+        from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+        to: NOTIFICATION_RECIPIENTS.join(", "),
+        replyTo: `${encodeHeaderWord(d.full_name)} <${d.email}>`,
+        subject: `New lekana pilot enrollment from ${d.business_name}`,
+        html: buildEnrollmentNotification(enrollment)
+      });
+      await sendEmail(token, {
+        from: `${FROM_DISPLAY} <${FROM_ADDRESS}>`,
+        to: d.email,
+        subject: "Your Lekana pilot application has been submitted",
+        html: buildEnrollmentConfirmation(enrollment)
+      });
+    } catch (err) {
+      console.error("[pilot/submit-application] email delivery failed:", err);
+    }
+    return res.status(201).json({
+      ok: true,
+      pilot_application_id: appRecord.id,
+      submitted_at: appRecord.submittedAt,
+      message: "Application submitted. Pieter will be in touch on WhatsApp within 1\u20132 business days."
+    });
+  });
+  const enrollSchema = z9.object({
+    full_name: z9.string().trim().min(1, "Your name is required").max(120),
+    business_name: z9.string().trim().min(1, "A business name is required").max(200),
+    email: z9.string().trim().email("A valid email is required").max(200),
+    cell_number: z9.string().trim().min(1, "A cell number is required").max(40),
+    policy_acknowledged: z9.literal(true, {
+      errorMap: () => ({ message: "Please confirm you have read the data policy" })
+    }),
+    pilot_terms_acknowledged: z9.literal(true, {
+      errorMap: () => ({ message: "Please confirm you have read the pilot terms" })
+    }),
+    feedback_permission_granted: z9.boolean().default(true)
+  });
+  app2.post("/api/pilot/enroll", stageLimiter, async (req, res) => {
+    const parsed = enrollSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ ok: false, errors: fieldErrors(parsed.error) });
+    }
+    const d = parsed.data;
+    const ip = getIp(req);
+    const ua = req.headers["user-agent"] || null;
+    let policyRecord, termsRecord;
+    try {
+      const policyInserted = await db.insert(policyAcknowledgments).values({
+        fullName: d.full_name,
+        businessName: d.business_name,
+        email: d.email,
+        cellNumber: d.cell_number,
+        dataPolicyAcknowledged: true,
+        ipAddress: ip,
+        userAgent: ua
+      }).returning();
+      policyRecord = policyInserted[0];
+      const termsInserted = await db.insert(termsAcknowledgments).values({
+        policyAcknowledgmentId: policyRecord.id,
+        pilotTermsAcknowledged: true,
+        feedbackPermissionGranted: d.feedback_permission_granted ?? true,
+        ipAddress: ip,
+        userAgent: ua
+      }).returning();
+      termsRecord = termsInserted[0];
+    } catch (err) {
+      console.error("[pilot/enroll] DB insert failed:", err);
+      return res.status(500).json({ ok: false, errors: { form: "Something went wrong. Please try again." } });
+    }
+    await logWorkflowEvent({
+      policyAcknowledgmentId: policyRecord.id,
+      eventType: "enrolled",
+      stage: "enroll",
+      ip,
+      userAgent: ua
+    });
+    console.log(`[pilot/enroll] ${d.full_name} <${d.email}> policy=${policyRecord.id} terms=${termsRecord.id}`);
+    return res.status(201).json({
+      ok: true,
+      policy_acknowledgment_id: policyRecord.id,
+      terms_acknowledgment_id: termsRecord.id,
+      submitted_at: policyRecord.submittedAt,
+      next_step: "/pilot-apply"
+    });
+  });
+  app2.get("/api/pilot/applications", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const statusFilter = req.query.status;
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const offset = Number(req.query.offset) || 0;
+      const conditions = statusFilter ? [eq5(pilotApplications.pilotStatus, statusFilter)] : [];
+      const where = conditions.length > 0 ? and3(...conditions) : void 0;
+      const [apps, countResult] = await Promise.all([
+        db.select().from(pilotApplications).where(where).orderBy(desc3(pilotApplications.submittedAt)).limit(limit).offset(offset),
+        db.select({ count: sql4`count(*)` }).from(pilotApplications).where(where)
+      ]);
+      const appIds = apps.map((a) => a.id);
+      const events = appIds.length > 0 ? await db.select().from(pilotWorkflowLog).where(inArray3(pilotWorkflowLog.pilotApplicationId, appIds)).orderBy(pilotWorkflowLog.eventAt) : [];
+      const eventsByApp = /* @__PURE__ */ new Map();
+      for (const e of events) {
+        if (!e.pilotApplicationId) continue;
+        if (!eventsByApp.has(e.pilotApplicationId)) eventsByApp.set(e.pilotApplicationId, []);
+        eventsByApp.get(e.pilotApplicationId).push(e);
+      }
+      const result = apps.map((a) => ({
+        ...a,
+        banks: (() => {
+          try {
+            return JSON.parse(a.banks);
+          } catch {
+            return [a.banks];
+          }
+        })(),
+        workflow: eventsByApp.get(a.id) || []
+      }));
+      return res.json({
+        ok: true,
+        applications: result,
+        total: Number(countResult[0]?.count || 0),
+        limit,
+        offset
+      });
+    } catch (err) {
+      console.error("[pilot/applications] fetch failed:", err);
+      return res.status(500).json({ message: "Failed to fetch applications" });
+    }
+  });
+  app2.post("/api/pilot/approve", isAuthenticated, isAdmin, async (req, res) => {
+    const schema = z9.object({
+      pilot_application_id: z9.string().min(1),
+      pilot_start_date: z9.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format")
+    });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid request" });
+    }
+    const { pilot_application_id, pilot_start_date } = parsed.data;
+    const start = new Date(pilot_start_date);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 21);
+    const pilot_end_date = end.toISOString().slice(0, 10);
+    const approvedBy = req.user?.claims?.email || "admin";
+    try {
+      const updated = await db.update(pilotApplications).set({
+        pilotStatus: "approved",
+        pilotStartDate: pilot_start_date,
+        pilotEndDate: pilot_end_date,
+        approvedAt: /* @__PURE__ */ new Date(),
+        approvedBy,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq5(pilotApplications.id, pilot_application_id)).returning();
+      if (!updated.length) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      await logWorkflowEvent({
+        policyAcknowledgmentId: updated[0].policyAcknowledgmentId,
+        pilotApplicationId: pilot_application_id,
+        eventType: "approved",
+        stage: "application",
+        triggeredBy: approvedBy
+      });
+      console.log(`[pilot/approve] app_id=${pilot_application_id} by=${approvedBy} start=${pilot_start_date}`);
+      return res.json({
+        ok: true,
+        pilot_start_date,
+        pilot_end_date,
+        approved_by: approvedBy
+      });
+    } catch (err) {
+      console.error("[pilot/approve] failed:", err);
+      return res.status(500).json({ message: "Failed to approve application" });
+    }
+  });
+}
+
 // server/routes.ts
 function computeContentHash(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -37985,6 +38494,7 @@ async function registerRoutes(app2) {
   registerRequestAccessRoutes(app2);
   registerContactRoutes(app2);
   registerPilotApplicationRoutes(app2);
+  registerPilotEnrollmentRoutes(app2);
   const httpServer = createServer(app2);
   return httpServer;
 }
@@ -37996,7 +38506,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || "https://work.lekana.app",
   credentials: true
 }));
-var apiLimiter = rateLimit5({
+var apiLimiter = rateLimit6({
   windowMs: 15 * 60 * 1e3,
   // 15 minutes
   max: 200,

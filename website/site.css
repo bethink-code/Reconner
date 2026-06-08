@@ -946,6 +946,15 @@ figure { margin: 0; }
   .person-card-qr { order: -1; }
 }
 
+/* ---------- Prose (long-form policy / terms content) ---------- */
+
+.prose h2 { margin: 40px 0 10px; font-size: clamp(20px, 2.6vw, 26px); font-weight: 500; }
+.prose h2:first-child { margin-top: 0; }
+.prose p { font-size: 17px; line-height: 1.6; color: #3D4450; margin: 0 0 14px; }
+.prose ul { padding-left: 20px; margin: 0 0 16px; }
+.prose ul li { font-size: 17px; line-height: 1.6; color: #3D4450; margin-bottom: 6px; }
+.prose strong { font-weight: 500; color: var(--lk-dark); }
+
 /* ---------- Scroll reveal (degrades to visible without JS) ---------- */
 
 .reveal { opacity: 0; transform: translateY(12px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); }

@@ -166,6 +166,60 @@ export function buildPilotApplicationNotification(application: PilotApplication)
   });
 }
 
+// --- Pilot enrollment (3-stage flow) -----------------------------------------
+
+const enrollmentConfirmationTemplate = readFileSync(
+  join(TEMPLATE_DIR, "pilot-enrollment-confirmation.html"),
+  "utf8",
+);
+
+export interface EnrollmentApplication {
+  name: string;
+  business: string;
+  email: string;
+  cell: string;
+  sites: number;
+  posSystem: string;
+  banks: string[];
+  successStory: string;
+  applicationId: string;
+  submittedAt: string; // pre-formatted in SAST
+}
+
+/** Applicant-facing confirmation sent after Stage 3 with full enrollment summary. */
+export function buildEnrollmentConfirmation(app: EnrollmentApplication): string {
+  return render(enrollmentConfirmationTemplate, {
+    CLIENT_NAME: escapeHtml(app.name),
+    BUSINESS_NAME: escapeHtml(app.business),
+    NUM_SITES: escapeHtml(String(app.sites)),
+    POS_SYSTEM: escapeHtml(app.posSystem),
+    BANKS: escapeHtml(app.banks.join(", ")),
+    SUCCESS_STORY: escapeHtml(app.successStory),
+    CELL_NUMBER: escapeHtml(app.cell),
+    APPLICATION_ID: escapeHtml(app.applicationId),
+    SUBMITTED_AT: escapeHtml(app.submittedAt),
+  });
+}
+
+/** Owner-facing notification for a completed enrollment — reuses the pilot notification template. */
+export function buildEnrollmentNotification(app: EnrollmentApplication): string {
+  return render(pilotNotificationTemplate, {
+    LEAD_DATE: escapeHtml(app.submittedAt),
+    RESPONSE: renderAnswers([
+      ["Name", app.name],
+      ["Business", app.business],
+      ["Email", app.email],
+      ["Cell (for WhatsApp)", app.cell],
+      ["Number of sites", String(app.sites)],
+      ["POS / fuel management system", app.posSystem],
+      ["Banks", app.banks.join(", ")],
+      ["What success looks like", app.successStory],
+      ["Application ID", app.applicationId],
+      ["Note", "Enrolled via 3-step policy → terms → application flow"],
+    ]),
+  });
+}
+
 // --- Gmail delivery ----------------------------------------------------------
 
 // Sender identity, shared by every public form (request-access, contact).

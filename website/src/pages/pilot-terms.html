@@ -1,0 +1,171 @@
+<!--meta
+{
+  "title": "Pilot Terms — Lekana pilot enrollment",
+  "description": "The three-week Lekana pilot in plain language. One week to onboard, two weeks running, you decide at the end.",
+  "route": "/pilot-terms",
+  "ogImage": "/og-image.png"
+}
+-->
+<div style="background:var(--lk-white);border-bottom:1px solid var(--lk-hair);padding:12px 0;">
+  <div class="container container--narrow" style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+    <span style="font-size:15px;color:var(--lk-muted);">Pilot Terms &mdash; full reference</span>
+    <a href="/pilot-enroll" style="font-size:15px;color:var(--lk-orange);text-decoration:underline;text-underline-offset:3px;white-space:nowrap;">&larr; Back to enrollment</a>
+  </div>
+</div>
+
+<section class="hero" style="padding-bottom:32px;">
+  <div class="container container--narrow">
+    <h1>The pilot in <strong>plain language.</strong></h1>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow prose reveal">
+    <h2>What is the pilot?</h2>
+    <p>Lekana is in pilot. We onboard one business at a time, free for three weeks, so the before-and-after is real. One week to get the data flowing. Two weeks running. At the end, you decide.</p>
+    <p>The reconciliation engine works. What we need now is a wider set of businesses with different point-of-sale systems, different banks, different volumes, and different ways of working, so the platform is ready when we open it up.</p>
+    <p>One pilot business has been running on it for six months and has surfaced <strong style="font-weight:500;">R&nbsp;42&thinsp;000 to R&nbsp;100&thinsp;000</strong> in leakage every month. That&rsquo;s one story. Yours will be different. What we&rsquo;re looking for is more stories.</p>
+
+    <h2>Duration</h2>
+    <p><strong style="font-weight:500;">Three weeks total:</strong></p>
+    <ul>
+      <li><strong style="font-weight:500;">Week 1:</strong> Onboarding. Get the data flowing. Capture the before.</li>
+      <li><strong style="font-weight:500;">Weeks 2&ndash;3:</strong> Running. Lekana runs against your real operation.</li>
+      <li><strong style="font-weight:500;">End of week 3:</strong> Measure again. Same questions, new numbers.</li>
+    </ul>
+    <p>Short enough that you know where you stand. Long enough for the before-and-after to be real.</p>
+
+    <h2>What we ask of you</h2>
+    <ul>
+      <li>A real business on the platform. Real data, real banks, real cash.</li>
+      <li>Your starting point. The time you currently spend on reconciliation, the gaps in confidence, the things that don&rsquo;t add up. We help you put a number on it.</li>
+      <li>The full three weeks. One onboarding, two running.</li>
+      <li>Honest feedback. The good, the broken, the surprising.</li>
+      <li>If the pilot surfaces a useful result, permission to share the headline outcome &mdash; anonymously, and only if you&rsquo;re comfortable. No data. No specifics. Just what Lekana found and what it meant for your business.</li>
+    </ul>
+
+    <h2>What you get</h2>
+    <ul>
+      <li>The full platform, free, for three weeks. Reconciliation and Insights together.</li>
+      <li>Onboarding done properly. One week, not a Tuesday afternoon.</li>
+      <li>A direct line to Pieter and Garth. Not a ticket system.</li>
+      <li>Your data stays yours. Always.</li>
+      <li>The choice at the end. Continue as a customer, or walk away. No obligation either way.</li>
+    </ul>
+
+    <h2>Approval</h2>
+    <p>We approve each business individually before access is granted. Subject to approval.</p>
+
+    <h2>One site or many</h2>
+    <p>We want businesses of different shapes in the pilot. A single-site business and a five-site group stress the platform differently, and we want to learn from both.</p>
+
+    <h2>Limitations</h2>
+    <p>The pilot is open while we are still learning. We stay close to each business through onboarding and the two weeks running, which puts a natural limit on how many we can take at once. When we have what we need, we close it.</p>
+
+    <h2>Termination</h2>
+    <p>Either party may terminate the pilot with written notice. If terminated early, your data is deleted within 7 days, except as required by law.</p>
+
+    <h2>Jurisdiction</h2>
+    <p>This agreement is governed by South African law. Disputes are resolved according to the terms in the Data &amp; Confidentiality Policy.</p>
+  </div>
+</section>
+
+<section class="section--tight" id="acknowledge">
+  <div class="container container--narrow reveal">
+    <div class="form-block" id="terms-form-block">
+      <h2 style="font-size:22px;margin:0 0 6px;">Step 1 &mdash; Acknowledge the terms</h2>
+      <p style="margin:0 0 24px;color:var(--lk-muted);">Confirm you&rsquo;ve read the pilot terms above.</p>
+
+      <noscript>
+        <p class="callout">JavaScript is disabled. Email <a href="mailto:pieter@bethink.co.za">pieter@bethink.co.za</a> directly to continue your enrollment.</p>
+      </noscript>
+
+      <form id="terms-form" novalidate>
+        <div class="form-field" data-field="pilot_terms_acknowledged">
+          <label class="check check--block">
+            <input type="checkbox" name="pilot_terms_acknowledged" required>
+            <span>I have read the pilot terms above and understand the three-week timeline, what is required of me, and what I will receive. <span class="req" aria-hidden="true">*</span></span>
+          </label>
+        </div>
+        <div class="form-field" data-field="feedback_permission_granted" style="margin-top:12px;">
+          <label class="check check--block">
+            <input type="checkbox" name="feedback_permission_granted" required>
+            <span>I commit to providing honest feedback and allow Lekana to share anonymous headline outcomes if the pilot surfaces useful results. <span class="req" aria-hidden="true">*</span></span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:20px;width:100%;">I Agree &mdash; Continue to Application</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var form = document.getElementById('terms-form');
+  if (!form) return;
+  var btn = form.querySelector('button[type=submit]');
+
+  function clearErrors() {
+    form.querySelectorAll('.has-error').forEach(function (el) { el.classList.remove('has-error'); });
+    form.querySelectorAll('.field-error').forEach(function (el) { el.remove(); });
+  }
+  function showError(fieldName, message) {
+    var wrap = form.querySelector('[data-field="' + fieldName + '"]')
+      || (form.elements[fieldName] && form.elements[fieldName].closest('.form-field'));
+    if (!wrap) return;
+    wrap.classList.add('has-error');
+    var p = document.createElement('p');
+    p.className = 'field-error';
+    p.textContent = message;
+    wrap.appendChild(p);
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearErrors();
+
+    var payload = {
+      pilot_terms_acknowledged: form.pilot_terms_acknowledged.checked,
+      feedback_permission_granted: form.feedback_permission_granted.checked
+    };
+
+    var original = btn.textContent;
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+
+    fetch('/api/pilot/acknowledge-terms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    })
+    .then(function (result) {
+      if (result.ok && result.body.ok) {
+        try {
+          localStorage.setItem('lk_enroll', JSON.stringify({ termsId: result.body.terms_acknowledgment_id }));
+        } catch (_) {}
+        window.location.href = '/pilot-policy';
+        return;
+      }
+      btn.textContent = original;
+      btn.disabled = false;
+      var errors = result.body.errors;
+      if (errors && typeof errors === 'object') {
+        Object.keys(errors).forEach(function (field) { showError(field, errors[field]); });
+      } else {
+        showError('pilot_terms_acknowledged', result.body.error || 'Something went wrong. Please try again.');
+      }
+    })
+    .catch(function () {
+      btn.textContent = original;
+      btn.disabled = false;
+      showError('pilot_terms_acknowledged', 'Could not connect. Please try again or email pieter@bethink.co.za.');
+    });
+  });
+})();
+</script>

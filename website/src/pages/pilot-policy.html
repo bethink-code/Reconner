@@ -1,0 +1,203 @@
+<!--meta
+{
+  "title": "Data &amp; Confidentiality Policy — Lekana pilot enrollment",
+  "description": "Lekana only ever sees your POS and bank transactions. Read how your data is handled during and after the pilot.",
+  "route": "/pilot-policy",
+  "ogImage": "/og-image.png"
+}
+-->
+<div style="background:var(--lk-white);border-bottom:1px solid var(--lk-hair);padding:12px 0;">
+  <div class="container container--narrow" style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+    <span style="font-size:15px;color:var(--lk-muted);">Data &amp; Confidentiality Policy &mdash; full reference</span>
+    <a href="/pilot-enroll" style="font-size:15px;color:var(--lk-orange);text-decoration:underline;text-underline-offset:3px;white-space:nowrap;">&larr; Back to enrollment</a>
+  </div>
+</div>
+
+<section class="hero" style="padding-bottom:32px;">
+  <div class="container container--narrow">
+    <h1>Your data. <strong>Your rules.</strong></h1>
+    <p class="lead">Lekana works with transactions. Nothing else. You choose what you share.</p>
+  </div>
+</section>
+
+<section class="section--tight">
+  <div class="container container--narrow prose reveal">
+    <h2>What Lekana sees</h2>
+    <p>Lekana only ever sees two things: your point-of-sale transaction records and your bank transactions. That&rsquo;s it.</p>
+    <p>Not your full books. Not your accounting system. Not your margins, your suppliers, your payroll, or anything else that runs your business. Lekana sees what moved through your till and what settled in your account. Nothing more.</p>
+
+    <h2>What Lekana does with your data</h2>
+    <p>Lekana uses POS and bank transaction data to:</p>
+    <ul>
+      <li>Match transactions from your till against bank deposits</li>
+      <li>Identify discrepancies (reconciliation)</li>
+      <li>Detect patterns that indicate leakage (Insights)</li>
+    </ul>
+    <p>That&rsquo;s the only purpose. No secondary use. No selling. No sharing.</p>
+
+    <h2>During the pilot</h2>
+    <p>For the three weeks of your pilot:</p>
+    <ul>
+      <li>Your POS data flows into Lekana&rsquo;s system</li>
+      <li>Your bank transactions flow into Lekana&rsquo;s system</li>
+      <li>Lekana reconciles them daily</li>
+      <li>You see all findings in real time</li>
+      <li>Your data remains your property at all times</li>
+    </ul>
+
+    <h2>After the pilot</h2>
+    <p>When the pilot ends:</p>
+    <ul>
+      <li>If you continue as a customer: your data stays in the system to power your ongoing reconciliation</li>
+      <li>If you walk away: your data is permanently deleted within 7 days</li>
+      <li>Lekana does not retain your data for any other purpose</li>
+      <li>Lekana does not sell, analyse, or reuse your data</li>
+    </ul>
+
+    <h2>Confidentiality of findings</h2>
+    <p>Whatever Lekana finds in your business stays between us. The details of your operations, your leakage, your findings &mdash; all confidential.</p>
+    <p>If Lekana surfaces a useful result and you&rsquo;re comfortable, we may share the headline outcome anonymously (no data, no specifics, just what Lekana found and what it meant). Only with your explicit permission.</p>
+
+    <h2>Your rights</h2>
+    <ul>
+      <li>You own your data. Always.</li>
+      <li>You can request deletion at any time.</li>
+      <li>You can see everything Lekana sees.</li>
+      <li>You can walk away at the end of the pilot with no obligation.</li>
+    </ul>
+
+    <h2>The business behind this</h2>
+    <p>Lekana is a product of Bethink (Pty) Ltd (Reg 2019/034780/07), a South African software company. This confidentiality agreement is between you and Bethink. Lekana&rsquo;s data handling is governed by this policy and South African data protection law (POPI Act).</p>
+  </div>
+</section>
+
+<section class="section--tight" id="acknowledge">
+  <div class="container container--narrow reveal">
+    <div class="form-block">
+      <h2 style="font-size:22px;margin:0 0 6px;">Step 2 &mdash; Your details</h2>
+      <p style="margin:0 0 24px;color:var(--lk-muted);">Tell us who you are. You&rsquo;ll only need to enter this once.</p>
+
+      <noscript>
+        <p class="callout">JavaScript is disabled. Email <a href="mailto:pieter@bethink.co.za">pieter@bethink.co.za</a> directly to start the pilot process.</p>
+      </noscript>
+
+      <form id="policy-form" novalidate>
+        <div class="form-field">
+          <label for="pf-name">Your name <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="pf-name" name="full_name" required autocomplete="name">
+        </div>
+        <div class="form-field">
+          <label for="pf-business">Business name <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="pf-business" name="business_name" required autocomplete="organization">
+        </div>
+        <div class="form-field">
+          <label for="pf-email">Email <span class="req" aria-hidden="true">*</span></label>
+          <input type="email" id="pf-email" name="email" required autocomplete="email">
+        </div>
+        <div class="form-field">
+          <label for="pf-cell">Cell, for WhatsApp <span class="req" aria-hidden="true">*</span></label>
+          <input type="tel" id="pf-cell" name="cell_number" required autocomplete="tel">
+        </div>
+
+        <div class="form-field" data-field="policy_acknowledged" style="margin-top:24px;">
+          <label class="check check--block">
+            <input type="checkbox" name="policy_acknowledged" required>
+            <span>I have read the policy above and understand how Lekana handles my data during and after the pilot. <span class="req" aria-hidden="true">*</span></span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:20px;width:100%;">I Understand &mdash; Continue to Pilot Terms</button>
+        <p class="form-legal">By continuing, you accept that we will store these details. No marketing emails. Ever.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // Guard: must have come from Step 1
+  var enrollData;
+  try { enrollData = JSON.parse(localStorage.getItem('lk_enroll') || '{}'); } catch (_) { enrollData = {}; }
+  if (!enrollData.termsId) {
+    window.location.href = '/pilot-terms';
+    return;
+  }
+
+  var form = document.getElementById('policy-form');
+  if (!form) return;
+  var btn = form.querySelector('button[type=submit]');
+
+  function clearErrors() {
+    form.querySelectorAll('.has-error').forEach(function (el) { el.classList.remove('has-error'); });
+    form.querySelectorAll('.field-error').forEach(function (el) { el.remove(); });
+  }
+  function showError(fieldName, message) {
+    var wrap = form.querySelector('[data-field="' + fieldName + '"]')
+      || (form.elements[fieldName] && form.elements[fieldName].closest('.form-field'));
+    if (!wrap) return;
+    wrap.classList.add('has-error');
+    var p = document.createElement('p');
+    p.className = 'field-error';
+    p.textContent = message;
+    wrap.appendChild(p);
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearErrors();
+
+    var payload = {
+      terms_acknowledgment_id: enrollData.termsId,
+      full_name: form.full_name.value.trim(),
+      business_name: form.business_name.value.trim(),
+      email: form.email.value.trim(),
+      cell_number: form.cell_number.value.trim(),
+      policy_acknowledged: form.policy_acknowledged.checked
+    };
+
+    var original = btn.textContent;
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+
+    fetch('/api/pilot/acknowledge-policy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    })
+    .then(function (result) {
+      if (result.ok && result.body.ok) {
+        try {
+          var updated = Object.assign({}, enrollData, {
+            policyId: result.body.policy_acknowledgment_id,
+            fullName: payload.full_name,
+            businessName: payload.business_name,
+            email: payload.email,
+            cell: payload.cell_number
+          });
+          localStorage.setItem('lk_enroll', JSON.stringify(updated));
+        } catch (_) {}
+        window.location.href = '/pilot-apply';
+        return;
+      }
+      btn.textContent = original;
+      btn.disabled = false;
+      var errors = result.body.errors;
+      if (errors && typeof errors === 'object') {
+        Object.keys(errors).forEach(function (field) { showError(field, errors[field]); });
+      } else {
+        showError('full_name', result.body.error || 'Something went wrong. Please try again.');
+      }
+    })
+    .catch(function () {
+      btn.textContent = original;
+      btn.disabled = false;
+      showError('full_name', 'Could not connect. Please try again or email pieter@bethink.co.za.');
+    });
+  });
+})();
+</script>

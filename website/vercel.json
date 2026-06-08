@@ -24,6 +24,10 @@
     {
       "source": "/api/pilot-application",
       "destination": "https://work.lekana.app/api/pilot-application"
+    },
+    {
+      "source": "/api/pilot/:path*",
+      "destination": "https://work.lekana.app/api/pilot/:path*"
     }
   ],
   "headers": [

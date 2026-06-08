@@ -788,7 +788,7 @@ figure { margin: 0; }
 .list-clean { list-style: none; padding: 0; margin: 0 0 16px; }
 .list-clean li {
   position: relative;
-  padding: 9px 0 9px 20px;
+  padding: 13px 0 13px 20px;
   font-size: 15px;
   color: var(--lk-muted);
   line-height: 1.25;

@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 const PLATFORM_OWNER_EMAILS = new Set<string>([
   "garth@bethink.co.za",
   "pieter@bethink.co.za",
+  "savannah@bethink.co.za",
 ]);
 
 interface SessionUser {

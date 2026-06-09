@@ -33,6 +33,23 @@
       "intro": "Twenty-five years building digital products. Lekana is a TimeShift product from my company Bethink. It is the build I am proudest of.",
       "vcardOrg": "Bethink (Pty) Ltd",
       "vcardTitle": "Co-founder, Lekana"
+    },
+    {
+      "slug": "savannah",
+      "firstName": "Savannah",
+      "lastName": "Shoebridge",
+      "title": "Client Experience, Lekana",
+      "role": "Client experience, UX design and research",
+      "bestFor": "Client experience, onboarding, design and UX feedback.",
+      "email": "savannah@bethink.co.za",
+      "phoneE164": "+27837424725",
+      "phoneDisplay": "+27 83 742 4725",
+      "whatsapp": "https://wa.me/27837424725",
+      "linkedin": null,
+      "photo": "/assets/people/Savannah_Shoebridge.jpg",
+      "intro": "I bridge the gap between what people need and what businesses deliver, making their digital experience easier, faster, and clearer. My work spans UX and design, user research, and AI automation for clients like Momentum, Elite Wealth, and Discovery.",
+      "vcardOrg": "Bethink (Pty) Ltd",
+      "vcardTitle": "Client Experience, Lekana"
     }
   ]
 }

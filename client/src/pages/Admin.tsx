@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore, Calculator, UserCog } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, ChevronDown, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore, Calculator, UserCog } from "lucide-react";
 import PricingTab from "@/components/admin/PricingTab";
 import BudgetTab from "@/components/admin/BudgetTab";
 import LeadsTab from "@/components/admin/LeadsTab";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -476,7 +477,7 @@ export default function Admin() {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex gap-2 border-b pb-2">
+        <div className="flex flex-wrap gap-2 border-b pb-2">
           {isPlatformOwner && (
             <Button
               variant={activeTab === "organizations" ? "default" : "ghost"}
@@ -513,73 +514,73 @@ export default function Admin() {
             <ScrollText className="h-4 w-4 mr-2" />
             Audit Log
           </Button>
-          <Button
-            variant={activeTab === "invites" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab("invites")}
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            Invites
-          </Button>
-          <Button
-            variant={activeTab === "requests" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab("requests")}
-          >
-            <Inbox className="h-4 w-4 mr-2" />
-            Requests
-            {pendingRequests.length > 0 && (
-              <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">{pendingRequests.length}</Badge>
-            )}
-          </Button>
-          <Button
-            variant={activeTab === "security" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab("security")}
-          >
-            <Lock className="h-4 w-4 mr-2" />
-            Security
-          </Button>
-          <Button
-            variant={activeTab === "ai-usage" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab("ai-usage")}
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            AI Costs
-          </Button>
+
+          {/* Access dropdown — Invites, Requests, Security */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={["invites", "requests", "security"].includes(activeTab) ? "default" : "ghost"}
+                size="sm"
+              >
+                <Lock className="h-4 w-4 mr-2" />
+                Access
+                {pendingRequests.length > 0 && (
+                  <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">{pendingRequests.length}</Badge>
+                )}
+                <ChevronDown className="h-3.5 w-3.5 ml-1.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setActiveTab("invites")}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Invites
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveTab("requests")}>
+                <Inbox className="h-4 w-4 mr-2" />
+                Requests
+                {pendingRequests.length > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">{pendingRequests.length}</Badge>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveTab("security")}>
+                <Shield className="h-4 w-4 mr-2" />
+                Security
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Internal dropdown — platform owner only */}
           {isPlatformOwner && (
-            <Button
-              variant={activeTab === "pricing" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab("pricing")}
-              data-testid="tab-pricing"
-            >
-              <Calculator className="h-4 w-4 mr-2" />
-              Pricing
-            </Button>
-          )}
-          {isPlatformOwner && (
-            <Button
-              variant={activeTab === "budget" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab("budget")}
-              data-testid="tab-budget"
-            >
-              <Calculator className="h-4 w-4 mr-2" />
-              Model 2
-            </Button>
-          )}
-          {isPlatformOwner && (
-            <Button
-              variant={activeTab === "leads" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab("leads")}
-              data-testid="tab-leads"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Leads
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={["leads", "ai-usage", "pricing", "budget"].includes(activeTab) ? "default" : "ghost"}
+                  size="sm"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Internal
+                  <ChevronDown className="h-3.5 w-3.5 ml-1.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setActiveTab("leads")}>
+                  <Users className="h-4 w-4 mr-2" />
+                  Leads
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab("ai-usage")}>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  AI Costs
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab("pricing")} data-testid="tab-pricing">
+                  <Calculator className="h-4 w-4 mr-2" />
+                  Pricing
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab("budget")} data-testid="tab-budget">
+                  <Calculator className="h-4 w-4 mr-2" />
+                  Model 2
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
 

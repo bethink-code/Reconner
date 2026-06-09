@@ -18,11 +18,11 @@ var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
-var __copyProps = (to, from, except, desc4) => {
+var __copyProps = (to, from, except, desc5) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc4 = __getOwnPropDesc(from, key)) || desc4.enumerable });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc5 = __getOwnPropDesc(from, key)) || desc5.enumerable });
   }
   return to;
 };
@@ -275,11 +275,11 @@ var require_dommatrix = __commonJS({
           });
           var x = components[0];
           var y = components[1];
-          var z10 = components[2];
+          var z11 = components[2];
           var a = components[3];
-          var xyz = [x, y, z10];
-          var xyza = [x, y, z10, a];
-          if (prop === "perspective" && x && [y, z10].every(function(n) {
+          var xyz = [x, y, z11];
+          var xyza = [x, y, z11, a];
+          if (prop === "perspective" && x && [y, z11].every(function(n) {
             return n === void 0;
           })) {
             m.m34 = -1 / x;
@@ -293,14 +293,14 @@ var require_dommatrix = __commonJS({
           } else if (prop === "translate3d" && xyz.every(function(n) {
             return !Number.isNaN(+n);
           })) {
-            m = m.translate(x, y, z10);
-          } else if (prop === "translate" && x && z10 === void 0) {
+            m = m.translate(x, y, z11);
+          } else if (prop === "translate" && x && z11 === void 0) {
             m = m.translate(x, y || 0, 0);
           } else if (prop === "rotate3d" && xyza.every(function(n) {
             return !Number.isNaN(+n);
           }) && a) {
-            m = m.rotateAxisAngle(x, y, z10, a);
-          } else if (prop === "rotate" && x && [y, z10].every(function(n) {
+            m = m.rotateAxisAngle(x, y, z11, a);
+          } else if (prop === "rotate" && x && [y, z11].every(function(n) {
             return n === void 0;
           })) {
             m = m.rotate(0, 0, x);
@@ -309,15 +309,15 @@ var require_dommatrix = __commonJS({
           }) && xyz.some(function(n) {
             return n !== 1;
           })) {
-            m = m.scale(x, y, z10);
-          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z10 === void 0) {
+            m = m.scale(x, y, z11);
+          } else if (prop === "scale" && !Number.isNaN(x) && x !== 1 && z11 === void 0) {
             var nosy = Number.isNaN(+y);
             var sy = nosy ? x : y;
             m = m.scale(x, sy, 1);
-          } else if (prop === "skew" && x && z10 === void 0) {
+          } else if (prop === "skew" && x && z11 === void 0) {
             m = m.skewX(x);
             m = y ? m.skewY(y) : m;
-          } else if (/[XYZ]/.test(prop) && x && [y, z10].every(function(n) {
+          } else if (/[XYZ]/.test(prop) && x && [y, z11].every(function(n) {
             return n === void 0;
           }) && ["translate", "rotate", "scale", "skew"].some(function(p) {
             return prop.includes(p);
@@ -341,13 +341,13 @@ var require_dommatrix = __commonJS({
         });
         return m;
       }
-      function Translate(x, y, z10) {
+      function Translate(x, y, z11) {
         var m = new CSSMatrix();
         m.m41 = x;
         m.e = x;
         m.m42 = y;
         m.f = y;
-        m.m43 = z10;
+        m.m43 = z11;
         return m;
       }
       function Rotate(rx, ry, rz) {
@@ -381,16 +381,16 @@ var require_dommatrix = __commonJS({
         m.m33 = cosx * cosy;
         return m;
       }
-      function RotateAxisAngle(x, y, z10, alpha) {
+      function RotateAxisAngle(x, y, z11, alpha) {
         var m = new CSSMatrix();
         var angle = alpha * (Math.PI / 360);
         var sinA = Math.sin(angle);
         var cosA = Math.cos(angle);
         var sinA2 = sinA * sinA;
-        var length = Math.sqrt(x * x + y * y + z10 * z10);
+        var length = Math.sqrt(x * x + y * y + z11 * z11);
         var X = x;
         var Y = y;
-        var Z = z10;
+        var Z = z11;
         if (length === 0) {
           X = 0;
           Y = 0;
@@ -422,13 +422,13 @@ var require_dommatrix = __commonJS({
         m.m33 = 1 - 2 * (x2 + y2) * sinA2;
         return m;
       }
-      function Scale(x, y, z10) {
+      function Scale(x, y, z11) {
         var m = new CSSMatrix();
         m.m11 = x;
         m.a = x;
         m.m22 = y;
         m.d = y;
-        m.m33 = z10;
+        m.m33 = z11;
         return m;
       }
       function SkewX(angle) {
@@ -594,10 +594,10 @@ var require_dommatrix = __commonJS({
       CSSMatrix.prototype.multiply = function multiply(m2) {
         return Multiply(this, m2);
       };
-      CSSMatrix.prototype.translate = function translate(x, y, z10) {
+      CSSMatrix.prototype.translate = function translate(x, y, z11) {
         var X = x;
         var Y = y;
-        var Z = z10;
+        var Z = z11;
         if (Z === void 0) {
           Z = 0;
         }
@@ -606,10 +606,10 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Translate(X, Y, Z));
       };
-      CSSMatrix.prototype.scale = function scale(x, y, z10) {
+      CSSMatrix.prototype.scale = function scale(x, y, z11) {
         var X = x;
         var Y = y;
-        var Z = z10;
+        var Z = z11;
         if (Y === void 0) {
           Y = x;
         }
@@ -631,13 +631,13 @@ var require_dommatrix = __commonJS({
         }
         return Multiply(this, Rotate(RX, RY, RZ));
       };
-      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z10, angle) {
-        if ([x, y, z10, angle].some(function(n) {
+      CSSMatrix.prototype.rotateAxisAngle = function rotateAxisAngle(x, y, z11, angle) {
+        if ([x, y, z11, angle].some(function(n) {
           return Number.isNaN(n);
         })) {
           throw new TypeError("CSSMatrix: expecting 4 values");
         }
-        return Multiply(this, RotateAxisAngle(x, y, z10, angle));
+        return Multiply(this, RotateAxisAngle(x, y, z11, angle));
       };
       CSSMatrix.prototype.skewX = function skewX(angle) {
         return Multiply(this, SkewX(angle));
@@ -661,12 +661,12 @@ var require_dommatrix = __commonJS({
         var m = this;
         var x = m.m11 * t.x + m.m12 * t.y + m.m13 * t.z + m.m14 * t.w;
         var y = m.m21 * t.x + m.m22 * t.y + m.m23 * t.z + m.m24 * t.w;
-        var z10 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
+        var z11 = m.m31 * t.x + m.m32 * t.y + m.m33 * t.z + m.m34 * t.w;
         var w = m.m41 * t.x + m.m42 * t.y + m.m43 * t.z + m.m44 * t.w;
         return {
           x: x / w,
           y: y / w,
-          z: z10 / w,
+          z: z11 / w,
           w
         };
       };
@@ -15076,9 +15076,9 @@ var require_pdf = __commonJS({
                 ctx._transformMatrix = ctx._transformMatrix || [1, 0, 0, 1, 0, 0];
                 ctx._transformStack = [];
                 try {
-                  var desc4 = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), "lineWidth");
-                  ctx._setLineWidth = desc4.set;
-                  ctx._getLineWidth = desc4.get;
+                  var desc5 = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), "lineWidth");
+                  ctx._setLineWidth = desc5.set;
+                  ctx._getLineWidth = desc5.get;
                   Object.defineProperty(ctx, "lineWidth", {
                     set: function setLineWidth(width) {
                       this._setLineWidth(width * LINEWIDTH_SCALE_FACTOR);
@@ -19672,11 +19672,11 @@ var require_pdf = __commonJS({
                   _get = function _get2(target, property, receiver) {
                     var base = _superPropBase(target, property);
                     if (!base) return;
-                    var desc4 = Object.getOwnPropertyDescriptor(base, property);
-                    if (desc4.get) {
-                      return desc4.get.call(arguments.length < 3 ? target : receiver);
+                    var desc5 = Object.getOwnPropertyDescriptor(base, property);
+                    if (desc5.get) {
+                      return desc5.get.call(arguments.length < 3 ? target : receiver);
                     }
-                    return desc4.value;
+                    return desc5.value;
                   };
                 }
                 return _get.apply(this, arguments);
@@ -27688,6 +27688,7 @@ __export(schema_exports, {
   insertTransactionSchema: () => insertTransactionSchema,
   insertUploadedFileSchema: () => insertUploadedFileSchema,
   invitedUsers: () => invitedUsers,
+  leads: () => leads,
   matches: () => matches,
   matchingRules: () => matchingRules,
   matchingRulesConfigSchema: () => matchingRulesConfigSchema,
@@ -28113,6 +28114,26 @@ var pilotWorkflowLog = pgTable("pilot_workflow_log", {
   index("IDX_workflow_log_policy_id").on(table.policyAcknowledgmentId),
   index("IDX_workflow_log_event_type").on(table.eventType),
   index("IDX_workflow_log_event_at").on(table.eventAt)
+]);
+var leads = pgTable("leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  businessType: varchar("business_type", { length: 100 }),
+  // fuel | retail | other
+  source: varchar("source", { length: 100 }).notNull().default("direct"),
+  // website_contact | referral | direct | pilot_page | other
+  status: varchar("status", { length: 50 }).notNull().default("new"),
+  // new | contacted | qualified | applied | converted | parked
+  notes: text("notes"),
+  linkedPilotApplicationId: varchar("linked_pilot_application_id").references(() => pilotApplications.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  index("IDX_leads_email").on(table.email),
+  index("IDX_leads_status").on(table.status),
+  index("IDX_leads_created_at").on(table.createdAt)
 ]);
 
 // server/db.ts
@@ -31323,8 +31344,8 @@ function computeDeclineAnalysis(bankTxns, fuelTxns) {
   const approved = bankTxns.filter((t) => t.matchStatus !== "excluded" && t.matchStatus !== "unmatchable");
   const claimedApprovals = /* @__PURE__ */ new Set();
   const analysed = excluded.map((tx) => {
-    const desc4 = (tx.description || "").toLowerCase();
-    const type = desc4.includes("declined") ? "Declined" : desc4.includes("cancel") || desc4.includes("revers") ? "Cancelled / Reversed" : "Excluded";
+    const desc5 = (tx.description || "").toLowerCase();
+    const type = desc5.includes("declined") ? "Declined" : desc5.includes("cancel") || desc5.includes("revers") ? "Cancelled / Reversed" : "Excluded";
     const cleanDesc = tx.description?.replace(/\s*\[Excluded:.*?\]/g, "").trim() || "";
     const amt = parseFloat(tx.amount);
     const card = tx.cardNumber || "";
@@ -37990,6 +38011,7 @@ function registerContactRoutes(app2) {
         error: "Could not send your message. Please email garth@bethink.co.za directly."
       });
     }
+    db.insert(leads).values({ name: data.name, email: data.email, source: "website_contact", notes: data.message }).catch((err) => console.error("[contact] lead insert failed:", err));
     return res.json({ ok: true });
   });
 }
@@ -38467,6 +38489,79 @@ function registerPilotEnrollmentRoutes(app2) {
   });
 }
 
+// server/leadsRoutes.ts
+import { z as z10 } from "zod";
+import { eq as eq6, desc as desc4 } from "drizzle-orm";
+var STATUSES = ["new", "contacted", "qualified", "applied", "converted", "parked"];
+var SOURCES = ["website_contact", "referral", "direct", "pilot_page", "other"];
+var BUSINESS_TYPES = ["fuel", "retail", "other"];
+var createSchema = z10.object({
+  name: z10.string().trim().min(1).max(255),
+  email: z10.string().trim().email().max(255),
+  phone: z10.string().trim().max(50).optional(),
+  businessType: z10.enum(BUSINESS_TYPES).optional(),
+  source: z10.enum(SOURCES).default("direct"),
+  status: z10.enum(STATUSES).default("new"),
+  notes: z10.string().trim().max(4e3).optional()
+});
+var updateSchema = z10.object({
+  name: z10.string().trim().min(1).max(255).optional(),
+  email: z10.string().trim().email().max(255).optional(),
+  phone: z10.string().trim().max(50).optional().nullable(),
+  businessType: z10.enum(BUSINESS_TYPES).optional().nullable(),
+  source: z10.enum(SOURCES).optional(),
+  status: z10.enum(STATUSES).optional(),
+  notes: z10.string().trim().max(4e3).optional().nullable(),
+  linkedPilotApplicationId: z10.string().optional().nullable()
+});
+function registerLeadsRoutes(app2) {
+  app2.get("/api/leads", isAuthenticated, isPlatformOwner, async (_req, res) => {
+    try {
+      const rows = await db.select().from(leads).orderBy(desc4(leads.createdAt));
+      res.json(rows);
+    } catch (err) {
+      console.error("[leads] list failed:", err);
+      res.status(500).json({ error: "Failed to fetch leads" });
+    }
+  });
+  app2.post("/api/leads", isAuthenticated, isPlatformOwner, async (req, res) => {
+    const parsed = createSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid data" });
+    }
+    try {
+      const [lead] = await db.insert(leads).values(parsed.data).returning();
+      res.status(201).json(lead);
+    } catch (err) {
+      console.error("[leads] create failed:", err);
+      res.status(500).json({ error: "Failed to create lead" });
+    }
+  });
+  app2.patch("/api/leads/:id", isAuthenticated, isPlatformOwner, async (req, res) => {
+    const parsed = updateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid data" });
+    }
+    try {
+      const [updated] = await db.update(leads).set({ ...parsed.data, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(leads.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ error: "Lead not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[leads] update failed:", err);
+      res.status(500).json({ error: "Failed to update lead" });
+    }
+  });
+  app2.delete("/api/leads/:id", isAuthenticated, isPlatformOwner, async (req, res) => {
+    try {
+      await db.delete(leads).where(eq6(leads.id, req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[leads] delete failed:", err);
+      res.status(500).json({ error: "Failed to delete lead" });
+    }
+  });
+}
+
 // server/routes.ts
 function computeContentHash(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
@@ -38495,6 +38590,7 @@ async function registerRoutes(app2) {
   registerContactRoutes(app2);
   registerPilotApplicationRoutes(app2);
   registerPilotEnrollmentRoutes(app2);
+  registerLeadsRoutes(app2);
   const httpServer = createServer(app2);
   return httpServer;
 }

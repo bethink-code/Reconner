@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Shield, ShieldOff, Users, Loader2, ScrollText, ChevronLeft, ChevronRight, RefreshCw, UserPlus, Trash2, Mail, Inbox, Check, X, Lock, Activity, AlertTriangle, Sparkles, Pencil, Archive, ArchiveRestore, Calculator, UserCog } from "lucide-react";
 import PricingTab from "@/components/admin/PricingTab";
 import BudgetTab from "@/components/admin/BudgetTab";
+import LeadsTab from "@/components/admin/LeadsTab";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -66,7 +67,7 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user: currentUser, isPlatformOwner, currentOrgId, canWrite } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security" | "ai-usage" | "organizations" | "properties" | "pricing" | "budget">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "invites" | "requests" | "security" | "ai-usage" | "organizations" | "properties" | "pricing" | "budget" | "leads">("users");
   const [auditPage, setAuditPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
@@ -567,6 +568,17 @@ export default function Admin() {
             >
               <Calculator className="h-4 w-4 mr-2" />
               Model 2
+            </Button>
+          )}
+          {isPlatformOwner && (
+            <Button
+              variant={activeTab === "leads" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("leads")}
+              data-testid="tab-leads"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Leads
             </Button>
           )}
         </div>
@@ -1630,6 +1642,12 @@ export default function Admin() {
       {activeTab === "budget" && isPlatformOwner && (
         <div className="max-w-[1500px] mx-auto mt-4">
           <BudgetTab />
+        </div>
+      )}
+
+      {activeTab === "leads" && isPlatformOwner && (
+        <div className="max-w-4xl mx-auto mt-4">
+          <LeadsTab />
         </div>
       )}
 

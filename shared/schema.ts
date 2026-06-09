@@ -513,3 +513,27 @@ export const pilotWorkflowLog = pgTable("pilot_workflow_log", {
   index("IDX_workflow_log_event_type").on(table.eventType),
   index("IDX_workflow_log_event_at").on(table.eventAt),
 ]);
+
+// Platform-owner-only sales pipeline. Tracks everyone who has expressed interest
+// in Lekana — via the website contact form, the pilot page, or added manually.
+// Not visible to client admins (isPlatformOwner gate on all API endpoints).
+export const leads = pgTable("leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  businessType: varchar("business_type", { length: 100 }), // fuel | retail | other
+  source: varchar("source", { length: 100 }).notNull().default("direct"), // website_contact | referral | direct | pilot_page | other
+  status: varchar("status", { length: 50 }).notNull().default("new"), // new | contacted | qualified | applied | converted | parked
+  notes: text("notes"),
+  linkedPilotApplicationId: varchar("linked_pilot_application_id").references(() => pilotApplications.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_leads_email").on(table.email),
+  index("IDX_leads_status").on(table.status),
+  index("IDX_leads_created_at").on(table.createdAt),
+]);
+
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = typeof leads.$inferInsert;

@@ -12,6 +12,8 @@ import {
   NOTIFICATION_RECIPIENTS,
   type ContactMessage,
 } from "./email";
+import { db } from "./db";
+import { leads } from "../shared/schema";
 
 // Public "contact us" form — served from the marketing site (lekana.app).
 // No authentication: this is how anyone (not only prospective customers) can
@@ -81,6 +83,11 @@ export function registerContactRoutes(app: Express): void {
         error: "Could not send your message. Please email garth@bethink.co.za directly.",
       });
     }
+
+    // Fire-and-forget: persist to leads pipeline so nothing gets lost in email.
+    db.insert(leads)
+      .values({ name: data.name, email: data.email, source: "website_contact", notes: data.message })
+      .catch((err) => console.error("[contact] lead insert failed:", err));
 
     return res.json({ ok: true });
   });

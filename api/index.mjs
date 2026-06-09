@@ -28123,6 +28123,7 @@ var leads = pgTable("leads", {
   phone: varchar("phone", { length: 50 }).notNull(),
   businessType: varchar("business_type", { length: 100 }),
   // fuel | retail | other
+  location: varchar("location", { length: 255 }),
   interestedInPilot: boolean("interested_in_pilot").notNull().default(false),
   source: varchar("source", { length: 100 }).notNull().default("direct"),
   // website_contact | referral | direct | pilot_page | other
@@ -38503,6 +38504,7 @@ var createSchema = z10.object({
   email: z10.string().trim().email().max(255).optional().or(z10.literal("")),
   phone: z10.string().trim().min(1).max(50),
   businessType: z10.enum(BUSINESS_TYPES).optional(),
+  location: z10.string().trim().max(255).optional(),
   interestedInPilot: z10.boolean().default(false),
   source: z10.enum(SOURCES).default("direct"),
   status: z10.enum(STATUSES).default("new"),
@@ -38514,6 +38516,7 @@ var updateSchema = z10.object({
   email: z10.string().trim().email().max(255).optional().nullable().or(z10.literal("")),
   phone: z10.string().trim().min(1).max(50).optional(),
   businessType: z10.enum(BUSINESS_TYPES).optional().nullable(),
+  location: z10.string().trim().max(255).optional().nullable(),
   interestedInPilot: z10.boolean().optional(),
   source: z10.enum(SOURCES).optional(),
   status: z10.enum(STATUSES).optional(),

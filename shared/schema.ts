@@ -524,6 +524,7 @@ export const leads = pgTable("leads", {
   email: varchar("email", { length: 255 }),
   phone: varchar("phone", { length: 50 }).notNull(),
   businessType: varchar("business_type", { length: 100 }), // fuel | retail | other
+  location: varchar("location", { length: 255 }),
   interestedInPilot: boolean("interested_in_pilot").notNull().default(false),
   source: varchar("source", { length: 100 }).notNull().default("direct"), // website_contact | referral | direct | pilot_page | other
   status: varchar("status", { length: 50 }).notNull().default("new"), // new | contacted | qualified | applied | converted | parked

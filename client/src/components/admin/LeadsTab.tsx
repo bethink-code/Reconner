@@ -44,6 +44,7 @@ const BLANK_FORM = {
   businessName: "",
   email: "",
   phone: "",
+  location: "",
   businessType: "" as string,
   interestedInPilot: false,
   source: "direct" as string,
@@ -90,6 +91,7 @@ export default function LeadsTab() {
       businessName: lead.businessName ?? "",
       email: lead.email ?? "",
       phone: lead.phone ?? "",
+      location: lead.location ?? "",
       businessType: lead.businessType ?? "",
       interestedInPilot: lead.interestedInPilot ?? false,
       source: lead.source,
@@ -124,6 +126,10 @@ export default function LeadsTab() {
         <div className="space-y-1">
           <Label>Email</Label>
           <Input type="email" value={form.email} onChange={(e) => formField("email", e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Town / location</Label>
+          <Input value={form.location} onChange={(e) => formField("location", e.target.value)} placeholder="e.g. Pretoria" />
         </div>
         <div className="space-y-1">
           <Label>Business type</Label>

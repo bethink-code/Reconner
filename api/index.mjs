@@ -27731,6 +27731,8 @@ var users = pgTable("users", {
   isAdmin: boolean("is_admin").default(false),
   // Platform owner = Lekana staff. Can belong to multiple orgs and switch between them.
   isPlatformOwner: boolean("is_platform_owner").notNull().default(false),
+  lastOrgId: varchar("last_org_id"),
+  lastPropertyId: varchar("last_property_id"),
   termsAcceptedAt: timestamp("terms_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
@@ -29666,9 +29668,16 @@ async function upsertUser(claims) {
 }
 async function resolveInitialOrg(userId, email) {
   const memberships = await storage.getUserOrganizations(userId);
-  if (memberships.length > 0) {
-    const first = memberships[0];
-    return { orgId: first.organization.id, role: first.role };
+  if (memberships.length === 0) {
+  } else {
+    const dbUser = await storage.getUser(userId);
+    if (dbUser?.lastOrgId) {
+      const lastMembership = memberships.find((m) => m.organization.id === dbUser.lastOrgId);
+      if (lastMembership) {
+        return { orgId: lastMembership.organization.id, role: lastMembership.role, lastPropertyId: dbUser.lastPropertyId };
+      }
+    }
+    return { orgId: memberships[0].organization.id, role: memberships[0].role, lastPropertyId: null };
   }
   const invite = await storage.getInvitedUserByEmail(email);
   if (invite && invite.organizationId) {
@@ -29837,6 +29846,9 @@ var isAuthenticated = async (req, res, next) => {
     return;
   }
 };
+
+// server/accountRoutes.ts
+import { eq as eq4 } from "drizzle-orm";
 
 // server/auditLog.ts
 import { desc as desc2, eq as eq3, and as and2, gte, lte, sql as sql3 } from "drizzle-orm";
@@ -30161,6 +30173,7 @@ function registerAccountRoutes(app2) {
       req.user.currentOrgRole = role;
       const props = await storage.getPropertiesByOrg(organizationId);
       req.user.currentPropertyId = props[0]?.id;
+      db.update(users).set({ lastOrgId: organizationId, lastPropertyId: props[0]?.id ?? null, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(users.id, userId)).catch((err) => console.error("[context] failed to persist last org:", err));
       const org = await storage.getOrganization(organizationId);
       audit(req, {
         action: "org.switch",
@@ -30193,6 +30206,7 @@ function registerAccountRoutes(app2) {
         });
       }
       req.user.currentPropertyId = propertyId;
+      db.update(users).set({ lastPropertyId: propertyId, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(users.id, req.user?.claims?.sub)).catch((err) => console.error("[context] failed to persist last property:", err));
       audit(req, {
         action: "property.switch",
         resourceType: "property",
@@ -35740,18 +35754,18 @@ var ReconciliationCommandService = class {
 };
 
 // server/reconciliation/reconciliationStateWriter.ts
-import { eq as eq4, inArray as inArray2 } from "drizzle-orm";
+import { eq as eq5, inArray as inArray2 } from "drizzle-orm";
 var DatabaseReconciliationStateWriter = class {
   async getFile(id) {
-    const [file] = await db.select().from(uploadedFiles).where(eq4(uploadedFiles.id, id));
+    const [file] = await db.select().from(uploadedFiles).where(eq5(uploadedFiles.id, id));
     return file || void 0;
   }
   async getMatch(id) {
-    const [match] = await db.select().from(matches).where(eq4(matches.id, id));
+    const [match] = await db.select().from(matches).where(eq5(matches.id, id));
     return match || void 0;
   }
   async getTransaction(id) {
-    const [transaction] = await db.select().from(transactions).where(eq4(transactions.id, id));
+    const [transaction] = await db.select().from(transactions).where(eq5(transactions.id, id));
     return transaction || void 0;
   }
   async getTransactionsByIds(ids) {
@@ -35759,16 +35773,16 @@ var DatabaseReconciliationStateWriter = class {
     return db.select().from(transactions).where(inArray2(transactions.id, ids));
   }
   async getTransactionsByFile(fileId) {
-    return db.select().from(transactions).where(eq4(transactions.fileId, fileId));
+    return db.select().from(transactions).where(eq5(transactions.fileId, fileId));
   }
   async getTransactionsByMatchId(matchId) {
-    return db.select().from(transactions).where(eq4(transactions.matchId, matchId));
+    return db.select().from(transactions).where(eq5(transactions.matchId, matchId));
   }
   async getResolutionsByPeriod(periodId) {
-    return db.select().from(transactionResolutions).where(eq4(transactionResolutions.periodId, periodId));
+    return db.select().from(transactionResolutions).where(eq5(transactionResolutions.periodId, periodId));
   }
   async getResolutionsByTransaction(transactionId) {
-    return db.select().from(transactionResolutions).where(eq4(transactionResolutions.transactionId, transactionId));
+    return db.select().from(transactionResolutions).where(eq5(transactionResolutions.transactionId, transactionId));
   }
   async createManualMatch(input) {
     return db.transaction(async (tx) => {
@@ -35800,7 +35814,7 @@ var DatabaseReconciliationStateWriter = class {
   }
   async createResolution(input) {
     return db.transaction(async (tx) => {
-      await tx.delete(transactionResolutions).where(eq4(transactionResolutions.transactionId, input.transactionId));
+      await tx.delete(transactionResolutions).where(eq5(transactionResolutions.transactionId, input.transactionId));
       const [resolution] = await tx.insert(transactionResolutions).values({
         transactionId: input.transactionId,
         periodId: input.periodId,
@@ -35813,7 +35827,7 @@ var DatabaseReconciliationStateWriter = class {
         linkedTransactionId: input.linkedTransactionId ?? null,
         assignee: input.assignee ?? null
       }).returning();
-      await tx.update(transactions).set({ matchStatus: "resolved" }).where(eq4(transactions.id, input.transactionId));
+      await tx.update(transactions).set({ matchStatus: "resolved" }).where(eq5(transactions.id, input.transactionId));
       return resolution;
     });
   }
@@ -35848,16 +35862,16 @@ var DatabaseReconciliationStateWriter = class {
     });
   }
   async deleteTransactionsByFile(fileId) {
-    await db.delete(transactions).where(eq4(transactions.fileId, fileId));
+    await db.delete(transactions).where(eq5(transactions.fileId, fileId));
   }
   async deleteFile(fileId) {
-    await db.delete(uploadedFiles).where(eq4(uploadedFiles.id, fileId));
+    await db.delete(uploadedFiles).where(eq5(uploadedFiles.id, fileId));
   }
   async unlinkMatchBundle(matchId, transactionIds) {
     await db.transaction(async (tx) => {
       await tx.update(transactions).set({ matchStatus: "unmatched", matchId: null }).where(inArray2(transactions.id, transactionIds));
       await tx.delete(transactionResolutions).where(inArray2(transactionResolutions.transactionId, transactionIds));
-      await tx.delete(matches).where(eq4(matches.id, matchId));
+      await tx.delete(matches).where(eq5(matches.id, matchId));
     });
   }
 };
@@ -38138,7 +38152,7 @@ function registerPilotApplicationRoutes(app2) {
 // server/pilotEnrollmentRoutes.ts
 import rateLimit5 from "express-rate-limit";
 import { z as z9 } from "zod";
-import { eq as eq5, and as and3, desc as desc3, sql as sql4, inArray as inArray3 } from "drizzle-orm";
+import { eq as eq6, and as and3, desc as desc3, sql as sql4, inArray as inArray3 } from "drizzle-orm";
 var BANKS2 = ["FNB", "ABSA", "Standard Bank", "Nedbank", "Other"];
 function getIp(req) {
   return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || null;
@@ -38253,7 +38267,7 @@ function registerPilotEnrollmentRoutes(app2) {
       return res.status(400).json({ ok: false, errors: fieldErrors(parsed.error) });
     }
     const d = parsed.data;
-    const termsRecord = await db.select({ id: termsAcknowledgments.id }).from(termsAcknowledgments).where(eq5(termsAcknowledgments.id, d.terms_acknowledgment_id)).limit(1);
+    const termsRecord = await db.select({ id: termsAcknowledgments.id }).from(termsAcknowledgments).where(eq6(termsAcknowledgments.id, d.terms_acknowledgment_id)).limit(1);
     if (!termsRecord.length) {
       return res.status(400).json({ ok: false, errors: { form: "Invalid enrollment token. Please start from the pilot terms page." } });
     }
@@ -38273,7 +38287,7 @@ function registerPilotEnrollmentRoutes(app2) {
       console.error("[pilot/acknowledge-policy] DB insert failed:", err);
       return res.status(500).json({ ok: false, errors: { form: "Something went wrong. Please try again." } });
     }
-    await db.update(termsAcknowledgments).set({ policyAcknowledgmentId: record.id }).where(eq5(termsAcknowledgments.id, d.terms_acknowledgment_id));
+    await db.update(termsAcknowledgments).set({ policyAcknowledgmentId: record.id }).where(eq6(termsAcknowledgments.id, d.terms_acknowledgment_id));
     await logWorkflowEvent({
       policyAcknowledgmentId: record.id,
       eventType: "policy_acknowledged",
@@ -38296,8 +38310,8 @@ function registerPilotEnrollmentRoutes(app2) {
     }
     const d = parsed.data;
     const [policyRecord, termsRecord] = await Promise.all([
-      db.select({ id: policyAcknowledgments.id, email: policyAcknowledgments.email }).from(policyAcknowledgments).where(eq5(policyAcknowledgments.id, d.policy_acknowledgment_id)).limit(1),
-      db.select({ id: termsAcknowledgments.id, policyId: termsAcknowledgments.policyAcknowledgmentId }).from(termsAcknowledgments).where(eq5(termsAcknowledgments.id, d.terms_acknowledgment_id)).limit(1)
+      db.select({ id: policyAcknowledgments.id, email: policyAcknowledgments.email }).from(policyAcknowledgments).where(eq6(policyAcknowledgments.id, d.policy_acknowledgment_id)).limit(1),
+      db.select({ id: termsAcknowledgments.id, policyId: termsAcknowledgments.policyAcknowledgmentId }).from(termsAcknowledgments).where(eq6(termsAcknowledgments.id, d.terms_acknowledgment_id)).limit(1)
     ]);
     if (!policyRecord.length) {
       return res.status(400).json({ ok: false, errors: { form: "Invalid enrollment token. Please start from the pilot terms page." } });
@@ -38440,7 +38454,7 @@ function registerPilotEnrollmentRoutes(app2) {
       const statusFilter = req.query.status;
       const limit = Math.min(Number(req.query.limit) || 50, 200);
       const offset = Number(req.query.offset) || 0;
-      const conditions = statusFilter ? [eq5(pilotApplications.pilotStatus, statusFilter)] : [];
+      const conditions = statusFilter ? [eq6(pilotApplications.pilotStatus, statusFilter)] : [];
       const where = conditions.length > 0 ? and3(...conditions) : void 0;
       const [apps, countResult] = await Promise.all([
         db.select().from(pilotApplications).where(where).orderBy(desc3(pilotApplications.submittedAt)).limit(limit).offset(offset),
@@ -38500,7 +38514,7 @@ function registerPilotEnrollmentRoutes(app2) {
         approvedAt: /* @__PURE__ */ new Date(),
         approvedBy,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq5(pilotApplications.id, pilot_application_id)).returning();
+      }).where(eq6(pilotApplications.id, pilot_application_id)).returning();
       if (!updated.length) {
         return res.status(404).json({ message: "Application not found" });
       }
@@ -38527,7 +38541,7 @@ function registerPilotEnrollmentRoutes(app2) {
 
 // server/leadsRoutes.ts
 import { z as z10 } from "zod";
-import { eq as eq6, desc as desc4 } from "drizzle-orm";
+import { eq as eq7, desc as desc4 } from "drizzle-orm";
 var STATUSES = ["new", "contacted", "qualified", "applied", "converted", "parked"];
 var SOURCES = ["website_contact", "referral", "direct", "pilot_page", "other"];
 var BUSINESS_TYPES = ["fuel", "retail", "other"];
@@ -38594,7 +38608,7 @@ function registerLeadsRoutes(app2) {
     }
     try {
       const { nextActionDue, ...rest } = parsed.data;
-      const [updated] = await db.update(leads).set({ ...rest, nextActionDue: nextActionDue ? new Date(nextActionDue) : null, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(leads.id, req.params.id)).returning();
+      const [updated] = await db.update(leads).set({ ...rest, nextActionDue: nextActionDue ? new Date(nextActionDue) : null, updatedAt: /* @__PURE__ */ new Date() }).where(eq7(leads.id, req.params.id)).returning();
       if (!updated) return res.status(404).json({ error: "Lead not found" });
       res.json(updated);
     } catch (err) {
@@ -38604,7 +38618,7 @@ function registerLeadsRoutes(app2) {
   });
   app2.delete("/api/leads/:id", isAuthenticated, isPlatformOwner, async (req, res) => {
     try {
-      await db.delete(leads).where(eq6(leads.id, req.params.id));
+      await db.delete(leads).where(eq7(leads.id, req.params.id));
       res.json({ ok: true });
     } catch (err) {
       console.error("[leads] delete failed:", err);
@@ -38613,7 +38627,7 @@ function registerLeadsRoutes(app2) {
   });
   app2.get("/api/leads/:id/notes", isAuthenticated, isPlatformOwner, async (req, res) => {
     try {
-      const notes = await db.select().from(leadNotes).where(eq6(leadNotes.leadId, req.params.id)).orderBy(desc4(leadNotes.createdAt));
+      const notes = await db.select().from(leadNotes).where(eq7(leadNotes.leadId, req.params.id)).orderBy(desc4(leadNotes.createdAt));
       res.json(notes);
     } catch (err) {
       console.error("[leads] notes list failed:", err);

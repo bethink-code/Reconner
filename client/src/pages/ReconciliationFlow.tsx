@@ -117,6 +117,10 @@ export default function ReconciliationFlow() {
       setMatchResult(data);
       setCompletedSteps(prev => [...prev.filter(s => s !== "configure"), "configure"]);
       setCurrentStep("configure");
+      // Pre-fetch results data while user reviews the match summary on configure step,
+      // so Results renders instantly when they click through.
+      queryClient.prefetchQuery({ queryKey: ["/api/periods", periodId, "dashboard"] });
+      queryClient.prefetchQuery({ queryKey: ["/api/periods", periodId, "review-model"] });
     },
     onError: (error: Error) => {
       setIsAutoMatching(false);

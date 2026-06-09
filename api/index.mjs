@@ -27688,6 +27688,7 @@ __export(schema_exports, {
   insertTransactionSchema: () => insertTransactionSchema,
   insertUploadedFileSchema: () => insertUploadedFileSchema,
   invitedUsers: () => invitedUsers,
+  leadNotes: () => leadNotes,
   leads: () => leads,
   matches: () => matches,
   matchingRules: () => matchingRules,
@@ -28125,6 +28126,9 @@ var leads = pgTable("leads", {
   // fuel | retail | other
   location: varchar("location", { length: 255 }),
   interestedInPilot: boolean("interested_in_pilot").notNull().default(false),
+  nextAction: varchar("next_action", { length: 100 }),
+  // first_contact | follow_up | send_pricing | set_up_pilot | onboard | check_in | convert
+  nextActionDue: timestamp("next_action_due"),
   source: varchar("source", { length: 100 }).notNull().default("direct"),
   // website_contact | referral | direct | pilot_page | other
   status: varchar("status", { length: 50 }).notNull().default("new"),
@@ -28137,6 +28141,15 @@ var leads = pgTable("leads", {
   index("IDX_leads_email").on(table.email),
   index("IDX_leads_status").on(table.status),
   index("IDX_leads_created_at").on(table.createdAt)
+]);
+var leadNotes = pgTable("lead_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  note: text("note").notNull(),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("IDX_lead_notes_lead_id").on(table.leadId),
+  index("IDX_lead_notes_created_at").on(table.createdAt)
 ]);
 
 // server/db.ts
@@ -38506,6 +38519,8 @@ var createSchema = z10.object({
   businessType: z10.enum(BUSINESS_TYPES).optional(),
   location: z10.string().trim().max(255).optional(),
   interestedInPilot: z10.boolean().default(false),
+  nextAction: z10.string().trim().max(100).optional(),
+  nextActionDue: z10.string().optional().nullable(),
   source: z10.enum(SOURCES).default("direct"),
   status: z10.enum(STATUSES).default("new"),
   notes: z10.string().trim().max(4e3).optional()
@@ -38518,6 +38533,8 @@ var updateSchema = z10.object({
   businessType: z10.enum(BUSINESS_TYPES).optional().nullable(),
   location: z10.string().trim().max(255).optional().nullable(),
   interestedInPilot: z10.boolean().optional(),
+  nextAction: z10.string().trim().max(100).optional().nullable(),
+  nextActionDue: z10.string().optional().nullable(),
   source: z10.enum(SOURCES).optional(),
   status: z10.enum(STATUSES).optional(),
   notes: z10.string().trim().max(4e3).optional().nullable(),
@@ -38539,7 +38556,11 @@ function registerLeadsRoutes(app2) {
       return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid data" });
     }
     try {
-      const [lead] = await db.insert(leads).values(parsed.data).returning();
+      const { nextActionDue, ...rest } = parsed.data;
+      const [lead] = await db.insert(leads).values({
+        ...rest,
+        nextActionDue: nextActionDue ? new Date(nextActionDue) : null
+      }).returning();
       res.status(201).json(lead);
     } catch (err) {
       console.error("[leads] create failed:", err);
@@ -38552,7 +38573,8 @@ function registerLeadsRoutes(app2) {
       return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid data" });
     }
     try {
-      const [updated] = await db.update(leads).set({ ...parsed.data, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(leads.id, req.params.id)).returning();
+      const { nextActionDue, ...rest } = parsed.data;
+      const [updated] = await db.update(leads).set({ ...rest, nextActionDue: nextActionDue ? new Date(nextActionDue) : null, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(leads.id, req.params.id)).returning();
       if (!updated) return res.status(404).json({ error: "Lead not found" });
       res.json(updated);
     } catch (err) {
@@ -38567,6 +38589,26 @@ function registerLeadsRoutes(app2) {
     } catch (err) {
       console.error("[leads] delete failed:", err);
       res.status(500).json({ error: "Failed to delete lead" });
+    }
+  });
+  app2.get("/api/leads/:id/notes", isAuthenticated, isPlatformOwner, async (req, res) => {
+    try {
+      const notes = await db.select().from(leadNotes).where(eq6(leadNotes.leadId, req.params.id)).orderBy(desc4(leadNotes.createdAt));
+      res.json(notes);
+    } catch (err) {
+      console.error("[leads] notes list failed:", err);
+      res.status(500).json({ error: "Failed to fetch notes" });
+    }
+  });
+  app2.post("/api/leads/:id/notes", isAuthenticated, isPlatformOwner, async (req, res) => {
+    const note = (req.body?.note ?? "").trim();
+    if (!note) return res.status(400).json({ error: "Note is required" });
+    try {
+      const [created] = await db.insert(leadNotes).values({ leadId: req.params.id, note }).returning();
+      res.status(201).json(created);
+    } catch (err) {
+      console.error("[leads] note create failed:", err);
+      res.status(500).json({ error: "Failed to add note" });
     }
   });
 }

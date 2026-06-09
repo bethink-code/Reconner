@@ -526,6 +526,8 @@ export const leads = pgTable("leads", {
   businessType: varchar("business_type", { length: 100 }), // fuel | retail | other
   location: varchar("location", { length: 255 }),
   interestedInPilot: boolean("interested_in_pilot").notNull().default(false),
+  nextAction: varchar("next_action", { length: 100 }), // first_contact | follow_up | send_pricing | set_up_pilot | onboard | check_in | convert
+  nextActionDue: timestamp("next_action_due"),
   source: varchar("source", { length: 100 }).notNull().default("direct"), // website_contact | referral | direct | pilot_page | other
   status: varchar("status", { length: 50 }).notNull().default("new"), // new | contacted | qualified | applied | converted | parked
   notes: text("notes"),
@@ -540,3 +542,15 @@ export const leads = pgTable("leads", {
 
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
+
+export const leadNotes = pgTable("lead_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  note: text("note").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_lead_notes_lead_id").on(table.leadId),
+  index("IDX_lead_notes_created_at").on(table.createdAt),
+]);
+
+export type LeadNote = typeof leadNotes.$inferSelect;

@@ -30214,6 +30214,15 @@ function registerAccountRoutes(app2) {
         const props2 = await storage.getAllProperties(includeArchived);
         return res.json(props2);
       }
+      if (req.query.myOrgs === "true") {
+        const userId = req.user?.claims?.sub;
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const memberships = await storage.getUserOrganizations(userId);
+        const allProps = await Promise.all(
+          memberships.map((m) => storage.getPropertiesByOrg(m.organization.id, includeArchived))
+        );
+        return res.json(allProps.flat());
+      }
       const ctx = await resolveOrgContext(req, res);
       if (!ctx) return;
       const props = await storage.getPropertiesByOrg(ctx.orgId, includeArchived);

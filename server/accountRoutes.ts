@@ -132,8 +132,7 @@ export function registerAccountRoutes(app: Express) {
   app.get("/api/properties", isAuthenticated, async (req: any, res) => {
     try {
       const includeArchived = req.query.includeArchived === "true";
-      // Platform owners can request every property across every org (cross-org admin view).
-      // Org admins/owners stay scoped to their current org via resolveOrgContext.
+      // Platform owners with all=true: every property across every org.
       if (req.query.all === "true") {
         const me = await storage.getUser(req.user?.claims?.sub);
         if (!me?.isPlatformOwner) {
@@ -141,6 +140,16 @@ export function registerAccountRoutes(app: Express) {
         }
         const props = await storage.getAllProperties(includeArchived);
         return res.json(props);
+      }
+      // myOrgs=true: properties across all orgs this user belongs to (multi-org admins).
+      if (req.query.myOrgs === "true") {
+        const userId = req.user?.claims?.sub;
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const memberships = await storage.getUserOrganizations(userId);
+        const allProps = await Promise.all(
+          memberships.map((m) => storage.getPropertiesByOrg(m.organization.id, includeArchived))
+        );
+        return res.json(allProps.flat());
       }
       const ctx = await resolveOrgContext(req, res);
       if (!ctx) return;

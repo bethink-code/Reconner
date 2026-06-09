@@ -173,7 +173,7 @@ export default function Admin() {
   // Properties — platform owners see every org's properties; everyone else stays scoped to their current org
   const propertiesQueryKey = isPlatformOwner
     ? ["/api/properties?includeArchived=true&all=true"]
-    : ["/api/properties?includeArchived=true"];
+    : ["/api/properties?includeArchived=true&myOrgs=true"];
   const { data: allProperties = [] } = useQuery<Property[]>({
     queryKey: propertiesQueryKey,
     enabled: !!currentOrgId,

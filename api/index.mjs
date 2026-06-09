@@ -29788,6 +29788,16 @@ async function setupAuth(app2) {
             console.error("Login error:", loginErr);
             return res.redirect("/api/login");
           }
+          const loginEmail = user.claims?.email || null;
+          const loginSub = user.claims?.sub || null;
+          db.insert(auditLogs).values({
+            userId: loginSub,
+            userEmail: loginEmail,
+            action: "auth.login",
+            resourceType: "user",
+            outcome: "success",
+            ipAddress: req.headers?.["x-forwarded-for"]?.toString()?.split(",")[0]?.trim() || req.socket?.remoteAddress || null
+          }).catch((err2) => console.error("[AUDIT] Failed to log login:", err2));
           return res.redirect("/");
         });
       })(req, res, next);

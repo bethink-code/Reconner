@@ -266,6 +266,16 @@ export async function setupAuth(app: Express) {
             console.error("Login error:", loginErr);
             return res.redirect("/api/login");
           }
+          const loginEmail = (user as any).claims?.email || null;
+          const loginSub = (user as any).claims?.sub || null;
+          db.insert(auditLogs).values({
+            userId: loginSub,
+            userEmail: loginEmail,
+            action: "auth.login",
+            resourceType: "user",
+            outcome: "success",
+            ipAddress: req.headers?.["x-forwarded-for"]?.toString()?.split(",")[0]?.trim() || req.socket?.remoteAddress || null,
+          }).catch((err) => console.error("[AUDIT] Failed to log login:", err));
           return res.redirect("/");
         });
       })(req, res, next);

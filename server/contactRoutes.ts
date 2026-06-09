@@ -86,7 +86,7 @@ export function registerContactRoutes(app: Express): void {
 
     // Fire-and-forget: persist to leads pipeline so nothing gets lost in email.
     db.insert(leads)
-      .values({ name: data.name, email: data.email, source: "website_contact", notes: data.message })
+      .values({ name: data.name, email: data.email, phone: "", source: "website_contact", notes: data.message })
       .catch((err) => console.error("[contact] lead insert failed:", err));
 
     return res.json({ ok: true });

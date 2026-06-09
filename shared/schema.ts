@@ -520,9 +520,11 @@ export const pilotWorkflowLog = pgTable("pilot_workflow_log", {
 export const leads = pgTable("leads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull(),
-  phone: varchar("phone", { length: 50 }),
+  businessName: varchar("business_name", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }).notNull(),
   businessType: varchar("business_type", { length: 100 }), // fuel | retail | other
+  interestedInPilot: boolean("interested_in_pilot").notNull().default(false),
   source: varchar("source", { length: 100 }).notNull().default("direct"), // website_contact | referral | direct | pilot_page | other
   status: varchar("status", { length: 50 }).notNull().default("new"), // new | contacted | qualified | applied | converted | parked
   notes: text("notes"),

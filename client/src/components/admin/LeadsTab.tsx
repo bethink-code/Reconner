@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
 import type { Lead } from "@shared/schema";
@@ -40,9 +41,11 @@ const BUSINESS_LABELS: Record<string, string> = {
 
 const BLANK_FORM = {
   name: "",
+  businessName: "",
   email: "",
   phone: "",
   businessType: "" as string,
+  interestedInPilot: false,
   source: "direct" as string,
   status: "new" as string,
   notes: "",
@@ -84,9 +87,11 @@ export default function LeadsTab() {
     setEditingLead(lead);
     setForm({
       name: lead.name,
-      email: lead.email,
+      businessName: lead.businessName ?? "",
+      email: lead.email ?? "",
       phone: lead.phone ?? "",
       businessType: lead.businessType ?? "",
+      interestedInPilot: lead.interestedInPilot ?? false,
       source: lead.source,
       status: lead.status,
       notes: lead.notes ?? "",
@@ -109,12 +114,16 @@ export default function LeadsTab() {
           <Input value={form.name} onChange={(e) => formField("name", e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label>Email *</Label>
-          <Input type="email" value={form.email} onChange={(e) => formField("email", e.target.value)} />
+          <Label>Business name</Label>
+          <Input value={form.businessName} onChange={(e) => formField("businessName", e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label>Phone</Label>
+          <Label>Cell *</Label>
           <Input value={form.phone} onChange={(e) => formField("phone", e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Email</Label>
+          <Input type="email" value={form.email} onChange={(e) => formField("email", e.target.value)} />
         </div>
         <div className="space-y-1">
           <Label>Business type</Label>
@@ -127,6 +136,14 @@ export default function LeadsTab() {
               <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="col-span-2 flex items-center gap-2 pt-1">
+          <Checkbox
+            id="pilot-flag"
+            checked={form.interestedInPilot}
+            onCheckedChange={(v) => setForm((prev) => ({ ...prev, interestedInPilot: !!v }))}
+          />
+          <Label htmlFor="pilot-flag" className="cursor-pointer">Interested in pilot</Label>
         </div>
         <div className="space-y-1">
           <Label>Source</Label>
@@ -191,6 +208,7 @@ export default function LeadsTab() {
                 <th className="text-left px-4 py-2.5 hidden sm:table-cell">Contact</th>
                 <th className="text-left px-4 py-2.5 hidden md:table-cell">Type</th>
                 <th className="text-left px-4 py-2.5 hidden md:table-cell">Source</th>
+                <th className="text-left px-4 py-2.5 hidden md:table-cell">Pilot</th>
                 <th className="text-left px-4 py-2.5">Status</th>
                 <th className="text-left px-4 py-2.5 hidden lg:table-cell">Added</th>
                 <th className="px-4 py-2.5" />
@@ -204,19 +222,26 @@ export default function LeadsTab() {
                 >
                   <td className="px-4 py-3 font-medium">
                     {lead.name}
-                    {lead.notes && (
-                      <p className="text-xs text-muted-foreground font-normal truncate max-w-[180px]">{lead.notes}</p>
+                    {lead.businessName && (
+                      <p className="text-xs text-muted-foreground font-normal">{lead.businessName}</p>
                     )}
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">
-                    <div>{lead.email}</div>
-                    {lead.phone && <div className="text-xs">{lead.phone}</div>}
+                    <div>{lead.phone}</div>
+                    {lead.email && <div className="text-xs">{lead.email}</div>}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
                     {lead.businessType ? BUSINESS_LABELS[lead.businessType] ?? lead.businessType : "—"}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
                     {SOURCE_LABELS[lead.source] ?? lead.source}
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {lead.interestedInPilot ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Yes</span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOURS[lead.status as LeadStatus] ?? "bg-gray-100 text-gray-600"}`}>
@@ -252,7 +277,7 @@ export default function LeadsTab() {
             <Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate(form)}
-              disabled={!form.name || !form.email || createMutation.isPending}
+              disabled={!form.name || !form.phone || createMutation.isPending}
             >
               {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
               Add lead
@@ -270,7 +295,7 @@ export default function LeadsTab() {
             <Button variant="outline" onClick={() => setEditingLead(null)}>Cancel</Button>
             <Button
               onClick={() => editingLead && updateMutation.mutate({ id: editingLead.id, data: form })}
-              disabled={!form.name || !form.email || updateMutation.isPending}
+              disabled={!form.name || !form.phone || updateMutation.isPending}
             >
               {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
               Save

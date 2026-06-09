@@ -28118,10 +28118,12 @@ var pilotWorkflowLog = pgTable("pilot_workflow_log", {
 var leads = pgTable("leads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull(),
-  phone: varchar("phone", { length: 50 }),
+  businessName: varchar("business_name", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }).notNull(),
   businessType: varchar("business_type", { length: 100 }),
   // fuel | retail | other
+  interestedInPilot: boolean("interested_in_pilot").notNull().default(false),
   source: varchar("source", { length: 100 }).notNull().default("direct"),
   // website_contact | referral | direct | pilot_page | other
   status: varchar("status", { length: 50 }).notNull().default("new"),
@@ -38011,7 +38013,7 @@ function registerContactRoutes(app2) {
         error: "Could not send your message. Please email garth@bethink.co.za directly."
       });
     }
-    db.insert(leads).values({ name: data.name, email: data.email, source: "website_contact", notes: data.message }).catch((err) => console.error("[contact] lead insert failed:", err));
+    db.insert(leads).values({ name: data.name, email: data.email, phone: "", source: "website_contact", notes: data.message }).catch((err) => console.error("[contact] lead insert failed:", err));
     return res.json({ ok: true });
   });
 }
@@ -38497,18 +38499,22 @@ var SOURCES = ["website_contact", "referral", "direct", "pilot_page", "other"];
 var BUSINESS_TYPES = ["fuel", "retail", "other"];
 var createSchema = z10.object({
   name: z10.string().trim().min(1).max(255),
-  email: z10.string().trim().email().max(255),
-  phone: z10.string().trim().max(50).optional(),
+  businessName: z10.string().trim().max(255).optional(),
+  email: z10.string().trim().email().max(255).optional().or(z10.literal("")),
+  phone: z10.string().trim().min(1).max(50),
   businessType: z10.enum(BUSINESS_TYPES).optional(),
+  interestedInPilot: z10.boolean().default(false),
   source: z10.enum(SOURCES).default("direct"),
   status: z10.enum(STATUSES).default("new"),
   notes: z10.string().trim().max(4e3).optional()
 });
 var updateSchema = z10.object({
   name: z10.string().trim().min(1).max(255).optional(),
-  email: z10.string().trim().email().max(255).optional(),
-  phone: z10.string().trim().max(50).optional().nullable(),
+  businessName: z10.string().trim().max(255).optional().nullable(),
+  email: z10.string().trim().email().max(255).optional().nullable().or(z10.literal("")),
+  phone: z10.string().trim().min(1).max(50).optional(),
   businessType: z10.enum(BUSINESS_TYPES).optional().nullable(),
+  interestedInPilot: z10.boolean().optional(),
   source: z10.enum(SOURCES).optional(),
   status: z10.enum(STATUSES).optional(),
   notes: z10.string().trim().max(4e3).optional().nullable(),

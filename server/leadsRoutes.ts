@@ -19,9 +19,11 @@ const BUSINESS_TYPES = ["fuel", "retail", "other"] as const;
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(255),
-  email: z.string().trim().email().max(255),
-  phone: z.string().trim().max(50).optional(),
+  businessName: z.string().trim().max(255).optional(),
+  email: z.string().trim().email().max(255).optional().or(z.literal("")),
+  phone: z.string().trim().min(1).max(50),
   businessType: z.enum(BUSINESS_TYPES).optional(),
+  interestedInPilot: z.boolean().default(false),
   source: z.enum(SOURCES).default("direct"),
   status: z.enum(STATUSES).default("new"),
   notes: z.string().trim().max(4000).optional(),
@@ -29,9 +31,11 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
-  email: z.string().trim().email().max(255).optional(),
-  phone: z.string().trim().max(50).optional().nullable(),
+  businessName: z.string().trim().max(255).optional().nullable(),
+  email: z.string().trim().email().max(255).optional().nullable().or(z.literal("")),
+  phone: z.string().trim().min(1).max(50).optional(),
   businessType: z.enum(BUSINESS_TYPES).optional().nullable(),
+  interestedInPilot: z.boolean().optional(),
   source: z.enum(SOURCES).optional(),
   status: z.enum(STATUSES).optional(),
   notes: z.string().trim().max(4000).optional().nullable(),

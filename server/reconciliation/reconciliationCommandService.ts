@@ -95,8 +95,8 @@ function isBankTransaction(transaction: Transaction) {
   return !!transaction.sourceType?.startsWith("bank");
 }
 
-function isFuelTransaction(transaction: Transaction) {
-  return transaction.sourceType === "fuel";
+function isSalesSideTransaction(transaction: Transaction) {
+  return transaction.sourceType === "fuel" || transaction.sourceType === "retail";
 }
 
 function assertPeriodTransaction(
@@ -437,8 +437,8 @@ export class ReconciliationCommandService {
       throw new ReconciliationCommandError(400, "invalid_bank_transaction", "The selected bank transaction is not a bank transaction");
     }
 
-    if (!isFuelTransaction(fuelTransaction)) {
-      throw new ReconciliationCommandError(400, "invalid_fuel_transaction", "The selected fuel transaction is not a fuel transaction");
+    if (!isSalesSideTransaction(fuelTransaction)) {
+      throw new ReconciliationCommandError(400, "invalid_sales_transaction", "The selected sales transaction is not a valid sales transaction");
     }
 
     return [bankTransaction, fuelTransaction] as const;

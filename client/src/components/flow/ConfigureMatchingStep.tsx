@@ -40,20 +40,18 @@ interface PresetConfig {
   id: string;
   name: string;
   description: string;
+  recommended?: boolean;
   icon: React.ElementType;
-  tolerance: string;
-  timing: string;
   rules: Partial<MatchingRules>;
 }
 
+// Preset ids are stored in saved rules — display names changed (Strict/Balanced/Relaxed), ids stay.
 const PRESETS: PresetConfig[] = [
   {
     id: "conservative",
-    name: "Conservative",
-    description: "Tight same-day control with minimal false positives",
+    name: "Strict",
+    description: "Only counts a match when the amount and timing line up almost exactly. You'll have more to review, but nothing small slips past.",
     icon: Shield,
-    tolerance: "±R0.01",
-    timing: "30 min close · 120 min exact",
     rules: {
       amountTolerance: 0.01,
       dateWindowDays: 1,
@@ -67,11 +65,10 @@ const PRESETS: PresetConfig[] = [
   },
   {
     id: "moderate",
-    name: "Moderate",
-    description: "Balanced for most businesses",
+    name: "Balanced",
+    recommended: true,
+    description: "A sensible middle ground that works for most businesses. Start here.",
     icon: Scale,
-    tolerance: "±R1.00",
-    timing: "60 min close · 120 min exact",
     rules: {
       amountTolerance: 1.0,
       dateWindowDays: 3,
@@ -85,11 +82,9 @@ const PRESETS: PresetConfig[] = [
   },
   {
     id: "aggressive",
-    name: "Aggressive",
-    description: "Wider operational recovery with more review risk",
+    name: "Relaxed",
+    description: "Allows for bigger timing and amount differences. A shorter review list, but small gaps can blend in.",
     icon: Target,
-    tolerance: "±R2.00",
-    timing: "120 min close · 120 min exact",
     rules: {
       amountTolerance: 2.0,
       dateWindowDays: 5,
@@ -229,8 +224,9 @@ export function ConfigureMatchingStep({
           <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <Settings className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Configure Matching</h2>
-          <p className="text-sm text-muted-foreground mt-1">How strict should we be when matching transactions?</p>
+          <p className="text-sm text-muted-foreground mb-1">Almost there. Now let's set how carefully we match.</p>
+          <h2 className="text-2xl font-semibold tracking-tight">Choose how closely a sale and a bank transaction must line up to count as a match</h2>
+          <p className="text-sm text-muted-foreground mt-1">Stricter matching flags more for you to review. Looser matching only flags the clear gaps. You can change this any time and run it again.</p>
         </div>
         <div className="space-y-6">
           <div className="grid grid-cols-3 gap-3">
@@ -263,12 +259,13 @@ export function ConfigureMatchingStep({
                     "h-6 w-6 mb-2",
                     isSelected ? "text-primary" : "text-muted-foreground"
                   )} />
-                  <p className="font-medium text-sm">{preset.name}</p>
+                  <p className="font-medium text-sm">
+                    {preset.name}
+                    {preset.recommended && (
+                      <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">Recommended</span>
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">{preset.description}</p>
-                  <div className="mt-3 space-y-1">
-                    <p className="text-xs font-mono">{preset.tolerance}</p>
-                    <p className="text-xs text-muted-foreground">{preset.timing}</p>
-                  </div>
                 </button>
               );
             })}
@@ -278,26 +275,27 @@ export function ConfigureMatchingStep({
             <p className="text-sm text-center">
               {selectedPreset === "conservative" && (
                 <>
-                  <span className="font-medium">Conservative</span> requires exact matches.
-                  Uses a 30 minute operational-close window and a 120 minute exact-match window.
+                  <span className="font-medium">Strict</span> flags more for you to review,
+                  but nothing small slips past.
                 </>
               )}
               {selectedPreset === "moderate" && (
                 <>
-                  <span className="font-medium">Moderate</span> is recommended for most businesses.
-                  Uses a 60 minute operational-close window and a 120 minute exact-match window.
+                  <span className="font-medium">Balanced</span> is a sensible middle ground
+                  that works for most businesses.
                 </>
               )}
               {selectedPreset === "aggressive" && (
                 <>
-                  <span className="font-medium">Aggressive</span> maximizes match rate.
-                  Uses a 120 minute operational-close window and a 120 minute exact-match window.
+                  <span className="font-medium">Relaxed</span> gives you a shorter review
+                  list, but small gaps can blend in.
                 </>
               )}
               {selectedPreset === "custom" && (
                 <>
-                  <span className="font-medium">Custom</span> uses your saved rules.
-                  {isPlatformOwner && " The cards above are presets only, and the live stages below reflect the actual rules that will run."}
+                  The settings below show exactly what will run. Pick a preset above to fill
+                  them in, or open Advanced settings to fine-tune.
+                  {isPlatformOwner && " The live stages below reflect the actual rules that will run."}
                 </>
               )}
             </p>
@@ -475,7 +473,7 @@ export function ConfigureMatchingStep({
                 className="w-full justify-between bg-muted/50 text-muted-foreground hover:bg-muted"
                 data-testid="button-toggle-advanced"
               >
-                <span>Advanced Settings</span>
+                <span>Advanced settings (most people never need these)</span>
                 <ChevronDown className={cn(
                   "h-4 w-4 transition-transform",
                   showAdvanced && "rotate-180"
@@ -486,7 +484,7 @@ export function ConfigureMatchingStep({
               <div className="space-y-4">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Amount Tolerance</Label>
+                    <Label>How far the amounts can differ and still match</Label>
                     <span className="text-sm font-mono">
                       ±R{customRules.amountTolerance.toFixed(2)}
                     </span>
@@ -500,13 +498,14 @@ export function ConfigureMatchingStep({
                     data-testid="slider-tolerance"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How much can amounts differ and still match?
+                    Card fees and rounding mean the sale and the bank amount aren't always identical
+                    to the cent. This sets how far apart they can be and still match.
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Forward / Back Match Window</Label>
+                    <Label>How many days before or after the sale to look</Label>
                     <span className="text-sm font-mono">
                       -{customRules.dateWindowDays} / +{customRules.dateWindowDays} days
                     </span>
@@ -520,13 +519,15 @@ export function ConfigureMatchingStep({
                     data-testid="slider-date-window"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How far before or after the sale a bank transaction can still be considered for matching. This does not change the reconciliation period itself.
+                    A sale can take a few days to show up in your bank. This is how far either side of
+                    the sale date we look for its matching bank transaction. It does not change your
+                    reconciliation period.
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Submission Delay</Label>
+                    <Label>When amounts match exactly, how late the payment can arrive</Label>
                     <span className="text-sm font-mono">
                       {customRules.attendantSubmissionDelayMinutes} min
                     </span>
@@ -540,13 +541,15 @@ export function ConfigureMatchingStep({
                     data-testid="slider-attendant-delay"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How long after the sale the payment may still post for an exact same-day match.
+                    When the amounts match to the cent, how long after the sale the bank transaction
+                    can arrive and still count as the same sale. Leave this as-is unless our team
+                    suggests otherwise.
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Operational Close Time Window</Label>
+                    <Label>When amounts are close, how far apart the times can be</Label>
                     <span className="text-sm font-mono">
                       {customRules.timeWindowMinutes} min
                     </span>
@@ -560,13 +563,14 @@ export function ConfigureMatchingStep({
                     data-testid="slider-operational-close-window"
                   />
                   <p className="text-xs text-muted-foreground">
-                    For close same-day matches that are not exact in amount, how far apart the sale and bank times may still be.
+                    When the amounts are close but not exact, how far apart the sale and bank times
+                    can be. Leave this as-is unless our team suggests otherwise.
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Match Quality Threshold</Label>
+                    <Label>How sure we need to be before calling it a match</Label>
                     <span className="text-sm font-mono">{customRules.minimumConfidence}%</span>
                   </div>
                   <Slider
@@ -578,7 +582,9 @@ export function ConfigureMatchingStep({
                     data-testid="slider-min-confidence"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How sure should we be before pairing a sale with a bank transaction? Lower = more matches but less accurate. Higher = fewer but more reliable.
+                    Each possible match gets a confidence score. This is the lowest score we'll
+                    accept. Higher means fewer but surer matches. Lower means more matches, but
+                    some may be wrong.
                   </p>
                 </div>
 
@@ -616,7 +622,7 @@ export function ConfigureMatchingStep({
               data-testid="button-start-reconciliation"
             >
               <Zap className="h-4 w-4 mr-2" />
-              {isMatching ? "Matching..." : "Start Reconciliation"}
+              {isMatching ? "Matching..." : "Start reconciliation"}
             </Button>
           </div>
         </div>

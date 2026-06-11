@@ -52,22 +52,26 @@ type SubStep = "upload" | "quality" | "mapping" | "complete";
 export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSourceType = "fuel" }: FuelUploadStepProps) {
   const { toast } = useToast();
 
-  // Vertical-aware copy. Fuel keeps its exact wording (byte-identical); other verticals get
-  // vocabulary-driven copy with guidance that fits their export (e.g. retail receipt-level files).
+  // Vertical-aware copy per the June 2026 copy review: conversational lead-in, the instruction
+  // in the heading, column requirements spelled out, and generic helpers (no system names).
   const vertical = getVertical(salesSideSourceType);
   const vocab = vertical.vocabulary;
   const isFuel = vertical.id === "fuel";
   const SalesIcon = isFuel ? Fuel : Store;
-  const salesNoun = vocab.salesSide.toLowerCase();
-  const introCopy = isFuel
-    ? "Upload your fuel transactions first — this is your source of truth. We'll match your bank transactions against these records."
-    : `Upload your ${vocab.salePlural} first — this is your source of truth. We'll match your bank deposits against these receipts.`;
-  const dropCopy = isFuel
-    ? "Drag and drop your fuel export file here"
-    : `Drag and drop your ${salesNoun} export file here`;
-  const tipCopy = isFuel
-    ? "Export your daily transaction report from your fuel management system. Make sure it includes the date, amount, and payment type for each sale. For best results, include fuel data for 3 days before and after your bank statement period."
-    : `Export your receipt-level report from your point-of-sale system — one row per receipt, with a payment type column. Make sure it includes the date, amount, and payment type for each ${vocab.saleSingular}. For best results, include ${salesNoun} data for 3 days before and after your bank statement period.`;
+  const headingCopy = isFuel
+    ? "Upload your fuel point of sale report for your period"
+    : "Upload your point of sale report for your period";
+  const subheadingCopy =
+    "This is your source of truth. We'll match each individual transaction against the line items in your merchant bank transaction reports.";
+  const staffColumnCopy = isFuel
+    ? { name: "Attendant / cashier", detail: "who was at the pump or point of sale" }
+    : { name: "Cashier", detail: "who rang up the sale" };
+  const extraColumnsCopy = isFuel
+    ? "You can add any other columns you want to track (pump number, fuel grade, vehicle registration, and so on)."
+    : "You can add any other columns you want to track.";
+  const retailReceiptNote = isFuel
+    ? null
+    : "Use the receipt-level export: one row per receipt, with a payment type column. A per-item export can't tell card from cash.";
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [subStep, setSubStep] = useState<SubStep>(
@@ -486,8 +490,9 @@ export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSo
         <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
           <SalesIcon className="h-6 w-6 text-primary" />
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">Upload Sales Data</h2>
-        <p className="text-sm text-muted-foreground mt-1">{introCopy}</p>
+        <p className="text-sm text-muted-foreground mb-1">First, let's get your sales in.</p>
+        <h2 className="text-2xl font-semibold tracking-tight">{headingCopy}</h2>
+        <p className="text-sm text-muted-foreground mt-1">{subheadingCopy}</p>
       </div>
       <div className="space-y-4">
         {uploadMutation.isPending ? (
@@ -515,7 +520,7 @@ export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSo
           >
             <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
             <p className="text-sm font-medium mb-1">
-              {dropCopy}
+              Drag and drop your file here
             </p>
             <p className="text-xs text-muted-foreground mb-4">
               or click to browse
@@ -538,18 +543,51 @@ export function FuelUploadStep({ periodId, existingFile, onComplete, salesSideSo
             </label>
             <div className="mt-4 space-y-1">
               <p className="text-xs text-muted-foreground">
-                Supported: Excel (.xlsx, .xls) or CSV
-              </p>
-              <p className="text-xs text-muted-foreground">
-                File should include columns for: date, amount, reference/invoice number
+                Supported: Excel (.xlsx, .xls), CSV, or TXT
               </p>
             </div>
           </div>
         )}
 
+        {/* Column requirements */}
+        <div className="p-4 bg-card rounded-lg">
+          <p className="text-sm font-medium mb-2">Please make sure your file has columns for the:</p>
+          <ul className="space-y-1 text-xs text-muted-foreground">
+            <li><span className="font-medium text-foreground">Date:</span> when the transaction happened</li>
+            <li><span className="font-medium text-foreground">Amount:</span> total sale (in Rands)</li>
+            <li><span className="font-medium text-foreground">Reference / invoice number:</span> receipt or transaction ID</li>
+            <li><span className="font-medium text-foreground">Payment type:</span> card or cash</li>
+            <li><span className="font-medium text-foreground">{staffColumnCopy.name}:</span> {staffColumnCopy.detail}</li>
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">{extraColumnsCopy}</p>
+          {retailReceiptNote && (
+            <p className="mt-2 text-xs text-muted-foreground">{retailReceiptNote}</p>
+          )}
+        </div>
+
+        {/* Helper: date range */}
         <div className="flex items-start gap-2 p-3 bg-card rounded-lg">
           <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
-          <p className="text-xs text-muted-foreground">{tipCopy}</p>
+          <div className="text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Include 3 days before and after your period</p>
+            <p className="mt-0.5">
+              Bank transactions can take days to settle. If you're reconciling 1 to 31 May, for example,
+              include point of sale data from 28 April through 3 June. This catches sales that happened
+              early but only showed up in your bank later.
+            </p>
+          </div>
+        </div>
+
+        {/* Helper: where to find it */}
+        <div className="flex items-start gap-2 p-3 bg-card rounded-lg">
+          <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
+          <div className="text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Where to find this report</p>
+            <p className="mt-0.5">
+              Look for a reports or transactions export option in your point of sale system.
+              If you can't find it, reach out to our team and we'll help you get it out.
+            </p>
+          </div>
         </div>
       </div>
     </div>

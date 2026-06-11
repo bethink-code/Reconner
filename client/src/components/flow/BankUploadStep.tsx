@@ -419,10 +419,20 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
           <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <Building2 className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Upload {bankName} Statement</h2>
-          <p className="text-sm text-muted-foreground mt-1">Upload your {bankName} bank statement to verify against your sales.</p>
+          <p className="text-sm text-muted-foreground mb-1">Now for the bank side of things.</p>
+          <h2 className="text-2xl font-semibold tracking-tight">Upload your {bankName} merchant transaction report</h2>
+          <p className="text-sm text-muted-foreground mt-1">This is what your processor actually received. We'll match each transaction against your point of sale data to find the gaps.</p>
         </div>
         <div className="space-y-4">
+          {/* Explainer: statement vs merchant report */}
+          <div className="p-4 bg-card rounded-lg">
+            <p className="text-sm font-medium">Your bank statement is not the same as your merchant transaction report</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Your bank statement shows bulk payout totals, the lump sums your processor paid into your
+              account. Your merchant transaction report shows every individual card transaction behind
+              those payouts. We need the detailed report, because that's where the gaps show up.
+            </p>
+          </div>
           {uploadMutation.isPending ? (
             <div className="space-y-4 p-8">
               <div className="text-center">
@@ -448,7 +458,7 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
             >
               <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
               <p className="text-sm font-medium mb-1">
-                Drag and drop your bank statement here
+                Drag and drop your file here
               </p>
               <p className="text-xs text-muted-foreground mb-4">
                 or click to browse
@@ -471,21 +481,49 @@ export function BankUploadStep({ periodId, bankName, existingFile, onBack }: Ban
               </label>
               <div className="mt-4 space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  Supported: Excel (.xlsx, .xls) or CSV
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Bank statement should include: date, amount, and reference/description
+                  Supported: Excel (.xlsx, .xls), CSV, or TXT
                 </p>
               </div>
             </div>
           )}
 
+          {/* Column requirements */}
+          <div className="p-4 bg-card rounded-lg">
+            <p className="text-sm font-medium mb-2">Please make sure your file has columns for the:</p>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              <li><span className="font-medium text-foreground">Date:</span> when the transaction was processed</li>
+              <li><span className="font-medium text-foreground">Time:</span> time of the transaction</li>
+              <li><span className="font-medium text-foreground">Terminal ID or reference:</span> which terminal processed the sale</li>
+              <li><span className="font-medium text-foreground">Transaction type:</span> card type or payment method</li>
+              <li><span className="font-medium text-foreground">Card number:</span> the card used (we mask these for security)</li>
+              <li><span className="font-medium text-foreground">Amount:</span> transaction value (in Rands)</li>
+              <li><span className="font-medium text-foreground">Cashier number:</span> who processed the transaction</li>
+            </ul>
+          </div>
+
+          {/* Helper: file format */}
           <div className="flex items-start gap-2 p-3 bg-card rounded-lg">
             <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
-            <p className="text-xs text-muted-foreground">
-              Download your merchant statement from your bank's online portal.
-              Make sure it includes the date, amount, and reference for each transaction.
-            </p>
+            <div className="text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">We need Excel, CSV or text files, not PDFs</p>
+              <p className="mt-0.5">
+                If your bank only gives you a PDF, use the PDF Converter on your Lekana dashboard to
+                convert it first. If you're stuck, reach out to our team.
+              </p>
+            </div>
+          </div>
+
+          {/* Helper: where to find it */}
+          <div className="flex items-start gap-2 p-3 bg-card rounded-lg">
+            <Lightbulb className="h-4 w-4 text-[#F5C400] mt-0.5 shrink-0" />
+            <div className="text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">Where to find this report</p>
+              <p className="mt-0.5">
+                Access your merchant transaction report through your {bankName} merchant processor
+                portal, not your regular online banking. Look for "Transaction Report", "Batch Report",
+                or "Settlement Detail". If you're unsure, contact your {bankName} merchant services team.
+              </p>
+            </div>
           </div>
         </div>
       </div>

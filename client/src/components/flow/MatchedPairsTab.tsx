@@ -67,8 +67,11 @@ interface MatchedPair {
   }[];
 }
 
-function getMatchLabel(matchType: string, userName: string, description?: string | null, matchStage?: string | null): string {
+function getMatchLabel(matchType: string, userName: string, description?: string | null, matchStage?: string | null, showEngineDetail = false): string {
   if (matchType.startsWith("auto")) {
+    // The engine's internal pass names are diagnostics — platform owners only.
+    // Owners just see "Matched"; the confidence % carries the nuance.
+    if (!showEngineDetail) return "Matched";
     if (matchStage === "strict_same_day_exact") return "Lekana (Strict Same-Day)";
     if (matchStage === "operational_close_match") return "Lekana (Operational Close)";
     if (matchStage === "boundary_transactions") return "Lekana (Boundary)";
@@ -87,15 +90,15 @@ function getMatchLabel(matchType: string, userName: string, description?: string
   if (matchType === "cash") return "Cash";
   if (matchType === "other_tender") return "Other tender";
   if (matchType === "debtor") return "Debtor";
-  if (matchType === "unmatched_card") return "Unmatched card sales";
-  if (matchType === "unmatched_bank") return "Unmatched bank";
+  if (matchType === "unmatched_card") return "Sale missing a payment";
+  if (matchType === "unmatched_bank") return "Payment missing a sale";
   if (matchType === "linked") return `${userName} (With reason)`;
   return `${userName} (Confirmed)`;
 }
 
 export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string; onJumpToReview?: (side: 'bank' | 'fuel') => void }) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isPlatformOwner } = useAuth();
   const userName = user?.firstName || "User";
   const [search, setSearch] = useState("");
   type TopFilter = "total" | "lekana" | "garth" | "excluded" | "review";
@@ -266,14 +269,18 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   }
 
   const legendItems = [
-    ["Lekana (Strict Same-Day)", "Matched in the strict same-day exact pass"],
-    ["Lekana (Operational Close)", "Matched in the close operational pass"],
-    ["Lekana (Boundary)", "Matched in the boundary transactions pass"],
-    ["Lekana (Settlement Fallback)", "Matched in the wider settlement fallback pass"],
+    ...(isPlatformOwner ? [
+      ["Lekana (Strict Same-Day)", "Matched in the strict same-day exact pass"],
+      ["Lekana (Operational Close)", "Matched in the close operational pass"],
+      ["Lekana (Boundary)", "Matched in the boundary transactions pass"],
+      ["Lekana (Settlement Fallback)", "Matched in the wider settlement fallback pass"],
+    ] : [
+      ["Matched", "Lekana found the matching merchant bank transaction"],
+    ]),
     [`${userName} (Confirmed)`, "You manually matched these transactions"],
     [`${userName} (With reason)`, "You matched and provided a reason"],
-    ["Excluded", "Reversed, declined, cancelled, or duplicate — excluded from matching"],
-    ["Other tender", "Non-card, non-cash tenders (EFT, vouchers, “Other”) — excluded from card matching"],
+    ["Excluded", "Reversed, declined, cancelled, or duplicate. Excluded from matching"],
+    ["Other tender", "Non-card, non-cash tenders (EFT, vouchers, “Other”). Excluded from card matching"],
   ];
 
   // Summary card helper — renders one of the 5 top-level buckets
@@ -348,14 +355,15 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
         />
         <SummaryCard
           id="lekana"
-          label="Lekana matched"
+          label="Matched by Lekana"
           count={totalLekana}
-          subRows={[
+          // The engine's pass breakdown is diagnostics — platform owners only.
+          subRows={isPlatformOwner ? [
             { key: "strict", label: "Strict same-day", count: strictCount },
             { key: "operational", label: "Operational close", count: operationalCount },
             { key: "boundary", label: "Boundary", count: boundaryCount },
             { key: "fallback", label: "Settlement fallback", count: fallbackCount },
-          ]}
+          ] : undefined}
         />
         <SummaryCard
           id="garth"
@@ -363,13 +371,13 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
           count={totalGarth}
           countColor={totalGarth === 0 ? "text-muted-foreground/60" : undefined}
           subRows={[
-            { key: "confirmed", label: "Confirmed", count: counts.confirmed },
-            { key: "reason", label: "With reason", count: counts.reason },
+            { key: "confirmed", label: "Marked as reviewed", count: counts.confirmed },
+            { key: "reason", label: "Reviewed with a note", count: counts.reason },
           ]}
         />
         <SummaryCard
           id="excluded"
-          label="Excluded"
+          label="Nothing to match"
           count={totalExcluded}
           subRows={[
             { key: "cash", label: "Cash", count: counts.cash },
@@ -385,18 +393,18 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
           countColor={totalReview > 0 ? "text-[#B45309]" : undefined}
           subRows={[
             {
-              key: "bank",
-              label: "Unmatched bank",
-              count: counts.unmatchedBank,
-              isLink: true,
-              onClickSub: () => onJumpToReview?.('bank'),
-            },
-            {
               key: "card",
-              label: "Unmatched card sales",
+              label: "Sales missing a payment",
               count: counts.unmatchedCard,
               isLink: true,
               onClickSub: () => onJumpToReview?.('fuel'),
+            },
+            {
+              key: "bank",
+              label: "Payments missing a sale",
+              count: counts.unmatchedBank,
+              isLink: true,
+              onClickSub: () => onJumpToReview?.('bank'),
             },
           ]}
         />
@@ -463,7 +471,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
             : p.fuelTransaction ? parseFloat(p.fuelTransaction.amount) : 0;
           const diff = (p.fuelTransaction && p.bankTransaction) ? Math.abs(bankAmt - fuelAmt) : 0;
           const confidence = p.match.matchConfidence ? parseFloat(p.match.matchConfidence) : null;
-          const matchLabel = getMatchLabel(p.match.matchType, userName, p.bankTransaction?.description, p.match.matchStage);
+          const matchLabel = getMatchLabel(p.match.matchType, userName, p.bankTransaction?.description, p.match.matchStage, isPlatformOwner);
           const mt = p.match.matchType;
           const bankOnly = !p.fuelTransaction && !!p.bankTransaction;
           const fuelOnly = !p.bankTransaction && !!p.fuelTransaction;
@@ -527,7 +535,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
               {/* Left — Bank only (excluded, unmatched_bank) */}
               {bankOnly && p.bankTransaction && (
                 <div className="min-w-0 space-y-0.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Bank</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Merchant</p>
                   <p className="text-sm font-semibold tabular-nums text-muted-foreground">{formatRand(bankAmt)}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {p.bankTransaction.transactionDate}
@@ -570,7 +578,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
               {/* Right — Bank (paired rows only) */}
               {!muted && p.bankTransaction && (
                 <div className="min-w-0 space-y-0.5 text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Bank</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Merchant</p>
                   <p className="text-sm font-semibold tabular-nums">{formatRand(bankAmt)}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {p.bankTransaction.transactionDate}

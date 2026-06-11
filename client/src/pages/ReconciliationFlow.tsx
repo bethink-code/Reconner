@@ -458,7 +458,8 @@ export default function ReconciliationFlow() {
               <div className="mx-auto mb-4 flex items-center justify-center">
                 <Check className="h-5 w-5 text-[#1A1200]" />
               </div>
-              <CardTitle className="text-2xl">Matching Complete</CardTitle>
+              <p className="text-sm text-muted-foreground">Done. Here's what we found.</p>
+              <CardTitle className="text-2xl">Matching complete</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {vertical.summaryView === "retail" ? (
@@ -473,15 +474,15 @@ export default function ReconciliationFlow() {
                     <p className="text-lg font-medium">of your card sales matched</p>
                     {completionMetrics.unmatchedFuelTransactions > 0 || completionMetrics.unmatchedBankTransactions > 0 ? (
                       <p className="text-base font-medium text-[#B45309]">
-                        {completionMetrics.matchedCardTransactions} of {completionMetrics.totalCardTransactions} card transactions matched - {completionMetrics.unmatchedFuelTransactions} sales and {completionMetrics.unmatchedBankTransactions} bank items need review
+                        {completionMetrics.matchedCardTransactions} of your {completionMetrics.totalCardTransactions} card sales matched cleanly. {completionMetrics.unmatchedFuelTransactions} sales and {completionMetrics.unmatchedBankTransactions} merchant bank transactions need a closer look.
                       </p>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        {completionMetrics.matchedCardTransactions} of {completionMetrics.totalCardTransactions} card transactions matched to bank records
+                        {completionMetrics.matchedCardTransactions} of your {completionMetrics.totalCardTransactions} card sales matched cleanly.
                       </p>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      {completionMetrics.bankApprovedTransactions} of {completionMetrics.totalInPeriodBankTransactions} in-period bank transactions approved
+                      {completionMetrics.bankApprovedTransactions} of {completionMetrics.totalInPeriodBankTransactions} merchant bank transactions matched.
                     </p>
                   </div>
                 </>
@@ -530,15 +531,15 @@ export default function ReconciliationFlow() {
                         ? "text-[#166534] dark:text-emerald-400"
                         : "text-[#1A1200] dark:text-foreground"
                     )}>{completionMetrics.matchedCardTransactions}</p>
-                    <p className="text-xs text-muted-foreground">Matched Card Sales</p>
+                    <p className="text-xs text-muted-foreground">Matched card sales</p>
                   </div>
                   <div className="rounded-lg bg-[#FEF9C3] dark:bg-amber-950/30 p-3">
                     <p className="text-2xl font-semibold text-[#B45309] dark:text-amber-400">{completionMetrics.unmatchedFuelTransactions}</p>
-                    <p className="text-xs text-muted-foreground">Review Sales</p>
+                    <p className="text-xs text-muted-foreground">Sales to review</p>
                   </div>
                   <div className="rounded-lg bg-muted/50 p-3">
                     <p className="text-2xl font-semibold">{completionMetrics.unmatchedBankTransactions}</p>
-                    <p className="text-xs text-muted-foreground">Review Bank</p>
+                    <p className="text-xs text-muted-foreground">Merchant bank transactions to review</p>
                   </div>
                 </div>
               ) : (
@@ -556,8 +557,9 @@ export default function ReconciliationFlow() {
               {matchResult.bankTransactionsUnmatchable > 0 && (
                 <div className="rounded-lg bg-muted/20 p-3 text-center">
                   <p className="text-sm text-muted-foreground">
-                    {matchResult.bankTransactionsUnmatchable} bank transaction{matchResult.bankTransactionsUnmatchable !== 1 ? 's' : ''} from your upload fell outside the period dates
-                    {period ? ` (${period.startDate} to ${period.endDate})` : ''} and were excluded.
+                    {matchResult.bankTransactionsUnmatchable} merchant bank transaction{matchResult.bankTransactionsUnmatchable !== 1 ? 's' : ''} in your file fell outside your reconciliation period
+                    {period ? ` (${period.startDate} to ${period.endDate})` : ''} so we set them aside.
+                    This is normal. They're the days either side that help us match late-settling sales.
                   </p>
                 </div>
               )}
@@ -569,7 +571,7 @@ export default function ReconciliationFlow() {
                   setCompletedSteps((prev) => [...prev.filter(s => s !== "configure"), "configure"]);
                   setCurrentStep("results");
                 }}>
-                  View Results Dashboard
+                  View results
                 </Button>
               </div>
             </CardContent>
@@ -646,7 +648,7 @@ export default function ReconciliationFlow() {
 
       <footer className="bg-footer text-white/70">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 text-center text-sm">
-          lekana · a Bethink product
+          Lekana · a TimeShift product by Bethink
         </div>
       </footer>
     </div>

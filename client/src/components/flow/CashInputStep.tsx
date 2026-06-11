@@ -101,9 +101,10 @@ export function CashInputStep({
         <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-card flex items-center justify-center">
           <Banknote className="h-6 w-6 text-primary" />
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">Enter the period's cash</h2>
+        <p className="text-sm text-muted-foreground mb-1">Right, let's sort out your cash.</p>
+        <h2 className="text-2xl font-semibold tracking-tight">Enter the cash you actually received this period</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          The cash you actually received this period, plus anything you spent from the till.
+          We compare this to what your point of sale rang up as cash, to find the gap.
         </p>
       </div>
 
@@ -145,8 +146,8 @@ export function CashInputStep({
             {receivedSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </div>
           <p className="text-xs text-muted-foreground">
-            The total cash you actually got for this period — wherever it ended up (banked, on hand, or in transit).
-            We compare this to what the till rang up as cash to find the gap.
+            The total cash you actually got for this period, wherever it ended up (banked, on hand,
+            or in transit). We compare this to what your point of sale rang up as cash to find the gap.
           </p>
         </section>
 
@@ -154,8 +155,8 @@ export function CashInputStep({
           <div>
             <h3 className="text-sm font-medium">Cash spent</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Anything you paid for in cash from the till — food, Uber, supplies. This explains where
-              received cash went; it doesn't change the gap.
+              Anything you paid for in cash straight from the drawer (food, Uber, supplies). This
+              explains where received cash went. It doesn't change the gap.
             </p>
           </div>
           <CashSpentList

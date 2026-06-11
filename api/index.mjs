@@ -31959,6 +31959,10 @@ function buildReprintScamReadModel(fuelTransactions) {
 }
 
 // shared/cashGap.ts
+function isCashPaymentType(paymentType) {
+  if (!paymentType) return false;
+  return /\bcash\b/i.test(paymentType);
+}
 function buildCashGapView(inputs) {
   const cashSalesAmount = sumAmounts(inputs.cashSales);
   const spentAmount = sumAmounts(inputs.spent);
@@ -32046,8 +32050,7 @@ function ensureRow(map, date) {
 
 // server/insights/cashGapReport.ts
 function isCashSale(tx) {
-  if (!tx.paymentType) return false;
-  return /\bcash\b/i.test(tx.paymentType);
+  return isCashPaymentType(tx.paymentType);
 }
 function extractCashSales(salesTransactions, bounds) {
   const items = [];
@@ -36887,7 +36890,7 @@ function round(value) {
 }
 function buildRetailSummary(transactions2, salesSideSourceType, period) {
   const inPeriod = (tx) => !!tx.transactionDate && tx.transactionDate >= period.startDate && tx.transactionDate <= period.endDate;
-  let card = ZERO, cash = ZERO, matched = ZERO, unmatchedCard = ZERO;
+  let card = ZERO, cash = ZERO, other = ZERO, matched = ZERO, unmatchedCard = ZERO;
   let bankSettled = ZERO, unmatchedBank = ZERO;
   for (const tx of transactions2) {
     if (!inPeriod(tx)) continue;
@@ -36898,8 +36901,10 @@ function buildRetailSummary(transactions2, salesSideSourceType, period) {
         card = add(card, value);
         if (isMatched) matched = add(matched, value);
         else unmatchedCard = add(unmatchedCard, value);
-      } else {
+      } else if (isCashPaymentType(tx.paymentType)) {
         cash = add(cash, value);
+      } else {
+        other = add(other, value);
       }
     } else if (tx.sourceType?.startsWith("bank")) {
       bankSettled = add(bankSettled, value);
@@ -36907,14 +36912,15 @@ function buildRetailSummary(transactions2, salesSideSourceType, period) {
     }
   }
   const total = {
-    count: card.count + cash.count,
-    amount: round(card.amount + cash.amount)
+    count: card.count + cash.count + other.count,
+    amount: round(card.amount + cash.amount + other.amount)
   };
   return {
     sales: {
       total,
       card: { count: card.count, amount: round(card.amount) },
-      cash: { count: cash.count, amount: round(cash.amount) }
+      cash: { count: cash.count, amount: round(cash.amount) },
+      other: { count: other.count, amount: round(other.amount) }
     },
     reconciliation: {
       cardMatchRate: card.count > 0 ? Math.round(matched.count / card.count * 100) : 0,

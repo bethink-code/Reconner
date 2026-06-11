@@ -65,10 +65,13 @@ export function RetailSummary({ periodId, compact = false, cashGap, onViewCashGa
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             Point of sale
           </p>
-          <div className="grid grid-cols-3 divide-x divide-border/50">
+          <div className={cn("grid divide-x divide-border/50", sales.other.count > 0 ? "grid-cols-4" : "grid-cols-3")}>
             <Figure label="Total sales" amount={sales.total.amount} count={sales.total.count} emphasis />
             <Figure label="Card" amount={sales.card.amount} count={sales.card.count} />
             <Figure label="Cash" amount={sales.cash.amount} count={sales.cash.count} />
+            {sales.other.count > 0 && (
+              <Figure label="Other tenders" amount={sales.other.amount} count={sales.other.count} />
+            )}
           </div>
         </div>
       </div>
@@ -105,7 +108,7 @@ export function RetailSummary({ periodId, compact = false, cashGap, onViewCashGa
           <InfoCardLabel>Point of sale</InfoCardLabel>
           <p className="mt-2 text-2xl font-bold tabular-nums">{formatRand(sales.total.amount)}</p>
           <p className="text-xs text-muted-foreground">{sales.total.count} sales · total takings</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className={cn("mt-3 grid gap-2", sales.other.count > 0 ? "grid-cols-3" : "grid-cols-2")}>
             <div>
               <p className="text-xs text-muted-foreground">Card</p>
               <p className="text-sm font-semibold tabular-nums">{formatRand(sales.card.amount)}</p>
@@ -114,6 +117,12 @@ export function RetailSummary({ periodId, compact = false, cashGap, onViewCashGa
               <p className="text-xs text-muted-foreground">Cash</p>
               <p className="text-sm font-semibold tabular-nums">{formatRand(sales.cash.amount)}</p>
             </div>
+            {sales.other.count > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">Other tenders</p>
+                <p className="text-sm font-semibold tabular-nums">{formatRand(sales.other.amount)}</p>
+              </div>
+            )}
           </div>
         </InfoCard>
 

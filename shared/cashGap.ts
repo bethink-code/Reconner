@@ -15,6 +15,17 @@
  * the received total and the cash-spent list. This module joins them and produces a view.
  */
 
+/**
+ * THE definition of a cash tender, shared by the retail summary and the cash-gap
+ * report so the two can never disagree. A sale is cash when its payment type says
+ * so — non-card tenders like "Other"/"EFT"/"Voucher" are NOT cash and must be
+ * surfaced separately, never folded into a cash figure.
+ */
+export function isCashPaymentType(paymentType: string | null | undefined): boolean {
+  if (!paymentType) return false;
+  return /\bcash\b/i.test(paymentType);
+}
+
 export interface CashSaleItem {
   id: string;
   date: string;

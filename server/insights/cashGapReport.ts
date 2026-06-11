@@ -1,5 +1,6 @@
 import {
   buildCashGapView,
+  isCashPaymentType,
   type CashGapView,
   type CashSaleItem,
   type CashSpentItem,
@@ -16,13 +17,13 @@ export interface CashGapSaleLike {
 }
 
 /**
- * A sale counts as "cash" when its payment type matches /cash/i. We do NOT rely on
- * `isCardTransaction === 'no'` alone because that bucket includes debtors and other
- * non-card categories — cash is its own category in our model.
+ * A sale counts as "cash" when its payment type says so (shared predicate — the
+ * retail summary uses the same one, so the two surfaces always agree). We do NOT
+ * rely on `isCardTransaction === 'no'` alone because that bucket includes debtors
+ * and other non-card categories — cash is its own category in our model.
  */
 export function isCashSale(tx: CashGapSaleLike): boolean {
-  if (!tx.paymentType) return false;
-  return /\bcash\b/i.test(tx.paymentType);
+  return isCashPaymentType(tx.paymentType);
 }
 
 /** The period date window cash sales are bounded to (inclusive, YYYY-MM-DD strings). */

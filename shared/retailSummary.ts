@@ -1,10 +1,17 @@
 /**
  * Retail summary — vertical-specific headline for a retail/POS reconciliation.
  *
- * The story a retail owner wants: total takings split into Cash + Card (which must tie back to the
- * total), and then the Card portion reconciled to what the bank actually settled. Computed straight
- * from the period's transactions — deliberately NOT from the fuel-shaped getPeriodSummary.
+ * The story a retail owner wants: total takings split into Card + Cash + Other (which must tie back
+ * to the total), and then the Card portion reconciled to what the bank actually settled. Computed
+ * straight from the period's transactions — deliberately NOT from the fuel-shaped getPeriodSummary.
+ *
+ * "Cash" means tenders whose payment type says cash (the same shared predicate the cash-gap report
+ * uses, so the two surfaces always agree). Everything else non-card — "Other"/EFT/voucher tenders,
+ * including refunds booked against them — is surfaced as its own `other` line, never hidden inside
+ * the cash figure.
  */
+
+import { isCashPaymentType } from "./cashGap.ts";
 
 export interface RetailSummaryAmount {
   count: number;
@@ -12,11 +19,13 @@ export interface RetailSummaryAmount {
 }
 
 export interface RetailSummaryReadModel {
-  /** Point-of-sale takings. total === card + cash (the split ties back to the total). */
+  /** Point-of-sale takings. total === card + cash + other (the split ties back to the total). */
   sales: {
     total: RetailSummaryAmount;
     card: RetailSummaryAmount;
     cash: RetailSummaryAmount;
+    /** Non-card, non-cash tenders (e.g. "Other", EFT, vouchers) — surfaced, never folded into cash. */
+    other: RetailSummaryAmount;
   };
   /** Card sales reconciled to the bank. */
   reconciliation: {
@@ -40,6 +49,7 @@ export interface RetailSummaryReadModel {
 export interface RetailSummaryTxn {
   sourceType: string | null;
   isCardTransaction: string | null;
+  paymentType: string | null;
   amount: string;
   transactionDate: string | null;
   matchStatus: string | null;
@@ -63,7 +73,7 @@ export function buildRetailSummary(
   const inPeriod = (tx: RetailSummaryTxn) =>
     !!tx.transactionDate && tx.transactionDate >= period.startDate && tx.transactionDate <= period.endDate;
 
-  let card = ZERO, cash = ZERO, matched = ZERO, unmatchedCard = ZERO;
+  let card = ZERO, cash = ZERO, other = ZERO, matched = ZERO, unmatchedCard = ZERO;
   let bankSettled = ZERO, unmatchedBank = ZERO;
 
   for (const tx of transactions) {
@@ -76,8 +86,10 @@ export function buildRetailSummary(
         card = add(card, value);
         if (isMatched) matched = add(matched, value);
         else unmatchedCard = add(unmatchedCard, value);
+      } else if (isCashPaymentType(tx.paymentType)) {
+        cash = add(cash, value);
       } else {
-        cash = add(cash, value); // not card → cash (retail has no debtor concept)
+        other = add(other, value); // non-card, non-cash tenders — never hidden inside cash
       }
     } else if (tx.sourceType?.startsWith("bank")) {
       bankSettled = add(bankSettled, value);
@@ -86,8 +98,8 @@ export function buildRetailSummary(
   }
 
   const total: RetailSummaryAmount = {
-    count: card.count + cash.count,
-    amount: round(card.amount + cash.amount),
+    count: card.count + cash.count + other.count,
+    amount: round(card.amount + cash.amount + other.amount),
   };
 
   return {
@@ -95,6 +107,7 @@ export function buildRetailSummary(
       total,
       card: { count: card.count, amount: round(card.amount) },
       cash: { count: cash.count, amount: round(cash.amount) },
+      other: { count: other.count, amount: round(other.amount) },
     },
     reconciliation: {
       cardMatchRate: card.count > 0 ? Math.round((matched.count / card.count) * 100) : 0,

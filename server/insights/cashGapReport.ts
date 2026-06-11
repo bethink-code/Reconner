@@ -35,6 +35,9 @@ export interface CashGapPeriodBounds {
  * Extract every sales-side cash transaction with a usable date and amount.
  * Period is boss: uploads may span beyond the period (buffer days for matching),
  * so cash sales outside the period dates never count toward the gap.
+ * Refunds (negative amounts) flow through: cash handed back out of the till
+ * reduces the cash that should have arrived, and the owner's counted "received"
+ * is inherently net — gross-vs-net would fabricate a phantom leak.
  */
 export function extractCashSales(
   salesTransactions: CashGapSaleLike[],
@@ -46,7 +49,7 @@ export function extractCashSales(
     if (!tx.transactionDate) continue;
     if (tx.transactionDate < bounds.startDate || tx.transactionDate > bounds.endDate) continue;
     const amount = parseFloat(tx.amount);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
+    if (!Number.isFinite(amount) || amount === 0) continue;
     items.push({ id: tx.id, date: tx.transactionDate, amount });
   }
   return items;

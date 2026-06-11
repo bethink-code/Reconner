@@ -54,6 +54,18 @@ test("extractCashSales drops non-cash, zero-amount, and undated rows", () => {
   assert.equal(sales[0].amount, 100);
 });
 
+test("extractCashSales nets cash refunds off (negative amounts flow through)", () => {
+  // Bruchs May 2026: 90 cash refunds (−R17,713.98) made the cash-gap card disagree
+  // with the period summary, which nets refunds. Both must show the same number.
+  const sales = extractCashSales([
+    makeSale({ amount: "1000", transactionDate: "2026-05-02" }),
+    makeSale({ amount: "-150", transactionDate: "2026-05-03" }), // cash refund
+    makeSale({ amount: "0", transactionDate: "2026-05-03" }),    // still dropped
+  ], MAY);
+  assert.equal(sales.length, 2);
+  assert.equal(sales.reduce((sum, s) => sum + s.amount, 0), 850);
+});
+
 test("extractCashSales drops cash sales outside the period dates (period is boss)", () => {
   // Uploads may span beyond the period for matching buffers (e.g. 15 Apr – 9 Jun
   // POS file against a 1–31 May period). Out-of-period cash must never count.

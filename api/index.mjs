@@ -32056,7 +32056,7 @@ function extractCashSales(salesTransactions, bounds) {
     if (!tx.transactionDate) continue;
     if (tx.transactionDate < bounds.startDate || tx.transactionDate > bounds.endDate) continue;
     const amount = parseFloat(tx.amount);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
+    if (!Number.isFinite(amount) || amount === 0) continue;
     items.push({ id: tx.id, date: tx.transactionDate, amount });
   }
   return items;

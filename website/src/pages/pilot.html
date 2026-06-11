@@ -83,3 +83,15 @@
     <p style="text-align:center;margin-top:20px;font-size:15px;color:var(--lk-muted);">Not ready yet? <a href="/contact" style="color:var(--lk-dark);text-decoration:underline;text-underline-offset:3px;">Get in touch</a> — we come back to every enquiry.</p>
   </div>
 </section>
+
+<script>
+  // Journey attribution: the homepage routes visitors through one of three journey
+  // pages, whose CTAs land here with ?journey=... Persist it so the application
+  // (3 steps later) can record which conversation converted.
+  (function () {
+    try {
+      var j = new URLSearchParams(window.location.search).get('journey');
+      if (j) localStorage.setItem('lk_journey', j);
+    } catch (_) {}
+  })();
+</script>

@@ -23,6 +23,10 @@ const SITE = "https://lekana.app";
 const layout = readFileSync(join(SRC, "layout.html"), "utf8");
 const navPartial = readFileSync(join(SRC, "partials", "nav.html"), "utf8");
 const footerPartial = readFileSync(join(SRC, "partials", "footer.html"), "utf8");
+// Shared sections for the three journey pages (Reassurance, Mutual win, Proof,
+// How it works, Terms, CTA). Pages opt in via {{JOURNEY_SHARED}}; their meta
+// "journeyId" flows into the CTA link for per-path pilot attribution.
+const journeyShared = readFileSync(join(SRC, "partials", "journey-shared.html"), "utf8");
 const personTemplate = readFileSync(join(SRC, "templates", "person.html"), "utf8");
 const people = JSON.parse(readFileSync(join(SRC, "data", "people.json"), "utf8")).people;
 
@@ -75,7 +79,10 @@ for (const person of people) {
 }
 
 for (const file of pageFiles) {
-  const { meta, body } = parseMeta(readFileSync(join(SRC, "pages", file), "utf8"));
+  let { meta, body } = parseMeta(readFileSync(join(SRC, "pages", file), "utf8"));
+
+  body = put(body, "{{JOURNEY_SHARED}}", journeyShared);
+  if (meta.journeyId) body = put(body, "{{JOURNEY_ID}}", meta.journeyId);
 
   let nav = navPartial;
   const key = meta.route.replace(/^\//, "");

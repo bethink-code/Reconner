@@ -474,6 +474,9 @@ export const pilotApplications = pgTable("pilot_applications", {
   banks: text("banks").notNull(), // JSON array stored as text: '["FNB","ABSA"]'
   successStory: text("success_story").notNull(),
   readyToProceed: boolean("ready_to_proceed").notNull().default(false),
+  // Which website journey page the applicant came through (cash-gap | tracking-cash |
+  // matching-payouts). Null for direct applications - it's attribution, never required.
+  journey: text("journey"),
   pilotStatus: text("pilot_status").notNull().default("pending_approval"), // pending_approval | approved | onboarding | running | completed | withdrawn
   pilotStartDate: text("pilot_start_date"),
   pilotEndDate: text("pilot_end_date"),

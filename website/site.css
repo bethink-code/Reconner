@@ -962,3 +962,32 @@ figure { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* ---------- Journey pages: conversation flow ---------- */
+/* Lekana speaks as plain copy; the reader's side renders as a white beat card
+   (second-person, never a fake quote). No borders - shadow carries the state. */
+
+.convo { max-width: 620px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.convo-lekana { margin: 0; font-size: 18px; line-height: 1.55; color: var(--lk-dark); max-width: 54ch; }
+.convo-you {
+  align-self: flex-end;
+  max-width: 88%;
+  background: var(--lk-white);
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 22px rgba(26, 18, 0, 0.07);
+}
+.convo-you .convo-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lk-muted);
+  margin-bottom: 6px;
+}
+.convo-you p { margin: 0; font-size: 15px; line-height: 1.5; color: rgba(26, 18, 0, 0.78); }
+
+/* Router statements rendered as links (homepage). */
+a.q-card { text-decoration: none; }
+.q-card-go { display: block; margin-top: 14px; font-size: 15px; font-weight: 600; color: var(--lk-orange); }

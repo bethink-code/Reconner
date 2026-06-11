@@ -1,0 +1,95 @@
+<!-- Shared journey sections: Reassurance, Mutual win, Proof, How it works, Terms + CTA.
+     Injected into each journey page via the JOURNEY_SHARED token; the JOURNEY_ID token is
+     replaced per page so the pilot application knows which conversation converted. -->
+
+<section class="section">
+  <div class="container">
+    <div class="panel-cream reveal">
+      <p class="tag">Your data stays yours</p>
+      <h2 style="font-size:clamp(24px,3.5vw,32px);">We know this is sensitive.</h2>
+      <p style="margin-top:12px;color:rgba(26,18,0,0.78);max-width:62ch;">Here's exactly what Lekana needs: your point of sale report, your merchant bank transaction report for the same period, and the cash you received. That's it.</p>
+      <p style="margin-top:10px;color:rgba(26,18,0,0.78);max-width:62ch;">We never connect to your bank account, and we never see anything you don't upload.</p>
+      <p style="margin-top:10px;color:rgba(26,18,0,0.78);max-width:62ch;">What happens next is your call. Work through the results yourself, ask us to walk you through them, or ask us what we see. The numbers are yours either way.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container container--narrow reveal" style="text-align:center;">
+    <p class="tag">The pilot</p>
+    <h2>No cost. <strong>No risk for you.</strong></h2>
+    <p class="lead" style="margin:16px auto 0;max-width:58ch;">You might find something that explains the gap. In that case you either keep using Lekana to stay on top of it, or you solve it yourself and move on. Either way, you've got the answer.</p>
+    <p class="lead" style="margin:14px auto 0;max-width:58ch;">Or you might find everything's good, and get peace of mind.</p>
+    <p class="lead" style="margin:14px auto 0;max-width:58ch;">We get to work with real data, real problems, and real patterns. That matters to us.</p>
+    <p class="win-line">No matter what you find, or don't find, you come out ahead.</p>
+  </div>
+</section>
+
+<section class="section" id="proof">
+  <div class="container">
+    <div class="proof reveal">
+      <p class="tag">From the pilot</p>
+      <h2>One business balanced its cash ups every day, and was still losing meaningful money every month.</h2>
+      <p class="lead">The numbers agreed with each other. The money still wasn't arriving. Once the reconciliation ran, the patterns surfaced. Once they were named, they could be stopped.</p>
+      <div class="leak-tags">
+        <span class="leak-tag">Reprinted slips</span>
+        <span class="leak-tag">Declines never resubmitted</span>
+        <span class="leak-tag">Shortfalls the totals couldn't show</span>
+      </div>
+      <p class="footnote" style="margin-top:8px;">Shared with permission. Your numbers will differ. The patterns repeat.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="how-it-works">
+  <div class="container">
+    <div class="reveal" style="text-align:center;">
+      <p class="tag">How it works</p>
+      <h2>Four steps. <strong>About five minutes.</strong></h2>
+    </div>
+    <div style="margin-top:32px;">
+      <article class="report-block reveal">
+        <div class="report-text">
+          <p class="report-num">Step 01</p>
+          <h3>Upload your point of sale report for your period.</h3>
+          <p>This is your source of truth. We'll match each individual transaction against the line items in your merchant bank transaction reports.</p>
+        </div>
+        <figure class="report-shot"><img src="/assets/screenshots/step1-fuel.png" alt="Uploading the point of sale report" loading="lazy"></figure>
+      </article>
+      <article class="report-block report-block--reverse reveal">
+        <div class="report-text">
+          <p class="report-num">Step 02</p>
+          <h3>Upload your merchant transaction report.</h3>
+          <p>This is what your processor actually received. Not the same as your bank statement: the statement shows bulk payout totals, the merchant transaction report shows every individual card transaction behind them. Multiple banks in the same period are fine.</p>
+        </div>
+        <figure class="report-shot"><img src="/assets/screenshots/step2-bank.png" alt="Uploading the merchant transaction report" loading="lazy"></figure>
+      </article>
+      <article class="report-block reveal">
+        <div class="report-text">
+          <p class="report-num">Step 03</p>
+          <h3>Enter the cash you actually received this period.</h3>
+          <p>We compare this to what your point of sale rang up as cash, to find the gap. Wherever the cash ended up: banked, on hand, or in transit.</p>
+        </div>
+        <figure class="report-shot"><img src="/assets/screenshots/step3-cash.png" alt="Entering the cash received" loading="lazy"></figure>
+      </article>
+      <article class="report-block report-block--reverse reveal">
+        <div class="report-text">
+          <p class="report-num">Step 04</p>
+          <h3>Results.</h3>
+          <p>The match rate. Card, cash and other tenders, each on its own line. The cash gap. The items needing your attention.</p>
+        </div>
+        <figure class="report-shot"><img src="/assets/screenshots/matching-complete.png" alt="The reconciliation results" loading="lazy"></figure>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="final reveal">
+  <div class="container container--narrow">
+    <h2>Free three-week pilot.</h2>
+    <p>After that, we'll talk about what happens next. We onboard businesses one at a time, personally.</p>
+    <div class="btn-row" style="justify-content:center;">
+      <a class="btn btn-primary" href="/pilot?journey={{JOURNEY_ID}}">Apply for the pilot</a>
+    </div>
+  </div>
+</section>

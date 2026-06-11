@@ -116,6 +116,8 @@ const applicationSchema = z.object({
   ready_to_proceed: z.literal(true, {
     errorMap: () => ({ message: "Please confirm you are ready to discuss next steps" }),
   }),
+  // Website journey attribution - optional, whitelisted, never blocks an application.
+  journey: z.enum(["cash-gap", "tracking-cash", "matching-payouts"]).nullish().catch(null),
 });
 
 function fieldErrors(error: z.ZodError): Record<string, string> {
@@ -276,6 +278,7 @@ export function registerPilotEnrollmentRoutes(app: Express): void {
         banks: JSON.stringify(d.banks),
         successStory: d.success_story,
         readyToProceed: true,
+        journey: d.journey ?? null,
         pilotStatus: "pending_approval",
         ipAddress: getIp(req),
         userAgent: req.headers["user-agent"] || null,

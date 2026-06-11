@@ -112,6 +112,9 @@
       .call(form.querySelectorAll('input[name=banks]:checked'))
       .map(function (b) { return b.value; });
 
+    var journey = null;
+    try { journey = localStorage.getItem('lk_journey') || null; } catch (_) {}
+
     var payload = {
       policy_acknowledgment_id: enrollData.policyId,
       terms_acknowledgment_id: enrollData.termsId,
@@ -123,7 +126,8 @@
       pos_system: form.pos_system.value.trim(),
       banks: banks,
       success_story: form.success_story.value.trim(),
-      ready_to_proceed: form.ready_to_proceed.checked
+      ready_to_proceed: form.ready_to_proceed.checked,
+      journey: journey
     };
 
     var original = btn.textContent;
@@ -142,7 +146,7 @@
     })
     .then(function (result) {
       if (result.ok && result.body.ok) {
-        try { localStorage.removeItem('lk_enroll'); } catch (_) {}
+        try { localStorage.removeItem('lk_enroll'); localStorage.removeItem('lk_journey'); } catch (_) {}
 
         var hero = document.getElementById('apply-hero');
         if (hero) hero.innerHTML = '<div class="container container--narrow" style="text-align:center;">'

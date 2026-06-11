@@ -28081,6 +28081,9 @@ var pilotApplications = pgTable("pilot_applications", {
   // JSON array stored as text: '["FNB","ABSA"]'
   successStory: text("success_story").notNull(),
   readyToProceed: boolean("ready_to_proceed").notNull().default(false),
+  // Which website journey page the applicant came through (cash-gap | tracking-cash |
+  // matching-payouts). Null for direct applications - it's attribution, never required.
+  journey: text("journey"),
   pilotStatus: text("pilot_status").notNull().default("pending_approval"),
   // pending_approval | approved | onboarding | running | completed | withdrawn
   pilotStartDate: text("pilot_start_date"),
@@ -38275,7 +38278,9 @@ var applicationSchema2 = z9.object({
   success_story: z9.string().trim().min(1, "Tell us what success looks like").max(500),
   ready_to_proceed: z9.literal(true, {
     errorMap: () => ({ message: "Please confirm you are ready to discuss next steps" })
-  })
+  }),
+  // Website journey attribution - optional, whitelisted, never blocks an application.
+  journey: z9.enum(["cash-gap", "tracking-cash", "matching-payouts"]).nullish().catch(null)
 });
 function fieldErrors(error) {
   const errors = {};
@@ -38398,6 +38403,7 @@ function registerPilotEnrollmentRoutes(app2) {
         banks: JSON.stringify(d.banks),
         successStory: d.success_story,
         readyToProceed: true,
+        journey: d.journey ?? null,
         pilotStatus: "pending_approval",
         ipAddress: getIp(req),
         userAgent: req.headers["user-agent"] || null

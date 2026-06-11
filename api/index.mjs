@@ -37128,10 +37128,11 @@ function registerReconciliationReadRoutes(app2) {
             }];
           }
           if (transaction.isCardTransaction === "no") {
+            const isCash = isCashPaymentType(transaction.paymentType);
             return [{
               match: {
-                id: `cash-${transaction.id}`,
-                matchType: "cash",
+                id: `${isCash ? "cash" : "other-tender"}-${transaction.id}`,
+                matchType: isCash ? "cash" : "other_tender",
                 matchConfidence: null,
                 createdAt: transaction.createdAt
               },

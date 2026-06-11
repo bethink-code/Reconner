@@ -85,6 +85,7 @@ function getMatchLabel(matchType: string, userName: string, description?: string
     return "Excluded";
   }
   if (matchType === "cash") return "Cash";
+  if (matchType === "other_tender") return "Other tender";
   if (matchType === "debtor") return "Debtor";
   if (matchType === "unmatched_card") return "Unmatched card sales";
   if (matchType === "unmatched_bank") return "Unmatched bank";
@@ -98,7 +99,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   const userName = user?.firstName || "User";
   const [search, setSearch] = useState("");
   type TopFilter = "total" | "lekana" | "garth" | "excluded" | "review";
-  type SubFilter = "strict" | "operational" | "boundary" | "fallback" | "confirmed" | "reason" | "cash" | "debtor" | "duplicates" | "bank" | "card" | null;
+  type SubFilter = "strict" | "operational" | "boundary" | "fallback" | "confirmed" | "reason" | "cash" | "other" | "debtor" | "duplicates" | "bank" | "card" | null;
   const [topFilter, setTopFilter] = useState<TopFilter>("total");
   const [subFilter, setSubFilter] = useState<SubFilter>(null);
   const [page, setPage] = useState(0);
@@ -146,6 +147,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   const isReason = (mt: string) => mt === "linked";
   const isDeclinedOrDuplicate = (mt: string) => mt === "excluded";
   const isCash = (mt: string) => mt === "cash";
+  const isOtherTender = (mt: string) => mt === "other_tender";
   const isDebtor = (mt: string) => mt === "debtor";
   const isUnmatchedCard = (mt: string) => mt === "unmatched_card";
   const isUnmatchedBank = (mt: string) => mt === "unmatched_bank";
@@ -156,7 +158,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
   const counts = useMemo(() => {
     const c = {
       exact: 0, rules: 0, confirmed: 0, reason: 0,
-      cash: 0, debtor: 0, duplicates: 0,
+      cash: 0, other: 0, debtor: 0, duplicates: 0,
       unmatchedCard: 0, unmatchedBank: 0,
     };
     for (const p of pairs) {
@@ -170,6 +172,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
       else if (isConfirmed(mt)) c.confirmed += fuelItemCount;
       else if (isReason(mt)) c.reason += fuelItemCount;
       else if (isCash(mt)) c.cash += fuelItemCount;
+      else if (isOtherTender(mt)) c.other += fuelItemCount;
       else if (isDebtor(mt)) c.debtor += fuelItemCount;
       else if (isDeclinedOrDuplicate(mt)) c.duplicates += 1; // bank-only, fuel count irrelevant
       else if (isUnmatchedCard(mt)) c.unmatchedCard += fuelItemCount;
@@ -178,22 +181,22 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
     return c;
   }, [pairs]);
 
-  const totalFuel = counts.exact + counts.rules + counts.confirmed + counts.reason + counts.cash + counts.debtor + counts.unmatchedCard + counts.unmatchedBank + counts.duplicates;
+  const totalFuel = counts.exact + counts.rules + counts.confirmed + counts.reason + counts.cash + counts.other + counts.debtor + counts.unmatchedCard + counts.unmatchedBank + counts.duplicates;
   const strictCount = pairs.reduce((sum, p) => sum + (isStrict(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
   const operationalCount = pairs.reduce((sum, p) => sum + (isOperational(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
   const boundaryCount = pairs.reduce((sum, p) => sum + (isBoundary(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
   const fallbackCount = pairs.reduce((sum, p) => sum + (isFallback(p) ? (p.fuelItems?.length ?? (p.fuelTransaction ? 1 : 0)) : 0), 0);
   const totalLekana = strictCount + operationalCount + boundaryCount + fallbackCount;
   const totalGarth = counts.confirmed + counts.reason;
-  const totalExcluded = counts.cash + counts.debtor + counts.duplicates;
+  const totalExcluded = counts.cash + counts.other + counts.debtor + counts.duplicates;
   const totalReview = counts.unmatchedCard + counts.unmatchedBank;
 
   const matchesTopFilter = (mt: string, t: TopFilter) => {
     switch (t) {
-      case "total": return mt.startsWith("auto") || isConfirmed(mt) || isReason(mt) || isCash(mt) || isDebtor(mt) || isUnmatchedCard(mt) || isUnmatchedBank(mt) || isDeclinedOrDuplicate(mt);
+      case "total": return mt.startsWith("auto") || isConfirmed(mt) || isReason(mt) || isCash(mt) || isOtherTender(mt) || isDebtor(mt) || isUnmatchedCard(mt) || isUnmatchedBank(mt) || isDeclinedOrDuplicate(mt);
       case "lekana": return mt.startsWith("auto");
       case "garth": return isConfirmed(mt) || isReason(mt);
-      case "excluded": return isCash(mt) || isDebtor(mt) || isDeclinedOrDuplicate(mt);
+      case "excluded": return isCash(mt) || isOtherTender(mt) || isDebtor(mt) || isDeclinedOrDuplicate(mt);
       case "review": return isUnmatchedCard(mt) || isUnmatchedBank(mt);
     }
   };
@@ -209,6 +212,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
       case "confirmed": return isConfirmed(mt);
       case "reason": return isReason(mt);
       case "cash": return isCash(mt);
+      case "other": return isOtherTender(mt);
       case "debtor": return isDebtor(mt);
       case "duplicates": return isDeclinedOrDuplicate(mt);
       case "bank": return isUnmatchedBank(mt);
@@ -269,6 +273,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
     [`${userName} (Confirmed)`, "You manually matched these transactions"],
     [`${userName} (With reason)`, "You matched and provided a reason"],
     ["Excluded", "Reversed, declined, cancelled, or duplicate — excluded from matching"],
+    ["Other tender", "Non-card, non-cash tenders (EFT, vouchers, “Other”) — excluded from card matching"],
   ];
 
   // Summary card helper — renders one of the 5 top-level buckets
@@ -316,12 +321,12 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
                     }
                   }}
                   className={cn(
-                    "w-[calc(100%+1rem)] flex items-center justify-between text-xs py-0.5 -mx-2 px-2 rounded-sm transition-colors",
+                    "w-[calc(100%+1rem)] flex items-center justify-between gap-2 text-xs py-0.5 -mx-2 px-2 rounded-sm transition-colors",
                     isSubActive ? "bg-white font-semibold" : "hover:bg-black/5",
                     sr.isLink && "hover:text-[#E8601C]"
                   )}
                 >
-                  <span className={cn("text-muted-foreground", isSubActive && "text-[#1A1200]")}>{sr.label}</span>
+                  <span className={cn("flex-1 text-left text-muted-foreground", isSubActive && "text-[#1A1200]")}>{sr.label}</span>
                   <span className={cn("tabular-nums font-medium", isSubActive ? "text-[#E8601C]" : "text-[#1A1200]")}>{sr.count}</span>
                 </button>
               );
@@ -368,6 +373,7 @@ export function MatchedPairsTab({ periodId, onJumpToReview }: { periodId: string
           count={totalExcluded}
           subRows={[
             { key: "cash", label: "Cash", count: counts.cash },
+            { key: "other", label: "Other tenders", count: counts.other },
             { key: "debtor", label: "Debtor", count: counts.debtor },
             { key: "duplicates", label: "Bank duplicates", count: counts.duplicates },
           ]}

@@ -12,6 +12,7 @@ import {
 import { storage } from "./storage";
 import { resolveVertical, salesSideConfig } from "./verticals.ts";
 import { buildRetailSummary } from "../shared/retailSummary.ts";
+import { isCashPaymentType } from "../shared/cashGap.ts";
 import { matchingRulesConfigSchema } from "../shared/schema";
 
 export function registerReconciliationReadRoutes(app: Express) {
@@ -261,10 +262,13 @@ export function registerReconciliationReadRoutes(app: Express) {
           }
 
           if (transaction.isCardTransaction === "no") {
+            // Cash means cash tenders only (shared predicate) — "Other"/EFT/voucher
+            // tenders get their own bucket so they're never hidden behind the Cash label.
+            const isCash = isCashPaymentType(transaction.paymentType);
             return [{
               match: {
-                id: `cash-${transaction.id}`,
-                matchType: "cash",
+                id: `${isCash ? "cash" : "other-tender"}-${transaction.id}`,
+                matchType: isCash ? "cash" : "other_tender",
                 matchConfidence: null,
                 createdAt: transaction.createdAt,
               },

@@ -1,8 +1,11 @@
 import type { Express } from "express";
+import { eq } from "drizzle-orm";
 import { isAuthenticated } from "./auth";
 import { audit } from "./auditLog";
 import { resolveOrgContext } from "./routeAccess";
 import { storage } from "./storage";
+import { db } from "./db";
+import { users } from "../shared/schema";
 import { getVertical } from "../shared/verticals/index.ts";
 
 export function registerAccountRoutes(app: Express) {
@@ -81,6 +84,11 @@ export function registerAccountRoutes(app: Express) {
       const props = await storage.getPropertiesByOrg(organizationId);
       req.user.currentPropertyId = props[0]?.id;
 
+      db.update(users)
+        .set({ lastOrgId: organizationId, lastPropertyId: props[0]?.id ?? null, updatedAt: new Date() })
+        .where(eq(users.id, userId))
+        .catch((err) => console.error("[context] failed to persist last org:", err));
+
       const org = await storage.getOrganization(organizationId);
       audit(req, {
         action: "org.switch",
@@ -117,6 +125,12 @@ export function registerAccountRoutes(app: Express) {
       }
 
       req.user.currentPropertyId = propertyId;
+
+      db.update(users)
+        .set({ lastPropertyId: propertyId, updatedAt: new Date() })
+        .where(eq(users.id, req.user?.claims?.sub))
+        .catch((err) => console.error("[context] failed to persist last property:", err));
+
       audit(req, {
         action: "property.switch",
         resourceType: "property",

@@ -117,12 +117,21 @@ async function upsertUser(claims: Record<string, string | number | undefined>) {
 
 // Pick an initial org for a freshly-authed user. Redeems any pending invite,
 // joins the user as a member, then returns { orgId, role } to seed the session.
-async function resolveInitialOrg(userId: string, email: string): Promise<{ orgId: string; role: OrgRole } | null> {
-  // Existing memberships first
+async function resolveInitialOrg(userId: string, email: string): Promise<{ orgId: string; role: OrgRole; lastPropertyId?: string | null } | null> {
   const memberships = await storage.getUserOrganizations(userId);
-  if (memberships.length > 0) {
-    const first = memberships[0];
-    return { orgId: first.organization.id, role: first.role };
+  if (memberships.length === 0) {
+    // No memberships yet — check for an invite below
+  } else {
+    // Restore last org if user still has access to it
+    const dbUser = await storage.getUser(userId);
+    if (dbUser?.lastOrgId) {
+      const lastMembership = memberships.find((m) => m.organization.id === dbUser.lastOrgId);
+      if (lastMembership) {
+        return { orgId: lastMembership.organization.id, role: lastMembership.role, lastPropertyId: dbUser.lastPropertyId };
+      }
+    }
+    // Fall back to first membership
+    return { orgId: memberships[0].organization.id, role: memberships[0].role, lastPropertyId: null };
   }
 
   // No memberships — check for an invite to redeem

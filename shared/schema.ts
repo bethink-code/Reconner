@@ -24,6 +24,8 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").default(false),
   // Platform owner = Lekana staff. Can belong to multiple orgs and switch between them.
   isPlatformOwner: boolean("is_platform_owner").notNull().default(false),
+  lastOrgId: varchar("last_org_id"),
+  lastPropertyId: varchar("last_property_id"),
   termsAcceptedAt: timestamp("terms_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

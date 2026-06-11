@@ -25,14 +25,26 @@ export function isCashSale(tx: CashGapSaleLike): boolean {
   return /\bcash\b/i.test(tx.paymentType);
 }
 
-/** Extract every sales-side cash transaction with a usable date and amount. */
+/** The period date window cash sales are bounded to (inclusive, YYYY-MM-DD strings). */
+export interface CashGapPeriodBounds {
+  startDate: string;
+  endDate: string;
+}
+
+/**
+ * Extract every sales-side cash transaction with a usable date and amount.
+ * Period is boss: uploads may span beyond the period (buffer days for matching),
+ * so cash sales outside the period dates never count toward the gap.
+ */
 export function extractCashSales(
   salesTransactions: CashGapSaleLike[],
+  bounds: CashGapPeriodBounds,
 ): CashSaleItem[] {
   const items: CashSaleItem[] = [];
   for (const tx of salesTransactions) {
     if (!isCashSale(tx)) continue;
     if (!tx.transactionDate) continue;
+    if (tx.transactionDate < bounds.startDate || tx.transactionDate > bounds.endDate) continue;
     const amount = parseFloat(tx.amount);
     if (!Number.isFinite(amount) || amount <= 0) continue;
     items.push({ id: tx.id, date: tx.transactionDate, amount });
@@ -52,8 +64,9 @@ export function buildCashGapReadModel(
   salesTransactions: CashGapSaleLike[],
   received: number | null,
   spent: CashGapSpentLike[],
+  bounds: CashGapPeriodBounds,
 ): CashGapView {
-  const cashSales = extractCashSales(salesTransactions);
+  const cashSales = extractCashSales(salesTransactions, bounds);
   const spentItems: CashSpentItem[] = spent.map((s) => ({
     id: s.id,
     date: s.paymentDate,

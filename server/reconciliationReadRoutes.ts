@@ -429,6 +429,7 @@ export function registerReconciliationReadRoutes(app: Express) {
         salesTransactions: fuelTransactions,
         received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
         spent: cashPayments,
+        bounds: { startDate: period.startDate, endDate: period.endDate },
       }));
     } catch (error) {
       console.error("Error fetching insights read model:", error);

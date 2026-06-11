@@ -178,7 +178,7 @@ test("buildInsightsReadModel keeps report logic separate and returns report-owne
         attendant: "Alice",
       },
     ],
-  }, [], { salesTransactions: [], received: null, spent: [] });
+  }, [], { salesTransactions: [], received: null, spent: [], bounds: { startDate: "2026-05-01", endDate: "2026-05-31" } });
 
   assert.equal(model.detail.matching.cardMatchPct, 87);
   assert.equal(model.detail.reconciliation.bankApprovedAmount, 69800);
@@ -227,7 +227,7 @@ test("buildInsightsReadModel returns no-attendant state when uploads have no att
       suspicious: [],
     },
     [],
-    { salesTransactions: [], received: null, spent: [] },
+    { salesTransactions: [], received: null, spent: [], bounds: { startDate: "2026-05-01", endDate: "2026-05-31" } },
   );
 
   assert.equal(model.attendants.state, "no_attendant_data");

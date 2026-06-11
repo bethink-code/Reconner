@@ -7,6 +7,7 @@ import { buildReconciliationOverviewReport } from "./reconciliationOverviewRepor
 import { buildReprintScamReadModel, type ReprintScamFuelLike } from "./reprintScamReport.ts";
 import {
   buildCashGapReadModel,
+  type CashGapPeriodBounds,
   type CashGapSpentLike,
   type CashGapSaleLike,
 } from "./cashGapReport.ts";
@@ -15,6 +16,8 @@ export interface CashGapInputsForReport {
   salesTransactions: CashGapSaleLike[];
   received: number | null;
   spent: CashGapSpentLike[];
+  /** Period dates — cash sales outside these never count (period is boss). */
+  bounds: CashGapPeriodBounds;
 }
 
 export function buildInsightsReadModel(
@@ -38,6 +41,7 @@ export function buildInsightsReadModel(
       cashGapInputs.salesTransactions,
       cashGapInputs.received,
       cashGapInputs.spent,
+      cashGapInputs.bounds,
     ),
   };
 }

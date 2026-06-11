@@ -32042,19 +32042,20 @@ function isCashSale(tx) {
   if (!tx.paymentType) return false;
   return /\bcash\b/i.test(tx.paymentType);
 }
-function extractCashSales(salesTransactions) {
+function extractCashSales(salesTransactions, bounds) {
   const items = [];
   for (const tx of salesTransactions) {
     if (!isCashSale(tx)) continue;
     if (!tx.transactionDate) continue;
+    if (tx.transactionDate < bounds.startDate || tx.transactionDate > bounds.endDate) continue;
     const amount = parseFloat(tx.amount);
     if (!Number.isFinite(amount) || amount <= 0) continue;
     items.push({ id: tx.id, date: tx.transactionDate, amount });
   }
   return items;
 }
-function buildCashGapReadModel(salesTransactions, received, spent) {
-  const cashSales = extractCashSales(salesTransactions);
+function buildCashGapReadModel(salesTransactions, received, spent, bounds) {
+  const cashSales = extractCashSales(salesTransactions, bounds);
   const spentItems = spent.map((s) => ({
     id: s.id,
     date: s.paymentDate,
@@ -32083,7 +32084,8 @@ function buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTr
     cashGap: buildCashGapReadModel(
       cashGapInputs.salesTransactions,
       cashGapInputs.received,
-      cashGapInputs.spent
+      cashGapInputs.spent,
+      cashGapInputs.bounds
     )
   };
 }
@@ -33020,7 +33022,8 @@ function registerExportRoutes(app2) {
         {
           salesTransactions: allFuelTransactions,
           received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
-          spent: cashPayments
+          spent: cashPayments,
+          bounds: { startDate: period.startDate, endDate: period.endDate }
         }
       );
       const XLSX2 = await import("xlsx");
@@ -37252,7 +37255,8 @@ function registerReconciliationReadRoutes(app2) {
       res.json(buildInsightsReadModel(summary, attendantSummary, declineResult, fuelTransactions, {
         salesTransactions: fuelTransactions,
         received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
-        spent: cashPayments
+        spent: cashPayments,
+        bounds: { startDate: period.startDate, endDate: period.endDate }
       }));
     } catch (error) {
       console.error("Error fetching insights read model:", error);

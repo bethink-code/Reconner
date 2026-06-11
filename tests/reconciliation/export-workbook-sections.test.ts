@@ -206,7 +206,7 @@ test("workbook section builders package reconciliation and insight reports witho
       },
     ],
     suspicious: [],
-  }, [], { salesTransactions: [], received: null, spent: [] });
+  }, [], { salesTransactions: [], received: null, spent: [], bounds: { startDate: "2026-05-01", endDate: "2026-05-31" } });
 
   const rules = {
     amountTolerance: 2,

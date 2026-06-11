@@ -131,6 +131,7 @@ export function registerExportRoutes(app: Express) {
           salesTransactions: allFuelTransactions,
           received: period.cashReceivedAmount === null ? null : Number(period.cashReceivedAmount),
           spent: cashPayments,
+          bounds: { startDate: period.startDate, endDate: period.endDate },
         },
       );
 

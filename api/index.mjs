@@ -30038,6 +30038,7 @@ var fuelAdapter = {
     salesSide: "Fuel",
     saleSingular: "fuel sale",
     salePlural: "fuel sales",
+    cardSales: "fuel card sales",
     staff: "Attendant",
     unit: "Pump"
   },
@@ -30072,6 +30073,7 @@ var retailAdapter = {
     salesSide: "Sales",
     saleSingular: "sale",
     salePlural: "sales",
+    cardSales: "card sales",
     staff: "Cashier",
     unit: null
   },
@@ -30979,6 +30981,9 @@ function deriveSummaryStats(summary) {
 function fmt(value) {
   return parseFloat(value.toFixed(2));
 }
+function cap(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 function fmtPeriodDate(value) {
   return new Date(value).toLocaleDateString("en-ZA", {
     day: "numeric",
@@ -30987,7 +30992,9 @@ function fmtPeriodDate(value) {
   });
 }
 function buildReconciliationSummaryRows(params) {
-  const { period, matchingRules: matchingRules2, dashboard, review } = params;
+  const { period, matchingRules: matchingRules2, dashboard, review, vocabulary } = params;
+  const sales = vocabulary.salesSide.toLowerCase();
+  const cardSales = vocabulary.cardSales;
   const summary = dashboard.summary;
   const stats = deriveSummaryStats(summary);
   const bankBreakdown = summary.perBankBreakdown || [];
@@ -31000,7 +31007,7 @@ function buildReconciliationSummaryRows(params) {
     { Metric: "Period", Count: "", Amount: period.name },
     { Metric: "Period dates", Count: "", Amount: periodDates },
     { Metric: "" },
-    { Metric: "FUEL TRANSACTIONS", Count: "Count", Amount: "Amount" },
+    { Metric: `${vocabulary.salesSide.toUpperCase()} TRANSACTIONS`, Count: "Count", Amount: "Amount" },
     { Metric: "  Card", Count: summary.cardFuelTransactions, Amount: fmt(summary.cardFuelAmount) }
   ];
   if (summary.debtorFuelTransactions > 0) {
@@ -31075,10 +31082,10 @@ function buildReconciliationSummaryRows(params) {
   }
   rows.push(
     { Metric: "" },
-    { Metric: "FUEL CARD SALES MATCHING" },
-    { Metric: "  Fuel card sales match rate", Count: cardMatchRateLabel },
-    { Metric: "  Matched fuel card sales transactions", Count: stats.matchedCardCount },
-    { Metric: "  Unmatched fuel card sales transactions", Count: stats.unmatchedFuelCount },
+    { Metric: `${cardSales.toUpperCase()} MATCHING` },
+    { Metric: `  ${cap(cardSales)} match rate`, Count: cardMatchRateLabel },
+    { Metric: `  Matched ${cardSales} transactions`, Count: stats.matchedCardCount },
+    { Metric: `  Unmatched ${cardSales} transactions`, Count: stats.unmatchedFuelCount },
     { Metric: "" },
     { Metric: "BANK PAYMENT MATCHING" },
     { Metric: "  Bank payment match rate", Count: bankMatchRateLabel },
@@ -31107,39 +31114,39 @@ function buildReconciliationSummaryRows(params) {
     { Metric: "  Dismissed", Count: dashboard.counts.dismissed },
     { Metric: "  Total review actions", Count: dashboard.counts.linked + dashboard.counts.flagged + dashboard.counts.dismissed },
     { Metric: "  Unmatched bank still to review", Count: review.sides.bank.summary.unresolvedCount },
-    { Metric: "  Unmatched fuel card sales still to review", Count: review.sides.fuel.summary.unresolvedCount }
+    { Metric: `  Unmatched ${cardSales} still to review`, Count: review.sides.fuel.summary.unresolvedCount }
   );
   rows.push(
     { Metric: "" },
-    { Metric: "FUEL CARD SALES RECONCILIATION", Count: "", Amount: "Amount" },
+    { Metric: `${cardSales.toUpperCase()} RECONCILIATION`, Count: "", Amount: "Amount" },
     { Metric: "  Bank approved amount", Amount: fmt(stats.bankApprovedAmount) },
-    { Metric: "  Fuel card sales amount", Amount: fmt(stats.cardOnlyAmount) },
+    { Metric: `  ${cap(cardSales)} amount`, Amount: fmt(stats.cardOnlyAmount) },
     { Metric: "  Surplus / shortfall", Amount: fmt(stats.fileSurplus) },
     { Metric: "" },
     { Metric: "SURPLUS / SHORTFALL ANALYSIS" },
     { Metric: "" },
     { Metric: "  Matched amount variance:" },
-    { Metric: "    Matched fuel amount (both sides in period)", Amount: fmt(stats.matchedFuelInPeriod) },
+    { Metric: `    Matched ${sales} amount (both sides in period)`, Amount: fmt(stats.matchedFuelInPeriod) },
     { Metric: "    Matched bank amount", Amount: fmt(summary.matchedBankAmount) },
     { Metric: "    Variance", Amount: fmt(stats.matchedVariance) },
     { Metric: "" },
-    { Metric: "  Fuel matched to bank outside period", Amount: stats.lagFuelAmount > 0 ? fmt(stats.lagFuelAmount) : "-" },
+    { Metric: `  ${vocabulary.salesSide} matched to bank outside period`, Amount: stats.lagFuelAmount > 0 ? fmt(stats.lagFuelAmount) : "-" },
     { Metric: "" },
     {
-      Metric: "  Fuel card sales with no bank match, within bank coverage",
+      Metric: `  ${cap(cardSales)} with no bank match, within bank coverage`,
       Amount: stats.unmatchedFuelCoveredAmount > 0 ? fmt(stats.unmatchedFuelCoveredAmount) : "-"
     },
     { Metric: "" },
     {
-      Metric: "  Fuel card sales with no bank match, outside bank coverage",
+      Metric: `  ${cap(cardSales)} with no bank match, outside bank coverage`,
       Amount: stats.unmatchedFuelUncoveredAmount > 0 ? fmt(stats.unmatchedFuelUncoveredAmount) : "-"
     },
     summary.tenantBankCoverage ? { Metric: `    Bank coverage: ${summary.tenantBankCoverage.min} to ${summary.tenantBankCoverage.max}` } : { Metric: "    No bank data uploaded for this property" },
     { Metric: "" },
-    { Metric: "  Bank with no fuel match", Amount: stats.unmatchedBankAmt > 0 ? fmt(stats.unmatchedBankAmt) : "-" },
+    { Metric: `  Bank with no ${sales} match`, Amount: stats.unmatchedBankAmt > 0 ? fmt(stats.unmatchedBankAmt) : "-" },
     { Metric: "" },
     {
-      Metric: "  Bank matched to fuel outside period (lag-explained)",
+      Metric: `  Bank matched to ${sales} outside period (lag-explained)`,
       Amount: stats.lagExplainedBankAmount > 0 ? fmt(stats.lagExplainedBankAmount) : "-"
     },
     { Metric: "" },
@@ -32976,9 +32983,13 @@ function registerExportRoutes(app2) {
         resolutions.map((resolution) => [resolution.transactionId, resolution])
       );
       const txMap = new Map(transactions2.map((transaction) => [transaction.id, transaction]));
+      const salesSourceType = vertical.salesSideSourceType;
+      const vocab = vertical.vocabulary;
+      const showStaff = vertical.fields.staffField === "attendant";
+      const showUnit = vertical.fields.showUnit;
       const fuelByMatchId = /* @__PURE__ */ new Map();
       for (const transaction of transactions2) {
-        if (transaction.matchId && transaction.sourceType === "fuel") {
+        if (transaction.matchId && transaction.sourceType === salesSourceType) {
           if (!fuelByMatchId.has(transaction.matchId)) {
             fuelByMatchId.set(transaction.matchId, []);
           }
@@ -32988,12 +32999,12 @@ function registerExportRoutes(app2) {
       const bankTxns = transactions2.filter(
         (transaction) => transaction.sourceType?.startsWith("bank")
       );
-      const fuelTxns = transactions2.filter((transaction) => transaction.sourceType === "fuel");
+      const fuelTxns = transactions2.filter((transaction) => transaction.sourceType === salesSourceType);
       const allBankTransactions = allTransactions.filter(
         (transaction) => transaction.sourceType?.startsWith("bank")
       );
       const allFuelTransactions = allTransactions.filter(
-        (transaction) => transaction.sourceType === "fuel"
+        (transaction) => transaction.sourceType === salesSourceType
       );
       const matchedBank = bankTxns.filter((transaction) => transaction.matchStatus === "matched");
       const unmatchedBank = bankTxns.filter(
@@ -33034,7 +33045,8 @@ function registerExportRoutes(app2) {
         period,
         matchingRules: matchingRulesData,
         dashboard: dashboardModel,
-        review: reviewModel
+        review: reviewModel,
+        vocabulary: vocab
       });
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(summaryRows), "Summary");
       const matchedRows = matchesData.map((match) => {
@@ -33046,21 +33058,21 @@ function registerExportRoutes(app2) {
         return {
           Date: bank?.transactionDate || fuel?.transactionDate || "",
           "Bank Time": bank?.transactionTime || "",
-          "Fuel Time": fuel?.transactionTime || "",
+          [`${vocab.salesSide} Time`]: fuel?.transactionTime || "",
           "Bank Amount": bankAmount,
-          "Fuel Amount": fuelAmount,
-          "Fuel Items": allFuelItems.length > 1 ? allFuelItems.length : 1,
+          [`${vocab.salesSide} Amount`]: fuelAmount,
+          [`${vocab.salesSide} Items`]: allFuelItems.length > 1 ? allFuelItems.length : 1,
           Difference: Math.round((bankAmount - fuelAmount) * 100) / 100,
           "Bank Source": bank?.sourceName || "",
           "Bank Description": bank?.description || "",
-          "Fuel Description": allFuelItems.length > 1 ? allFuelItems.map(
+          [`${vocab.salesSide} Description`]: allFuelItems.length > 1 ? allFuelItems.map(
             (fuelItem) => `${fuelItem.description || ""} (${parseFloat(fuelItem.amount).toFixed(2)})`
           ).join("; ") : fuel?.description || "",
           "Card Number": bank?.cardNumber || "",
           "Payment Type": fuel?.paymentType || "",
-          Attendant: fuel?.attendant || "",
+          ...showStaff ? { Attendant: fuel?.attendant || "" } : {},
           Cashier: fuel?.cashier || "",
-          Pump: fuel?.pump || "",
+          ...showUnit ? { Pump: fuel?.pump || "" } : {},
           Confidence: match.matchConfidence ? `${match.matchConfidence}%` : "",
           "Match Type": matchTypeLabel(match.matchType)
         };
@@ -33076,7 +33088,7 @@ function registerExportRoutes(app2) {
           Bank: transaction.sourceName || transaction.sourceType,
           "Card Number": transaction.cardNumber || "",
           Description: transaction.description || "",
-          Attendant: fuel?.attendant || "",
+          ...showStaff ? { Attendant: fuel?.attendant || "" } : {},
           Cashier: fuel?.cashier || "",
           Resolution: resolution ? resolution.resolutionType : "unresolved",
           Reason: resolution?.reason || "",
@@ -33108,16 +33120,16 @@ function registerExportRoutes(app2) {
           Amount: parseFloat(transaction.amount),
           "Payment Type": transaction.paymentType || "",
           "Card Number": transaction.cardNumber || "",
-          Attendant: transaction.attendant || "",
+          ...showStaff ? { Attendant: transaction.attendant || "" } : {},
           Cashier: transaction.cashier || "",
-          Pump: transaction.pump || "",
+          ...showUnit ? { Pump: transaction.pump || "" } : {},
           Description: transaction.description || "",
           Matched: match ? "Yes" : "No",
           "Bank Match Amount": bankTransaction ? parseFloat(bankTransaction.amount) : "",
           "Bank Source": bankTransaction?.sourceName || ""
         };
       });
-      XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(fuelRows), "Fuel Transactions");
+      XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(fuelRows), `${vocab.salesSide} Transactions`);
       const unmatchedFuel = fuelTxns.filter(
         (transaction) => transaction.isCardTransaction === "yes" && transaction.matchStatus !== "matched"
       );
@@ -33131,38 +33143,39 @@ function registerExportRoutes(app2) {
             "Payment Type": transaction.paymentType || "",
             "Card Number": transaction.cardNumber || "",
             Reference: transaction.referenceNumber || "",
-            Attendant: transaction.attendant || "",
+            ...showStaff ? { Attendant: transaction.attendant || "" } : {},
             Cashier: transaction.cashier || "",
-            Pump: transaction.pump || "",
+            ...showUnit ? { Pump: transaction.pump || "" } : {},
             Description: transaction.description || "",
             Resolution: resolution ? resolution.resolutionType : "unresolved",
             Reason: resolution?.reason || "",
             Notes: resolution?.notes || ""
           };
         });
-        const attendantTotals = /* @__PURE__ */ new Map();
+        const staffColumn = showStaff ? "Attendant" : "Cashier";
+        const staffTotals = /* @__PURE__ */ new Map();
         for (const transaction of unmatchedFuel) {
-          const name = transaction.attendant || "Unknown";
-          const existing = attendantTotals.get(name) || { count: 0, amount: 0 };
+          const name = (showStaff ? transaction.attendant : transaction.cashier) || "Unknown";
+          const existing = staffTotals.get(name) || { count: 0, amount: 0 };
           existing.count += 1;
           existing.amount += parseFloat(transaction.amount);
-          attendantTotals.set(name, existing);
+          staffTotals.set(name, existing);
         }
         unmatchedFuelRows.push({});
-        unmatchedFuelRows.push({ Attendant: "BY ATTENDANT" });
-        for (const [name, stats] of Array.from(attendantTotals.entries()).sort(
+        unmatchedFuelRows.push({ [staffColumn]: `BY ${vocab.staff.toUpperCase()}` });
+        for (const [name, stats] of Array.from(staffTotals.entries()).sort(
           (a, b) => a[0].localeCompare(b[0])
         )) {
-          unmatchedFuelRows.push({ Attendant: `  ${name}`, Amount: fmt2(stats.amount) });
+          unmatchedFuelRows.push({ [staffColumn]: `  ${name}`, Amount: fmt2(stats.amount) });
         }
         unmatchedFuelRows.push({
-          Attendant: "Total unmatched fuel card sales",
+          [staffColumn]: `Total unmatched ${vocab.cardSales}`,
           Amount: fmt2(sumAmount(unmatchedFuel))
         });
         XLSX2.utils.book_append_sheet(
           wb,
           XLSX2.utils.json_to_sheet(unmatchedFuelRows),
-          "Unmatched fuel"
+          `Unmatched ${vocab.salesSide.toLowerCase()}`
         );
       }
       if (insightsModel.declines.hasDeclined) {
@@ -33173,13 +33186,15 @@ function registerExportRoutes(app2) {
           "Declined card transactions"
         );
       }
-      const attendantRows = buildAttendantSummaryRows(insightsModel.attendants);
-      if (attendantRows.length > 0) {
-        XLSX2.utils.book_append_sheet(
-          wb,
-          XLSX2.utils.json_to_sheet(attendantRows),
-          "Attendant Summary"
-        );
+      if (vertical.insights.includes("attendants")) {
+        const attendantRows = buildAttendantSummaryRows(insightsModel.attendants);
+        if (attendantRows.length > 0) {
+          XLSX2.utils.book_append_sheet(
+            wb,
+            XLSX2.utils.json_to_sheet(attendantRows),
+            "Attendant Summary"
+          );
+        }
       }
       const allRows = transactions2.map((transaction) => ({
         Date: transaction.transactionDate,
@@ -33191,8 +33206,8 @@ function registerExportRoutes(app2) {
         "Payment Type": transaction.paymentType || "",
         Reference: transaction.referenceNumber || "",
         Description: transaction.description || "",
-        Attendant: transaction.attendant || "",
-        Pump: transaction.pump || "",
+        ...showStaff ? { Attendant: transaction.attendant || "" } : { Cashier: transaction.cashier || "" },
+        ...showUnit ? { Pump: transaction.pump || "" } : {},
         Status: transaction.matchStatus
       }));
       XLSX2.utils.book_append_sheet(wb, XLSX2.utils.json_to_sheet(allRows), "All Transactions");

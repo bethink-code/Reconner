@@ -10,6 +10,7 @@ export const fuelAdapter: VerticalAdapter = {
     salesSide: "Fuel",
     saleSingular: "fuel sale",
     salePlural: "fuel sales",
+    cardSales: "fuel card sales",
     staff: "Attendant",
     unit: "Pump",
   },

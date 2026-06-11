@@ -14,6 +14,7 @@ export const retailAdapter: VerticalAdapter = {
     salesSide: "Sales",
     saleSingular: "sale",
     salePlural: "sales",
+    cardSales: "card sales",
     staff: "Cashier",
     unit: null,
   },

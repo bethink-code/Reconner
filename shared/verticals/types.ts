@@ -26,6 +26,9 @@ export interface VerticalVocabulary {
   saleSingular: string;
   /** Plural sale noun, e.g. "fuel sales" / "sales". */
   salePlural: string;
+  /** The card-side sales phrase, e.g. "fuel card sales" / "card sales" — composing it from
+   *  salesSide would produce "Sales card sales" for retail, so it's its own term. */
+  cardSales: string;
   /** Who handled the sale, e.g. "Attendant" / "Cashier". */
   staff: string;
   /** The dispensing/sale unit, e.g. "Pump"; null when the vertical has no such concept. */

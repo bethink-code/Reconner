@@ -3,11 +3,16 @@ import type { PeriodInsightsReadModel } from "../../shared/periodInsights.ts";
 import type { ResultsDashboardReadModel } from "../../shared/reconciliationDashboard.ts";
 import type { ReviewQueueReadModel } from "../../shared/reconciliationReview.ts";
 import type { MatchingRulesConfig, ReconciliationPeriod } from "../../shared/schema";
+import type { VerticalVocabulary } from "../../shared/verticals/types.ts";
 
 type WorksheetRow = Record<string, string | number | undefined>;
 
 function fmt(value: number) {
   return parseFloat(value.toFixed(2));
+}
+
+function cap(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function fmtPeriodDate(value: string) {
@@ -23,8 +28,13 @@ export function buildReconciliationSummaryRows(params: {
   matchingRules: MatchingRulesConfig | null;
   dashboard: ResultsDashboardReadModel;
   review: ReviewQueueReadModel;
+  vocabulary: VerticalVocabulary;
 }): WorksheetRow[] {
-  const { period, matchingRules, dashboard, review } = params;
+  const { period, matchingRules, dashboard, review, vocabulary } = params;
+  // Labels derive from the vertical vocabulary — fuel stays byte-identical
+  // ("fuel card sales"), retail reads naturally ("card sales", "Sales").
+  const sales = vocabulary.salesSide.toLowerCase(); // "fuel" / "sales"
+  const cardSales = vocabulary.cardSales; // "fuel card sales" / "card sales"
   const summary = dashboard.summary;
   const stats = deriveSummaryStats(summary);
   const bankBreakdown = summary.perBankBreakdown || [];
@@ -46,7 +56,7 @@ export function buildReconciliationSummaryRows(params: {
     { Metric: "Period", Count: "", Amount: period.name },
     { Metric: "Period dates", Count: "", Amount: periodDates },
     { Metric: "" },
-    { Metric: "FUEL TRANSACTIONS", Count: "Count", Amount: "Amount" },
+    { Metric: `${vocabulary.salesSide.toUpperCase()} TRANSACTIONS`, Count: "Count", Amount: "Amount" },
     { Metric: "  Card", Count: summary.cardFuelTransactions, Amount: fmt(summary.cardFuelAmount) },
   ];
 
@@ -126,10 +136,10 @@ export function buildReconciliationSummaryRows(params: {
 
   rows.push(
     { Metric: "" },
-    { Metric: "FUEL CARD SALES MATCHING" },
-    { Metric: "  Fuel card sales match rate", Count: cardMatchRateLabel },
-    { Metric: "  Matched fuel card sales transactions", Count: stats.matchedCardCount },
-    { Metric: "  Unmatched fuel card sales transactions", Count: stats.unmatchedFuelCount },
+    { Metric: `${cardSales.toUpperCase()} MATCHING` },
+    { Metric: `  ${cap(cardSales)} match rate`, Count: cardMatchRateLabel },
+    { Metric: `  Matched ${cardSales} transactions`, Count: stats.matchedCardCount },
+    { Metric: `  Unmatched ${cardSales} transactions`, Count: stats.unmatchedFuelCount },
     { Metric: "" },
     { Metric: "BANK PAYMENT MATCHING" },
     { Metric: "  Bank payment match rate", Count: bankMatchRateLabel },
@@ -160,42 +170,42 @@ export function buildReconciliationSummaryRows(params: {
     { Metric: "  Dismissed", Count: dashboard.counts.dismissed },
     { Metric: "  Total review actions", Count: dashboard.counts.linked + dashboard.counts.flagged + dashboard.counts.dismissed },
     { Metric: "  Unmatched bank still to review", Count: review.sides.bank.summary.unresolvedCount },
-    { Metric: "  Unmatched fuel card sales still to review", Count: review.sides.fuel.summary.unresolvedCount },
+    { Metric: `  Unmatched ${cardSales} still to review`, Count: review.sides.fuel.summary.unresolvedCount },
   );
 
   rows.push(
     { Metric: "" },
-    { Metric: "FUEL CARD SALES RECONCILIATION", Count: "", Amount: "Amount" },
+    { Metric: `${cardSales.toUpperCase()} RECONCILIATION`, Count: "", Amount: "Amount" },
     { Metric: "  Bank approved amount", Amount: fmt(stats.bankApprovedAmount) },
-    { Metric: "  Fuel card sales amount", Amount: fmt(stats.cardOnlyAmount) },
+    { Metric: `  ${cap(cardSales)} amount`, Amount: fmt(stats.cardOnlyAmount) },
     { Metric: "  Surplus / shortfall", Amount: fmt(stats.fileSurplus) },
     { Metric: "" },
     { Metric: "SURPLUS / SHORTFALL ANALYSIS" },
     { Metric: "" },
     { Metric: "  Matched amount variance:" },
-    { Metric: "    Matched fuel amount (both sides in period)", Amount: fmt(stats.matchedFuelInPeriod) },
+    { Metric: `    Matched ${sales} amount (both sides in period)`, Amount: fmt(stats.matchedFuelInPeriod) },
     { Metric: "    Matched bank amount", Amount: fmt(summary.matchedBankAmount) },
     { Metric: "    Variance", Amount: fmt(stats.matchedVariance) },
     { Metric: "" },
-    { Metric: "  Fuel matched to bank outside period", Amount: stats.lagFuelAmount > 0 ? fmt(stats.lagFuelAmount) : "-" },
+    { Metric: `  ${vocabulary.salesSide} matched to bank outside period`, Amount: stats.lagFuelAmount > 0 ? fmt(stats.lagFuelAmount) : "-" },
     { Metric: "" },
     {
-      Metric: "  Fuel card sales with no bank match, within bank coverage",
+      Metric: `  ${cap(cardSales)} with no bank match, within bank coverage`,
       Amount: stats.unmatchedFuelCoveredAmount > 0 ? fmt(stats.unmatchedFuelCoveredAmount) : "-",
     },
     { Metric: "" },
     {
-      Metric: "  Fuel card sales with no bank match, outside bank coverage",
+      Metric: `  ${cap(cardSales)} with no bank match, outside bank coverage`,
       Amount: stats.unmatchedFuelUncoveredAmount > 0 ? fmt(stats.unmatchedFuelUncoveredAmount) : "-",
     },
     summary.tenantBankCoverage
       ? { Metric: `    Bank coverage: ${summary.tenantBankCoverage.min} to ${summary.tenantBankCoverage.max}` }
       : { Metric: "    No bank data uploaded for this property" },
     { Metric: "" },
-    { Metric: "  Bank with no fuel match", Amount: stats.unmatchedBankAmt > 0 ? fmt(stats.unmatchedBankAmt) : "-" },
+    { Metric: `  Bank with no ${sales} match`, Amount: stats.unmatchedBankAmt > 0 ? fmt(stats.unmatchedBankAmt) : "-" },
     { Metric: "" },
     {
-      Metric: "  Bank matched to fuel outside period (lag-explained)",
+      Metric: `  Bank matched to ${sales} outside period (lag-explained)`,
       Amount: stats.lagExplainedBankAmount > 0 ? fmt(stats.lagExplainedBankAmount) : "-",
     },
     { Metric: "" },

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildReconciliationSummaryRows, buildAttendantSummaryRows, buildDeclinedRows } from "../../server/export/readModelWorkbook.ts";
+import { getVertical } from "../../shared/verticals/index.ts";
 import { buildInsightsReadModel } from "../../server/insights/insightsReadModel.ts";
 import { buildResultsDashboardReadModel } from "../../server/reconciliation/dashboardReadModel.ts";
 import type { ReviewQueueReadModel } from "../../shared/reconciliationReview.ts";
@@ -236,12 +237,34 @@ test("workbook section builders package reconciliation and insight reports witho
     matchingRules: rules,
     dashboard,
     review,
+    vocabulary: getVertical("fuel").vocabulary,
   });
+  // Fuel labels must stay byte-identical to the pre-vocabulary export
   const fuelMatchRateRow = summaryRows.find((row) => row.Metric === "  Fuel card sales match rate");
   const bankReviewRow = summaryRows.find((row) => row.Metric === "  Unmatched bank still to review");
 
   assert.equal(fuelMatchRateRow?.Count, "87% (111/127)");
   assert.equal(bankReviewRow?.Count, 12);
+  assert.equal(summaryRows.some((row) => row.Metric === "FUEL TRANSACTIONS"), true);
+  assert.equal(summaryRows.some((row) => row.Metric === "FUEL CARD SALES MATCHING"), true);
+  assert.equal(summaryRows.some((row) => row.Metric === "  Bank with no fuel match"), true);
+
+  // Retail reads in its own vocabulary — no fuel wording anywhere
+  const retailRows = buildReconciliationSummaryRows({
+    period,
+    matchingRules: rules,
+    dashboard,
+    review,
+    vocabulary: getVertical("retail").vocabulary,
+  });
+  assert.equal(retailRows.some((row) => row.Metric === "SALES TRANSACTIONS"), true);
+  assert.equal(retailRows.some((row) => row.Metric === "CARD SALES MATCHING"), true);
+  assert.equal(retailRows.some((row) => row.Metric === "  Card sales match rate"), true);
+  assert.equal(retailRows.some((row) => row.Metric === "  Bank with no sales match"), true);
+  assert.equal(
+    retailRows.some((row) => typeof row.Metric === "string" && /fuel/i.test(row.Metric)),
+    false,
+  );
 
   const attendantRows = buildAttendantSummaryRows(insights.attendants);
   assert.equal(attendantRows.some((row) => row.Metric === "ATTENDANT ACCOUNTABILITY"), true);

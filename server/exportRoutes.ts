@@ -81,9 +81,16 @@ export function registerExportRoutes(app: Express) {
       );
       const txMap = new Map(transactions.map((transaction) => [transaction.id, transaction]));
 
+      // The sales side is vertical-scoped (fuel/retail) — a hardcoded "fuel" filter
+      // would leave every sales sheet empty for retail properties.
+      const salesSourceType = vertical.salesSideSourceType;
+      const vocab = vertical.vocabulary;
+      const showStaff = vertical.fields.staffField === "attendant";
+      const showUnit = vertical.fields.showUnit;
+
       const fuelByMatchId = new Map<string, typeof transactions>();
       for (const transaction of transactions) {
-        if (transaction.matchId && transaction.sourceType === "fuel") {
+        if (transaction.matchId && transaction.sourceType === salesSourceType) {
           if (!fuelByMatchId.has(transaction.matchId)) {
             fuelByMatchId.set(transaction.matchId, []);
           }
@@ -94,12 +101,12 @@ export function registerExportRoutes(app: Express) {
       const bankTxns = transactions.filter((transaction) =>
         transaction.sourceType?.startsWith("bank"),
       );
-      const fuelTxns = transactions.filter((transaction) => transaction.sourceType === "fuel");
+      const fuelTxns = transactions.filter((transaction) => transaction.sourceType === salesSourceType);
       const allBankTransactions = allTransactions.filter((transaction) =>
         transaction.sourceType?.startsWith("bank"),
       );
       const allFuelTransactions = allTransactions.filter(
-        (transaction) => transaction.sourceType === "fuel",
+        (transaction) => transaction.sourceType === salesSourceType,
       );
       const matchedBank = bankTxns.filter((transaction) => transaction.matchStatus === "matched");
       const unmatchedBank = bankTxns.filter(
@@ -147,6 +154,7 @@ export function registerExportRoutes(app: Express) {
         matchingRules: matchingRulesData,
         dashboard: dashboardModel,
         review: reviewModel,
+        vocabulary: vocab,
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Summary");
 
@@ -164,14 +172,14 @@ export function registerExportRoutes(app: Express) {
         return {
           Date: bank?.transactionDate || fuel?.transactionDate || "",
           "Bank Time": bank?.transactionTime || "",
-          "Fuel Time": fuel?.transactionTime || "",
+          [`${vocab.salesSide} Time`]: fuel?.transactionTime || "",
           "Bank Amount": bankAmount,
-          "Fuel Amount": fuelAmount,
-          "Fuel Items": allFuelItems.length > 1 ? allFuelItems.length : 1,
+          [`${vocab.salesSide} Amount`]: fuelAmount,
+          [`${vocab.salesSide} Items`]: allFuelItems.length > 1 ? allFuelItems.length : 1,
           Difference: Math.round((bankAmount - fuelAmount) * 100) / 100,
           "Bank Source": bank?.sourceName || "",
           "Bank Description": bank?.description || "",
-          "Fuel Description":
+          [`${vocab.salesSide} Description`]:
             allFuelItems.length > 1
               ? allFuelItems
                   .map(
@@ -182,9 +190,9 @@ export function registerExportRoutes(app: Express) {
               : fuel?.description || "",
           "Card Number": bank?.cardNumber || "",
           "Payment Type": fuel?.paymentType || "",
-          Attendant: fuel?.attendant || "",
+          ...(showStaff ? { Attendant: fuel?.attendant || "" } : {}),
           Cashier: fuel?.cashier || "",
-          Pump: fuel?.pump || "",
+          ...(showUnit ? { Pump: fuel?.pump || "" } : {}),
           Confidence: match.matchConfidence ? `${match.matchConfidence}%` : "",
           "Match Type": matchTypeLabel(match.matchType),
         };
@@ -201,7 +209,7 @@ export function registerExportRoutes(app: Express) {
           Bank: transaction.sourceName || transaction.sourceType,
           "Card Number": transaction.cardNumber || "",
           Description: transaction.description || "",
-          Attendant: fuel?.attendant || "",
+          ...(showStaff ? { Attendant: fuel?.attendant || "" } : {}),
           Cashier: fuel?.cashier || "",
           Resolution: resolution ? resolution.resolutionType : "unresolved",
           Reason: resolution?.reason || "",
@@ -235,16 +243,16 @@ export function registerExportRoutes(app: Express) {
           Amount: parseFloat(transaction.amount),
           "Payment Type": transaction.paymentType || "",
           "Card Number": transaction.cardNumber || "",
-          Attendant: transaction.attendant || "",
+          ...(showStaff ? { Attendant: transaction.attendant || "" } : {}),
           Cashier: transaction.cashier || "",
-          Pump: transaction.pump || "",
+          ...(showUnit ? { Pump: transaction.pump || "" } : {}),
           Description: transaction.description || "",
           Matched: match ? "Yes" : "No",
           "Bank Match Amount": bankTransaction ? parseFloat(bankTransaction.amount) : "",
           "Bank Source": bankTransaction?.sourceName || "",
         };
       });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fuelRows), "Fuel Transactions");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fuelRows), `${vocab.salesSide} Transactions`);
 
       const unmatchedFuel = fuelTxns.filter(
         (transaction) =>
@@ -260,9 +268,9 @@ export function registerExportRoutes(app: Express) {
             "Payment Type": transaction.paymentType || "",
             "Card Number": transaction.cardNumber || "",
             Reference: transaction.referenceNumber || "",
-            Attendant: transaction.attendant || "",
+            ...(showStaff ? { Attendant: transaction.attendant || "" } : {}),
             Cashier: transaction.cashier || "",
-            Pump: transaction.pump || "",
+            ...(showUnit ? { Pump: transaction.pump || "" } : {}),
             Description: transaction.description || "",
             Resolution: resolution ? resolution.resolutionType : "unresolved",
             Reason: resolution?.reason || "",
@@ -270,31 +278,33 @@ export function registerExportRoutes(app: Express) {
           };
         });
 
-        const attendantTotals = new Map<string, { count: number; amount: number }>();
+        // Group unmatched sales by the vertical's staff field (attendant for fuel, cashier for retail)
+        const staffColumn = showStaff ? "Attendant" : "Cashier";
+        const staffTotals = new Map<string, { count: number; amount: number }>();
         for (const transaction of unmatchedFuel) {
-          const name = transaction.attendant || "Unknown";
-          const existing = attendantTotals.get(name) || { count: 0, amount: 0 };
+          const name = (showStaff ? transaction.attendant : transaction.cashier) || "Unknown";
+          const existing = staffTotals.get(name) || { count: 0, amount: 0 };
           existing.count += 1;
           existing.amount += parseFloat(transaction.amount);
-          attendantTotals.set(name, existing);
+          staffTotals.set(name, existing);
         }
 
         unmatchedFuelRows.push({});
-        unmatchedFuelRows.push({ Attendant: "BY ATTENDANT" });
-        for (const [name, stats] of Array.from(attendantTotals.entries()).sort((a, b) =>
+        unmatchedFuelRows.push({ [staffColumn]: `BY ${vocab.staff.toUpperCase()}` });
+        for (const [name, stats] of Array.from(staffTotals.entries()).sort((a, b) =>
           a[0].localeCompare(b[0]),
         )) {
-          unmatchedFuelRows.push({ Attendant: `  ${name}`, Amount: fmt(stats.amount) });
+          unmatchedFuelRows.push({ [staffColumn]: `  ${name}`, Amount: fmt(stats.amount) });
         }
         unmatchedFuelRows.push({
-          Attendant: "Total unmatched fuel card sales",
+          [staffColumn]: `Total unmatched ${vocab.cardSales}`,
           Amount: fmt(sumAmount(unmatchedFuel)),
         });
 
         XLSX.utils.book_append_sheet(
           wb,
           XLSX.utils.json_to_sheet(unmatchedFuelRows),
-          "Unmatched fuel",
+          `Unmatched ${vocab.salesSide.toLowerCase()}`,
         );
       }
 
@@ -307,13 +317,17 @@ export function registerExportRoutes(app: Express) {
         );
       }
 
-      const attendantRows = buildAttendantSummaryRows(insightsModel.attendants);
-      if (attendantRows.length > 0) {
-        XLSX.utils.book_append_sheet(
-          wb,
-          XLSX.utils.json_to_sheet(attendantRows),
-          "Attendant Summary",
-        );
+      // Attendant accountability is a fuel-only insight — verticals that don't register
+      // it (retail) would otherwise get a sheet telling them to "map the attendant column".
+      if (vertical.insights.includes("attendants")) {
+        const attendantRows = buildAttendantSummaryRows(insightsModel.attendants);
+        if (attendantRows.length > 0) {
+          XLSX.utils.book_append_sheet(
+            wb,
+            XLSX.utils.json_to_sheet(attendantRows),
+            "Attendant Summary",
+          );
+        }
       }
 
       const allRows = transactions.map((transaction) => ({
@@ -326,8 +340,8 @@ export function registerExportRoutes(app: Express) {
         "Payment Type": transaction.paymentType || "",
         Reference: transaction.referenceNumber || "",
         Description: transaction.description || "",
-        Attendant: transaction.attendant || "",
-        Pump: transaction.pump || "",
+        ...(showStaff ? { Attendant: transaction.attendant || "" } : { Cashier: transaction.cashier || "" }),
+        ...(showUnit ? { Pump: transaction.pump || "" } : {}),
         Status: transaction.matchStatus,
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRows), "All Transactions");

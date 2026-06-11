@@ -35474,8 +35474,8 @@ function uniqueIds(ids) {
 function isBankTransaction2(transaction) {
   return !!transaction.sourceType?.startsWith("bank");
 }
-function isFuelTransaction(transaction) {
-  return transaction.sourceType === "fuel";
+function isSalesSideTransaction2(transaction) {
+  return transaction.sourceType === "fuel" || transaction.sourceType === "retail";
 }
 function assertPeriodTransaction(transaction, periodId, label) {
   if (!transaction) {
@@ -35746,8 +35746,8 @@ var ReconciliationCommandService = class {
     if (!isBankTransaction2(bankTransaction)) {
       throw new ReconciliationCommandError(400, "invalid_bank_transaction", "The selected bank transaction is not a bank transaction");
     }
-    if (!isFuelTransaction(fuelTransaction)) {
-      throw new ReconciliationCommandError(400, "invalid_fuel_transaction", "The selected fuel transaction is not a fuel transaction");
+    if (!isSalesSideTransaction2(fuelTransaction)) {
+      throw new ReconciliationCommandError(400, "invalid_sales_transaction", "The selected sales transaction is not a valid sales transaction");
     }
     return [bankTransaction, fuelTransaction];
   }
@@ -35981,14 +35981,25 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
             message: "Same file detected, using existing data"
           });
         }
-        const fileToReplace = existingFile ? {
-          id: existingFile.id,
-          fileName: existingFile.fileName,
-          fileUrl: existingFile.fileUrl
-        } : null;
-        if (fileToReplace) {
+        if (existingFile && existingFile.contentHash !== contentHash) {
+          const confirmReplacement = req.body.confirmReplacement === "true" || req.body.confirmReplacement === true;
+          if (!confirmReplacement) {
+            return res.status(409).json({
+              error: "A different file already exists for this source",
+              existingFile: {
+                id: existingFile.id,
+                fileName: existingFile.fileName,
+                sourceType: existingFile.sourceType,
+                sourceName: existingFile.sourceName,
+                uploadedAt: existingFile.uploadedAt,
+                rowCount: existingFile.rowCount
+              },
+              message: `A ${sourceType} file (${existingFile.fileName}) already exists for this period. Uploading a different file will replace it and remove all transactions from the old file. Please confirm if you want to proceed.`,
+              requiresConfirmation: true
+            });
+          }
           console.log(
-            `Will replace existing file after successful upload: ${fileToReplace.fileName} (${fileToReplace.id})`
+            `User confirmed replacement of ${existingFile.fileName} with new file`
           );
         }
         const inferredType = inferUploadFileType(req.file);
@@ -36081,6 +36092,29 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
           safeFileName,
           req.file.mimetype
         );
+        if (existingFile) {
+          console.log(
+            `Deleting replaced file BEFORE creating new one: ${existingFile.fileName} (${existingFile.id})`
+          );
+          try {
+            await reconciliationCommandService.deleteFileAndState(req.params.periodId, existingFile.id);
+            await objectStorageService.deleteFile(existingFile.fileUrl);
+            console.log(
+              "Successfully deleted old file, its transactions, and related matches"
+            );
+          } catch (cleanupError) {
+            console.error("CRITICAL: Could not delete old file before creating new one:", cleanupError);
+            try {
+              await objectStorageService.deleteFile(fileUrl);
+            } catch (e) {
+              console.error("Failed to rollback uploaded file:", e);
+            }
+            return res.status(500).json({
+              error: "Could not replace existing file. The old file could not be cleaned up. Please try again or contact support.",
+              detail: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+            });
+          }
+        }
         const uploadedFile = await storage.createFile({
           periodId: req.params.periodId,
           fileName: safeFileName,
@@ -36097,20 +36131,6 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
           bankName: bankName || null,
           status: "uploaded"
         });
-        if (fileToReplace) {
-          console.log(
-            `Cleaning up replaced file: ${fileToReplace.fileName} (${fileToReplace.id})`
-          );
-          try {
-            await reconciliationCommandService.deleteFileAndState(req.params.periodId, fileToReplace.id);
-            await objectStorageService.deleteFile(fileToReplace.fileUrl);
-            console.log(
-              "Successfully cleaned up old file, its transactions, and related matches"
-            );
-          } catch (cleanupError) {
-            console.warn("Could not fully clean up old file:", cleanupError);
-          }
-        }
         audit(req, {
           action: "file.upload",
           resourceType: "file",
@@ -36150,6 +36170,25 @@ function registerFileWorkflowRoutes(app2, upload2, computeContentHash2) {
         }
         if (!file.columnMapping) {
           return res.status(400).json({ error: "Column mapping not set" });
+        }
+        const allFilesInPeriod = await storage.getFilesByPeriod(req.params.periodId);
+        const otherFilesOfSameType = allFilesInPeriod.filter(
+          (f) => f.sourceType === file.sourceType && f.sourceName === file.sourceName && f.id !== file.id
+        );
+        if (otherFilesOfSameType.length > 0) {
+          console.error(
+            `SECURITY VIOLATION PREVENTED: Multiple files of same type detected for period. File: ${file.id}, Other files: ${otherFilesOfSameType.map((f) => f.id).join(", ")}`
+          );
+          return res.status(409).json({
+            error: "Cannot process: multiple files of this type exist for the period",
+            message: "Another file with the same source type already exists. Please delete the other file before processing this one.",
+            existingFiles: otherFilesOfSameType.map((f) => ({
+              id: f.id,
+              fileName: f.fileName,
+              uploadedAt: f.uploadedAt,
+              status: f.status
+            }))
+          });
         }
         await reconciliationCommandService.clearFileTransactions(req.params.periodId, file.id);
         const buffer = await readFileBuffer2(file);

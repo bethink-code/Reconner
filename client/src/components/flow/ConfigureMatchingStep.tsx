@@ -119,6 +119,7 @@ export function ConfigureMatchingStep({
 
   // Fetch verification summary for data coverage
   const { data: verSummary, isLoading: verLoading } = useQuery<{
+    fuelBreakdown?: { debtorTransactions: number; debtorAmount: number };
     overview: {
       fuelSystem: { totalSales: number; cardTransactions: number; cashTransactions: number };
       bankStatements: {
@@ -413,7 +414,7 @@ export function ConfigureMatchingStep({
                       <span className="text-muted-foreground">Sales data</span>
                       <span className="flex items-center gap-1.5 font-medium">
                         {fuelRange.earliest} to {fuelRange.latest}
-                        <span className="text-muted-foreground">({verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions} txns)</span>
+                        <span className="text-muted-foreground">({verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions + (verSummary.fuelBreakdown?.debtorTransactions || 0)} txns)</span>
                         <StatusIcon status={fuelStatus} />
                       </span>
                     </div>

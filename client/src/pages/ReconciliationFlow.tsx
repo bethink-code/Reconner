@@ -501,10 +501,12 @@ export default function ReconciliationFlow() {
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">Period Sales</p>
                   <div className="flex divide-x divide-border/50">
                     {[
-                      { label: "All", count: verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions, amount: verSummary.overview.fuelSystem.totalSales },
-                      { label: "Card", count: verSummary.overview.fuelSystem.cardTransactions - (verSummary.fuelBreakdown?.debtorTransactions || 0), amount: verSummary.overview.fuelSystem.cardSales - (verSummary.fuelBreakdown?.debtorAmount || 0) },
+                      // Card/Cash come from the backend already net of debtors; debtors are their
+                      // own segment so the strip ties back to the Results-tab Period Sales split.
+                      { label: "All", count: verSummary.overview.fuelSystem.cardTransactions + verSummary.overview.fuelSystem.cashTransactions + (verSummary.fuelBreakdown?.debtorTransactions || 0), amount: verSummary.overview.fuelSystem.totalSales },
+                      { label: "Card", count: verSummary.overview.fuelSystem.cardTransactions, amount: verSummary.overview.fuelSystem.cardSales },
+                      ...((verSummary.fuelBreakdown?.debtorTransactions || 0) > 0 ? [{ label: "Debtor / Account", count: verSummary.fuelBreakdown!.debtorTransactions, amount: verSummary.fuelBreakdown!.debtorAmount }] : []),
                       { label: "Cash", count: verSummary.overview.fuelSystem.cashTransactions, amount: verSummary.overview.fuelSystem.cashSales },
-                      ...((verSummary.fuelBreakdown?.debtorTransactions || 0) > 0 ? [{ label: "Debtors", count: verSummary.fuelBreakdown!.debtorTransactions, amount: verSummary.fuelBreakdown!.debtorAmount }] : []),
                     ].map((seg) => (
                       <div key={seg.label} className="flex-1 py-2 px-3 text-center">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{seg.label}</p>

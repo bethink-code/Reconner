@@ -151,6 +151,12 @@ export interface AttendantSummaryRow {
 }
 
 export interface VerificationSummary {
+  // Debtor split — card/cash above exclude debtors, this surfaces them so the Period Sales
+  // strips show Card / Debtor / Cash consistently with the Results-tab summary.
+  fuelBreakdown: {
+    debtorTransactions: number;
+    debtorAmount: number;
+  };
   overview: {
     fuelSystem: {
       totalSales: number;
@@ -1446,10 +1452,14 @@ export class DatabaseStorage implements IStorage {
         SELECT
           COUNT(*) as total_fuel,
           COALESCE(SUM(amount::numeric), 0) as total_fuel_amount,
-          COUNT(CASE WHEN is_card_transaction = 'yes' THEN 1 END) as card_transactions,
-          COALESCE(SUM(CASE WHEN is_card_transaction = 'yes' THEN amount::numeric ELSE 0 END), 0) as card_amount,
-          COUNT(CASE WHEN is_card_transaction = 'no' THEN 1 END) as cash_transactions,
-          COALESCE(SUM(CASE WHEN is_card_transaction = 'no' THEN amount::numeric ELSE 0 END), 0) as cash_amount,
+          -- Card / Cash exclude debtor-like payment types (debtors are their own category,
+          -- never card and never cash) so these tie back to the Results-tab Period Sales split.
+          COUNT(CASE WHEN is_card_transaction = 'yes' AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%') THEN 1 END) as card_transactions,
+          COALESCE(SUM(CASE WHEN is_card_transaction = 'yes' AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%') THEN amount::numeric ELSE 0 END), 0) as card_amount,
+          COUNT(CASE WHEN is_card_transaction = 'no' AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%') THEN 1 END) as cash_transactions,
+          COALESCE(SUM(CASE WHEN is_card_transaction = 'no' AND NOT (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%') THEN amount::numeric ELSE 0 END), 0) as cash_amount,
+          COUNT(CASE WHEN (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%') THEN 1 END) as debtor_transactions,
+          COALESCE(SUM(CASE WHEN (LOWER(payment_type) LIKE '%debtor%' OR LOWER(payment_type) LIKE '%account%' OR LOWER(payment_type) LIKE '%fleet%') THEN amount::numeric ELSE 0 END), 0) as debtor_amount,
           (SELECT COUNT(DISTINCT reference_number) FROM transactions t2 CROSS JOIN period_scope ps
            WHERE t2.period_id = $1 AND t2.source_type = 'fuel' AND t2.is_card_transaction = 'yes'
              AND NOT (LOWER(t2.payment_type) LIKE '%debtor%' OR LOWER(t2.payment_type) LIKE '%account%' OR LOWER(t2.payment_type) LIKE '%fleet%')
@@ -1636,6 +1646,8 @@ export class DatabaseStorage implements IStorage {
     const cardTransactions = parseInt(row.card_transactions || '0');
     const matchableInvoices = parseInt(row.matchable_invoices || '0');
     const cashTransactions = parseInt(row.cash_transactions || '0');
+    const debtorTransactions = parseInt(row.debtor_transactions || '0');
+    const debtorAmount = parseFloat(row.debtor_amount || '0');
     
     const totalBankAmount = parseFloat(row.total_bank_amount || '0');
     const totalBankTransactions = parseInt(row.total_bank || '0');
@@ -1759,6 +1771,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     return {
+      // Debtor split so the Period Sales strips (Step 5 + Configure) can show Card / Debtor / Cash
+      // with the same definitions as the Results-tab summary — cash never includes debtors.
+      fuelBreakdown: {
+        debtorTransactions,
+        debtorAmount,
+      },
       overview: {
         fuelSystem: {
           totalSales: totalFuelAmount,
